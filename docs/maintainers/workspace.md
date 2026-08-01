@@ -121,8 +121,7 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run bench:baseline` | build the SDK and record the current benchmark protocol |
 | `pnpm run fresh:smoke` | pack the SDK and prove fresh strict testing-kit, Vite, and Nuxt consumers |
 | `pnpm run publish:sdk:dry-run` | run the full gate and package rehearsal without changing versions |
-| `pnpm run publish:sdk:patch` / `:minor` / `:major` | release: preflight, gate, rehearse, bump, publish, and await npm |
-| `pnpm run publish:sdk:tag` | tag the reviewed release commit once npm confirms the version |
+| `pnpm run publish:sdk:patch` / `:minor` / `:major` | release: preflight, gate, rehearse, bump, publish, await npm, commit, tag, and push |
 
 ## 5. Test organization
 
@@ -163,11 +162,9 @@ Both jobs install from the root lockfile. The workflow carries read-only reposit
 
 The SDK package metadata points to `https://github.com/mareszhar/vanity` and declares `sdk/` as its repository directory.
 
-Release tooling is intentionally review-first, and a release is one command:
+Release tooling is intentionally review-first, and a release is one command, happy path included. The one precondition it asks of the maintainer: the working tree must be clean before `pnpm run publish:sdk:patch`, `:minor`, or `:major` starts — whatever history led there, squashed or not.
 
-1. `pnpm run publish:sdk:patch`, `:minor`, or `:major` verifies npm authentication and target-version availability before any expensive work, runs the complete gate and packaging rehearsal, bumps `sdk/package.json`, rebuilds, publishes `@mszr/vanity`, and waits for registry visibility.
-2. The maintainer reviews history and creates the release commit — `🔖 release v<version>` — by committing or squashing as they prefer; the npm artifact is independent of Git history.
-3. From that clean commit, `pnpm run publish:sdk:tag` confirms the manifest version is live on npm and tags `HEAD` as `v<version>`; the maintainer pushes the branch and tag and attaches release notes to the GitHub release. Tags therefore exist only for successful releases, on the reviewed commit.
+Given that, the command verifies npm authentication and target-version availability before any expensive work, runs the complete gate and packaging rehearsal, bumps `sdk/package.json`, rebuilds, publishes `@mszr/vanity`, waits for registry visibility, then commits the bump as `🔖 release v<version>`, tags `HEAD` as `v<version>`, and pushes the branch and tag to `origin`. The only remaining step is attaching release notes to the GitHub release the pushed tag makes available.
 
 `pnpm run publish:sdk:dry-run` proves the same gate and packaging rehearsal without changing anything.
 
@@ -175,6 +172,4 @@ Failure handling is explicit:
 
 - Validation and packaging receipts under ignored `.vanity/` are keyed to a digest of repository content with the manifest version masked, so unchanged inputs are never revalidated — not even after the bump itself. `VANITY_FORCE_VERIFY=1` ignores receipts; `VANITY_UNSAFE_PUBLISH_SKIP_CHECKS=1` skips the gate entirely and is never appropriate for a real release.
 - A failure before publication restores `sdk/package.json` and leaves no release state.
-- Once published, the bump is permanent: the release is recorded under `.vanity/`, and re-running the same release command resumes the registry wait and remaining steps instead of re-bumping or re-publishing. `publish:sdk:tag` completes the release and clears the record.
-
-The release script never commits or pushes; the only Git history it creates is the version tag, through the explicit `publish:sdk:tag` step.
+- Once published, the bump is permanent: the release is recorded under `.vanity/`, and re-running the same `publish:sdk:<bump>` command resumes registry propagation, commit, tag, and push individually — whichever of those didn't complete — instead of re-bumping or re-publishing.

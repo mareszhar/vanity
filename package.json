@@ -55,8 +55,7 @@
     "publish:sdk:dry-run": "tsx scripts/publish-sdk.ts dry-run",
     "publish:sdk:patch": "tsx scripts/publish-sdk.ts patch",
     "publish:sdk:minor": "tsx scripts/publish-sdk.ts minor",
-    "publish:sdk:major": "tsx scripts/publish-sdk.ts major",
-    "publish:sdk:tag": "tsx scripts/publish-sdk.ts tag"
+    "publish:sdk:major": "tsx scripts/publish-sdk.ts major"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:",

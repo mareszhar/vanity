@@ -3,23 +3,26 @@
  *
  *   pnpm run publish:sdk:dry-run
  *   pnpm run publish:sdk:<patch|minor|major>
- *   pnpm run publish:sdk:tag
  *
- * A release is one command: preflight (npm authentication and target-version
- * availability) before any expensive work, then the complete validation gate
- * and packaging rehearsal, then the version bump, publication, and registry
- * propagation wait. Git stays in the maintainer's hands — the script never
- * commits or pushes, and `publish:sdk:tag` creates the version tag only after
- * the manifest version is proven live on npm, so tags always mark successful
- * releases on the reviewed commit.
+ * A release is one command, happy path included: preflight (a clean working
+ * tree, npm authentication, and target-version availability) before any
+ * expensive work; the complete validation gate and packaging rehearsal; the
+ * version bump, publication, and registry propagation wait; then the release
+ * commit, an annotated tag, and a push of both to `origin` — so a successful
+ * run needs nothing further except attaching notes to the GitHub release.
+ * The precondition this replaces manual git stewardship with is simple: the
+ * working tree must be clean before a release starts, whatever history led
+ * there — squashed or not.
  *
  * Failure recovery is explicit. Validation receipts under ignored `.vanity/`
  * are keyed to a digest of repository content with the manifest version
  * masked, so a green gate is never repaid for unchanged inputs — not even by
  * the bump itself. A failure before publication restores `sdk/package.json`
- * and leaves no release state; once published the bump is permanent, the
- * release is recorded, and re-running the same command resumes (registry
- * wait, next steps) instead of re-bumping or re-publishing.
+ * and leaves no release state. Once published the bump is permanent, so the
+ * release is recorded in `.vanity/release-state.json`: a later step failing
+ * (registry wait, commit, tag, push) keeps that record, and re-running the
+ * same `publish:sdk:<bump>` resumes from the first incomplete step instead
+ * of re-bumping or re-publishing.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -48,6 +51,9 @@ interface ReleaseState {
   version: string
   bump: Bump
   publishedAt: string
+  committed: boolean
+  tagged: boolean
+  pushed: boolean
 }
 
 function capture(command: string, args: string[], cwd = workspaceDir): string {
@@ -191,6 +197,11 @@ function loadReleaseState(): ReleaseState | undefined {
   }
 }
 
+function saveReleaseState(state: ReleaseState): void {
+  mkdirSync(stateDir, { recursive: true })
+  writeFileSync(releaseStatePath, `${JSON.stringify(state, null, 2)}\n`)
+}
+
 /**
  * `--workspaces=false` keeps this a plain registry query even though `cwd`
  * sits at a pnpm workspace root; `timeout` guarantees the call itself can
@@ -247,12 +258,53 @@ function waitForRegistry(name: string, version: string): void {
   ].join('\n'))
 }
 
-function printNextSteps(version: string, homepage: string): void {
-  step(`release v${version} — remaining steps are yours`)
-  console.log(`  1. Create the release commit (squashing is fine): 🔖 release v${version}`)
-  console.log(`  2. pnpm run publish:sdk:tag   — tags the clean HEAD as v${version} once npm confirms it`)
-  console.log(`  3. git push origin main v${version}`)
-  console.log(`  4. Attach release notes: ${homepage}/releases/new?tag=v${version}`)
+/** Idempotent: commits the version bump only if it isn't already committed. */
+function ensureCommitted(version: string, state: ReleaseState): void {
+  if (state.committed) {
+    console.log(`✓ release commit already present`)
+    return
+  }
+
+  run('git', ['add', 'sdk/package.json'])
+  if (capture('git', ['diff', '--cached', '--name-only']) !== '')
+    run('git', ['commit', '-m', `🔖 release v${version}`])
+  else
+    console.log('  sdk/package.json already reflects the published version — nothing to commit')
+
+  state.committed = true
+  saveReleaseState(state)
+}
+
+/** Idempotent: tags `HEAD` only if the release tag doesn't already exist. */
+function ensureTagged(version: string, state: ReleaseState): void {
+  const tag = `v${version}`
+  if (state.tagged) {
+    console.log(`✓ ${tag} already created`)
+    return
+  }
+
+  if (capture('git', ['tag', '--list', tag]) === '')
+    run('git', ['tag', '-a', tag, '-m', `🔖 release ${tag}`])
+  else
+    console.log(`  ${tag} already exists — leaving it as-is`)
+
+  state.tagged = true
+  saveReleaseState(state)
+}
+
+/** Idempotent: pushes the current branch and release tag only once. */
+function ensurePushed(version: string, state: ReleaseState): void {
+  const tag = `v${version}`
+  if (state.pushed) {
+    console.log(`✓ ${tag} already pushed`)
+    return
+  }
+
+  const branch = capture('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+  run('git', ['push', 'origin', branch, tag])
+
+  state.pushed = true
+  saveReleaseState(state)
 }
 
 function dryRun(): void {
@@ -264,109 +316,82 @@ function dryRun(): void {
 
 function publishSdk(bump: Bump): void {
   const manifest = readManifest()
-  const state = loadReleaseState()
+  let state = loadReleaseState()
 
   if (state !== undefined && state.version === manifest.version) {
     console.log(`↻ resuming release v${state.version} — it is already published; not bumping again`)
-    console.log(`  (finish it with publish:sdk:tag, or delete .vanity/release-state.json to abandon the record)`)
-    waitForRegistry(manifest.name, state.version)
-    printNextSteps(state.version, manifest.homepage)
-    return
   }
+  else {
+    if (state !== undefined) {
+      console.log(`⚠ discarding a stale release record (v${state.version}); starting a fresh ${bump} release`)
+      rmSync(releaseStatePath, { force: true })
+    }
 
-  if (state !== undefined) {
-    console.log(`⚠ discarding a stale release record (v${state.version}); starting a fresh ${bump} release`)
-    rmSync(releaseStatePath, { force: true })
+    step('preflight')
+    if (capture('git', ['status', '--porcelain']) !== '')
+      fail('publishing requires a clean working tree — commit or stash pending changes first')
+
+    const whoami = spawnSync('npm', ['whoami'], {
+      cwd: workspaceDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 15_000,
+    })
+    const account = whoami.stdout?.trim()
+    if (whoami.status !== 0 || account === undefined || account === '')
+      fail('not authenticated to npm — run npm login first (sessions expire)')
+
+    const next = bumpVersion(manifest.version, bump)
+    if (versionOnNpm(manifest.name, next))
+      fail(`${manifest.name}@${next} already exists on npm`)
+    console.log(`✓ publishing as ${account}: ${manifest.name} ${manifest.version} → ${next}`)
+
+    const receipt = loadReceipt(contentDigest())
+    gate(receipt)
+    smoke(receipt)
+
+    const source = readFileSync(manifestPath, 'utf8')
+    const versionField = `"version": "${manifest.version}"`
+    if (!source.includes(versionField))
+      fail(`could not find ${versionField} in sdk/package.json`)
+
+    try {
+      step(`version ${manifest.version} → ${next}`)
+      writeFileSync(manifestPath, source.replace(versionField, `"version": "${next}"`))
+      run('pnpm', ['run', 'sdk:build'])
+
+      step(`publish ${manifest.name}@${next}`)
+      run('pnpm', ['publish', '--access', 'public', '--no-git-checks'], packageDir)
+    }
+    catch (error) {
+      writeFileSync(manifestPath, source)
+      fail([
+        `release aborted before publication — sdk/package.json restored to ${manifest.version}`,
+        `  ${error instanceof Error ? error.message : String(error)}`,
+      ].join('\n'))
+    }
+
+    state = { version: next, bump, publishedAt: new Date().toISOString(), committed: false, tagged: false, pushed: false }
+    saveReleaseState(state)
   }
-
-  step('preflight')
-  const whoami = spawnSync('npm', ['whoami'], {
-    cwd: workspaceDir,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 15_000,
-  })
-  const account = whoami.stdout?.trim()
-  if (whoami.status !== 0 || account === undefined || account === '')
-    fail('not authenticated to npm — run npm login first (sessions expire)')
-
-  const next = bumpVersion(manifest.version, bump)
-  if (versionOnNpm(manifest.name, next))
-    fail(`${manifest.name}@${next} already exists on npm`)
-  console.log(`✓ publishing as ${account}: ${manifest.name} ${manifest.version} → ${next}`)
-
-  const receipt = loadReceipt(contentDigest())
-  gate(receipt)
-  smoke(receipt)
-
-  const source = readFileSync(manifestPath, 'utf8')
-  const versionField = `"version": "${manifest.version}"`
-  if (!source.includes(versionField))
-    fail(`could not find ${versionField} in sdk/package.json`)
 
   try {
-    step(`version ${manifest.version} → ${next}`)
-    writeFileSync(manifestPath, source.replace(versionField, `"version": "${next}"`))
-    run('pnpm', ['run', 'sdk:build'])
-
-    step(`publish ${manifest.name}@${next}`)
-    run('pnpm', ['publish', '--access', 'public', '--no-git-checks'], packageDir)
+    waitForRegistry(manifest.name, state.version)
+    ensureCommitted(state.version, state)
+    ensureTagged(state.version, state)
+    ensurePushed(state.version, state)
   }
   catch (error) {
-    writeFileSync(manifestPath, source)
     fail([
-      `release aborted before publication — sdk/package.json restored to ${manifest.version}`,
-      `  ${error instanceof Error ? error.message : String(error)}`,
+      error instanceof Error ? error.message : String(error),
+      `${manifest.name}@${state.version} is published, but a later step failed.`,
+      `Resume by re-running: pnpm run publish:sdk:${state.bump}`,
     ].join('\n'))
   }
 
-  mkdirSync(stateDir, { recursive: true })
-  writeFileSync(releaseStatePath, `${JSON.stringify(
-    { version: next, bump, publishedAt: new Date().toISOString() } satisfies ReleaseState,
-    null,
-    2,
-  )}\n`)
-
-  waitForRegistry(manifest.name, next)
-  printNextSteps(next, manifest.homepage)
-}
-
-/** Tag the reviewed release commit — only once npm proves the release exists. */
-function tagRelease(): void {
-  const manifest = readManifest()
-  const tag = `v${manifest.version}`
-  const state = loadReleaseState()
-  const recentlyPublished = state !== undefined && state.version === manifest.version
-
-  if (capture('git', ['status', '--porcelain']) !== '')
-    fail('tagging requires a clean working tree — commit the release first')
-
-  if (!versionOnNpm(manifest.name, manifest.version, { preferOnline: true })) {
-    fail(recentlyPublished
-      ? [
-          `${manifest.name}@${manifest.version} was published but is not yet visible on npm.`,
-          `  Run pnpm run publish:sdk:${state.bump} again to wait for propagation, then retry the tag.`,
-        ].join('\n')
-      : `${manifest.name}@${manifest.version} is not on npm — publish before tagging`)
-  }
-
-  const head = capture('git', ['rev-parse', 'HEAD'])
-  if (capture('git', ['tag', '--list', tag]) === '') {
-    run('git', ['tag', '-a', tag, '-m', `🔖 release ${tag}`])
-    console.log(`\n✓ tagged ${head.slice(0, 7)} as ${tag}`)
-  }
-  else if (capture('git', ['rev-list', '-n', '1', tag]) === head) {
-    console.log(`✓ ${tag} already tags HEAD`)
-  }
-  else {
-    fail(`tag ${tag} already exists on another commit — delete it first if that was unintended`)
-  }
-
-  if (recentlyPublished)
-    rmSync(releaseStatePath, { force: true })
-
-  console.log(`  Push it with: git push origin ${tag}`)
-  console.log(`  Release notes: ${manifest.homepage}/releases/new?tag=${tag}`)
+  rmSync(releaseStatePath, { force: true })
+  step(`v${state.version} released`)
+  console.log(`  Attach release notes: ${manifest.homepage}/releases/new?tag=v${state.version}`)
 }
 
 const [command] = process.argv.slice(2)
@@ -380,9 +405,6 @@ switch (command) {
   case 'major':
     publishSdk(command)
     break
-  case 'tag':
-    tagRelease()
-    break
   default:
-    fail(`unknown command '${command ?? ''}' — use dry-run, patch, minor, major, or tag`)
+    fail(`unknown command '${command ?? ''}' — use dry-run, patch, minor, or major`)
 }
