@@ -1,0 +1,180 @@
+# vanity — workspace
+
+This repository is the complete development and release home for Vanity. User-facing behavior belongs to the domain specifications; this document describes the infrastructure that keeps those contracts honest.
+
+## 1. Layout
+
+```text
+vanity/
+  package.json             root command manager
+  pnpm-workspace.yaml
+  pnpm-lock.yaml
+  turbo.json
+  tsconfig.base.json
+  eslint.config.ts
+  sdk/                     @mszr/vanity
+  docs/                    canonical product and maintainer documentation
+  scripts/                 audits, benchmarks, smoke tests, release tooling
+  tests/                   browser and development integration tests
+  benchmarks/              generated scale fixtures and accepted baselines
+  sandbox/
+    fixtures/              shared comparison data
+    demo-main/             flagship Nuxt studio
+    demo-comparisons/      Vite comparison matrix
+  .github/workflows/       repository CI
+```
+
+The root is a private maintainer workspace. `sdk/` is the only publishable npm package.
+
+## 2. Command architecture
+
+The root `package.json` is the command center. Maintainers should not need to change directories for normal development, validation, benchmarking, demo work, or release preparation.
+
+Leaf package scripts describe the tasks Turbo executes; root scripts provide the stable human-facing vocabulary. `typecheck` first checks root tooling and browser specs through the root TypeScript project, then runs Turbo’s complete workspace graph; `sdk:typecheck` remains the narrow SDK-only command. Workspace dependency edges ensure the SDK builds before demos that consume its package exports.
+
+Turbo owns:
+
+- dependency-aware `build`, `prep`, `typecheck`, and `test` execution;
+- local caching of deterministic task output;
+- persistent development processes;
+- filtered SDK or demo workflows invoked by root aliases.
+
+SDK production builds exclude test-only files from their cache key, so changing a Selenita or runtime fixture does not rebuild the publishable package. SDK typechecking stores incremental compiler state under ignored `.cache/`; ESLint does the same. Independent demo builds run with bounded concurrency, while editor and browser workers are capped where extra processes cost more than they save.
+
+The raw vanilla-extract coexistence compiler is lazy: a Vanity-only project never starts its private Vite evaluator. When a raw vanilla-extract module does require it, the evaluator is middleware-only and transportless across Vite 7 and Vite 8, so concurrent builds do not allocate duplicate WebSocket ports or watchers.
+
+Scripts that inspect the repository as a whole—lint, documentation examples, audits, benchmarks, browser suites, fresh-package smoke, and releases—remain explicit root commands.
+
+## 3. Toolchain
+
+- **Package manager:** pnpm, pinned by `packageManager` in the root manifest.
+- **Runtime:** Node from `.nvmrc`.
+- **Task graph:** Turborepo.
+- **Lint and formatting:** ESLint with `@antfu/eslint-config`; formatting is part of the lint configuration.
+- **SDK build:** obuild.
+- **SDK tests:** Vitest across runtime, type, editor-DX, and emitted-output planes.
+- **Demo integration:** Playwright against Nuxt and Vite production/development servers.
+- **Primary integration substrate:** published vanilla-extract packages declared in `sdk/package.json`.
+
+### Dependency policy
+
+Third-party version ranges live in `pnpm-workspace.yaml`. The default `catalog` is the exact maintainer test matrix consumed with `catalog:`; the named `peers` catalog is the broader SDK compatibility contract consumed with `catalog:peers`. This keeps “what this checkout verifies” separate from “what consumers may install” without duplicating either policy across package manifests.
+
+Packing and publication use pnpm, which natively materializes both catalog and workspace references as ordinary npm-compatible ranges inside the artifact. It does not rewrite `sdk/package.json` on disk, so the authored manifest and Git always retain `catalog:` references—even after an interrupted pack or publish. Fresh-package smoke tests inspect and install that real tarball outside the workspace.
+
+Use `workspace:*` only for local workspace packages: it guarantees a local link during development and is likewise replaced by the publishable version during packing. Do not use it for registry dependencies.
+
+Run `pnpm run upi` to review and interactively select latest eligible upgrades across the workspace. It runs pnpm's latest-upgrade flow, keeps the default catalog and lockfile in sync, and respects the repository's minimum release-age policy. It deliberately retains TypeScript 6.x until its ESLint integration supports TypeScript 7. The broader peer catalog changes only when Vanity intentionally changes its supported compatibility window. Follow an upgrade with `pnpm run validate` before release work.
+
+Repository automation under `scripts/` is TypeScript run through `tsx`, with an introductory comment that states the operational purpose and the invariant each script protects. Published runtime shims and tool-required configuration files may still use their required JavaScript module format outside that directory.
+
+Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences for executable examples where appropriate. `pnpm run docs:examples` parses every TypeScript fence in the canonical README and documentation tree, then typechecks the package-backed examples under `docs/examples/`.
+
+## 4. Top-level commands
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm install` | install the workspace and optionally install the repository Git hook |
+| `pnpm run dev` | run the SDK stub build and all demos |
+| `pnpm run build` | build every workspace package with a build task |
+| `pnpm run typecheck` | typecheck every workspace package that exposes a typecheck task |
+| `pnpm run test` | run the complete SDK assertion suite |
+| `pnpm run lint` | lint and format-check the repository with a persistent cache |
+| `pnpm run lint:staged` | lint only staged files; this is the pre-commit guard |
+| `pnpm run check:fast` | run cached lint, root tooling/browser-spec typechecking, incremental SDK typechecking, and non-editor SDK tests for the normal edit loop |
+| `pnpm run check` | run non-browser quality gates |
+| `pnpm run validate` | run non-browser gates, the permanent canary, all demo builds, optimized-CSS checks, production/development browsers, and lifecycle cleanup |
+| `pnpm run audit` | build and audit the canonical SDK fixture |
+| `pnpm run docs:examples` | parse documentation fences and typecheck canonical examples |
+| `pnpm run upi` | interactively review latest eligible dependency updates across the workspace |
+
+### SDK
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm run sdk:dev` | run the SDK stub development build |
+| `pnpm run sdk:build` | build `@mszr/vanity` |
+| `pnpm run sdk:typecheck` | typecheck the SDK |
+| `pnpm run sdk:test` | run every SDK assertion plane |
+| `pnpm run sdk:test:fast` | run runtime and emitted-output assertions without starting editor language services |
+| `pnpm run sdk:test:dx` | run the Selenita editor-DX plane |
+| `pnpm run sdk:test:types` | run the compile-time assertion plane |
+| `pnpm run sdk:test:watch` | run SDK tests in watch mode |
+
+### Demos
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm run demo:main` | run the flagship Nuxt studio |
+| `pnpm run demo:comparisons` | run the Vite comparison matrix |
+| `pnpm run demo:typecheck` | prepare and typecheck all demos |
+| `pnpm run demo:build` | build all demos |
+| `pnpm run demo:e2e` | build, inspect CSS, run production/development browser suites, and verify process cleanup |
+
+### Benchmarks and packaging
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm run bench:generate` | regenerate deterministic scale fixtures |
+| `pnpm run bench:fixtures:check` | fail when generated fixtures drift |
+| `pnpm run bench:resolution` | compare resolution-type encodings |
+| `pnpm run bench:baseline` | build the SDK and record the current benchmark protocol |
+| `pnpm run fresh:smoke` | pack the SDK and prove fresh strict testing-kit, Vite, and Nuxt consumers |
+| `pnpm run publish:sdk:dry-run` | run the full gate and package rehearsal without changing versions |
+| `pnpm run publish:sdk:patch` / `:minor` / `:major` | release: preflight, gate, rehearse, bump, publish, and await npm |
+| `pnpm run publish:sdk:tag` | tag the reviewed release commit once npm confirms the version |
+
+## 5. Test organization
+
+SDK tests live beside the code they exercise in `sdk/src/`:
+
+- `*.test.ts` — runtime behavior;
+- `*.test-d.ts` — public type shape;
+- `*.dx.test.ts` — editor completion, diagnostics, and hover;
+- `*.out.test.ts` — emitted CSS and artifact shape.
+
+Repository browser tests live in `tests/`. They own cross-package evidence that cannot belong to the SDK: `demos.spec.ts` and `scheme-axis.spec.ts` exercise built Nuxt/Vite applications, while `dev/nuxt-dev.spec.ts` proves first paint and HMR against the development server. The root `tsconfig.json` typechecks these Node/Playwright files and root tooling without making those concerns part of the reusable `tsconfig.base.json`. Shared demo data lives in `sandbox/fixtures/`; package-consumer fixtures live in `sdk/src/test-support/`.
+
+The permanent evidence policy is [testing.md](./testing.md). A feature is complete only when the relevant runtime, type, editor, output, integration, packaging, and performance claims are independently proven.
+
+Use `check:fast` while iterating and `check` before handing off non-browser work. `validate` remains the release-shaped gate: it deliberately pays for every canary, optimizer, browser, and development-lifecycle contract. The two levels differ in cadence, not standards; no release evidence was removed from the complete gate.
+
+## 6. Generated and local state
+
+The root `.gitignore` is the single ignore authority. Generated or machine-local state includes:
+
+- `node_modules/`, `dist/`, `.nuxt/`, `.output/`, and `styled-system/`;
+- `.turbo/`, `.pnpm-store/`, coverage, Playwright results, and TypeScript build info;
+- `.vanity/` manifests, benchmark measurements, release validation receipts, and in-flight release records;
+- generated auto-import declarations.
+
+Checked-in benchmark fixtures under `benchmarks/generated/` are deterministic source artifacts and are guarded by `pnpm run bench:fixtures:check`.
+
+## 7. CI
+
+`.github/workflows/ci.yml` runs two parallel jobs:
+
+1. types, tests, documentation examples, audits, lint, and benchmark drift;
+2. the permanent canary, demo builds, optimized-CSS checks, production and development browser suites, lifecycle cleanup, and fresh packed consumers.
+
+Both jobs install from the root lockfile. The workflow carries read-only repository permissions and never publishes.
+
+## 8. Releases
+
+The SDK package metadata points to `https://github.com/mareszhar/vanity` and declares `sdk/` as its repository directory.
+
+Release tooling is intentionally review-first, and a release is one command:
+
+1. `pnpm run publish:sdk:patch`, `:minor`, or `:major` verifies npm authentication and target-version availability before any expensive work, runs the complete gate and packaging rehearsal, bumps `sdk/package.json`, rebuilds, publishes `@mszr/vanity`, and waits for registry visibility.
+2. The maintainer reviews history and creates the release commit — `🔖 release v<version>` — by committing or squashing as they prefer; the npm artifact is independent of Git history.
+3. From that clean commit, `pnpm run publish:sdk:tag` confirms the manifest version is live on npm and tags `HEAD` as `v<version>`; the maintainer pushes the branch and tag and attaches release notes to the GitHub release. Tags therefore exist only for successful releases, on the reviewed commit.
+
+`pnpm run publish:sdk:dry-run` proves the same gate and packaging rehearsal without changing anything.
+
+Failure handling is explicit:
+
+- Validation and packaging receipts under ignored `.vanity/` are keyed to a digest of repository content with the manifest version masked, so unchanged inputs are never revalidated — not even after the bump itself. `VANITY_FORCE_VERIFY=1` ignores receipts; `VANITY_UNSAFE_PUBLISH_SKIP_CHECKS=1` skips the gate entirely and is never appropriate for a real release.
+- A failure before publication restores `sdk/package.json` and leaves no release state.
+- Once published, the bump is permanent: the release is recorded under `.vanity/`, and re-running the same release command resumes the registry wait and remaining steps instead of re-bumping or re-publishing. `publish:sdk:tag` completes the release and clears the record.
+
+The release script never commits or pushes; the only Git history it creates is the version tag, through the explicit `publish:sdk:tag` step.

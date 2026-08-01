@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./.cache/typescript/workspace.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": [
+    "*.config.ts",
+    "scripts/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "benchmarks",
+    "node_modules",
+    "sandbox",
+    "sdk",
+    "spikes"
+  ]
+}

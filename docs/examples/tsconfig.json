@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@mszr/vanity": ["../../sdk/dist/index.d.mts"],
+      "@mszr/vanity/presets": ["../../sdk/dist/presets.d.mts"],
+      "@mszr/vanity/runtime": ["../../sdk/dist/runtime.d.mts"]
+    },
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["./*.ts"]
+}

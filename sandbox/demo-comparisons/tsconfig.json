@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "plugins": [{ "name": "@mszr/vanity/typescript" }],
+    "types": ["vite/client", "vanity-auto-imports"]
+  },
+  "vueCompilerOptions": {
+    "plugins": ["@vue/language-plugin-pug"]
+  },
+  "include": ["src", "*.ts"]
+}

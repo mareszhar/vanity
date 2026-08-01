@@ -1,0 +1,17 @@
+{
+  "name": "spike-type-accumulation",
+  "type": "module",
+  "private": true,
+  "description": "Agnostic TS spike: an accumulating builder with structural, readable requirements. Proves the type-level patterns a shape-accumulating engine relies on.",
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "depth": "node depth/measure.mjs"
+  },
+  "devDependencies": {
+    "@mszr/selenita": "^0.2.2",
+    "type-fest": "^5.8.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

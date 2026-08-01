@@ -1,0 +1,27 @@
+/* The SFC lane's design decisions — a hand-maintained mirror of @prism/domain.
+   This duplication is the model speaking: scoped <style> blocks can't import
+   TypeScript, so the decisions live twice and drift is a code-review problem.
+
+   The live hue is no harder here than anywhere else — every value just threads
+   var(--demo-hue) by hand, and every derived lightness/chroma was worked out by
+   a human and pasted in. That upkeep is the cost being measured. */
+
+:root {
+  --sfc-brand: oklch(0.58 0.2 var(--demo-hue, 285));
+  --sfc-brand-hover: light-dark(oklch(0.5266 0.177 var(--demo-hue, 285)), oklch(0.623 0.177 var(--demo-hue, 285)));
+  --sfc-brand-soft: light-dark(oklch(0.928 0.042 var(--demo-hue, 285)), oklch(0.242 0.042 var(--demo-hue, 285)));
+  --sfc-on-brand: oklch(100% 0 0);
+  --sfc-surface: light-dark(oklch(0.9627 0.008 var(--demo-hue, 285)), oklch(0.1558 0.008 var(--demo-hue, 285)));
+  --sfc-surface-raised: light-dark(oklch(0.9172 0.008 var(--demo-hue, 285)), oklch(0.1988 0.008 var(--demo-hue, 285)));
+  --sfc-border: light-dark(oklch(0.808 0.008 var(--demo-hue, 285)), oklch(0.302 0.008 var(--demo-hue, 285)));
+  --sfc-ink-muted: light-dark(oklch(0.4258 0.008 var(--demo-hue, 285)), oklch(0.6632 0.008 var(--demo-hue, 285)));
+  --sfc-ink: light-dark(oklch(0.1346 0.008 var(--demo-hue, 285)), oklch(0.9384 0.008 var(--demo-hue, 285)));
+  --sfc-space-xs: 4px;
+  --sfc-space-sm: 8px;
+  --sfc-space-md: 16px;
+  --sfc-space-lg: 24px;
+  --sfc-radius-sm: 6px;
+  --sfc-radius-md: 10px;
+  --sfc-radius-pill: 999px;
+  --sfc-duration-fast: 120ms;
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://v2-10-5.turborepo.dev/schema.json",
+  "ui": "stream",
+  "tasks": {
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "prep": {
+      "dependsOn": ["^build"],
+      "outputs": [".nuxt/**", "auto-imports.d.ts", "styled-system/**"]
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts", "!**/*.test-d.ts", "!src/test-support/**"],
+      "outputs": ["dist/**", ".output/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build", "prep"],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "outputs": []
+    }
+  }
+}

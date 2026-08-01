@@ -1,0 +1,12 @@
+{
+  "name": "@prism/domain",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The shared Prism design decisions and content, as data — every comparison lane derives from this one source",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts"
+}

@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+# Vanity commit guard: synchronize generated package metadata and lint staged
+# Vanity changes before Git records the commit.
+#
+# Installed by scripts/install-git-hooks.ts through:
+#   git config core.hooksPath .githooks
+
+readmes=$(git diff --cached --name-only -- README.md sdk/README.md)
+
+if [ -n "$readmes" ]; then
+  if ! git diff --quiet -- README.md; then
+    echo "[vanity pre-commit] README.md has unstaged changes; stage it before committing either README" >&2
+    exit 1
+  fi
+
+  echo "[vanity pre-commit] synchronizing the package README"
+  pnpm run readme:sync
+  git add sdk/README.md
+fi
+
+echo "[vanity pre-commit] checking the package README and linting staged files"
+pnpm run readme:check
+pnpm run lint:staged

@@ -1,0 +1,21 @@
+{
+  "name": "spike-compiler-projection",
+  "type": "module",
+  "private": true,
+  "description": "Agnostic Vite spike: one pure contract module projected into build, browser, SSR, and tool contexts with compiler-owned CSS emission.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "validate": "pnpm run check && pnpm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "type-fest": "^5.8.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  }
+}

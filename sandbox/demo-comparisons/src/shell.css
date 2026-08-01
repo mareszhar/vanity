@@ -1,0 +1,493 @@
+/* The harness chrome — not a lane. Plain CSS on purpose: the lanes are the
+   subject, so the frame around them stays neutral and hand-written. */
+
+:root {
+  /* The one live channel. Every lane derives its own tokens from it. */
+  --demo-hue: 285;
+  --demo-brand: oklch(0.58 0.2 var(--demo-hue));
+  --demo-canvas: light-dark(oklch(0.985 0.004 var(--demo-hue)), oklch(0.145 0.006 var(--demo-hue)));
+  --demo-surface: light-dark(oklch(1 0 0), oklch(0.175 0.007 var(--demo-hue)));
+  --demo-sunken: light-dark(oklch(0.965 0.004 var(--demo-hue)), oklch(0.128 0.006 var(--demo-hue)));
+  --demo-line: light-dark(oklch(0.9 0.005 var(--demo-hue)), oklch(0.26 0.008 var(--demo-hue)));
+  --demo-line-strong: light-dark(oklch(0.82 0.007 var(--demo-hue)), oklch(0.34 0.01 var(--demo-hue)));
+  --demo-ink: light-dark(oklch(0.19 0.01 var(--demo-hue)), oklch(0.95 0.008 var(--demo-hue)));
+  --demo-ink-muted: light-dark(oklch(0.48 0.012 var(--demo-hue)), oklch(0.68 0.012 var(--demo-hue)));
+  --demo-ink-faint: light-dark(oklch(0.62 0.01 var(--demo-hue)), oklch(0.55 0.01 var(--demo-hue)));
+
+  color-scheme: light dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  background: var(--demo-canvas);
+  color: var(--demo-ink);
+}
+
+:root[data-scheme='light'] {
+  color-scheme: light;
+}
+
+:root[data-scheme='dark'] {
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 18rem;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}
+
+.shell {
+  width: min(100% - 2rem, 82rem);
+  margin-inline: auto;
+  padding-block: 2.5rem 4rem;
+  display: grid;
+  gap: 1.75rem;
+}
+
+/* ─── Hero ─────────────────────────────────────────────────────────────── */
+
+.hero {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 46rem;
+}
+
+.eyebrow,
+.kicker {
+  margin: 0;
+  color: var(--demo-brand);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.lede {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--demo-ink-muted);
+  font-size: 1.02rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* ─── Control panel ────────────────────────────────────────────────────── */
+
+.panel {
+  display: grid;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--demo-line);
+  border-radius: 0.9rem;
+  background: var(--demo-surface);
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+}
+
+.panel-head h2 {
+  margin: 0.2rem 0 0;
+  font-size: 1.15rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.status {
+  margin: 0;
+  color: var(--demo-ink-faint);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two even rows of three: the discrete choices, then the continuous ones. */
+.controls {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem 1.25rem;
+  align-items: end;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.field-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--demo-ink-muted);
+  font-size: 0.78rem;
+  font-weight: 550;
+}
+
+.field-value {
+  color: var(--demo-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-note {
+  margin: 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--demo-line);
+  color: var(--demo-ink-faint);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.panel-note code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.92em;
+  color: var(--demo-ink-muted);
+}
+
+/* ─── Select ───────────────────────────────────────────────────────────── */
+
+.select-wrap {
+  position: relative;
+  display: grid;
+}
+
+.select-wrap select {
+  appearance: none;
+  width: 100%;
+  min-height: 2.5rem;
+  /* Deliberate room between the value and the caret. */
+  padding-inline: 0.7rem 2.1rem;
+  border: 1px solid var(--demo-line-strong);
+  border-radius: 0.55rem;
+  background: var(--demo-sunken);
+  text-transform: capitalize;
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+
+.select-wrap select:hover {
+  border-color: var(--demo-brand);
+}
+
+.select-caret {
+  position: absolute;
+  inset-inline-end: 0.7rem;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  color: var(--demo-ink-faint);
+  font-size: 0.6rem;
+  pointer-events: none;
+}
+
+/* ─── Switch ───────────────────────────────────────────────────────────── */
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.switch-track {
+  position: relative;
+  inline-size: 2.6rem;
+  block-size: 1.5rem;
+  border-radius: 999px;
+  background: var(--demo-line-strong);
+  transition: background-color 140ms ease;
+}
+
+.switch[data-state='checked'] .switch-track {
+  background: var(--demo-brand);
+}
+
+.switch-knob {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 0.2rem;
+  inline-size: 1.1rem;
+  block-size: 1.1rem;
+  border-radius: 50%;
+  background: oklch(1 0 0);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
+  translate: 0 -50%;
+  transition: translate 180ms cubic-bezier(0.3, 0.7, 0, 1);
+}
+
+.switch[data-state='checked'] .switch-knob {
+  translate: calc(2.6rem - 1.1rem - 0.4rem) -50%;
+}
+
+/* ─── Range ────────────────────────────────────────────────────────────── */
+
+.range {
+  appearance: none;
+  width: 100%;
+  height: 1.2rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--demo-sunken);
+  border: 1px solid var(--demo-line-strong);
+}
+
+.range::-moz-range-track {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--demo-sunken);
+  border: 1px solid var(--demo-line-strong);
+}
+
+.range::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: calc((0.45rem - 1.1rem) / 2);
+  border: 2px solid var(--demo-brand);
+  border-radius: 50%;
+  background: var(--demo-surface);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.2);
+}
+
+.range::-moz-range-thumb {
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid var(--demo-brand);
+  border-radius: 50%;
+  background: var(--demo-surface);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.2);
+}
+
+.range-hue::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    90deg,
+    oklch(0.72 0.17 0),
+    oklch(0.72 0.17 60),
+    oklch(0.72 0.17 120),
+    oklch(0.72 0.17 180),
+    oklch(0.72 0.17 240),
+    oklch(0.72 0.17 300),
+    oklch(0.72 0.17 360)
+  );
+}
+
+.range-hue::-moz-range-track {
+  background: linear-gradient(
+    90deg,
+    oklch(0.72 0.17 0),
+    oklch(0.72 0.17 60),
+    oklch(0.72 0.17 120),
+    oklch(0.72 0.17 180),
+    oklch(0.72 0.17 240),
+    oklch(0.72 0.17 300),
+    oklch(0.72 0.17 360)
+  );
+}
+
+:where(select, input, button):focus-visible {
+  outline: 2px solid var(--demo-brand);
+  outline-offset: 2px;
+}
+
+/* ─── Lane matrix ──────────────────────────────────────────────────────── */
+
+/* Five lanes read as a matrix only when they sit side by side, so the columns
+   are stepped deliberately rather than left to auto-fit (which strands the
+   fifth lane on a row of its own). */
+.matrix {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+/* Every lane is presented identically — same features, same frame. The only
+   thing under comparison is the source behind each one. */
+.lane {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 0.9rem;
+  min-width: 0;
+  padding: 1.1rem;
+  border: 1px solid var(--demo-line);
+  border-radius: 0.9rem;
+  background: var(--demo-surface);
+}
+
+.lane-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.lane-index {
+  display: grid;
+  place-items: center;
+  inline-size: 1.6rem;
+  block-size: 1.6rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--demo-sunken);
+  border: 1px solid var(--demo-line);
+  color: var(--demo-ink-faint);
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lane-head h2 {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.lane-note {
+  min-height: 4.5em;
+  margin: 0;
+  color: var(--demo-ink-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.lane-demo {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  padding: 0.9rem;
+  border: 1px solid var(--demo-line);
+  border-radius: 0.65rem;
+  background: var(--demo-sunken);
+}
+
+.demo-block {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+}
+
+.card-block {
+  align-self: stretch;
+}
+
+.card-block > article {
+  width: 100%;
+}
+
+.demo-label-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.demo-label,
+.demo-value {
+  color: var(--demo-ink-faint);
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.demo-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The progress track fills its block. */
+.demo-block > [role='progressbar'] {
+  width: 100%;
+}
+
+.lane-footer {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--demo-line);
+  color: var(--demo-ink-faint);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 34rem) {
+  .controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .matrix {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 48rem) {
+  .shell {
+    width: min(100% - 3rem, 82rem);
+    gap: 2.25rem;
+    padding-block: 3.5rem 5rem;
+  }
+
+  .panel {
+    padding: 1.5rem;
+  }
+
+  .controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .matrix {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 84rem) {
+  .matrix {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .lane-note {
+    min-height: 5.5em;
+  }
+}

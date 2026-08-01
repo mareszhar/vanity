@@ -1,0 +1,15 @@
+{
+  "name": "spike-value-channel-law",
+  "type": "module",
+  "private": true,
+  "description": "Library-agnostic spike for semantic reference rebinding and composable relative-channel expressions.",
+  "scripts": {
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@mszr/selenita": "^0.2.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

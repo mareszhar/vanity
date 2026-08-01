@@ -1,0 +1,5 @@
+/* The Panda lane's stylesheet — its PostCSS plugin replaces this directive
+   with the extracted styles. Tokens live in panda.config.ts; the codegen step
+   (`panda codegen`, wired to postinstall) regenerates ../styled-system. */
+
+@layer panda-reset, panda-base, panda-tokens, panda-recipes, panda-utilities;

@@ -1,0 +1,23 @@
+/* The Tailwind lane's design decisions — a hand-maintained mirror of
+   @prism/domain in @theme syntax. Scheme pairs ride light-dark() values, so
+   utilities follow the toggle without dark: doubling, and every value threads
+   var(--demo-hue) so the whole theme follows the live channel. */
+
+@import 'tailwindcss';
+
+@theme {
+  --color-brand: oklch(0.58 0.2 var(--demo-hue, 285));
+  --color-brand-hover: light-dark(oklch(0.5266 0.177 var(--demo-hue, 285)), oklch(0.623 0.177 var(--demo-hue, 285)));
+  --color-brand-soft: light-dark(oklch(0.928 0.042 var(--demo-hue, 285)), oklch(0.242 0.042 var(--demo-hue, 285)));
+  --color-on-brand: oklch(100% 0 0);
+  --color-surface: light-dark(oklch(0.9627 0.008 var(--demo-hue, 285)), oklch(0.1558 0.008 var(--demo-hue, 285)));
+  --color-surface-raised: light-dark(
+    oklch(0.9172 0.008 var(--demo-hue, 285)),
+    oklch(0.1988 0.008 var(--demo-hue, 285))
+  );
+  --color-edge: light-dark(oklch(0.808 0.008 var(--demo-hue, 285)), oklch(0.302 0.008 var(--demo-hue, 285)));
+  --color-ink-muted: light-dark(oklch(0.4258 0.008 var(--demo-hue, 285)), oklch(0.6632 0.008 var(--demo-hue, 285)));
+  --color-ink: light-dark(oklch(0.1346 0.008 var(--demo-hue, 285)), oklch(0.9384 0.008 var(--demo-hue, 285)));
+  --radius-sm: 6px;
+  --radius-md: 10px;
+}

@@ -1,0 +1,20 @@
+{
+  "name": "spike-system-package",
+  "type": "module",
+  "private": true,
+  "description": "Agnostic TS spike: a chained, consolidated system exported from a LIBRARY PACKAGE. Probes declaration emit (d.ts size, TS7056/TS2742, alias portability) and the consumer side (check time, completions from the emitted d.ts alone).",
+  "scripts": {
+    "generate": "node emit/generate.mjs",
+    "emit": "tsc -p lib/tsconfig.json",
+    "check": "pnpm run emit && tsc -p app/tsconfig.json",
+    "pretest": "pnpm run emit",
+    "test": "vitest run",
+    "measure": "node emit/measure.mjs"
+  },
+  "devDependencies": {
+    "@mszr/selenita": "^0.2.2",
+    "type-fest": "^5.8.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

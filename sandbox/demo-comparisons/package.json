@@ -1,0 +1,34 @@
+{
+  "name": "demo-comparisons",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The same Prism components in SFC scoped CSS, Tailwind, Panda, raw vanilla-extract, and vanity — study material and competitive bars",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "prep": "vite build --mode prepare",
+    "typecheck": "vue-tsc --noEmit",
+    "postinstall": "panda codegen"
+  },
+  "dependencies": {
+    "@prism/domain": "workspace:*",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@mszr/vanity": "workspace:*",
+    "@pandacss/dev": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@vanilla-extract/css": "catalog:",
+    "@vanilla-extract/dynamic": "catalog:",
+    "@vanilla-extract/recipes": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vue/language-plugin-pug": "catalog:",
+    "pug": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "unplugin-auto-import": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
+  }
+}

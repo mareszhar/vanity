@@ -1,0 +1,8 @@
+{
+  "name": "vanity-benchmark-small",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@mszr/vanity": "link:../../../sdk"
+  }
+}

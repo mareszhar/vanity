@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mszr.dev/vanity/manifest-3.schema.json",
+  "title": "vanity Manifest v3",
+  "description": "The canonical vanity system map plus package-relative build-module provenance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "format",
+    "version",
+    "system",
+    "systems",
+    "modules"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.mszr.dev/vanity/manifest-3.schema.json"
+    },
+    "format": {
+      "const": "vanity.manifest/3"
+    },
+    "version": {
+      "const": 3
+    },
+    "system": {
+      "$ref": "#/$defs/system"
+    },
+    "systems": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/system"
+      }
+    },
+    "modules": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/module"
+      }
+    }
+  },
+  "$defs": {
+    "identities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compatibility",
+        "css",
+        "runtime",
+        "docs"
+      ],
+      "properties": {
+        "compatibility": {
+          "type": "string",
+          "pattern": "^vanity-compatibility-1-"
+        },
+        "css": {
+          "type": "string",
+          "pattern": "^vanity-css-1-"
+        },
+        "runtime": {
+          "type": "string",
+          "pattern": "^vanity-runtime-schema-1-"
+        },
+        "docs": {
+          "type": "string",
+          "pattern": "^vanity-docs-1-"
+        }
+      }
+    },
+    "semanticEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "owner"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "system",
+                "module",
+                "plugin"
+              ]
+            },
+            "id": {
+              "type": "string"
+            }
+          }
+        },
+        "declaredAt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "column": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "semanticRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/semanticEntry"
+      }
+    },
+    "system": {
+      "allOf": [
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "kind",
+            "format",
+            "version",
+            "identities",
+            "prefix",
+            "root",
+            "layerRoot",
+            "engine",
+            "layers",
+            "conditions",
+            "axes",
+            "roots",
+            "tokens",
+            "plugins",
+            "extensions",
+            "consts",
+            "constructors",
+            "utilities",
+            "runtime",
+            "overwrites",
+            "audits"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "format": {
+              "const": "vanity.introspection/1"
+            },
+            "version": {
+              "const": 1
+            },
+            "kind": {
+              "const": "system"
+            },
+            "identities": {
+              "$ref": "#/$defs/identities"
+            },
+            "prefix": {
+              "type": "string"
+            },
+            "root": {
+              "type": "string"
+            },
+            "layerRoot": {
+              "type": "string"
+            },
+            "engine": {
+              "$ref": "#/$defs/semanticEntry"
+            },
+            "layers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/semanticEntry"
+              }
+            },
+            "conditions": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "axes": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "roots": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "tokens": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "plugins": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "extensions": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "consts": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "constructors": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "utilities": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "runtime": {
+              "type": "object"
+            },
+            "overwrites": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/semanticEntry"
+              }
+            },
+            "audits": {
+              "$ref": "#/$defs/semanticRecord"
+            }
+          }
+        }
+      ]
+    },
+    "module": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "source",
+            "recipes",
+            "ports",
+            "styles",
+            "escapes",
+            "contrast",
+            "tokenUsage"
+          ],
+          "properties": {
+            "kind": {
+              "const": "module"
+            },
+            "source": {
+              "type": "string"
+            },
+            "recipes": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "ports": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "styles": {
+              "$ref": "#/$defs/semanticRecord"
+            },
+            "escapes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/semanticEntry"
+              }
+            },
+            "contrast": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/semanticEntry"
+              }
+            },
+            "tokenUsage": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

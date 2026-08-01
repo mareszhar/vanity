@@ -1,0 +1,150 @@
+{
+  "name": "@mszr/vanity",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "A delightful design-system engine and TypeScript harness for CSS: typed systems and styling APIs in; standards-aligned CSS out.",
+  "author": "Mares (https://github.com/mareszhar)",
+  "license": "AGPL-3.0-only",
+  "homepage": "https://github.com/mareszhar/vanity",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mareszhar/vanity.git",
+    "directory": "sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/mareszhar/vanity/issues"
+  },
+  "keywords": [
+    "design-system",
+    "typescript",
+    "css",
+    "vanilla-extract",
+    "tokens",
+    "recipes",
+    "vue",
+    "nuxt"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./runtime": {
+      "types": "./dist/runtime.d.mts",
+      "import": "./dist/runtime.mjs"
+    },
+    "./capabilities": {
+      "types": "./dist/capabilities.d.mts",
+      "import": "./dist/capabilities.mjs"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.mts",
+      "import": "./dist/cli.mjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.mts",
+      "import": "./dist/testing.mjs"
+    },
+    "./manifest.schema.json": "./manifest.schema.json",
+    "./vite": {
+      "types": "./dist/vite.d.mts",
+      "import": "./dist/vite.mjs"
+    },
+    "./vue": {
+      "types": "./dist/vue.d.mts",
+      "import": "./dist/vue.mjs"
+    },
+    "./nuxt": {
+      "types": "./dist/nuxt.d.mts",
+      "import": "./dist/nuxt.mjs"
+    },
+    "./typescript": "./typescript.cjs",
+    "./presets": {
+      "types": "./dist/presets.d.mts",
+      "import": "./dist/presets.mjs"
+    }
+  },
+  "bin": {
+    "vanity": "./dist/cli.mjs"
+  },
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist",
+    "manifest.schema.json",
+    "typescript.cjs"
+  ],
+  "scripts": {
+    "prepack": "pnpm -w run readme:check",
+    "dev": "obuild --stub",
+    "build": "obuild",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --typecheck --passWithNoTests",
+    "test:fast": "vitest run --exclude '**/*.dx.test.ts'",
+    "test:dx": "vitest run .dx.test.ts",
+    "test:types": "vitest run --typecheck.only --passWithNoTests",
+    "test:watch": "vitest --typecheck"
+  },
+  "peerDependencies": {
+    "@mszr/selenita": "catalog:peers",
+    "@nuxt/kit": "catalog:peers",
+    "@nuxt/schema": "catalog:peers",
+    "nuxt": "catalog:peers",
+    "typescript": "catalog:peers",
+    "vite": "catalog:peers",
+    "vue": "catalog:peers"
+  },
+  "peerDependenciesMeta": {
+    "@mszr/selenita": {
+      "optional": true
+    },
+    "@nuxt/kit": {
+      "optional": true
+    },
+    "@nuxt/schema": {
+      "optional": true
+    },
+    "nuxt": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@vanilla-extract/css": "catalog:",
+    "@vanilla-extract/integration": "catalog:",
+    "@vanilla-extract/vite-plugin": "catalog:",
+    "csstype": "catalog:",
+    "culori": "catalog:",
+    "esbuild": "catalog:",
+    "known-css-properties": "catalog:",
+    "lightningcss": "catalog:",
+    "oxc-parser": "catalog:"
+  },
+  "devDependencies": {
+    "@mszr/selenita": "catalog:",
+    "@nuxt/kit": "catalog:",
+    "@nuxt/schema": "catalog:",
+    "@types/culori": "catalog:",
+    "@types/node": "catalog:",
+    "ajv": "catalog:",
+    "nuxt": "catalog:",
+    "obuild": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vue": "catalog:"
+  }
+}
