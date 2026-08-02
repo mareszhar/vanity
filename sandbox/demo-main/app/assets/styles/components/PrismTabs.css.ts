@@ -1,4 +1,5 @@
-const { anatomy, t } = ds
+const { anatomy, calc, length, t } = ds
+const controlRadius = calc(t.radius.sm).subtract(length.rem(0.2))
 
 export const tabs = anatomy({
   parts: ['root', 'list', 'trigger', 'panel'],
@@ -22,7 +23,7 @@ export const tabs = anatomy({
       minBlockSize: t.size.controlSm,
       paddingInline: t.space.sm,
       border: 0,
-      borderRadius: `calc(${t.radius.sm} - 0.2rem)`,
+      borderRadius: controlRadius,
       background: 'transparent',
       color: t.color.inkMuted,
       whiteSpace: 'nowrap',

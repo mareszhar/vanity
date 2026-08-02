@@ -8,9 +8,9 @@ describe('symmetric authoring editor DX', () => {
   it('keeps module callbacks scoped and system callbacks fully accumulated', () => {
     const result = project.query`
       import { createSystem, defineConsts } from '@mszr/vanity'
-      const constants = defineConsts({ seed: 2 }).add(module => {
-        void module.${cursor('module')}seed
-        return { doubled: module.seed * 2 }
+      const constants = defineConsts({ seed: 2 }).add(m => {
+        void m.${cursor('module')}seed
+        return { doubled: m.seed * 2 }
       })
       createSystem().addConsts(constants).addConsts(ds => {
         void ds.consts.${cursor('system')}doubled

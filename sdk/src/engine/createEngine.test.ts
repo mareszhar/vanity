@@ -146,7 +146,7 @@ describe('the canonical design engine', () => {
     const de = createEngine()
     const seed = { color: { brand: '#635bff' } }
     const module = de.defineTokens(seed)
-    const branch = module.derive(({ color }) => ({ color: { accent: color.brand } }))
+    const branch = module.derive(m => ({ color: { accent: m.color.brand } }))
 
     seed.color.brand = '#f00'
     expect(Object.isFrozen(module)).toBe(true)
@@ -190,8 +190,8 @@ describe('engine-owned system finalization', () => {
     const de = createEngine({ length: { unitless: 'rem' } })
     const widget = de.defineTokens({
       color: { brand: de.oklch(0.58, 0.2, 285) },
-    }, { root: '#widget', layer: 'tokens.components' }).derive(({ color }) => ({
-      color: { accent: color.brand },
+    }, { root: '#widget', layer: 'tokens.components' }).derive(m => ({
+      color: { accent: m.color.brand },
     }))
     const metrics = de.defineTokens({ space: { sm: de.length(0.5) } })
 

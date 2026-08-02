@@ -18,16 +18,14 @@ Create and consolidate a design system in a plain TypeScript module—not in a `
 // src/design/system.ts
 import { createSystem } from '@mszr/vanity'
 
-const open = createSystem()
-
-export const ds = open
-  .addTokens(open.defineTokens({
+export const ds = createSystem()
+  .addTokens(ds => ({
     color: {
       brand: '#635bff',
       canvas: '#ffffff',
     },
     space: {
-      md: open.length.rem(1),
+      md: ds.length.rem(1),
     },
   }))
   .consolidate({

@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 describe('unified token output', () => {
   it('preserves logical token values and chained relative-channel expressions', () => {
     const open = createSystem()
-      .addTokens(current => current.defineTokens({
+      .addTokens(current => ({
         control: {
           minL: current.tdef.number({ val: 0.18, mutable: true }),
           maxL: current.tdef.number({ val: 0.92, mutable: true }),
@@ -20,7 +20,7 @@ describe('unified token output', () => {
           hue: current.tdef.number({ val: 285, mutable: true }),
         },
       }))
-      .addTokens(current => current.defineTokens({
+      .addTokens(current => ({
         color: {
           brand: current.oklch(
             current.calc(current.t.control.minL).add(
@@ -33,7 +33,7 @@ describe('unified token output', () => {
           ),
         },
       }))
-      .addTokens(current => current.defineTokens({
+      .addTokens(current => ({
         color: {
           shifted: current.oklch.from(current.t.color.brand, {
             l: current.channel.subtract(current.t.control.pivot).multiply(-1000),

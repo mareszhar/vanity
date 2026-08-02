@@ -70,11 +70,11 @@ describe('runtime types', () => {
         activate: (_root, _mode) => {},
       },
     })
-    const controlled = open.addTokens(open.defineTokens({
+    const controlled = open.addTokens({
       value: open.tdef({
         axes: { custom: { automatic: 'a', manual: 'b' } },
       }),
-    })).consolidate()
+    }).consolidate()
     const runtime = controlled.runtime()
 
     runtime.axes.custom.$switchTo('automatic')
@@ -93,11 +93,11 @@ describe('runtime types', () => {
       },
       default: 'cozy',
     })
-    const controlled = open.addTokens(open.defineTokens({
+    const controlled = open.addTokens({
       value: open.tdef({
         axes: { density: { compact: 'a', dense: 'd', automatic: 'b' } },
       }),
-    })).consolidate()
+    }).consolidate()
     const runtime = controlled.runtime()
 
     runtime.axes.density.$switchTo('compact')
@@ -116,11 +116,11 @@ describe('runtime types', () => {
         interactive: thisMode.and(selector('&:hover')),
       },
     })
-    const controlled = open.addTokens(open.defineTokens({
+    const controlled = open.addTokens({
       value: open.tdef({
         axes: { compound: { anchored: 'a', union: 'u', gated: 'g', interactive: 'i' } },
       }),
-    })).consolidate()
+    }).consolidate()
     const runtime = controlled.runtime()
 
     runtime.axes.compound.$switchTo('anchored')

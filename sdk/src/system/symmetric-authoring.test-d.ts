@@ -13,8 +13,8 @@ import { describe, expectTypeOf, it } from 'vitest'
 
 describe('symmetric authoring types', () => {
   it('preserves accumulated module and system callback context', () => {
-    const consts = defineConsts({ seed: 2 }).add(module => ({
-      doubled: module.seed * 2,
+    const consts = defineConsts({ seed: 2 }).add(m => ({
+      doubled: m.seed * 2,
     }))
     const conditions = defineConditions().add('selected', '&[aria-selected=true]')
     const axes = defineAxes().add('density', ['comfortable', 'compact'])

@@ -12,7 +12,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 
 describe('public authoring vocabulary', () => {
   it('spells compatible input and token boundaries', () => {
-    const open = createSystem().addTokens(current => current.defineTokens({
+    const open = createSystem().addTokens(current => ({
       length: current.tdef.length({ val: current.length.rem(1), mutable: true }),
       color: current.tdef.color({ val: 'rebeccapurple', mutable: true }),
     }))

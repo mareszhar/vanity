@@ -1,7 +1,8 @@
-const { class: style, port, t } = ds
+const { calc, class: style, clamp, percent, port, t } = ds
 
 // The fraction is a per-instance runtime input — a port, not a design token.
 export const fraction = port(0)
+const percentage = calc(fraction).multiply(percent(100))
 
 export const track = style({
   position: 'relative',
@@ -14,7 +15,7 @@ export const track = style({
 
 export const fill = style({
   blockSize: '100%',
-  inlineSize: `clamp(0%, calc(${fraction} * 100%), 100%)`,
+  inlineSize: clamp(percent(0), percentage, percent(100)),
   borderRadius: t.radius.pill,
   background: `linear-gradient(90deg, ${t.color.brand}, ${t.color.brandHover})`,
   transitionProperty: 'inline-size',

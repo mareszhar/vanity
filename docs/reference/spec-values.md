@@ -208,10 +208,12 @@ This contract applies across direct token-channel authoring. A target without an
 
 ```TS
 const colors = open.defineTokens({
-  color: {
-    surface: open.tdef.color({ val: '#1b1b1f', mutable: true }),
-    onSurface: open.legibleOn(open.t.color.surface),
-  },
+  color: open.defineTokens()
+    .add('surface', {
+      val: open.oklch(0.14, 0.01, 285),
+      mutable: true,
+    })
+    .add('onSurface', m => open.legibleOn(m.surface)),
 })
 ```
 

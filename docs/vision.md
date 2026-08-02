@@ -42,9 +42,9 @@ const open = createSystem()
   })
 
 export const ds = open
-  .addTokens(open.defineTokens({
+  .addTokens(ds => ({
     color: {
-      brand: open.oklch(0.6, 0.15, 264),
+      brand: ds.oklch(0.6, 0.15, 264),
     },
   }))
   .consolidate({

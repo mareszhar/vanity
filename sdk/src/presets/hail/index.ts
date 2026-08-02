@@ -174,7 +174,7 @@ function setupHail(initial: VanityPluginSetupSystem, rawOptions: HailOptions): o
 }
 
 function setupFlatHail(initial: VanityPluginSetupSystem, options: HailNormalizedOptions): object {
-  const withControls = initial.addTokens(controlTokens(initial, options))
+  const withControls = initial.addTokens(controlTokenSeed(initial, options))
   return installVocabularyAndPresets(asWorkingSystem(withControls), options)
 }
 
@@ -186,7 +186,7 @@ function setupElevatedHail(initial: VanityPluginSetupSystem, options: HailNormal
     readonly scheme: ReturnType<typeof colorSchemes>
   }>
   const controls = controlTokenSeed(withScheme, options)
-  const withControls = withScheme.addTokens(withScheme.defineTokens({
+  const withControls = withScheme.addTokens({
     ...controls,
     hail: {
       ...controls.hail,
@@ -196,12 +196,8 @@ function setupElevatedHail(initial: VanityPluginSetupSystem, options: HailNormal
         description: 'Elevation direction: 0 in light schemes and 1 in dark schemes.',
       }),
     },
-  }))
+  })
   return installVocabularyAndPresets(asWorkingSystem(withControls), options)
-}
-
-function controlTokens(ds: VanityPluginSetupSystem, options: HailNormalizedOptions) {
-  return ds.defineTokens(controlTokenSeed(ds, options))
 }
 
 function controlTokenSeed(ds: VanityOpenSystemBase, options: HailNormalizedOptions) {

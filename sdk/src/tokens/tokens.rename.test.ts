@@ -28,7 +28,7 @@ function engineModularFixture(cursorFile: 'colors.ts' | 'consumer.ts'): RenameFi
     'colors.ts': `
       import { de } from './engine'
       export const colors = de.defineTokens({ color: { ${cursorFile === 'colors.ts' ? MARK : ''}brand: de.oklch(0.58, 0.2, 285) } })
-        .derive(({ color }) => ({ color: { brandSoft: de.alpha(color.brand, 0.12) } }))
+        .derive(m => ({ color: { brandSoft: de.alpha(m.color.brand, 0.12) } }))
     `,
     'metrics.ts': `
       import { de } from './engine'
@@ -57,7 +57,7 @@ function unifiedFixture(cursorFile: 'tokens.ts' | 'consumer.ts'): RenameFixture 
       import { defineTokens } from '@mszr/vanity'
       export const colors = defineTokens()
         .add('${cursorFile === 'tokens.ts' ? MARK : ''}brand', '#635bff')
-        .add('brandSoft', refs => refs.brand)
+        .add('brandSoft', m => m.brand)
     `,
     'design.ts': `
       import { createSystem } from '@mszr/vanity'

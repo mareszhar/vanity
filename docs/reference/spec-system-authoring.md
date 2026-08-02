@@ -44,15 +44,15 @@ Every registrable data kind has a detached definition:
 ```TS
 const conditions = defineConditions()
   .add('compact', '&[data-density=compact]')
-  .add(current => ({
-    interactive: `${current.compact}:hover`,
+  .add(m => ({
+    interactive: `${m.compact}:hover`,
   }))
 
 const axes = defineAxes()
   .add('density', ['comfortable', 'compact'])
 
 const constants = defineConsts({ base: 4 })
-  .add('doubled', current => current.base * 2)
+  .add('doubled', m => m.base * 2)
 ```
 
 All builders use one scoped `.add()` grammar:
@@ -60,9 +60,9 @@ All builders use one scoped `.add()` grammar:
 ```TS
 defineXs(seed)
   .add('name', value)
-  .add('name', current => value)
+  .add('name', m => value)
   .add({ name: value })
-  .add(current => ({ name: value }))
+  .add(m => ({ name: value }))
   .add(module)
   .add([moduleA, moduleB])
 ```
@@ -149,8 +149,8 @@ The additive guard operates at leaves:
 A utility function is itself a function, so `addUtil('name', fn)` and `defineUtils().add('name', fn)` unambiguously add the function. A utility that needs accumulated module context uses the plural callback:
 
 ```TS
-defineUtils().add(current => ({
-  next: value => current.previous(value),
+defineUtils().add(m => ({
+  next: value => m.previous(value),
 }))
 ```
 

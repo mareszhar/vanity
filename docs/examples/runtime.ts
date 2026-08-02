@@ -2,7 +2,7 @@ import { colorSchemes, createSystem } from '@mszr/vanity'
 import { setCustomProperties, setCustomProperty } from '@mszr/vanity/runtime'
 
 const open = createSystem().addAxis('scheme', colorSchemes())
-const tokens = open.defineTokens({
+const ds = open.addTokens({
   color: {
     brand: open.tdef.color({
       val: open.oklch(0.58, 0.2, 285),
@@ -10,8 +10,7 @@ const tokens = open.defineTokens({
       axes: { scheme: { dark: open.oklch(0.72, 0.16, 285) } },
     }),
   },
-})
-const ds = open.addTokens(tokens).consolidate({ root: '#widget', prefix: 'runtime-doc' })
+}).consolidate({ root: '#widget', prefix: 'runtime-doc' })
 const runtime = ds.runtime()
 
 runtime.t.color.brand.$set('oklch(62% 0.2 210)')

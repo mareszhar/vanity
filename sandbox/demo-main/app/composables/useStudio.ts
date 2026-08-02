@@ -51,20 +51,22 @@ type Runtime = ReturnType<typeof ds.runtime>
  *  a default in source keeps flowing through HMR.
  */
 function applyTo(rt: Runtime, s: StudioSettings): void {
-  s.hue === defaults.hue ? rt.t.color.hue.$unset() : rt.t.color.hue.$set(s.hue)
-  s.radius === defaults.radius ? rt.t.radius.seed.$unset() : rt.t.radius.seed.$set(`${s.radius}px`)
+  rt.transaction((tx) => {
+    s.hue === defaults.hue ? tx.t.color.hue.$unset() : tx.t.color.hue.$set(s.hue)
+    s.radius === defaults.radius ? tx.t.radius.seed.$unset() : tx.t.radius.seed.$set(`${s.radius}px`)
 
-  // The loaded faces carry hashed family names, so the typeface always comes
-  // from the runtime rather than the token's plain fallback default.
-  rt.t.font.family.$set(typefaces[s.typeface])
-  rt.t.font.mono.$set(typefaces.mono)
+    // The loaded faces carry hashed family names, so the typeface always comes
+    // from the runtime rather than the token's plain fallback default.
+    tx.t.font.family.$set(typefaces[s.typeface])
+    tx.t.font.mono.$set(typefaces.mono)
 
-  if (s.scheme !== 'system')
-    rt.axes.scheme.$switchTo(s.scheme)
-  if (s.density !== defaults.density)
-    rt.axes.density.$switchTo(s.density)
-  if (s.motion !== defaults.motion)
-    rt.axes.motion.$switchTo(s.motion)
+    if (s.scheme !== 'system')
+      tx.axes.scheme.$switchTo(s.scheme)
+    if (s.density !== defaults.density)
+      tx.axes.density.$switchTo(s.density)
+    if (s.motion !== defaults.motion)
+      tx.axes.motion.$switchTo(s.motion)
+  })
 }
 
 /**

@@ -339,7 +339,7 @@ export function tokenKindOf(handle: VanityRuntimeHandle): 'color' | 'value' | un
 
 // ─── defineTokens ────────────────────────────────────────────────────────────
 
-type RuntimeStage = (tokens: Record<string, unknown>) => object
+type RuntimeStage = (m: Record<string, unknown>) => object
 type RuntimeContribution
   = {
     readonly kind: 'seed'
@@ -570,15 +570,15 @@ export function prefixTokenModule(module: unknown, path: readonly string[]): unk
     if (contribution.kind === 'patch-stage') {
       return Object.freeze({
         ...contribution,
-        stage: (tokens: Record<string, unknown>) =>
-          wrapGraph(path, contribution.stage(readGraphPath(tokens, path))),
+        stage: (m: Record<string, unknown>) =>
+          wrapGraph(path, contribution.stage(readGraphPath(m, path))),
       })
     }
     return Object.freeze({
       ...contribution,
       modulePath: Object.freeze([...path, ...(contribution.modulePath ?? [])]),
-      stage: (tokens: Record<string, unknown>) =>
-        wrapGraph(path, contribution.stage(readGraphPath(tokens, path))),
+      stage: (m: Record<string, unknown>) =>
+        wrapGraph(path, contribution.stage(readGraphPath(m, path))),
     })
   })
   return createTokenBuilder(

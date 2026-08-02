@@ -25,7 +25,7 @@ export const tint = ds.port(ds.t.color.brand)
 export const rotation = ds.port(ds.angle.deg(0))
 
 export const fill = ds.class({
-  inlineSize: `calc(${fraction} * 100%)`,
+  inlineSize: ds.calc(fraction).multiply(ds.percent(100)),
   background: tint,
   rotate: rotation,
 })

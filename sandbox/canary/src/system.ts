@@ -2,8 +2,6 @@ import {
   colorSchemes,
   container,
   createSystem,
-  defineConditions,
-  defineConsts,
   media,
   scope,
   selector,
@@ -18,19 +16,8 @@ const panel = withScheme.defineTokens({
     axes: { scheme: { dark: '#f8fafc' } },
   }),
 }).root('#panel')
-const canaryConditions = defineConditions({
-  conditionMatrix: scope('#app')
-    .and(media({ width: { '>=': '1px' } }))
-    .and(supports('(display: grid)'))
-    .and(container('canary', { inlineSize: { '>=': '1px' } }))
-    .and(selector('&[data-ready]')),
-})
-const canaryConsts = defineConsts({
-  product: 'reorientation-canary',
-})
-
 export const ds = withScheme
-  .addTokens(withScheme.defineTokens({
+  .addTokens({
     color: {
       brand: withScheme.tdef.color({
         val: '#635bff',
@@ -47,9 +34,15 @@ export const ds = withScheme
       md: '16px',
     },
     panel,
-  }))
-  .addConditions(canaryConditions)
-  .addConsts(canaryConsts)
+  })
+  .addConditions({
+    conditionMatrix: scope('#app')
+      .and(media({ width: { '>=': '1px' } }))
+      .and(supports('(display: grid)'))
+      .and(container('canary', { inlineSize: { '>=': '1px' } }))
+      .and(selector('&[data-ready]')),
+  })
+  .addConsts({ product: 'reorientation-canary' })
   .consolidate({
     prefix: 'canary',
     root: ':root',

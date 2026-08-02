@@ -170,14 +170,14 @@ export interface VanityDefinitionModule<
   readonly add: {
     <const Name extends string, const Value>(
       name: Kind extends 'utils' ? never : DefinitionName<Kind, Shape, Name>,
-      value: (module: Readonly<Shape>) => Value & DefinitionValueGuard<Kind, Value>,
+      value: (m: Readonly<Shape>) => Value & DefinitionValueGuard<Kind, Value>,
     ): VanityDefinitionModule<Kind, VanityDefinitionMerge<Kind, Shape, Record<Name, Value>>>
     <const Name extends string, const Value>(
       name: DefinitionName<Kind, Shape, Name>,
       value: Value & DefinitionValueGuard<Kind, Value>,
     ): VanityDefinitionModule<Kind, VanityDefinitionMerge<Kind, Shape, Record<Name, Value>>>
     <const Added extends object>(
-      factory: (module: Readonly<Shape>) => Added & DefinitionTreeGuard<Kind, Added>,
+      factory: (m: Readonly<Shape>) => Added & DefinitionTreeGuard<Kind, Added>,
     ): VanityDefinitionModule<Kind, VanityDefinitionMerge<Kind, Shape, Added>>
     <const Module extends VanityDefinitionModule<Kind, any>>(
       module: Module,
@@ -229,7 +229,7 @@ export function defineRecordModule<
         throw new TypeError(`[vanity] ${definitionName(kind)}.add() cannot replace existing '${first}'`)
       // Utility leaves are themselves functions, so `(name, fn)` must mean a
       // direct leaf. A utility that needs module context uses the unambiguous
-      // plural callback form: `.add(module => ({ name: ... }))`.
+      // plural callback form: `.add(m => ({ name: ... }))`.
       const value = typeof second === 'function' && kind !== 'utils'
         ? Reflect.apply(second, undefined, [entries])
         : second

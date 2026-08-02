@@ -7,7 +7,7 @@ describe('axis declarations and contexts', () => {
   it('emits canonical grouped token overrides in the final token sublayer', () => {
     const de = createEngine()
     const module = de.defineTokens({ color: { brand: de.oklch(0.58, 0.2, 285) } })
-      .derive(({ color }) => ({ color: { soft: de.alpha(color.brand, 0.12) } }))
+      .derive(m => ({ color: { soft: de.alpha(m.color.brand, 0.12) } }))
     const { records, result } = collectInspection(() => emit(() => {
       const ds = de.createSystem({ prefix: 'app', tokens: module })
       return ds.tokenOverride({ color: { brand: '#111111' } }, 'midnight')

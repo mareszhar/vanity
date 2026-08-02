@@ -10,14 +10,14 @@ import { describe, expectTypeOf, it } from 'vitest'
 describe('unified token and axis types', () => {
   it('keeps logical graph handles valid through calculations and color channels', () => {
     const open = createSystem()
-      .addTokens(current => current.defineTokens({
+      .addTokens(current => ({
         control: {
           min: current.tdef.number({ val: 0.2, mutable: true }),
           max: current.tdef.number({ val: 0.9, mutable: true }),
           pivot: current.tdef.number({ val: 0.5, mutable: true }),
         },
       }))
-      .addTokens(current => current.defineTokens({
+      .addTokens(current => ({
         brand: current.oklch(
           current.calc(current.t.control.min)
             .add(current.calc(current.t.control.max).subtract(current.t.control.min)),
@@ -43,8 +43,8 @@ describe('unified token and axis types', () => {
 
   it('accumulates the four t() forms and rebinds portable module shape', () => {
     const portable = defineTokens({ seed: 'red' })
-      .add('alias', tokens => tokens.seed)
-      .add(tokens => ({ nested: { contrast: tokens.alias } }))
+      .add('alias', m => m.seed)
+      .add(m => ({ nested: { contrast: m.alias } }))
     const open = createSystem()
     const module = open.defineTokens({ color: portable })
       .add('space', '4px')
@@ -76,7 +76,7 @@ describe('unified token and axis types', () => {
         },
         default: 'cozy',
       })
-    const staged = open.addTokens(open.defineTokens({
+    const staged = open.addTokens({
       color: {
         canvas: open.tdef.color({ mutable: true }),
         $axes: {
@@ -90,7 +90,7 @@ describe('unified token and axis types', () => {
         mutable: true,
         axes: { density: { compact: null } },
       }),
-    })).augmentTokens({
+    }).augmentTokens({
       control: token => token.density({ compact: '8px' }),
     })
     const ds = staged.consolidate({

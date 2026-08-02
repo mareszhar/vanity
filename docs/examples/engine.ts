@@ -10,12 +10,10 @@ const open = createSystem()
     size: { base: 4 },
   }))
 
-const palette = open.defineTokens({
+const ds = open.addTokens({
   color: { brand: open.oklch(0.58, 0.2, 285) },
   space: { md: open.length.rem(1) },
-})
-
-const ds = open.addTokens(palette).consolidate({ prefix: 'engine-doc' })
+}).consolidate({ prefix: 'engine-doc' })
 
 void ds.class({
   background: ds.oklchx.from(ds.t.color.brand, { e: 0.04 }),

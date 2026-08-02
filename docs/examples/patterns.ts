@@ -1,11 +1,10 @@
 import { createSystem, propertyAliases } from '@mszr/vanity'
 
 const open = createSystem().addPlugin(propertyAliases({ py: 'paddingBlock' }, { expose: 'both' }))
-const tokens = open.defineTokens({
+const ds = open.addTokens({
   color: { brand: 'oklch(62% 0.2 285)' },
   space: { sm: open.length.rem(0.5), md: open.length.rem(1) },
-})
-const ds = open.addTokens(tokens).consolidate({ prefix: 'patterns-doc' })
+}).consolidate({ prefix: 'patterns-doc' })
 const gap = ds.port(ds.t.space.md)
 const atoms = ds.atoms({ properties: { gap: ds.t.space } }, 'space-atoms')
 

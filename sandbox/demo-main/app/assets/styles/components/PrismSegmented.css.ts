@@ -1,4 +1,5 @@
-const { class: style, t } = ds
+const { calc, class: style, length, t } = ds
+const controlRadius = calc(t.radius.sm).subtract(length.rem(0.2))
 
 export const group = style({
   display: 'inline-grid',
@@ -21,7 +22,7 @@ export const option = style({
   minBlockSize: t.size.controlSm,
   paddingInline: t.space.xs,
   border: 0,
-  borderRadius: `calc(${t.radius.sm} - 0.2rem)`,
+  borderRadius: controlRadius,
   background: 'transparent',
   color: t.color.inkMuted,
   fontWeight: 550,

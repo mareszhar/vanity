@@ -1933,6 +1933,7 @@ const sourceAuthoringNames = new Set([
   'createSystem',
   'consolidate',
   'defineTokens',
+  'addTokens',
   'add',
   'theme',
   'tokenOverride',

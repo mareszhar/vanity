@@ -3,10 +3,10 @@
  * hand-maintained mirror of its methods. Small app-owned fragments sit beside
  * `ds`; Hail remains the design-system opinion rather than a grab-bag.
  */
-import type { VanityCssInput } from '@mszr/vanity'
+import type { VanityStyleValue } from '@mszr/vanity'
 
 export interface FocusRingOptions {
-  readonly color?: VanityCssInput
+  readonly color?: VanityStyleValue<'outlineColor'>
   readonly width?: string
   readonly offset?: string
 }
@@ -14,7 +14,9 @@ export interface FocusRingOptions {
 export function focusRing(options: FocusRingOptions = {}) {
   return {
     focusVisible: {
-      outline: `${options.width ?? '2px'} solid ${String(options.color ?? 'currentColor')}`,
+      outlineWidth: options.width ?? '2px',
+      outlineStyle: 'solid',
+      outlineColor: options.color ?? 'currentColor',
       outlineOffset: options.offset ?? '2px',
     },
   } as const

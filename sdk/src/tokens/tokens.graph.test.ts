@@ -15,10 +15,10 @@ describe('token-graph traits and handles', () => {
           emit: false,
         }),
       },
-    }).derive(({ color }) => ({
+    }).derive(m => ({
       color: {
-        brandSoft: de.alpha(color.brand, 0.12),
-        constantSoft: de.alpha(color.constant, 0.2),
+        brandSoft: de.alpha(m.color.brand, 0.12),
+        constantSoft: de.alpha(m.color.constant, 0.2),
       },
     }))
 
@@ -62,7 +62,7 @@ describe('token-graph traits and handles', () => {
             mutable: true,
             description: 'Interactive accent',
             metadata: { owner: 'brand' },
-            register: { inherits: true },
+            register: true,
             validate: { id: 'brand-color' },
             axes: {
               scheme: {
@@ -89,7 +89,7 @@ describe('token-graph traits and handles', () => {
     expect(ds.t.color.future.$mutable).toBe(true)
     expect(ds.t.color.accent.$description).toBe('Interactive accent')
     expect(ds.t.color.accent.$metadata).toEqual({ owner: 'brand' })
-    expect(ds.t.color.accent.$register).toEqual({ inherits: true })
+    expect(ds.t.color.accent.$register).toBe(true)
     expect(ds.t.color.accent.$validate).toEqual({ id: 'brand-color' })
     expect(ds.t.color.accent.$mutable).toBe(true)
     expect(ds.t.color.accent.$axes.scheme.dark.$val).toBeUndefined()
@@ -117,7 +117,7 @@ describe('token-graph traits and handles', () => {
   it('projects modules and arbitrary resolved selections with final names', () => {
     const de = createEngine()
     const colors = de.defineTokens({ color: { brand: de.oklch(0.58, 0.2, 285) } })
-      .derive(({ color }) => ({ color: { soft: de.alpha(color.brand, 0.12) } }))
+      .derive(m => ({ color: { soft: de.alpha(m.color.brand, 0.12) } }))
     const space = de.defineTokens({ space: { sm: de.length.rem(0.5) } })
     const { returned: ds } = emit(() => de.createSystem({
       tokens: de.defineTokens().compose(colors).compose(space),
@@ -163,7 +163,7 @@ describe('token-graph traits and handles', () => {
       support: defineCssSupportTarget({ id: 'without-relative-color', features: ['color-level-4', 'custom-properties'] }),
     })
     const tokens = de.defineTokens({ color: { brand: de.oklch(0.58, 0.2, 285) } })
-      .derive(({ color }) => ({ color: { soft: de.alpha(color.brand, 0.12) } }))
+      .derive(m => ({ color: { soft: de.alpha(m.color.brand, 0.12) } }))
 
     expect(() => emit(() => de.createSystem({ tokens }))).toThrow(/relative-color.*without-relative-color/)
     expect(() => emit(() => de.createSystem({ tokens }))).toThrow(/reference: 'val'/)

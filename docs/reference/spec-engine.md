@@ -5,7 +5,9 @@ Vanity itself is the design-system engine. The public lifecycle has two stages: 
 ```ts
 import { createSystem } from '@mszr/vanity'
 
-const open = createSystem({ length: { unitless: 'rem' } })
+const open = createSystem({
+  constructors: { length: { unitless: 'rem' } },
+})
   .addTokens({
     color: { brand: '#635bff' },
     space: { md: '1rem' },

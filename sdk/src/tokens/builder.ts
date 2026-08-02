@@ -108,6 +108,7 @@ export interface VanityTokenTreeContext<
   readonly [name: string]:
     | VanityLeafInput
     | VanityTokenDefinition<any, any>
+    | VanityUnifiedTokenBuilder<any, any, any>
     | VanityTokenTreeContext<Axes>
     | VanityBulkAxisCallbacks<Axes>
     | undefined
@@ -132,7 +133,7 @@ export type VanityTokenTreeInputGuard<
   readonly [Key in keyof Input]:
   Key extends '$axes' ? unknown
     : Key extends `$${string}` ? never
-      : Input[Key] extends VanityLeafInput | VanityTokenDefinition<any, any> ? unknown
+      : Input[Key] extends VanityLeafInput | VanityTokenDefinition<any, any> | VanityUnifiedTokenBuilder<any, any, any> ? unknown
         : Input[Key] extends object ? VanityTokenTreeInputGuard<Input[Key], Axes>
           : unknown
 }
@@ -436,7 +437,7 @@ export interface VanityUnifiedTokenBuilder<
     >
     <const Name extends string, const Result extends VanityBuilderTokenInput<Bound>>(
       name: AdditiveName<Graph, Name>,
-      factory: (tokens: VanityCanonicalTokens<Graph, 'module', Policy>) => Result,
+      factory: (m: VanityCanonicalTokens<Graph, 'module', Policy>) => Result,
     ): VanityUnifiedTokenBuilder<
       Graph & Record<Name, NamedDerivedTokenNode<Result>>,
       Policy,
@@ -444,7 +445,7 @@ export interface VanityUnifiedTokenBuilder<
       Bound
     >
     <const Stage extends object>(
-      factory: (tokens: VanityCanonicalTokens<Graph, 'module', Policy>) =>
+      factory: (m: VanityCanonicalTokens<Graph, 'module', Policy>) =>
       Stage & (Bound extends true ? unknown : VanityPortableStageGuard<Stage>),
     ): VanityUnifiedTokenBuilder<
       VanityAdditiveGraph<Graph, MarkDerivedTree<Stage>>,
@@ -629,8 +630,8 @@ function facade(context: BuilderRuntimeContext, id = Symbol('vanity.tokenModule'
         return next((context.module as any).compose(addition))
       }
       if (typeof first === 'function' && args.length === 1) {
-        return next((context.module as any).derive((tokens: Record<string, unknown>) => {
-          const result = first(tokens)
+        return next((context.module as any).derive((m: Record<string, unknown>) => {
+          const result = first(m)
           return prepareSeed(result as object, context.tdef, context.axes).graph
         }))
       }
@@ -640,14 +641,14 @@ function facade(context: BuilderRuntimeContext, id = Symbol('vanity.tokenModule'
         throw new TypeError(`[vanity] token name '${first}' cannot begin with '$'`)
       const moduleRef = moduleRefOf(second)
       if (moduleRef?.module === id) {
-        return next((context.module as any).derive((tokens: Record<string, unknown>) => ({
-          [first]: readPath(tokens, moduleRef.path),
+        return next((context.module as any).derive((m: Record<string, unknown>) => ({
+          [first]: readPath(m, moduleRef.path),
         })))
       }
       if (typeof second === 'function' && !isConfiguredToken(second)) {
-        return next((context.module as any).derive((tokens: Record<string, unknown>) => ({
+        return next((context.module as any).derive((m: Record<string, unknown>) => ({
           [first]: normalizeNamedToken(
-            (second as (...args: any[]) => unknown)(tokens),
+            (second as (...args: any[]) => unknown)(m),
             context.tdef,
           ),
         })))

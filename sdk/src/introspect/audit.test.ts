@@ -45,7 +45,7 @@ describe('unused tokens', () => {
             seed: core.token({ val: core.oklch(0.58, 0.2, 285), mutable: true }),
             retired: core.token({ val: core.oklch(0.5, 0.1, 100), deprecated: { reason: 'use color.seed' } }),
           },
-        }).derive(({ color }) => ({ color: { tint: core.alpha(color.seed, 0.12) } })),
+        }).derive(m => ({ color: { tint: core.alpha(m.color.seed, 0.12) } })),
       })
       return style({ background: t.color.tint }, 'card')
     })
@@ -88,7 +88,7 @@ describe('contrast acceptances', () => {
     const { manifest, css } = built(() => {
       const { t, css: style } = createSystem({
         tokens: defineTokens({ color: { mid: core.oklch(0.6, 0.02, 285) } })
-          .derive(({ color }) => ({ color: { onMid: core.legibleOn(color.mid, { contrast: 40 }) } })),
+          .derive(m => ({ color: { onMid: core.legibleOn(m.color.mid, { contrast: 40 }) } })),
       })
       return style({ color: t.color.onMid, background: t.color.mid }, 'chip')
     })

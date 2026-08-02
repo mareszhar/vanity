@@ -8,7 +8,7 @@ describe('the value law in editor tooling', () => {
   it('completes channel chains and localizes incompatible channel values', () => {
     const result = project.query`
       import { createSystem } from '@mszr/vanity'
-      const first = createSystem().addTokens(current => current.defineTokens({
+      const first = createSystem().addTokens(current => ({
         pivot: current.tdef.number({ val: 0.5, mutable: true }),
         brand: 'rebeccapurple',
       }))

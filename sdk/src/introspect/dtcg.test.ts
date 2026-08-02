@@ -49,7 +49,7 @@ describe('dTCG interchange', () => {
             axes: { scheme: { light: de.oklch(0.6, 0.1, 285), dark: null } },
           }),
         },
-      }).derive(({ color }) => ({ color: { brandAlias: color.brand } }))
+      }).derive(m => ({ color: { brandAlias: m.color.brand } }))
       const ds = de.createSystem({ tokens: module, prefix: 'first' })
       return exportDesignTokens(ds, { mode: 'authored' })
     }).returned as any
@@ -69,9 +69,9 @@ describe('dTCG interchange', () => {
   it('orders authored imports by dependencies that exist only inside branches', () => {
     const de = createEngine().axes(({ scheme }) => ({ scheme: scheme({ locality: 'root' }) }))
     const document = emit(() => {
-      const module = de.defineTokens({ color: { seed: 'red' } }).derive(({ color }) => ({
+      const module = de.defineTokens({ color: { seed: 'red' } }).derive(m => ({
         color: {
-          conditional: de.token({ val: 'white', axes: { scheme: { dark: color.seed } } }),
+          conditional: de.token({ val: 'white', axes: { scheme: { dark: m.color.seed } } }),
         },
       }))
       return exportDesignTokens(de.createSystem({ tokens: module }), { mode: 'authored' })

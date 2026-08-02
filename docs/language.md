@@ -151,9 +151,9 @@ A system must not be created or consolidated inside `*.css.ts`. The compiler ser
 ```TS
 const palette = ds.defineTokens()
   .add('hue', 264)
-  .add('brand', t => ds.oklch(0.6, 0.15, t.hue))
-  .add(t => ({
-    canvas: ds.oklch.from(t.brand, { l: 0.98 }),
+  .add('brand', m => ds.oklch(0.6, 0.15, m.hue))
+  .add(m => ({
+    canvas: ds.oklch.from(m.brand, { l: 0.98 }),
   }))
 ```
 

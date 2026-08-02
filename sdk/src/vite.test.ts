@@ -274,7 +274,7 @@ export function exercise() {
     await writeFile(join(root, 'system.ts'), `import { createSystem } from '@test/legacy'
 const open = createSystem()
 export const ds = open
-  .addTokens(open.defineTokens({ space: { sm: '8px' } }))
+  .addTokens({ space: { sm: '8px' } })
   .consolidate({ prefix: 'app' })
 `)
     await writeFile(join(root, 'entry.ts'), `import { ds } from './system'
@@ -331,7 +331,7 @@ export const runtime = ds.runtime
     expect(manifest.version).toBe(3)
     expect(manifest.system.tokens['color.brand'].name).toBe('--vanity-color-brand')
     expect(manifest.system.tokens['color.brand']).toMatchObject({
-      declaredAt: { file: 'system.ts', line: 9, column: 14 },
+      declaredAt: { file: 'system.ts', line: 7, column: 14 },
     })
     const modules = Object.values(manifest.modules) as any[]
     expect((modules.flatMap(module => Object.values(module.recipes))
@@ -407,7 +407,7 @@ describe('source-local build diagnostics', () => {
       'system.ts': `import { createSystem } from '@test/legacy'
 const open = createSystem()
 export const ds = open
-  .addTokens(open.defineTokens({ color: { brand: '#635bff' } }))
+  .addTokens({ color: { brand: '#635bff' } })
   .consolidate()
 `,
       'broken.css.ts': `import { ds } from './system'
@@ -444,9 +444,9 @@ export const broken = ds.class({
 
 const open = createSystem()
 export const palette = open.defineTokens({ color: { base: open.oklch(0.7, 0, 0) } })
-  .add(({ color }) => ({
+  .add(m => ({
     color: {
-      onBase: open.legibleOn(color.base),
+      onBase: open.legibleOn(m.color.base),
     },
   }))
 `,
@@ -454,8 +454,7 @@ export const palette = open.defineTokens({ color: { base: open.oklch(0.7, 0, 0) 
 import { palette } from './palette.tokens'
 
 const open = createSystem()
-const tokens = open.defineTokens().add(palette)
-export const ds = open.addTokens(tokens).consolidate()
+export const ds = open.addTokens(palette).consolidate()
 `,
       'marker.css.ts': `import { ds } from './system'
 export const marker = ds.class({ color: ds.t.color.base })

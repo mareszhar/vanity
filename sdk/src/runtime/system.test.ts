@@ -180,14 +180,14 @@ describe('mutable runtime', () => {
       }),
     }).root('#widget')
     const ds = open
-      .addTokens(open.defineTokens({
+      .addTokens({
         brand: open.tdef.color({
           val: 'red',
           mutable: true,
           axes: { scheme: { dark: 'black' } },
         }),
         widget,
-      }))
+      })
       .consolidate({ prefix: 'multi', root: '#system' })
     const system = new MemoryRoot('#system')
     const firstWidget = new MemoryRoot('#widget')
@@ -266,7 +266,7 @@ describe('mutable runtime', () => {
     const widget = open.defineTokens({
       pad: open.tdef.length({ mutable: true }),
     }).root('#widget')
-    const ds = open.addTokens(open.defineTokens({
+    const ds = open.addTokens({
       ratio: open.tdef.number({
         mutable: true,
         validate: {
@@ -276,7 +276,7 @@ describe('mutable runtime', () => {
         },
       }),
       widget,
-    })).consolidate({ prefix: 'atomic', root: '#system' })
+    }).consolidate({ prefix: 'atomic', root: '#system' })
     const system = new MemoryRoot('#system')
     const widgetRoot = new MemoryRoot('#widget')
     const scope = new MemoryScope()
@@ -306,7 +306,7 @@ describe('mutable runtime', () => {
     const widget = open.defineTokens({
       pad: open.tdef.length({ mutable: true }),
     }).root(scopeCondition('.widget'))
-    const ds = open.addTokens(open.defineTokens({ widget }))
+    const ds = open.addTokens({ widget })
       .consolidate({ prefix: 'scoped-runtime', root: '#system' })
     const system = new MemoryRoot('#system')
     const widgetRoot = new MemoryRoot('.widget')
@@ -341,12 +341,12 @@ describe('mutable runtime', () => {
         project: mode => ({ attributes: { 'data-contrast': mode } }),
       },
     })
-    const ds = open.addTokens(open.defineTokens({
+    const ds = open.addTokens({
       ink: open.tdef.color({
         val: 'black',
         axes: { contrast: { automatic: 'CanvasText', calm: '#222' } },
       }),
-    })).consolidate({ prefix: 'controlled', root: '#system' })
+    }).consolidate({ prefix: 'controlled', root: '#system' })
     const root = new MemoryRoot('#system')
     const runtime = ds.runtime({ within: root })
 
@@ -383,12 +383,12 @@ describe('mutable runtime', () => {
       },
       default: 'cozy',
     })
-    const ds = open.addTokens(open.defineTokens({
+    const ds = open.addTokens({
       space: open.tdef.length({
         val: '1rem',
         axes: { density: { cozy: '1rem', compact: '0.75rem' } },
       }),
-    })).consolidate({ prefix: 'direct-axis', root: '#system' })
+    }).consolidate({ prefix: 'direct-axis', root: '#system' })
     const root = new MemoryRoot('#system')
     const runtime = ds.runtime({ within: root })
 
@@ -409,14 +409,14 @@ describe('mutable runtime', () => {
   it('projects a native scheme pin even without token-authored scheme branches', () => {
     const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'element' }))
     const ds = open
-      .addTokens(open.defineTokens({
+      .addTokens({
         color: {
           canvas: open.lightDark(
             open.oklch(0.98, 0, 0),
             open.oklch(0.14, 0, 0),
           ),
         },
-      }))
+      })
       .consolidate({ prefix: 'native', root: '#studio' })
 
     const seed = ds.snapshotFrom(runtime => runtime.axes.scheme.$switchTo('light'))
@@ -439,11 +439,11 @@ describe('mutable runtime', () => {
         interactive: thisMode.and(selector('&:hover')),
       },
     })
-    const ds = open.addTokens(open.defineTokens({
+    const ds = open.addTokens({
       value: open.tdef({
         axes: { compound: { anchored: 'a', union: 'u', gated: 'g', interactive: 'i' } },
       }),
-    })).consolidate({ prefix: 'compound-axis', root: '#system' })
+    }).consolidate({ prefix: 'compound-axis', root: '#system' })
     const root = new MemoryRoot('#system')
     const runtime = ds.runtime({ within: root })
 

@@ -33,16 +33,17 @@ Create the design system in a plain TypeScript module. The open system defines a
 // src/design/system.ts
 import { createSystem } from '@mszr/vanity'
 
-const open = createSystem()
-
-export const ds = open
-  .addTokens(open.defineTokens({
+export const ds = createSystem()
+  .addTokens(ds => ({
     color: {
-      brand: '#635bff',
+      brand: ds.tdef.color({
+        val: '#635bff',
+        mutable: true,
+      }),
       canvas: '#ffffff',
     },
     space: {
-      md: open.length.rem(1),
+      md: ds.length.rem(1),
     },
   }))
   .addConditions({

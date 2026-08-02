@@ -1,9 +1,4 @@
-const { recipe, t } = ds
-
-// Soft status planes: the canvas lifted toward the status color, so they stay
-// opaque in both schemes. Mixing toward `transparent` would make the badge a
-// window onto whatever sits behind it.
-const soft = (color: string) => `color-mix(in oklab, ${t.color.canvas} 84%, ${color})`
+const { mix, recipe, t } = ds
 
 export const badge = recipe({
   base: {
@@ -22,9 +17,9 @@ export const badge = recipe({
     tone: {
       brand: { background: t.color.brandSoft, color: t.color.brand },
       neutral: { background: t.color.surface, color: t.color.inkMuted, boxShadow: `inset 0 0 0 1px ${t.color.border}` },
-      positive: { background: soft(`${t.color.positive}`), color: t.color.positive },
-      warning: { background: soft(`${t.color.warning}`), color: t.color.warning },
-      danger: { background: soft(`${t.color.danger}`), color: t.color.danger },
+      positive: { background: mix(t.color.canvas, t.color.positive, 0.16), color: t.color.positive },
+      warning: { background: mix(t.color.canvas, t.color.warning, 0.16), color: t.color.warning },
+      danger: { background: mix(t.color.canvas, t.color.danger, 0.16), color: t.color.danger },
     },
   },
   defaults: { tone: 'brand' },

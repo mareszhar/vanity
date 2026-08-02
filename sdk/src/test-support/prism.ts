@@ -28,13 +28,13 @@ export function definePrism() {
       title: { fontSize: '1.375rem', lineHeight: 1.25, fontWeight: 600 },
     },
   })
-    .derive(({ color }) => ({
+    .derive(m => ({
       color: {
-        surface: de.lighten(color.brand, 0.24),
-        ink: de.darken(color.brand, 0.4),
-        brandSoft: de.alpha(color.brand, 0.12),
-        brandHover: de.lighten(color.brand, 0.06),
-        onBrand: de.legibleOn(color.brand),
+        surface: de.lighten(m.color.brand, 0.24),
+        ink: de.darken(m.color.brand, 0.4),
+        brandSoft: de.alpha(m.color.brand, 0.12),
+        brandHover: de.lighten(m.color.brand, 0.06),
+        onBrand: de.legibleOn(m.color.brand),
       },
     }))
 
@@ -61,13 +61,13 @@ export function definePrismSystem() {
       body: { fontSize: '1rem', lineHeight: 1.5, fontWeight: 400 },
       title: { fontSize: '1.375rem', lineHeight: 1.25, fontWeight: 600 },
     },
-  }).derive(({ color }) => ({
+  }).derive(m => ({
     color: {
-      surface: de.lighten(color.brand, 0.24),
-      ink: de.darken(color.brand, 0.4),
-      brandSoft: de.alpha(color.brand, 0.12),
-      brandHover: de.lighten(color.brand, 0.06),
-      onBrand: de.legibleOn(color.brand),
+      surface: de.lighten(m.color.brand, 0.24),
+      ink: de.darken(m.color.brand, 0.4),
+      brandSoft: de.alpha(m.color.brand, 0.12),
+      brandHover: de.lighten(m.color.brand, 0.06),
+      onBrand: de.legibleOn(m.color.brand),
     },
   }))
 

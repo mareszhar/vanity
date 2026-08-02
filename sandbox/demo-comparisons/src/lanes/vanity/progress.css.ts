@@ -1,7 +1,8 @@
-const { class: style, port, t } = ds
+const { calc, class: style, percent, port, t } = ds
 
 /** The typed runtime boundary — declared, defaulted, named by its export. */
 export const fraction = port(0)
+const percentage = calc(fraction).multiply(percent(100))
 
 export const track = style({
   background: t.color.surface,
@@ -11,7 +12,7 @@ export const track = style({
 })
 
 export const fill = style({
-  inlineSize: `calc(${fraction} * 100%)`,
+  inlineSize: percentage,
   blockSize: '100%',
   background: t.color.brand,
   motionOk: { transition: `inline-size ${t.duration.normal} ease` },

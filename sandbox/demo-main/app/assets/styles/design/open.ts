@@ -1,32 +1,5 @@
-import { colorSchemes, createSystem, data, defineAxes } from '@mszr/vanity'
+import { colorSchemes, createSystem, data } from '@mszr/vanity'
 import { hail } from '@mszr/vanity/presets'
-
-const applicationAxes = defineAxes({
-  scheme: colorSchemes({
-    locality: 'element',
-    description: 'Platform preference unless the studio root pins light or dark.',
-  }),
-  density: {
-    modes: {
-      compact: data('density', 'compact'),
-      cozy: '&',
-      spacious: data('density', 'spacious'),
-    },
-    default: 'cozy',
-    modeOrder: ['compact', 'cozy', 'spacious'],
-    description: 'Interface rhythm — spacing, control size, and shadow lift — independent of viewport.',
-  },
-  motion: {
-    modes: {
-      none: data('motion', 'none'),
-      subtle: '&',
-      springy: data('motion', 'springy'),
-    },
-    default: 'subtle',
-    modeOrder: ['none', 'subtle', 'springy'],
-    description: 'Decorative motion profile; prefers-reduced-motion always overrides it.',
-  },
-})
 
 /**
  * Prism's authoring environment.
@@ -36,7 +9,32 @@ const applicationAxes = defineAxes({
  * Every downstream token module is authored against this one open system.
  */
 export const open = createSystem()
-  .addAxes(applicationAxes)
+  .addAxes({
+    scheme: colorSchemes({
+      locality: 'element',
+      description: 'Platform preference unless the studio root pins light or dark.',
+    }),
+    density: {
+      modes: {
+        compact: data('density', 'compact'),
+        cozy: '&',
+        spacious: data('density', 'spacious'),
+      },
+      default: 'cozy',
+      modeOrder: ['compact', 'cozy', 'spacious'],
+      description: 'Interface rhythm — spacing, control size, and shadow lift — independent of viewport.',
+    },
+    motion: {
+      modes: {
+        none: data('motion', 'none'),
+        subtle: '&',
+        springy: data('motion', 'springy'),
+      },
+      default: 'subtle',
+      modeOrder: ['none', 'subtle', 'springy'],
+      description: 'Decorative motion profile; prefers-reduced-motion always overrides it.',
+    },
+  })
   .addPlugin(hail({
     color: {
       elevation: true,

@@ -15,10 +15,10 @@ describe('token-graph output', () => {
           compileOnly: de.token({ val: de.oklch(0.4, 0.1, 120), reference: 'val', emit: false }),
         },
         future: de.token.length(),
-      }).derive(({ color }) => ({
+      }).derive(m => ({
         color: {
-          brandSoft: de.alpha(color.brand, 0.12),
-          compileOnlySoft: de.alpha(color.compileOnly, 0.2),
+          brandSoft: de.alpha(m.color.brand, 0.12),
+          compileOnlySoft: de.alpha(m.color.compileOnly, 0.2),
         },
       })),
       prefix: 'app',
@@ -34,28 +34,22 @@ describe('token-graph output', () => {
 
   it('derives live legibleOn fallbacks from authored defaults without coupling them to a scheme', () => {
     const open = createSystem().addPlugin(hail({ color: { elevation: true } }))
-    const palette = open.defineTokens({
-      color: {
-        hue: open.tdef.number({ val: 275, mutable: true, register: { inherits: true } }),
+    const ds = open.addTokens({
+      color: open.defineTokens({
+        hue: open.tdef.number({ val: 275, mutable: true, register: true }),
         whole: open.tdef.color({ val: open.oklch(0.6, 0.15, 275), mutable: true }),
         liveBrand: open.tdef.color({ val: open.oklch(0.58, 0.2, 285), mutable: true }),
-      },
-    })
-      .add(({ color }) => ({
-        color: {
-          channeled: open.oklch(0.6, 0.15, color.hue),
-          elevated: open.oklchx.from(color.liveBrand, { e: 0.2 }),
-        },
-      }))
-      .add(({ color }) => ({
-        color: {
-          onWhole: open.legibleOn(color.whole),
-          onChanneled: open.legibleOn(color.channeled),
-          onElevated: open.legibleOn(color.elevated),
-        },
-      }))
-
-    const ds = open.addTokens(palette).consolidate({ prefix: 'app' })
+      })
+        .add(m => ({
+          channeled: open.oklch(0.6, 0.15, m.hue),
+          elevated: open.oklchx.from(m.liveBrand, { e: 0.2 }),
+        }))
+        .add(m => ({
+          onWhole: open.legibleOn(m.whole),
+          onChanneled: open.legibleOn(m.channeled),
+          onElevated: open.legibleOn(m.elevated),
+        })),
+    }).consolidate({ prefix: 'app' })
     const { result: { css } } = collectInspection(() =>
       emit(() => {
         void ds.class

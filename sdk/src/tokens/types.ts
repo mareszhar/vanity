@@ -751,7 +751,7 @@ export interface VanityTokenModule<
     module: VanityTokenDefinition<M, Policy> & VanityCompositionGuard<G, M>,
   ) => VanityTokenModule<VanityMergeGraph<G, M>, Policy>
   derive: <const S extends VanityTokenStage>(
-    stage: (tokens: VanityCanonicalTokens<G, string, Policy>) => S & VanityAddition<G, S>,
+    stage: (m: VanityCanonicalTokens<G, string, Policy>) => S & VanityAddition<G, S>,
   ) => VanityTokenModule<VanityMergeGraph<G, VanityMarkDerived<S>>, Policy>
 }
 
@@ -764,7 +764,7 @@ export interface VanityTokenBuilder<G extends object> extends VanityTokenDefinit
     module: VanityTokenDefinition<M> & VanityCompositionGuard<G, M>,
   ) => VanityTokenBuilder<VanityMergeGraph<G, M>>
   derive: <const S extends VanityTokenStage>(
-    stage: (tokens: VanityTokens<G, string>) => S & VanityAddition<G, S>,
+    stage: (m: VanityTokens<G, string>) => S & VanityAddition<G, S>,
   ) => VanityTokenBuilder<VanityMergeGraph<G, VanityMarkDerived<S>>>
   /** Finalize the standalone graph for characterization. */
   build: <Prefix extends string = 'vanity'>(

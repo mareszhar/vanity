@@ -96,16 +96,18 @@ The locked system exposes added utils and constructors but no registration metho
 ## 5. Constructors
 
 ```TS
-ds.defineConstructor('shade', {
+const withShade = ds.addConstructor('shade', current => ({
   call(lightness: number) {
-    return ds.oklch(lightness, 0.1, 264)
+    return current.oklch(lightness, 0.1, 264)
   },
   from(base: string) {
-    return ds.oklch.from(base, {
+    return current.oklch.from(base, {
       c: 0.1,
     })
   },
-})
+}))
+
+withShade.shade(0.6)
 ```
 
 Constructor families:

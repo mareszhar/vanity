@@ -22,8 +22,8 @@ describe('unified token builder', () => {
     const portable = defineTokens({ seed: 'red' })
     const palette = portable
       .add('alias', portable.refs.seed)
-      .add('accent', tokens => tokens.alias)
-      .add(tokens => ({ contrast: tokens.seed }))
+      .add('accent', m => m.alias)
+      .add(m => ({ contrast: m.seed }))
     const nested = createSystem()
       .defineTokens({
         color: palette,
@@ -45,10 +45,10 @@ describe('unified token builder', () => {
       brand: open.oklch(0.6, 0.15, 264),
     })
     const complete = palette.add('soft', open.alpha(palette.refs.brand, 0.2))
-    const ds = open.addTokens(open.defineTokens({
+    const ds = open.addTokens({
       first: complete,
       second: complete,
-    })).consolidate({ prefix: 'lazy-expression' })
+    }).consolidate({ prefix: 'lazy-expression' })
 
     expect(ds.t.first.soft.$val).toContain('var(--lazy-expression-first-brand)')
     expect(ds.t.second.soft.$val).toContain('var(--lazy-expression-second-brand)')
@@ -114,7 +114,7 @@ describe('unified token builder', () => {
       },
       default: 'rest',
     })
-    const ds = open.addTokens(open.defineTokens({
+    const ds = open.addTokens({
       inferred: open.tdef({
         axes: {
           state: {
@@ -140,7 +140,7 @@ describe('unified token builder', () => {
           },
         },
       }),
-    })).consolidate({ prefix: 'base-default' })
+    }).consolidate({ prefix: 'base-default' })
 
     expect(ds.t.inferred.$val).toBe('gray')
     expect(ds.t.inferred.$axes.state.rest.$val).toBe('gray')
@@ -160,14 +160,14 @@ describe('unified token builder', () => {
         default: 'cozy',
       })
 
-    expect(() => open.addTokens(open.defineTokens({
+    expect(() => open.addTokens({
       ambiguous: open.tdef({
         axes: {
           scheme: { light: 'white', dark: 'black' },
           density: { cozy: 'gray', compact: 'silver' },
         },
       }),
-    })).consolidate({ prefix: 'ambiguous-defaults' })).toThrow(
+    }).consolidate({ prefix: 'ambiguous-defaults' })).toThrow(
       /explicit val.*different default-mode candidates/,
     )
   })
@@ -180,7 +180,7 @@ describe('unified token builder', () => {
       },
       default: 'cozy',
     })
-    const staged = open.addTokens(open.defineTokens({
+    const staged = open.addTokens({
       optional: open.tdef.color({ mutable: true }),
       control: open.tdef({
         val: '12px',
@@ -191,7 +191,7 @@ describe('unified token builder', () => {
           },
         },
       }),
-    }))
+    })
       .augmentTokens({
         optional: token => token.val('rebeccapurple'),
         control: token => token.density({ compact: '8px' }),
@@ -219,7 +219,7 @@ describe('unified token builder', () => {
           axes: { scheme: { dark: 'maroon' } },
         }),
       },
-    }).add('alias', refs => refs.color.brand)
+    }).add('alias', m => m.color.brand)
     const ds = open.addTokens(module).consolidate({ prefix: 'dtcg-unified' })
     const document = exportDesignTokens(ds, { mode: 'authored' }) as any
 

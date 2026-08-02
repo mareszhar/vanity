@@ -6,15 +6,14 @@ import {
 } from '@mszr/vanity'
 
 const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
-const tokens = open.defineTokens({
+const ds = open.addTokens({
   color: {
     brand: open.tdef.color({
       val: open.oklch(0.58, 0.2, 285),
       axes: { scheme: { dark: open.oklch(0.72, 0.14, 285) } },
     }),
   },
-})
-const ds = open.addTokens(tokens).consolidate({
+}).consolidate({
   audit: { unusedTokens: 'warn', escapes: 'error' },
   prefix: 'introspection-doc',
 })

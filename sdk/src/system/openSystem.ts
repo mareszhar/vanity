@@ -39,7 +39,6 @@ import type {
   VanityConfiguredToken,
   VanityDefaultTokenPolicy,
   VanityDerivedResult,
-  VanityGraphInput,
   VanityLeafInput,
   VanityTokenConfig,
   VanityTokenHandleAny,
@@ -513,7 +512,7 @@ const VANITY_SYSTEM_PLUGIN = Symbol.for('vanity.systemPlugin')
 
 type GraphOf<Input>
   = Input extends import('../tokens/types').VanityTokenDefinition<infer Graph extends object, any> ? Graph
-    : Input extends VanityGraphInput ? Input
+    : Input extends VanityTokenTreeContext<any> ? VanityTokenTreeGraph<Input>
       : never
 
 type GraphsOfInputs<
@@ -1022,10 +1021,10 @@ export interface VanityOpenSystemMethods<
       Utils,
       Plugins
     >
-    <const Input extends VanityTokenModule<any, any> | VanityUnifiedTokenBuilder<any, any, any> | VanityGraphInput>(
+    <const Input extends VanityTokenModule<any, any> | VanityUnifiedTokenBuilder<any, any, any> | VanityTokenTreeContext<EngineAxes<Engine>>>(
       input: Input & VanityCompositionGuard<Tokens, GraphOf<Input>>,
     ): VanityOpenSystem<Engine, VanityAdditiveGraph<Tokens, GraphOf<Input>>, Conditions, Consts, Utils, Plugins>
-    <const Input extends VanityTokenModule<any, any> | VanityUnifiedTokenBuilder<any, any, any> | VanityGraphInput>(
+    <const Input extends VanityTokenModule<any, any> | VanityUnifiedTokenBuilder<any, any, any> | VanityTokenTreeContext<EngineAxes<Engine>>>(
       factory: (system: VanityOpenSystem<Engine, Tokens, Conditions, Consts, Utils, Plugins>) => Input & VanityCompositionGuard<Tokens, GraphOf<Input>>,
     ): VanityOpenSystem<Engine, VanityAdditiveGraph<Tokens, GraphOf<Input>>, Conditions, Consts, Utils, Plugins>
   }
@@ -2296,7 +2295,7 @@ function materializeOpen(state: OpenState): VanityOpenSystem<any, any, any, any,
         : undefined
       const module = unwrapped ?? (isTokenBuilder(resolved)
         ? resolved
-        : state.engine.defineTokens(resolved as VanityGraphInput)
+        : unwrapUnifiedTokenBuilder(defineTokens(resolved as VanityTokenTreeContext<any>))!
       )
       // Axis/plugin/policy additions may evolve the engine after earlier
       // token contributions. Compose through an empty module owned by the

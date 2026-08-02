@@ -20,8 +20,8 @@ describe('symmetric authoring', () => {
     const conditions = defineConditions({ compact: '&[data-density=compact]' })
       .add('wide', media({ width: { '>=': '60rem' } }))
     const axes = defineAxes({ density: ['comfortable', 'compact'] })
-    const consts = defineConsts({ base: 4 }).add(current => ({
-      doubled: current.base * 2,
+    const consts = defineConsts({ base: 4 }).add(m => ({
+      doubled: m.base * 2,
     }))
     const utilities = defineUtils({ mx: { circle: () => 'circle' } })
       .add({ mx: { badge: () => 'badge' } })

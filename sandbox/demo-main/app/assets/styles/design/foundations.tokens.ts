@@ -90,12 +90,12 @@ export const foundationTokens = open.defineTokens({
     emphasized: open.tdef({ val: 'cubic-bezier(0.3, 0.7, 0, 1)' }),
   },
 })
-  .add(({ radius }) => ({
+  .add(m => ({
     radius: {
-      xs: open.calc(radius.seed).multiply(0.45),
-      sm: open.calc(radius.seed).multiply(0.7),
-      md: radius.seed,
-      lg: open.calc(radius.seed).multiply(1.5),
-      xl: open.calc(radius.seed).multiply(2.2),
+      xs: open.calc(m.radius.seed).multiply(0.45),
+      sm: open.calc(m.radius.seed).multiply(0.7),
+      md: m.radius.seed,
+      lg: open.calc(m.radius.seed).multiply(1.5),
+      xl: open.calc(m.radius.seed).multiply(2.2),
     },
   }))

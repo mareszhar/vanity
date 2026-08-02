@@ -221,7 +221,7 @@ export const open = createSystem().addPlugin(hail({
 export const palette = open.defineTokens({
   color: { brand: open.tdef.color({ val: open.oklchx(0.58, 0.66, 285), mutable: true }) },
 })
-  .add(({ color }) => ({ color: { brandSoft: open.alpha(color.brand, 0.12) } }))
+  .add(m => ({ color: { brandSoft: open.alpha(m.color.brand, 0.12) } }))
 `)
   write(join(plainDir, 'src/system.ts'), `import { open } from './engine'
 import { palette } from './palette.tokens'
@@ -265,7 +265,7 @@ export const open = createSystem()
 export const palette = open.defineTokens({
   color: { brand: open.tdef.color({ val: open.oklch(0.58, 0.2, 285), mutable: true }) },
 })
-  .add(({ color }) => ({ color: { brandSoft: open.alpha(color.brand, 0.12) } }))
+  .add(m => ({ color: { brandSoft: open.alpha(m.color.brand, 0.12) } }))
 `)
   write(join(nuxtDir, 'app/design/system.ts'), `import { open } from './engine'
 import { palette } from './palette.tokens'
