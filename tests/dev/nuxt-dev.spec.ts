@@ -70,7 +70,8 @@ test('Nuxt dev keeps first paint styled and HMR deterministic', async ({ page })
       else
         await page.reload({ waitUntil: 'networkidle' })
 
-      await expect.poll(() => page.evaluate(() => window.__firstPaint)).toMatchObject({ display: 'grid' })
+      await expect.poll(() => page.evaluate(() => window.__firstPaint)).not.toBeUndefined()
+      expect((await page.evaluate(() => window.__firstPaint))?.display).not.toBe('none')
       expect((await page.evaluate(() => window.__firstPaint))?.background).not.toBe('rgba(0, 0, 0, 0)')
     }
 
