@@ -67,6 +67,14 @@ export default antfu(
     },
   },
   {
+    files: ['scripts/**/*.test.ts'],
+    rules: {
+      // Maintainer scripts run directly on Node; their focused tests use the
+      // built-in runner rather than adding a second test runtime to the root.
+      'test/no-import-node-test': 'off',
+    },
+  },
+  {
     files: ['pnpm-workspace.yaml'],
     rules: {
       // The default catalog is the verified matrix; `peers` is intentionally

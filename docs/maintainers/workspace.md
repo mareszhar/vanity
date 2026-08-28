@@ -64,7 +64,9 @@ Packing and publication use pnpm, which natively materializes both catalog and w
 
 Use `workspace:*` only for local workspace packages: it guarantees a local link during development and is likewise replaced by the publishable version during packing. Do not use it for registry dependencies.
 
-Run `pnpm run upi` to review and interactively select latest eligible upgrades across the workspace. It runs pnpm's latest-upgrade flow, keeps the default catalog and lockfile in sync, and respects the repository's minimum release-age policy. It deliberately retains TypeScript 6.x until its ESLint integration supports TypeScript 7. The broader peer catalog changes only when Vanity intentionally changes its supported compatibility window. Follow an upgrade with `pnpm run validate` before release work.
+Run `pnpm run upi` to review and select latest eligible upgrades from the default catalog. The script derives pnpm's package selectors from that catalog, so the target list is never duplicated in maintainer code. pnpm's native multiselect then presents each dependency once, even when several workspace packages use it; arrow keys move, Space toggles, `a` selects all, `i` inverts the selection, and Enter confirms. Cancelling the review is a no-op. The updater deliberately excludes TypeScript while its ESLint integration supports only the current workspace toolchain, and preserves the broader `peers` catalog because it defines the SDK's published compatibility contract. Follow an upgrade with `pnpm run validate` before release work.
+
+The dependency-update mental model has three layers: the workspace discovers projects and provides one install graph; the default catalog owns the exact versions Vanity tests; and the named `peers` catalog owns the broader versions the published SDK promises to support. `upi` derives candidates from the default catalog, delegates resolution and the interactive UI to pnpm, then reapplies the explicit compatibility policies before reconciling the install. A successful pnpm exit without a changed catalog or lockfile is treated as a no-op, which makes canceling safe even though pnpm reports an interactive cancellation with a successful exit status.
 
 Repository automation under `scripts/` is TypeScript run through `tsx`, with an introductory comment that states the operational purpose and the invariant each script protects. Published runtime shims and tool-required configuration files may still use their required JavaScript module format outside that directory.
 
@@ -87,7 +89,7 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run validate` | run non-browser gates, the permanent canary, all demo builds, optimized-CSS checks, production/development browsers, and lifecycle cleanup |
 | `pnpm run audit` | build and audit the canonical SDK fixture |
 | `pnpm run docs:examples` | parse documentation fences and typecheck canonical examples |
-| `pnpm run upi` | interactively review latest eligible dependency updates across the workspace |
+| `pnpm run upi` | review default-catalog updates with pnpm's native multiselect |
 
 ### SDK
 
