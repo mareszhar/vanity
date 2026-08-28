@@ -248,7 +248,7 @@ document.querySelector('#app')!.innerHTML = '<button class="' + card + '" data-c
   write(join(nuxtDir, 'tsconfig.json'), '{ "extends": "./.nuxt/tsconfig.json" }\n')
   write(join(nuxtDir, 'nuxt.config.ts'), `export default defineNuxtConfig({
   modules: ['@mszr/vanity/nuxt'],
-  vanity: { system: '~/design/system.ts' },
+  vanity: { compiler: { system: '~/design/system.ts' } },
   devtools: { enabled: false },
   compatibilityDate: '2026-07-10',
   typescript: { tsConfig: { compilerOptions: { allowImportingTsExtensions: true } } },
