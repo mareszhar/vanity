@@ -478,7 +478,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
    * a file upstream of the system cannot use the system's bindings — injecting
    * there would only manufacture a cycle.
    */
-  const injectShimFor = async (filePath: string): Promise<string | undefined> => {
+  const injectShimFor = async (filePath: string): Promise<StyleAutoImportInjection | undefined> => {
     const autoImports = compiler.styleAutoImports
 
     if (!autoImports)
@@ -506,6 +506,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       typeof autoImports === 'object' ? autoImports : {},
       '[vanity] compiler.styleAutoImports',
     )
+    const ambientAliases = styleAutoImportAliases(source, from, names)
 
     const shim = join(config.root, 'node_modules', '.vanity', 'style-auto-imports.mjs')
     const content = names.length === 0
@@ -548,7 +549,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       declarationsRegistrationContent = nextDeclarationsRegistration
     }
 
-    return names.length === 0 ? undefined : shim
+    return names.length === 0 ? undefined : { aliases: ambientAliases, path: shim }
   }
 
   const cssTsPlugin: Plugin = {
@@ -675,11 +676,13 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
             exports: system.buildExports,
           }
         }))
+        const injection = await injectShimFor(filePath)
         const bundled = await bundleStyleModule({
           filePath,
           root,
           alias: viteAliasToEsbuild(config),
-          inject: await injectShimFor(filePath),
+          inject: injection?.path,
+          ambientAliases: injection?.aliases,
           externalModules: externalSystems,
         })
         source = bundled.source
@@ -1804,8 +1807,15 @@ interface BundleStyleModuleParams {
   alias: Record<string, string>
   /** The auto-import shim module, if the system option is configured. */
   inject?: string
+  /** Alias provenance declared by the configured style auto-import barrel. */
+  ambientAliases?: ReadonlyMap<string, string>
   /** Already-evaluated configured systems imported by this style module. */
   externalModules?: readonly BundleExternalModule[]
+}
+
+interface StyleAutoImportInjection {
+  aliases: ReadonlyMap<string, string>
+  path: string
 }
 
 interface BundleExternalModule {
@@ -1826,6 +1836,7 @@ async function bundleStyleModule({
   root,
   alias,
   inject,
+  ambientAliases,
   externalModules = [],
 }: BundleStyleModuleParams): Promise<{
   source: string
@@ -1892,8 +1903,10 @@ async function bundleStyleModule({
 
             const original = await readFile(path, 'utf-8')
             const isStyleModule = styleSourceFilter.test(path)
-            const named = isStyleModule ? applyDebugNames(original, path) : original
-            const located = applySourceLocations(named, path, root)
+            const named = isStyleModule
+              ? applyDebugNamesWithAliases(original, path, ambientAliases)
+              : original
+            const located = applySourceLocations(named, path, root, ambientAliases)
 
             const source = isStyleModule
               ? addFileScope({
@@ -2155,12 +2168,20 @@ export function styleAutoImportDeclarations(from: string, names: readonly string
  * - `IDENT.port(...)` and friends — the system-bound forms
  */
 export function applyDebugNames(source: string, fileName = 'module.css.ts'): string {
+  return applyDebugNamesWithAliases(source, fileName)
+}
+
+function applyDebugNamesWithAliases(
+  source: string,
+  fileName: string,
+  ambientAliases?: ReadonlyMap<string, string>,
+): string {
   const parsed = parseSync(fileName, source, { range: true })
 
   if (parsed.errors.some(error => error.severity === 'Error'))
     return source
 
-  const aliases = authoringAliases(parsed.program)
+  const aliases = authoringAliases(parsed.program, undefined, ambientAliases)
   const edits: Array<{ at: number, text: string }> = []
 
   new Visitor({
@@ -2198,9 +2219,6 @@ export function applyDebugNames(source: string, fileName = 'module.css.ts'): str
 const authoringNames = new Set([
   'port',
   'class',
-  // `cls` is the recommended local binding for the reserved `class` member;
-  // it is an authoring convention, not a second public system member.
-  'cls',
   'recipe',
   'anatomy',
   'keyframes',
@@ -2231,8 +2249,63 @@ const sourceAuthoringNames = new Set([
 ])
 const tokenBuilderMethodNames = new Set(['add', 'derive', 'compose', 'build'])
 
-function authoringAliases(program: Parameters<Visitor['visit']>[0], names = authoringNames): Map<string, string> {
+/**
+ * Resolve the configured barrel's exported local names back to authoring
+ * members. This is deliberately syntactic: the barrel is already read as
+ * source to discover its exports, and executing it here would change the
+ * compiler's configuration-time behavior.
+ */
+function styleAutoImportAliases(
+  source: string,
+  fileName: string,
+  names: readonly string[],
+): Map<string, string> {
+  const parsed = parseSync(fileName, source)
+
+  if (parsed.errors.some(error => error.severity === 'Error'))
+    return new Map()
+
+  const aliases = authoringAliases(parsed.program, sourceAuthoringNames)
+  const selected = new Set(names)
+  const exportedAliases = new Map<string, string>()
+
+  for (const declaration of parsed.module.staticExports) {
+    for (const entry of declaration.entries) {
+      const exported = entry.exportName.name
+
+      if (
+        entry.isType
+        || entry.exportName.kind !== 'Name'
+        || exported === null
+        || !selected.has(exported)
+        || entry.localName.kind !== 'Name'
+        || entry.localName.name === null
+      ) {
+        continue
+      }
+
+      const member = aliases.get(entry.localName.name)
+      if (member !== undefined)
+        exportedAliases.set(exported, member)
+    }
+  }
+
+  return exportedAliases
+}
+
+function authoringAliases(
+  program: Parameters<Visitor['visit']>[0],
+  names = authoringNames,
+  ambientAliases?: ReadonlyMap<string, string>,
+): Map<string, string> {
   const aliases = new Map([...names].map(name => [name, name]))
+
+  if (ambientAliases !== undefined) {
+    for (const [local, imported] of ambientAliases) {
+      if (names.has(imported))
+        aliases.set(local, imported)
+    }
+  }
 
   new Visitor({
     ImportSpecifier(node) {
@@ -2242,6 +2315,18 @@ function authoringAliases(program: Parameters<Visitor['visit']>[0], names = auth
         aliases.set(node.local.name, imported)
     },
     VariableDeclarator(node) {
+      if (node.id.type === 'Identifier' && node.init?.type === 'MemberExpression') {
+        const property = node.init.property
+        const member = property.type === 'Identifier'
+          ? property.name
+          : property.type === 'Literal' && typeof property.value === 'string' ? property.value : undefined
+
+        if (member !== undefined && names.has(member))
+          aliases.set(node.id.name, member)
+
+        return
+      }
+
       if (node.id.type !== 'ObjectPattern')
         return
 
@@ -2282,13 +2367,18 @@ function authoringCallee(callee: Expression, aliases: Map<string, string>, names
  * VanityError raised synchronously can recover the exact authored property.
  * Token-builder chains register all seed/stage paths as one source context.
  */
-function applySourceLocations(source: string, fileName: string, root: string): string {
+function applySourceLocations(
+  source: string,
+  fileName: string,
+  root: string,
+  ambientAliases?: ReadonlyMap<string, string>,
+): string {
   const parsed = parseSync(fileName, source, { range: true })
 
   if (parsed.errors.some(error => error.severity === 'Error'))
     return source
 
-  const aliases = authoringAliases(parsed.program, sourceAuthoringNames)
+  const aliases = authoringAliases(parsed.program, sourceAuthoringNames, ambientAliases)
   const calls: Array<{ node: CallExpression, name: string }> = []
 
   new Visitor({

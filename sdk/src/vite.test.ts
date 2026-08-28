@@ -352,6 +352,7 @@ describe('source-local build diagnostics', () => {
   async function buildBrokenFixture(
     files: Record<string, string>,
     diagnostics?: import('./diagnostics').VanityDiagnosticSink,
+    compiler: import('./vite').VanityCompilerOptions = {},
   ): Promise<unknown> {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-diagnostic-')))
 
@@ -365,7 +366,13 @@ describe('source-local build diagnostics', () => {
         configFile: false,
         logLevel: 'silent',
         root,
-        plugins: [vanityPlugin({ compiler: { identifiers: 'debug', diagnostics } })],
+        plugins: [vanityPlugin({
+          compiler: {
+            identifiers: 'debug',
+            diagnostics,
+            ...compiler,
+          },
+        })],
         resolve: { alias: aliases },
         build: {
           write: false,
@@ -439,6 +446,39 @@ export const broken = ds.class({
       path: ['borderRadius'],
       fix: expect.objectContaining({ message: expect.any(String) }),
     }))
+  })
+
+  it('traces an ambient style alias to its authored property', async () => {
+    const error = await buildBrokenFixture({
+      'entry.ts': 'export { broken } from \'./broken.css\'\n',
+      'system.ts': `import { createSystem } from '@test/legacy'
+export const ds = createSystem()
+  .addTokens({ color: { brand: '#635bff' } })
+  .consolidate()
+`,
+      'authoring.ts': `import { ds } from './system'
+export { ds }
+export const { class: mk } = ds
+`,
+      'broken.css.ts': `export const broken = mk({
+  borderRadius: '8pxx',
+})
+`,
+    }, undefined, {
+      system: 'system.ts',
+      styleAutoImports: 'authoring.ts',
+    })
+    const vanityError = findVanityError(error)
+    const diagnostic = vanityError?.diagnostics[0]
+
+    expect(diagnostic).toMatchObject({
+      code: 'VANITY_CSS_INVALID_VALUE',
+      file: 'broken.css.ts',
+      path: ['borderRadius'],
+      line: 2,
+      column: 3,
+    })
+    expect(String(error)).toContain('at broken.css.ts:2:3')
   })
 
   it('traces a composed token failure to the module that defines it', async () => {
@@ -822,10 +862,10 @@ export {}
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-style-barrel", "type": "module" }')
     await writeFile(authoring, `import { ds } from './system'
 export { ds }
-export const { class: cls, t } = ds
+export const { class: mk, t } = ds
 `)
-    await writeFile(join(root, 'card.css.ts'), 'export const card = cls({ padding: t.space.sm })\n')
-    await writeFile(join(root, 'entry.ts'), 'export { card } from \'./card.css\'\n')
+    await writeFile(join(root, 'styles.css.ts'), 'export const card = mk({ padding: t.space.sm })\n')
+    await writeFile(join(root, 'entry.ts'), 'export { card } from \'./styles.css\'\n')
 
     const result = await build({
       configFile: false,
@@ -852,9 +892,10 @@ export const { class: cls, t } = ds
       .map(asset => String(asset.source))
       .join('\n')
 
+    expect(css).toMatch(/\.card__[\w-]+ \{/)
     expect(css).toContain('padding: var(--vanity-space-sm)')
     const declarations = await readFile(join(root, 'node_modules/.vanity/style-auto-imports.d.ts'), 'utf-8')
-    expect(declarations).toContain('const cls: typeof VanityStyleAutoImports.cls')
+    expect(declarations).toContain('const mk: typeof VanityStyleAutoImports.mk')
     expect(declarations).toContain('const t: typeof VanityStyleAutoImports.t')
   })
 
@@ -1068,14 +1109,19 @@ describe('applyDebugNames', () => {
   it('appends debug ids to css, recipe, anatomy, and keyframes calls', () => {
     expect(applyDebugNames('export const card = css({ padding: 8 })'))
       .toBe('export const card = css({ padding: 8 }, \'card\')')
-    expect(applyDebugNames('export const card = cls({ padding: 8 })'))
-      .toBe('export const card = cls({ padding: 8 }, \'card\')')
+    expect(applyDebugNames('const { class: cls } = ds\nexport const card = cls({ padding: 8 })'))
+      .toBe('const { class: cls } = ds\nexport const card = cls({ padding: 8 }, \'card\')')
     expect(applyDebugNames('export const button = recipe({ base: {} })'))
       .toBe('export const button = recipe({ base: {} }, \'button\')')
     expect(applyDebugNames('const dialog = anatomy({ parts: [\'root\'] })'))
       .toBe('const dialog = anatomy({ parts: [\'root\'] }, \'dialog\')')
     expect(applyDebugNames('const fade = system.keyframes({ from: { opacity: 0 } })'))
       .toBe('const fade = system.keyframes({ from: { opacity: 0 } }, \'fade\')')
+  })
+
+  it('does not infer an unbound non-canonical authoring name', () => {
+    const source = 'export const card = cls({ padding: 8 })'
+    expect(applyDebugNames(source)).toBe(source)
   })
 
   it('respects an explicit debug id', () => {
