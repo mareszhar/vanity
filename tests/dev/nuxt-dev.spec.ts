@@ -89,7 +89,7 @@ test('Nuxt dev keeps first paint styled and HMR deterministic', async ({ page })
     expect(await loadCount(page)).toBe(loadsBeforeHmr)
 
     // An export-shape change costs exactly one reload.
-    const probe = '\nexport const __vanityHmrShapeProbe = style({ opacity: 1 })\n'
+    const probe = '\nexport const __vanityHmrShapeProbe = cls({ opacity: 1 })\n'
     await writeFile(appStyleFile, `${originalAppStyle}${probe}`)
     await expect.poll(() => loadCount(page)).toBe(loadsBeforeHmr + 1)
     await page.waitForTimeout(750)
