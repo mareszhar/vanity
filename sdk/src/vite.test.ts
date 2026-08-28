@@ -807,10 +807,10 @@ export {}
 
     expect(css).toMatch(/\.card__[\w-]+ \{/)
     expect(css).toContain('padding: var(--vanity-space-sm)')
-    const declarations = await readFile(join(root, 'node_modules/.vanity/auto-imports.d.ts'), 'utf-8')
-    const registration = await readFile(join(root, 'node_modules/@types/vanity-auto-imports/index.d.ts'), 'utf-8')
+    const declarations = await readFile(join(root, 'node_modules/.vanity/style-auto-imports.d.ts'), 'utf-8')
+    const registration = await readFile(join(root, 'node_modules/@types/vanity-style-auto-imports/index.d.ts'), 'utf-8')
     expect(declarations).toContain('const ds: typeof VanityStyleAutoImports.ds')
-    expect(registration).toContain('<reference path="../../.vanity/auto-imports.d.ts" />')
+    expect(registration).toContain('<reference path="../../.vanity/style-auto-imports.d.ts" />')
   })
 
   it('supports a style auto-import barrel derived from the configured system', async () => {
@@ -853,7 +853,7 @@ export const { class: cls, t } = ds
       .join('\n')
 
     expect(css).toContain('padding: var(--vanity-space-sm)')
-    const declarations = await readFile(join(root, 'node_modules/.vanity/auto-imports.d.ts'), 'utf-8')
+    const declarations = await readFile(join(root, 'node_modules/.vanity/style-auto-imports.d.ts'), 'utf-8')
     expect(declarations).toContain('const cls: typeof VanityStyleAutoImports.cls')
     expect(declarations).toContain('const t: typeof VanityStyleAutoImports.t')
   })
@@ -883,7 +883,7 @@ export const { class: cls, t } = ds
       server: { middlewareMode: true, hmr: false, watch: null },
       optimizeDeps: { noDiscovery: true },
     })
-    const declarations = join(root, 'node_modules/.vanity/auto-imports.d.ts')
+    const declarations = join(root, 'node_modules/.vanity/style-auto-imports.d.ts')
     const retransform = async () => {
       for (const moduleNode of server.moduleGraph.getModulesByFile(card) ?? [])
         server.moduleGraph.invalidateModule(moduleNode)
@@ -942,7 +942,7 @@ export const { class: cls, t } = ds
       .join('\n')
 
     expect(css).toContain('padding: var(--vanity-space-sm)')
-    const declarations = await readFile(join(root, 'node_modules/.vanity/auto-imports.d.ts'), 'utf-8')
+    const declarations = await readFile(join(root, 'node_modules/.vanity/style-auto-imports.d.ts'), 'utf-8')
     expect(declarations).toContain('const ds: typeof VanityStyleAutoImports.ds')
     expect(declarations).not.toContain('const helper:')
   })

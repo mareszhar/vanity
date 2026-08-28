@@ -152,7 +152,9 @@ The common compiler lane evaluates `*.css.ts`, imports a locked system from plai
 
 `app.runtimeAutoImports` remains opt-in and supplies runtime-facing values to application modules. It never changes how `*.css.ts` modules are evaluated. A string names one source, an array selects built-in presets, and the object form combines `presets` with `sources`. Built-in presets provide named Vanity runtime groups; package and local sources are curated barrels and contribute all named value exports by default. Use `{ from, include }` or `{ from, exclude }` for deliberate narrowing; the two filters cannot be combined. Template injection is adapter-specific as shown above.
 
-Generated types are the only ambient declaration source. Plain Vite writes Vanity's generated runtime declarations to the automatically discovered `node_modules/@types/vanity-runtime-auto-imports` package and overwrites that file so removed exports do not linger. Nuxt delegates declaration generation to its native import registry; both adapters preserve the authored exports' overloads, generics, literal types, and TSDoc.
+Generated types are the only ambient declaration source. Plain Vite writes the style-lane declarations to the automatically discovered `node_modules/@types/vanity-style-auto-imports` package and the runtime-lane declarations to `node_modules/@types/vanity-runtime-auto-imports`, overwriting both files so removed exports do not linger. Nuxt delegates declaration generation to its native import registry; both adapters preserve the authored exports' overloads, generics, literal types, and TSDoc.
+
+Plain-Vite projects that set `compilerOptions.types` explicitly must include `vanity-style-auto-imports` and/or `vanity-runtime-auto-imports` for the enabled lanes, because an explicit list disables TypeScript's automatic `@types` discovery. Nuxt projects use Nuxt's generated type references instead.
 
 ## 9. SSR and HMR
 

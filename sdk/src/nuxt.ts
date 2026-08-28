@@ -108,7 +108,7 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
         : autoImportEntry
 
       const declarations = addTypeTemplate({
-        filename: 'vanity-auto-imports.d.ts',
+        filename: 'vanity-style-auto-imports.d.ts',
         getContents: () => {
           const currentNames = selectAutoImportNames(
             styleExportNames(readConfiguredModule(autoImportEntry!)),

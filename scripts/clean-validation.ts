@@ -18,7 +18,6 @@ const workspaceDir = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 const validationPaths = [
   'sandbox/demo-comparisons/auto-imports.d.ts',
   'sandbox/demo-comparisons/node_modules/.vanity',
-  'sandbox/demo-comparisons/node_modules/@types/vanity-auto-imports',
   'sandbox/demo-comparisons/node_modules/@types/vanity-style-auto-imports',
   'sandbox/demo-comparisons/node_modules/@types/vanity-runtime-auto-imports',
   'sandbox/demo-main/.nuxt',

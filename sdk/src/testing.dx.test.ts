@@ -23,7 +23,7 @@ const autoImportProject = defineVanityProject({
       export const t = ds.t
       export const css = ds.class
     `,
-    'auto-imports.d.ts': styleAutoImportDeclarations('./authoring.ts', ['ds', 't', 'css']),
+    'style-auto-imports.d.ts': styleAutoImportDeclarations('./authoring.ts', ['ds', 't', 'css']),
   },
 })
 
