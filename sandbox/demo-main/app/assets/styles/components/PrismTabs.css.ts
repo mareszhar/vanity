@@ -1,4 +1,5 @@
-const { anatomy, calc, length, t } = ds
+const { length } = ds
+
 const controlRadius = calc(t.radius.sm).subtract(length.rem(0.2))
 
 export const tabs = anatomy({

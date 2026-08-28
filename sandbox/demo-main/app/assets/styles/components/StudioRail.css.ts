@@ -1,6 +1,4 @@
-const { class: style, t } = ds
-
-export const rail = style({
+export const rail = cls({
   display: 'grid',
   alignContent: 'start',
   gap: t.space.lg,
@@ -17,8 +15,8 @@ export const rail = style({
   },
 })
 
-export const brand = style({ display: 'flex', alignItems: 'center', gap: t.space.sm })
-export const brandMark = style({
+export const brand = cls({ display: 'flex', alignItems: 'center', gap: t.space.sm })
+export const brandMark = cls({
   display: 'grid',
   placeItems: 'center',
   inlineSize: '2.5rem',
@@ -31,24 +29,24 @@ export const brandMark = style({
   fontWeight: 700,
   boxShadow: t.shadow.raised,
 })
-export const brandText = style({ display: 'grid' })
-export const brandName = style({ ...t.text.title.$dec, margin: 0, letterSpacing: '-0.02em' })
-export const brandTag = style({ ...t.text.detail.$dec, margin: 0, color: t.color.inkMuted })
+export const brandText = cls({ display: 'grid' })
+export const brandName = cls({ ...t.text.title.$dec, margin: 0, letterSpacing: '-0.02em' })
+export const brandTag = cls({ ...t.text.detail.$dec, margin: 0, color: t.color.inkMuted })
 
-export const section = style({ display: 'grid', gap: t.space.sm })
-export const heading = style({
+export const section = cls({ display: 'grid', gap: t.space.sm })
+export const heading = cls({
   ...t.text.micro.$dec,
   margin: 0,
   color: t.color.inkFaint,
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
 })
-export const controls = style({ display: 'grid', gap: t.space.md })
-export const group = style({ display: 'grid', gap: t.space['2xs'] })
-export const controlLabel = style({ ...t.text.label.$dec, color: t.color.inkMuted })
+export const controls = cls({ display: 'grid', gap: t.space.md })
+export const group = cls({ display: 'grid', gap: t.space['2xs'] })
+export const controlLabel = cls({ ...t.text.label.$dec, color: t.color.inkMuted })
 
-export const presets = style({ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: t.space['2xs'] })
-export const preset = style({
+export const presets = cls({ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: t.space['2xs'] })
+export const preset = cls({
   ...t.text.detail.$dec,
   display: 'flex',
   alignItems: 'center',
@@ -67,7 +65,7 @@ export const preset = style({
   hover: { borderColor: t.color.brand, background: t.color.brandSoft },
   ...focusRing({ color: t.color.brand }),
 })
-export const presetDot = style({
+export const presetDot = cls({
   inlineSize: '0.75rem',
   blockSize: '0.75rem',
   flex: '0 0 auto',
@@ -75,11 +73,11 @@ export const presetDot = style({
   boxShadow: 'inset 0 0 0 1px oklch(0 0 0 / 0.15)',
 })
 
-export const actions = style({ display: 'grid', gap: t.space.xs })
-export const footer = style({
+export const actions = cls({ display: 'grid', gap: t.space.xs })
+export const footer = cls({
   display: 'grid',
   gap: t.space.xs,
   paddingBlockStart: t.space.md,
   borderBlockStart: `1px solid ${t.color.border}`,
 })
-export const note = style({ ...t.text.detail.$dec, margin: 0, color: t.color.inkFaint, textWrap: 'pretty' })
+export const note = cls({ ...t.text.detail.$dec, margin: 0, color: t.color.inkFaint, textWrap: 'pretty' })

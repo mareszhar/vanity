@@ -1,5 +1,3 @@
-const { class: style, t } = ds
-
 const thumb = {
   inlineSize: '1.2rem',
   blockSize: '1.2rem',
@@ -20,9 +18,9 @@ const track = {
 const spectrum
   = 'linear-gradient(90deg, oklch(0.72 0.17 0), oklch(0.72 0.17 60), oklch(0.72 0.17 120), oklch(0.72 0.17 180), oklch(0.72 0.17 240), oklch(0.72 0.17 300), oklch(0.72 0.17 360))'
 
-export const field = style({ display: 'grid', gap: t.space['2xs'] })
+export const field = cls({ display: 'grid', gap: t.space['2xs'] })
 
-export const header = style({
+export const header = cls({
   ...t.text.label.$dec,
   display: 'flex',
   justifyContent: 'space-between',
@@ -30,9 +28,9 @@ export const header = style({
   color: t.color.inkMuted,
 })
 
-export const value = style({ color: t.color.ink, fontVariantNumeric: 'tabular-nums' })
+export const value = cls({ color: t.color.ink, fontVariantNumeric: 'tabular-nums' })
 
-export const slider = style({
+export const slider = cls({
   'appearance': 'none',
   'WebkitAppearance': 'none',
   'inlineSize': '100%',
@@ -47,7 +45,7 @@ export const slider = style({
   ...focusRing({ color: t.color.brand }),
 })
 
-export const hue = style({
+export const hue = cls({
   '&::-webkit-slider-runnable-track': { background: spectrum, border: `1px solid ${t.color.border}` },
   '&::-moz-range-track': { background: spectrum, border: `1px solid ${t.color.border}` },
 })

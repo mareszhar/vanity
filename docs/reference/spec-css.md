@@ -49,6 +49,23 @@ Contract:
 - number behavior is explicit policy/data, not guessed;
 - source/debug/provenance survives lowering.
 
+For repetitive style modules, a project may expose selected bound helpers through its own style auto-import barrel. Keep `ds.class` as the canonical member name; `cls` is a local shorthand that makes the reserved property convenient as a bare binding without adding a second Vanity API:
+
+```TS
+import { ds } from './system'
+
+export { ds }
+export const { class: cls, t } = ds
+```
+
+The integration adapter can expose that barrel to evaluated `*.css.ts` modules through `compiler.styleAutoImports` ([spec-integrations.md §8](./spec-integrations.md#8-integration-adapters)). Consuming application modules use the generated style exports as a namespace when that keeps the component boundary clear:
+
+```TS
+import * as s from './Card.css'
+
+const className = s.card
+```
+
 ## 3. Fragments and mixins
 
 A mixin is a normal TypeScript function. `ds.fragment()` is the typed data it may return:

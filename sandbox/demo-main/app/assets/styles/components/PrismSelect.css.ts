@@ -1,12 +1,10 @@
-const { class: style, t } = ds
+export const field = cls({ display: 'grid', gap: t.space['2xs'] })
 
-export const field = style({ display: 'grid', gap: t.space['2xs'] })
+export const label = cls({ ...t.text.label.$dec, color: t.color.inkMuted })
 
-export const label = style({ ...t.text.label.$dec, color: t.color.inkMuted })
+export const wrap = cls({ position: 'relative', display: 'grid' })
 
-export const wrap = style({ position: 'relative', display: 'grid' })
-
-export const select = style({
+export const select = cls({
   ...t.text.body.$dec,
   appearance: 'none',
   WebkitAppearance: 'none',
@@ -28,7 +26,7 @@ export const select = style({
   focusVisible: { ...focusRing({ color: t.color.brand }).focusVisible, borderColor: t.color.brand },
 })
 
-export const caret = style({
+export const caret = cls({
   position: 'absolute',
   insetInlineEnd: t.space.sm,
   insetBlockStart: '50%',

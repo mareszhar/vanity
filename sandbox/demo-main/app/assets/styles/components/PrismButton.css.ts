@@ -1,5 +1,3 @@
-const { port, recipe, t } = ds
-
 // A publishable padding port: a consumer can retune every nested button's inline
 // padding through the cascade, zero runtime, via `button.ports.pad.dec(...)`.
 const pad = port(t.space.md)

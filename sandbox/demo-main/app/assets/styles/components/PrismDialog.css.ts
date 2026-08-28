@@ -1,5 +1,3 @@
-const { anatomy, keyframes, t } = ds
-
 const fade = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
 const rise = keyframes({
   from: { opacity: 0, transform: 'translateY(12px) scale(0.98)' },

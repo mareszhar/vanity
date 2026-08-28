@@ -813,6 +813,51 @@ export {}
     expect(registration).toContain('<reference path="../../.vanity/auto-imports.d.ts" />')
   })
 
+  it('supports a style auto-import barrel derived from the configured system', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-style-barrel-')))
+    const system = join(root, 'system.ts')
+    const authoring = join(root, 'authoring.ts')
+
+    await cp(local('./test-support/vite-app/system.ts'), system)
+    await writeFile(join(root, 'package.json'), '{ "name": "vanity-style-barrel", "type": "module" }')
+    await writeFile(authoring, `import { ds } from './system'
+export { ds }
+export const { class: cls, t } = ds
+`)
+    await writeFile(join(root, 'card.css.ts'), 'export const card = cls({ padding: t.space.sm })\n')
+    await writeFile(join(root, 'entry.ts'), 'export { card } from \'./card.css\'\n')
+
+    const result = await build({
+      configFile: false,
+      logLevel: 'silent',
+      root,
+      plugins: [vanityPlugin({
+        compiler: {
+          identifiers: 'debug',
+          system,
+          styleAutoImports: authoring,
+        },
+      })],
+      resolve: { alias: aliases },
+      build: {
+        write: false,
+        minify: false,
+        lib: { entry: join(root, 'entry.ts'), formats: ['es'], fileName: 'entry' },
+      },
+    })
+
+    const { output } = (Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput
+    const css = output
+      .filter((item): item is Rollup.OutputAsset => item.type === 'asset' && item.fileName.endsWith('.css'))
+      .map(asset => String(asset.source))
+      .join('\n')
+
+    expect(css).toContain('padding: var(--vanity-space-sm)')
+    const declarations = await readFile(join(root, 'node_modules/.vanity/auto-imports.d.ts'), 'utf-8')
+    expect(declarations).toContain('const cls: typeof VanityStyleAutoImports.cls')
+    expect(declarations).toContain('const t: typeof VanityStyleAutoImports.t')
+  })
+
   it('regenerates exact globals when system exports are added and removed', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-auto-watch-')))
     const system = join(root, 'system.ts')
@@ -1023,6 +1068,8 @@ describe('applyDebugNames', () => {
   it('appends debug ids to css, recipe, anatomy, and keyframes calls', () => {
     expect(applyDebugNames('export const card = css({ padding: 8 })'))
       .toBe('export const card = css({ padding: 8 }, \'card\')')
+    expect(applyDebugNames('export const card = cls({ padding: 8 })'))
+      .toBe('export const card = cls({ padding: 8 }, \'card\')')
     expect(applyDebugNames('export const button = recipe({ base: {} })'))
       .toBe('export const button = recipe({ base: {} }, \'button\')')
     expect(applyDebugNames('const dialog = anatomy({ parts: [\'root\'] })'))

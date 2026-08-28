@@ -1,5 +1,3 @@
-const { mix, recipe, t } = ds
-
 export const badge = recipe({
   base: {
     ...t.text.micro.$dec,

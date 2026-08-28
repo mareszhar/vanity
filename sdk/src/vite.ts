@@ -75,6 +75,7 @@ import autoImportVite from 'unplugin-auto-import/vite'
 import { reportDiagnostics, resetDiagnosticSources, VanityError } from './diagnostics'
 import { selectAutoImportNames } from './internal/autoImportNames'
 import { exportNamesFromFile } from './internal/exportNames'
+import { withEmissionFileScope } from './internal/fileScope'
 import { collectInspection } from './internal/inspect'
 import {
   isPackageSpecifier,
@@ -663,16 +664,17 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       let externalSystemEntries: readonly string[] = []
 
       try {
-        externalSystems = systemSources.flatMap((systemSource, index) => {
-          const system = systemsByEntry.get(systemSource.entry)
-          return system === undefined
-            ? []
-            : [{
-                id: `vanity:build-system:${index}`,
-                source: systemSource,
-                exports: system.buildExports,
-              }]
-        })
+        externalSystems = await Promise.all(systemSources.map(async (systemSource, index) => {
+          // An auto-import barrel may be the only route from a style module to
+          // the configured system. Ensure that route still receives the same
+          // evaluated build-plane external as an explicit system import.
+          const system = await ensureConfiguredSystem(systemSource)
+          return {
+            id: `vanity:build-system:${index}`,
+            source: systemSource,
+            exports: system.buildExports,
+          }
+        }))
         const bundled = await bundleStyleModule({
           filePath,
           root,
@@ -2024,7 +2026,11 @@ function evaluateStyleModule(
 
   try {
     const { result: exports, records } = collectInspection(() =>
-      executeBundle(source, filePath, externalModules))
+      // CommonJS bundling hoists dependency requires before vanilla-extract's
+      // source-level file-scope prologue. Keep those dependencies in the same
+      // style evaluation scope so an authoring barrel can safely read bound
+      // helpers such as `ds.t` while it is initialized.
+      withEmissionFileScope(filePath, () => executeBundle(source, filePath, externalModules)))
 
     for (const [serializedFileScope, cssObjs] of cssObjsByFileScope) {
       const css = transformVanityCss(cssObjs as any, {
@@ -2192,6 +2198,9 @@ export function applyDebugNames(source: string, fileName = 'module.css.ts'): str
 const authoringNames = new Set([
   'port',
   'class',
+  // `cls` is the recommended local binding for the reserved `class` member;
+  // it is an authoring convention, not a second public system member.
+  'cls',
   'recipe',
   'anatomy',
   'keyframes',

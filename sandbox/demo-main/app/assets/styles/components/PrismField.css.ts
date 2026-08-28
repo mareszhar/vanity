@@ -1,10 +1,8 @@
-const { class: style, t } = ds
+export const field = cls({ display: 'grid', gap: t.space['2xs'] })
 
-export const field = style({ display: 'grid', gap: t.space['2xs'] })
+export const label = cls({ ...t.text.label.$dec, color: t.color.inkMuted })
 
-export const label = style({ ...t.text.label.$dec, color: t.color.inkMuted })
-
-export const input = style({
+export const input = cls({
   ...t.text.body.$dec,
   'inlineSize': '100%',
   'minBlockSize': t.size.control,

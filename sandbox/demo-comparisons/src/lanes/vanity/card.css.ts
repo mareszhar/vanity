@@ -1,6 +1,4 @@
-const { class: style, t } = ds
-
-export const root = style({
+export const root = cls({
   display: 'grid',
   gap: t.space.sm,
   justifyItems: 'start',
@@ -10,7 +8,7 @@ export const root = style({
   borderRadius: t.radius.md,
 })
 
-export const title = style({
+export const title = cls({
   margin: 0,
   fontSize: '1.125rem',
   lineHeight: 1.3,
@@ -18,7 +16,7 @@ export const title = style({
   color: t.color.ink,
 })
 
-export const body = style({
+export const body = cls({
   margin: 0,
   fontSize: '0.875rem',
   color: t.color.inkMuted,

@@ -31,7 +31,7 @@ Component styles live apart from components; the design system lives under `asse
 - `app/assets/styles/design/palette.tokens.ts` — channel-first color, elevation surfaces, and shadows.
 - `app/assets/styles/design/foundations.tokens.ts` — density-scaled space, the radius seed, type scale, fonts, motion.
 - `app/assets/styles/design/system.ts` — composes the token builders and locks the one `ds`.
-- `app/assets/styles/design/authoring.ts` — safely re-exports that exact `ds` and independent preset helpers; Nuxt generates the style globals from it.
+- `app/assets/styles/design/authoring.ts` — the user-owned style barrel that re-exports the exact `ds`, selected bound authoring helpers, and independent preset helpers; `cls` is its local shorthand for `ds.class`.
 - `app/assets/styles/design/base.css.ts` — self-hosted `@font-face` declarations and the global reset.
 - `app/assets/styles/components/*.css.ts` — recipes, anatomies, ports, and the page styles.
 - `app/components/*.vue` — template-first Pug SFCs that reach their styles through the `styled` alias (`import * as s from 'styled/Name.css'`).

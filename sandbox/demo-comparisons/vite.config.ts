@@ -37,7 +37,7 @@ export default defineConfig({
           'panda-utilities',
           'compare',
         ],
-        styleAutoImports: true,
+        styleAutoImports: './src/lanes/vanity/authoring.ts',
       },
       app: {
         runtimeAutoImports: ['core', 'vue'],

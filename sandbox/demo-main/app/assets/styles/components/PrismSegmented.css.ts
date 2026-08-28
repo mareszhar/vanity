@@ -1,7 +1,8 @@
-const { calc, class: style, length, t } = ds
+const { length } = ds
+
 const controlRadius = calc(t.radius.sm).subtract(length.rem(0.2))
 
-export const group = style({
+export const group = cls({
   display: 'inline-grid',
   gridAutoFlow: 'column',
   gridAutoColumns: '1fr',
@@ -13,7 +14,7 @@ export const group = style({
   background: t.color.canvas,
 })
 
-export const option = style({
+export const option = cls({
   ...t.text.detail.$dec,
   display: 'inline-flex',
   alignItems: 'center',

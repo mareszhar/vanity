@@ -6,8 +6,6 @@
  * the chosen face.
  */
 
-const { fontFace, rules } = ds
-
 const geist = fontFace({
   src: 'url("/fonts/geist-sans.woff2") format("woff2")',
   fontWeight: '100 900',

@@ -1,5 +1,3 @@
-const { recipe, t } = ds
-
 export const button = recipe({
   base: {
     display: 'inline-flex',

@@ -1,9 +1,29 @@
 /**
- * Generated style auto-imports expose the exact locked system rather than a
- * hand-maintained mirror of its methods. Small app-owned fragments sit beside
- * `ds`; Hail remains the design-system opinion rather than a grab-bag.
+ * The style auto-import barrel exposes the exact locked system plus the bound
+ * authoring helpers this demo uses directly. `cls` is only a local shorthand
+ * for the canonical `ds.class`; it is not a second Vanity API.
  */
 import type { VanityStyleValue } from '@mszr/vanity'
+
+import { ds } from './system'
+
+export { ds }
+
+export const {
+  anatomy,
+  calc,
+  class: cls,
+  clamp,
+  fontFace,
+  keyframes,
+  mix,
+  percent,
+  port,
+  raw,
+  recipe,
+  rules,
+  t,
+} = ds
 
 export interface FocusRingOptions {
   readonly color?: VanityStyleValue<'outlineColor'>
@@ -39,5 +59,3 @@ export function visuallyHidden() {
     border: 0,
   } as const
 }
-
-export { ds } from './system'

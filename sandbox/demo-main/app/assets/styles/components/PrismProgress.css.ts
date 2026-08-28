@@ -1,10 +1,8 @@
-const { calc, class: style, clamp, percent, port, t } = ds
-
 // The fraction is a per-instance runtime input — a port, not a design token.
 export const fraction = port(0)
 const percentage = calc(fraction).multiply(percent(100))
 
-export const track = style({
+export const track = cls({
   position: 'relative',
   blockSize: t.space.sm,
   borderRadius: t.radius.pill,
@@ -13,7 +11,7 @@ export const track = style({
   overflow: 'hidden',
 })
 
-export const fill = style({
+export const fill = cls({
   blockSize: '100%',
   inlineSize: clamp(percent(0), percentage, percent(100)),
   borderRadius: t.radius.pill,

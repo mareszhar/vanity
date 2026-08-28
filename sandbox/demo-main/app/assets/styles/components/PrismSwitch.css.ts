@@ -1,5 +1,3 @@
-const { anatomy, t } = ds
-
 // An anatomy: the track and knob both answer to the root's checked state through
 // part-scoped conditions, so one `data-state` on the button drives every part.
 export const control = anatomy({

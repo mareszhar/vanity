@@ -1,6 +1,4 @@
-const { class: style, t } = ds
-
-export const page = style({
+export const page = cls({
   minBlockSize: '100dvh',
   background: t.color.canvas,
   color: t.color.ink,
@@ -12,7 +10,7 @@ export const page = style({
   lg: { gridTemplateColumns: '20rem minmax(0, 1fr)' },
 })
 
-export const skipLink = style({
+export const skipLink = cls({
   position: 'fixed',
   insetBlockStart: t.space.sm,
   insetInlineStart: t.space.sm,
@@ -26,20 +24,20 @@ export const skipLink = style({
   focusVisible: { transform: 'translateY(0)' },
 })
 
-export const main = style({
+export const main = cls({
   minInlineSize: 0,
   display: 'grid',
   alignContent: 'start',
 })
 
-export const facts = style({ display: 'grid', gap: t.space.xs, margin: 0 })
-export const fact = style({
+export const facts = cls({ display: 'grid', gap: t.space.xs, margin: 0 })
+export const fact = cls({
   display: 'flex',
   justifyContent: 'space-between',
   gap: t.space.md,
   paddingBlock: t.space.xs,
   borderBlockEnd: `1px solid ${t.color.border}`,
 })
-export const factLabel = style({ ...t.text.label.$dec, margin: 0, color: t.color.ink })
-export const factValue = style({ ...t.text.detail.$dec, margin: 0, color: t.color.inkMuted, textAlign: 'end', textTransform: 'capitalize' })
-export const note = style({ ...t.text.detail.$dec, margin: 0, color: t.color.inkFaint })
+export const factLabel = cls({ ...t.text.label.$dec, margin: 0, color: t.color.ink })
+export const factValue = cls({ ...t.text.detail.$dec, margin: 0, color: t.color.inkMuted, textAlign: 'end', textTransform: 'capitalize' })
+export const note = cls({ ...t.text.detail.$dec, margin: 0, color: t.color.inkFaint })
