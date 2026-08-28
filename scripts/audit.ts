@@ -37,7 +37,7 @@ async function main(): Promise<void> {
     configFile: false,
     logLevel: 'silent',
     root,
-    plugins: [vanityPlugin({ identifiers: 'debug' })],
+    plugins: [vanityPlugin({ compiler: { identifiers: 'debug' } })],
     resolve: {
       alias: {
         '@mszr/vanity/runtime': join(packageDir, 'src', 'runtime.ts'),

@@ -118,42 +118,41 @@ Retain:
 
 Style-module handles imported in component code are projected serialized runtime handles; build authoring code never executes in the browser.
 
-## 8. Vite and Nuxt
+## 8. Integration adapters
 
-The integration:
+The integrations share compiler and application lanes, but each adapter registers those lanes through its host:
 
-- evaluates `*.css.ts`;
-- imports a locked system from plain `system.ts`;
-- emits one system CSS artifact and one CSS artifact per style source;
-- preserves lazy splitting;
-- writes the manifest;
-- provides stable dev endpoints and DevTools;
-- recovers from dependency errors without restart;
-- generates browser and SSR projections from portable data;
-- supports precompiled package contracts.
+| Entry | User-facing adapter | Compiler lane | Application lane |
+| --- | --- | --- | --- |
+| `/vite` | `vanityPlugin` | Evaluates `*.css.ts`, emits CSS, and projects the locked system. | Uses Vite auto-import transforms for application modules and Vue templates when the host uses Vue. |
+| `/nuxt` | The default Nuxt module | Installs the `/vite` compiler lane internally. | Registers runtime imports through Nuxt's native import registry. |
+| `/vue` | Vue runtime helpers | None. | Explicit runtime helpers such as `usePorts`, `useAnatomy`, and `propsOf`; no bundler registration. |
 
-`styleAutoImports`:
+The Vite adapter is configured through one registration:
 
-- remains opt-in;
-- includes the locked `ds` surface and top-level condition atoms/helpers appropriate to style files;
-- generates exact ambient declarations at a documented stable path;
-- regenerates on configuration/export change;
-- registers the declarations with Nuxt/Vite/TypeScript;
-- includes a generated-file banner;
-- preserves TSDoc and exact types;
-- allows explicit import or user aliasing at all times;
-- avoids injecting into modules upstream of the system.
+```ts
+vanityPlugin({
+  compiler: {
+    system: './src/design/system.ts',
+    layerOrder: ['vendor', 'app'],
+    styleAutoImports: './src/design/authoring.ts',
+  },
+  app: {
+    runtimeAutoImports: {
+      presets: ['core', 'vue'],
+      sources: ['@mono/styles', './src/app-imports.ts'],
+    },
+  },
+})
+```
 
-Generated types are the only ambient declaration source.
+The common compiler lane evaluates `*.css.ts`, imports a locked system from plain `system.ts`, emits one system CSS artifact and one CSS artifact per style source, preserves lazy splitting, writes the manifest, provides stable dev endpoints and DevTools, recovers from dependency errors without restart, generates browser and SSR projections from portable data, and supports precompiled package contracts. `compiler.layerOrder` establishes the host-wide order of CSS layer roots; its detailed semantics live in [spec-engine.md §9](./spec-engine.md#9-compiler-projection).
 
-The release implementation:
+`compiler.styleAutoImports` remains opt-in and exposes authoring exports only to evaluated `*.css.ts` modules. `true` reuses the single `compiler.system` entry; a string names another source; a filtered object may omit `from` to reuse `compiler.system`. It generates exact ambient declarations at a stable path, regenerates on configuration or export changes, registers those declarations with the host, includes a generated-file banner, preserves TSDoc and exact types, allows explicit imports or user aliasing, and avoids injecting into modules upstream of the system. Use `include` or `exclude` for deliberate narrowing, never both.
 
-- plain Vite writes `node_modules/.vanity/auto-imports.d.ts`;
-- plain Vite registers that stable file through the generated `node_modules/@types/vanity-auto-imports/index.d.ts` bridge;
-- Nuxt registers `.nuxt/vanity-auto-imports.d.ts`;
-- every global is `typeof` the authored module export, preserving overloads, generics, literal token paths, and TSDoc;
-- Oxc-based export discovery excludes type-only/default exports and reruns when the system source changes;
-- both files carry the generated-file banner.
+`app.runtimeAutoImports` remains opt-in and supplies runtime-facing values to application modules. It never changes how `*.css.ts` modules are evaluated. A string names one source, an array selects built-in presets, and the object form combines `presets` with `sources`. Built-in presets provide named Vanity runtime groups; package and local sources are curated barrels and contribute all named value exports by default. Use `{ from, include }` or `{ from, exclude }` for deliberate narrowing; the two filters cannot be combined. Template injection is adapter-specific as shown above.
+
+Generated types are the only ambient declaration source. Plain Vite writes Vanity's generated runtime declarations to the automatically discovered `node_modules/@types/vanity-runtime-auto-imports` package and overwrites that file so removed exports do not linger. Nuxt delegates declaration generation to its native import registry; both adapters preserve the authored exports' overloads, generics, literal types, and TSDoc.
 
 ## 9. SSR and HMR
 

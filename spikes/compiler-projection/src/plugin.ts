@@ -3,7 +3,7 @@ import type { CompiledStyleDefinition, PortableContract } from './types.ts'
 import { readFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { normalizePath } from 'vite'
-import { renderCascadePrelude, renderStyleCss, renderSystemCss } from './css.ts'
+import { renderLayerOrderPrelude, renderStyleCss, renderSystemCss } from './css.ts'
 import { discoverLocalDependencies } from './dependencies.ts'
 import { writeIfChanged } from './files.ts'
 import { fingerprint } from './hash.ts'
@@ -23,7 +23,7 @@ export interface ContractSource {
 export interface CompilerProjectionOptions {
   contracts: Array<string | ContractSource>
   target: 'browser' | 'ssr'
-  cascade: string[]
+  layerOrder: string[]
   artifactDirectory: string
   cascadeFileName?: string
 }
@@ -129,7 +129,7 @@ function runtimeModule(contract: PortableContract, target: 'browser' | 'ssr'): s
 export function compilerProjection(options: CompilerProjectionOptions): CompilerProjectionHarness {
   if (options.contracts.length === 0)
     throw new Error('[projection] at least one contract source is required')
-  if (options.cascade.length === 0)
+  if (options.layerOrder.length === 0)
     throw new Error('[projection] cascade prelude requires at least one layer root')
 
   const sources = options.contracts.map(asSource)
@@ -283,7 +283,7 @@ export function compilerProjection(options: CompilerProjectionOptions): Compiler
         this.emitFile({
           type: 'asset',
           fileName: cascadeFileName,
-          source: renderCascadePrelude(options.cascade),
+          source: renderLayerOrderPrelude(options.layerOrder),
         })
       }
     },

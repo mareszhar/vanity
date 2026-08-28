@@ -31,7 +31,7 @@ describe('a precompiled contract consumed from package dist', () => {
     const harness = compilerProjection({
       contracts: [{ entry: library.entry, artifact: library.artifact }],
       target: 'browser',
-      cascade: ['vendor', 'precompiled'],
+      layerOrder: ['vendor', 'precompiled'],
       artifactDirectory: join(work, 'artifacts'),
     })
 

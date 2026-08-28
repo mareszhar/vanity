@@ -29,7 +29,7 @@ describe('duplicate contract package instances', () => {
     const harness = compilerProjection({
       contracts: [duplicateSystemA, duplicateSystemB],
       target: 'browser',
-      cascade: ['vendor', 'duplicate'],
+      layerOrder: ['vendor', 'duplicate'],
       artifactDirectory: join(work, 'artifacts'),
     })
 

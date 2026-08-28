@@ -196,8 +196,10 @@ The Vite integration accepts one or more plain system entries:
 
 ```ts
 vanityPlugin({
-  system: './src/system.ts',
-  cascade: ['vendor', 'app'],
+  compiler: {
+    system: './src/system.ts',
+    layerOrder: ['vendor', 'app'],
+  },
 })
 ```
 
@@ -205,7 +207,7 @@ For a style transform the compiler executes the full in-process contract, emits 
 
 For ordinary browser and SSR imports of the configured `system.ts`, Vite replaces the source with a facade generated from portable data. The source module, authoring closures, compiler, Vanilla Extract, and Node-only code never enter those graphs.
 
-A compiler-owned cascade prelude is emitted as the first stylesheet.
+A compiler-owned cascade prelude is emitted as the first stylesheet. `compiler.layerOrder` optionally supplies its ordered CSS layer roots; when omitted, Vanity derives the order from the configured systems' roots. Set it when the build also contains external layers whose precedence must be explicit.
 
 ## 10. Package projection
 

@@ -192,7 +192,7 @@ createSystem({
     },
   },
   support: {},
-  layers: ['reset', 'base', 'app'],
+  layerOrder: ['reset', 'base', 'app'],
   reference: 'var',
   validation: 'strict',
 })
@@ -200,7 +200,7 @@ createSystem({
 
 This is equivalent to `createSystem().addPolicies(config)`.
 
-Known top-level groups are `constructors`, `support`, `layers`, `reference`, `validation`, and `plugins`. Constructor names form an open subfamily for built-in, user, and plugin constructors. Plugin policy data is auto-scoped by plugin identity.
+Known top-level groups are `constructors`, `support`, `layerOrder`, `reference`, `validation`, and `plugins`. Constructor names form an open subfamily for built-in, user, and plugin constructors. Plugin policy data is auto-scoped by plugin identity.
 
 Conformance policy adapts unresolved values at system entry. Restriction policy is metadata and diagnostics, never shape subtraction. `forbid` fails consolidation, `discourage` warns and compiles. `prospective` covers later contributions; `retroactive` scans the complete graph.
 

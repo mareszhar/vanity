@@ -16,6 +16,7 @@ export default defineConfig({
       '@test': local('./src/test-support/index.ts'),
       '@mszr/vanity/capabilities': local('./src/capabilities.ts'),
       '@mszr/vanity/runtime': local('./src/runtime.ts'),
+      '@mszr/vanity/imports': local('./src/imports.ts'),
       '@mszr/vanity/testing': local('./src/testing.ts'),
       '@mszr/vanity/presets': local('./src/presets.ts'),
       '@mszr/vanity/vite': local('./src/vite.ts'),

@@ -8,6 +8,7 @@
       "@mszr/vanity/capabilities": ["./src/capabilities.ts"],
       "@mszr/vanity/cli": ["./src/cli.ts"],
       "@mszr/vanity/runtime": ["./src/runtime.ts"],
+      "@mszr/vanity/imports": ["./src/imports.ts"],
       "@mszr/vanity/testing": ["./src/testing.ts"],
       "@mszr/vanity/presets": ["./src/presets.ts"],
       "@mszr/vanity/vite": ["./src/vite.ts"],

@@ -20,7 +20,7 @@ describe('policy editor DX', () => {
     expect(result.at('policy').completions).toContainCompletions([
       'constructors',
       'support',
-      'layers',
+      'layerOrder',
       'reference',
       'validation',
       'plugins',

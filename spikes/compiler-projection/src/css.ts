@@ -36,6 +36,6 @@ export function renderStyleCss(style: CompiledStyleDefinition): string {
   ].join('\n')
 }
 
-export function renderCascadePrelude(cascade: readonly string[]): string {
-  return `@layer ${cascade.join(', ')};\n`
+export function renderLayerOrderPrelude(layerOrder: readonly string[]): string {
+  return `@layer ${layerOrder.join(', ')};\n`
 }

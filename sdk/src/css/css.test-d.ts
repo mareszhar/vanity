@@ -110,7 +110,7 @@ describe('css() typing', () => {
   })
 
   it('custom layers replace the default order in the layer key', () => {
-    const custom = de.createSystem({ tokens: {}, layers: ['base', 'app'] })
+    const custom = de.createSystem({ tokens: {}, layerOrder: ['base', 'app'] })
 
     void custom.css.layer('app')({})
     // @ts-expect-error — 'overrides' is not declared by this system

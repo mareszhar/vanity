@@ -38,6 +38,10 @@
       "types": "./dist/runtime.d.mts",
       "import": "./dist/runtime.mjs"
     },
+    "./imports": {
+      "types": "./dist/imports.d.mts",
+      "import": "./dist/imports.mjs"
+    },
     "./capabilities": {
       "types": "./dist/capabilities.d.mts",
       "import": "./dist/capabilities.mjs"
@@ -131,7 +135,8 @@
     "esbuild": "catalog:",
     "known-css-properties": "catalog:",
     "lightningcss": "catalog:",
-    "oxc-parser": "catalog:"
+    "oxc-parser": "catalog:",
+    "unplugin-auto-import": "catalog:"
   },
   "devDependencies": {
     "@mszr/selenita": "catalog:",

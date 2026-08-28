@@ -80,8 +80,13 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [vanityPlugin({
-    system: './src/design/system.ts',
-    cascade: ['vendor', 'app'],
+    compiler: {
+      system: './src/design/system.ts',
+      layerOrder: ['vendor', 'app'],
+    },
+    app: {
+      runtimeAutoImports: ['core'],
+    },
   })],
 })
 ```

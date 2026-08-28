@@ -206,7 +206,7 @@ async function main(): Promise<void> {
   write(join(plainDir, 'vite.config.ts'), `import { defineConfig } from 'vite'
 import { vanityPlugin } from '@mszr/vanity/vite'
 
-export default defineConfig({ plugins: [vanityPlugin({ system: './src/system.ts' })] })
+export default defineConfig({ plugins: [vanityPlugin({ compiler: { system: './src/system.ts' } })] })
 `)
   write(join(plainDir, 'index.html'), '<main id="app"></main><script type="module" src="/src/main.ts"></script>\n')
   write(join(plainDir, 'src/engine.ts'), `import { createSystem } from '@mszr/vanity'

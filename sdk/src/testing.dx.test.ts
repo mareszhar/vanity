@@ -93,6 +93,11 @@ const ENTRYPOINT_VALUES = {
     'setCustomProperties',
     'setCustomProperty',
   ],
+  imports: [
+    'vanityCoreAutoImports',
+    'vanityRuntimeAutoImportPresets',
+    'vanityVueAutoImports',
+  ],
   capabilities: [
     'VANITY_CSS_CAPABILITIES',
     'VANITY_CSS_NAMED_API_ROWS',
@@ -117,7 +122,7 @@ const ENTRYPOINT_VALUES = {
     'vanityPlugin',
   ],
   vue: ['propsOf', 'useAnatomy', 'usePorts'],
-  nuxt: ['default', 'vanityNuxtImports'],
+  nuxt: ['default'],
   presets: ['hail'],
   cli: ['assertManifest', 'explainManifestPath', 'inspectManifest', 'readManifest'],
   testing: [
@@ -202,6 +207,7 @@ describe('public Phase 11 editor contract', () => {
   it('gives every named value on every public entrypoint a purpose at completion', () => {
     const result = project.query`
       import * as runtime from '@mszr/vanity/runtime'
+      import * as imports from '@mszr/vanity/imports'
       import * as capabilities from '@mszr/vanity/capabilities'
       import * as vite from '@mszr/vanity/vite'
       import * as vue from '@mszr/vanity/vue'
@@ -210,6 +216,7 @@ describe('public Phase 11 editor contract', () => {
       import * as cli from '@mszr/vanity/cli'
       import * as testing from '@mszr/vanity/testing'
       void runtime.${cursor('runtime')}
+      void imports.${cursor('imports')}
       void capabilities.${cursor('capabilities')}
       void vite.${cursor('vite')}
       void vue.${cursor('vue')}

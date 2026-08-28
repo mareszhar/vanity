@@ -4,8 +4,10 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [
     vanityPlugin({
-      system: './src/system.ts',
-      cascade: ['vendor', 'canary'],
+      compiler: {
+        system: './src/system.ts',
+        layerOrder: ['vendor', 'canary'],
+      },
     }),
   ],
   build: {

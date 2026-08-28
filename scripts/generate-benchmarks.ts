@@ -171,7 +171,7 @@ function viteConfigSource(): string {
 import { vanityPlugin } from '../../../sdk/dist/vite.mjs'
 
 export default {
-  plugins: [vanityPlugin({ system: './src/system.ts' })],
+  plugins: [vanityPlugin({ compiler: { system: './src/system.ts' } })],
 }
 `
 }

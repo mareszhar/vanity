@@ -122,7 +122,7 @@ Conformance and restriction are deliberately different:
 
 Bound restricted constructors always carry an authoring diagnostic. Portable values cannot know the future host, so the system scans their constructor provenance at consolidation. `prospective` is the default and covers contributions registered after the restriction; `retroactive` covers the complete graph. A discouraged value compiles with a warning; a forbidden value fails.
 
-The policy book has the known top-level groups `constructors`, `support`, `layers`, `reference`, `validation`, and `plugins`. `createSystem(config)` is exactly the initial policy book; `addPolicies` and `overwritePolicies` use the same grammar.
+Value resolution uses the system policy book described in [System authoring §8](./spec-system-authoring.md#8-policy-book).
 
 ## 6. Same-named CSS parity
 

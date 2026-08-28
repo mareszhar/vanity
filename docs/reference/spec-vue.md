@@ -110,29 +110,26 @@ const d = useAnatomy(s.dialog, props)
 
 ```TS
 // nuxt.config.ts
-import { vanityNuxtImports } from '@mszr/vanity/nuxt'
-
 export default defineNuxtConfig({
   modules: ['@mszr/vanity/nuxt'],
   vanity: {
-    system: '~/design/system.ts',
-    styleAutoImports: {
-      from: '~/design/authoring.ts',
+    compiler: {
+      system: '~/design/system.ts',
+      styleAutoImports: '~/design/authoring.ts',
     },
-  },
-  imports: {
-    presets: [...vanityNuxtImports],
+    app: {
+      runtimeAutoImports: ['core', 'vue'],
+    },
   },
 })
 ```
 
-The `styleAutoImports` option is optional and defaults to `false`. `true` generates globals from the configured system module; `{ from }` names a different plain value-export module, useful for exposing the exact `ds` alongside independent preset helpers without mirroring bound system methods. Nuxt application auto-imports are intentionally configured by the project. `vanityNuxtImports` is a convenience value for Nuxt's ordinary `imports.presets` option; importing and spreading it makes the choice visible. Projects may instead list a narrower preset or use explicit imports.
+The `compiler` and `app` blocks describe two different execution lanes. Their shared contract and adapter differences are defined in [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters). In Nuxt, `app.runtimeAutoImports` enters Nuxt's native import registry and is therefore available in Nuxt application code and Vue templates; `core` is Vanity's framework-agnostic runtime group and `vue` adds the Vue adapter.
 
 **Contract details.**
 
-- Wires the `/vite` plugin (manifest emission included) and, when opted in, makes the configured system module available to evaluated `*.css.ts` files through the build-time inject shim. It does not force application auto-imports.
-- **Style-module auto-imports are opt-in.** When enabled, an esbuild `inject` shim resolves unbound identifiers to the configured source, explicit imports stay untouched, and files upstream of the locked system are skipped. The exemplary shape auto-imports `ds`, then locally selects readable atoms: `const { class: style, recipe, t } = ds`. Plain-Vite users pass the same source as the `/vite` plugin's `autoImports` option; explicit imports always remain valid.
-- **The globals are generated, never hand-maintained.** Plain Vite writes `node_modules/.vanity/auto-imports.d.ts`; Nuxt registers `.nuxt/vanity-auto-imports.d.ts`. Every global is declared as `typeof` its authored system-module export, so overloads, generics, literal token paths, and hover documentation remain exact. Syntax-based export discovery regenerates the shim/declarations when value exports change and excludes type-only/default exports. Plain Vite registers the stable declaration through a generated `@types/vanity-auto-imports` reference bridge. Projects whose `compilerOptions.types` explicitly narrows automatic type discovery include `"vanity-auto-imports"` in that list.
+- Installs the `/vite` compiler lane (manifest emission included) and registers opted-in application runtime imports with Nuxt's native import registry; the shared lane contract and generated-type rules live in [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters).
+- Nuxt's native registry owns the application declaration surface, so Nuxt projects need neither a separate `imports.presets` entry nor a Vanity-specific Nuxt preset value.
 - **Importing the system module from app code is legal.** Token handles, override classes, runtime factories, and SSR projection helpers cross as serializable contracts; bound authoring functions cross as build-plane stubs that throw the lane redirect if called — never a poisoned module, never a silent no-op.
 - Nuxt DevTools tab: the token browser (values per scheme, liveness, usage counts), recipe/anatomy inspector, ports, conditions, and the escape inventory, with click-through to the `.css.ts` source. It embeds the manifest view the `/vite` plugin serves at `/__vanity/` in dev — one implementation serves plain Vite and Nuxt alike ([spec-introspection.md §5](./spec-introspection.md#5-manifest-v3)).
 - A single component can use Vanity with the module and one `.css.ts` file; no global buy-in is required.

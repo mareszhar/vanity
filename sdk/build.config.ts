@@ -1,8 +1,8 @@
 import { defineBuildConfig } from 'obuild/config'
 
 const browserExternal = ['@vanilla-extract/css']
-const viteExternal = ['@vanilla-extract/vite-plugin', 'vite']
-const nuxtExternal = ['@nuxt/kit', 'nuxt', 'vite']
+const viteExternal = ['@vanilla-extract/vite-plugin', 'unplugin-auto-import', 'vite']
+const nuxtExternal = ['@nuxt/kit', 'nuxt', 'unplugin-auto-import', 'vite']
 const vueExternal = ['vue']
 const testingExternal = ['@mszr/selenita']
 
@@ -21,6 +21,13 @@ export default defineBuildConfig({
       input: ['./src/runtime.ts'],
       rolldown: {
         platform: 'browser',
+      },
+    },
+    {
+      type: 'bundle',
+      input: ['./src/imports.ts'],
+      rolldown: {
+        platform: 'neutral',
       },
     },
     {

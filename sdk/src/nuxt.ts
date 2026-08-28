@@ -1,8 +1,8 @@
 /**
  * The Nuxt module ([spec-vue.md §4]): wires the `/vite` plugin, injects
- * the configured system's bound functions into evaluated style modules, and
- * ships the SSR scheme recipe (cookie + `data-scheme`). It deliberately does
- * not register application auto-imports; that remains the Nuxt app's choice.
+ * the configured system's bound functions into evaluated style modules,
+ * registers the configured application runtime imports, and ships the SSR
+ * scheme recipe (cookie + `data-scheme`).
  *
  * The Nuxt DevTools tab is the `/vite` plugin's manifest view (`/__vanity/`)
  * embedded — one implementation serves plain Vite and Nuxt alike
@@ -11,10 +11,16 @@
 
 import type { NuxtModule } from '@nuxt/schema'
 import type { Plugin, PluginOption } from 'vite'
-import type { VanityAutoImports, VanityViteOptions } from './vite'
+import type {
+  VanityCompilerOptions,
+  VanityRuntimeAutoImports,
+  VanityViteOptions,
+} from './vite'
 import { readFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 import {
+  addImports,
+  addImportsSources,
   addPluginTemplate,
   addTypeTemplate,
   addVitePlugin,
@@ -22,41 +28,21 @@ import {
   resolveAlias,
   updateTemplates,
 } from '@nuxt/kit'
+import { selectAutoImportNames } from './internal/autoImportNames'
+import { exportNamesFromFile } from './internal/exportNames'
+import {
+  isPackageSpecifier,
+  normalizeRuntimeAutoImports,
+  runtimeAutoImportIgnore,
+} from './internal/runtimeAutoImports'
+import { withVanityViteHost } from './internal/viteHost'
 import { protectRelativeColorSyntax } from './nuxt/postcss'
 import { styleAutoImportDeclarations, styleExportNames, vanityPlugin } from './vite'
 
-/**
- * Optional application auto-imports for Vue-facing Vanity helpers.
- *
- * Nothing registers these implicitly. A Nuxt app opts in visibly:
- *
- * `imports: { presets: [...vanityNuxtImports] }`
- */
-export const vanityNuxtImports = [
-  {
-    from: '@mszr/vanity/vue',
-    imports: ['propsOf', 'useAnatomy', 'usePorts'],
-  },
-  {
-    from: '@mszr/vanity/runtime',
-    imports: ['ports', 'setCustomProperties', 'setCustomProperty'],
-  },
-]
-
-export interface VanityNuxtOptions extends Omit<VanityViteOptions, 'autoImports'> {
-  /**
-   * The plain consolidated system module (`~/design/system.ts`). Vite projects
-   * app/SSR imports from its portable contract.
-   */
-  system?: string
-  /**
-   * Opt into generated globals inside evaluated `*.css.ts` files.
-   *
-   * `true` reads exports from `system`; `{ from }` keeps the locked contract
-   * and its style-only authoring facade as separate plain modules.
-   */
-  styleAutoImports?: boolean | {
-    readonly from: string
+export interface VanityNuxtOptions extends Omit<VanityViteOptions, 'compiler'> {
+  /** Nuxt's adapter accepts one configured plain system entry. */
+  compiler?: Omit<VanityCompilerOptions, 'system'> & {
+    system?: string
   }
 }
 
@@ -89,8 +75,10 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
   },
   defaults: {},
   setup(options, nuxt) {
-    const { system, styleAutoImports = false, ...viteOptions } = options
-    let autoImports: VanityAutoImports | undefined
+    const compiler = options.compiler ?? {}
+    const app = options.app ?? {}
+    const { system, styleAutoImports = false, ...viteOptions } = compiler
+    let styleImports: NonNullable<VanityCompilerOptions['styleAutoImports']> | undefined
     let systemEntry: string | undefined
     let autoImportEntry: string | undefined
     const resolveSourcePath = (path: string) => {
@@ -100,14 +88,12 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
 
     if (system) {
       systemEntry = resolveSourcePath(system)
-      readSystemModule(systemEntry)
+      readConfiguredModule(systemEntry)
     }
 
-    if (systemEntry && styleAutoImports) {
-      autoImportEntry = styleAutoImports === true
-        ? systemEntry
-        : resolveSourcePath(styleAutoImports.from)
-      readSystemModule(autoImportEntry)
+    if (styleAutoImports) {
+      autoImportEntry = resolveNuxtStyleAutoImportSource(styleAutoImports, systemEntry, resolveSourcePath)
+      readConfiguredModule(autoImportEntry)
 
       // Fail at configuration time for a missing system, even when it
       // currently has no value exports. A zero-export declaration remains a
@@ -115,16 +101,20 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
       // Let the Vite integration rediscover value exports on every system
       // source change; pinning an initial list would stale the injection shim
       // until a dev-server restart.
-      autoImports = {
-        from: autoImportEntry,
-        emitDeclarations: false,
-        registerTypes: false,
-      }
+      styleImports = typeof styleAutoImports === 'object'
+        ? styleAutoImports.include !== undefined
+          ? { from: autoImportEntry, include: styleAutoImports.include }
+          : { from: autoImportEntry, exclude: styleAutoImports.exclude }
+        : autoImportEntry
 
       const declarations = addTypeTemplate({
         filename: 'vanity-auto-imports.d.ts',
         getContents: () => {
-          const currentNames = styleExportNames(readSystemModule(autoImportEntry!))
+          const currentNames = selectAutoImportNames(
+            styleExportNames(readConfiguredModule(autoImportEntry!)),
+            typeof styleAutoImports === 'object' ? styleAutoImports : {},
+            '[vanity] compiler.styleAutoImports',
+          )
           return styleAutoImportDeclarations(autoImportEntry!, currentNames)
         },
       })
@@ -138,6 +128,9 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
       })
     }
 
+    if (app.runtimeAutoImports !== undefined)
+      registerNuxtRuntimeAutoImports(app.runtimeAutoImports, resolveSourcePath)
+
     // TypeScript cannot natively connect an inferred mapped token handle back
     // to its object-literal definition for rename-symbol. The bundled plugin
     // supplies those graph-aware locations; Nuxt users pay no setup tax.
@@ -148,13 +141,15 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
     // but preserve these standards-valid expressions byte-for-byte.
     protectRelativeColorSyntax(nuxt.options.postcss)
 
-    addVitePlugin(toVitePlugins(vanityPlugin({
-      ...viteOptions,
-      ...(systemEntry === undefined || /\.css\.[cm]?[jt]sx?$/.test(systemEntry)
-        ? {}
-        : { system: systemEntry }),
-      autoImports,
-    })))
+    addVitePlugin(toVitePlugins(vanityPlugin(withVanityViteHost({
+      compiler: {
+        ...viteOptions,
+        ...(systemEntry === undefined || /\.css\.[cm]?[jt]sx?$/.test(systemEntry)
+          ? {}
+          : { system: systemEntry }),
+        ...(styleImports === undefined ? {} : { styleAutoImports: styleImports }),
+      },
+    }, 'nuxt'))))
 
     addPluginTemplate({
       filename: 'vanity-scheme.mjs',
@@ -194,16 +189,36 @@ function installTypescriptPlugin(tsconfig: VanityTsConfig): void {
     plugins.push({ name: '@mszr/vanity/typescript' })
 }
 
-function readSystemModule(from: string): string {
+function readConfiguredModule(from: string): string {
   try {
     return readFileSync(from, 'utf-8')
   }
   catch {
     throw new Error(
-      `[vanity] the configured system module does not exist: ${from}\n`
-      + `  fix: point vanity.system at your plain consolidated module — e.g. system: '~/design/system.ts'`,
+      `[vanity] the configured Vanity module does not exist: ${from}\n`
+      + `  fix: point compiler.system or compiler.styleAutoImports at a readable module`,
     )
   }
+}
+
+function resolveNuxtStyleAutoImportSource(
+  value: Exclude<NonNullable<VanityCompilerOptions['styleAutoImports']>, false>,
+  systemEntry: string | undefined,
+  resolveSourcePath: (path: string) => string,
+): string {
+  if (typeof value === 'string')
+    return resolveSourcePath(value)
+
+  if (typeof value === 'object' && value.from !== undefined)
+    return resolveSourcePath(value.from)
+
+  if (systemEntry === undefined) {
+    throw new TypeError(
+      '[vanity] compiler.styleAutoImports without a source requires one plain compiler.system entry',
+    )
+  }
+
+  return systemEntry
 }
 
 function toVitePlugins(options: PluginOption[]): Plugin[] {
@@ -232,4 +247,38 @@ function collectVitePlugin(option: PluginOption, plugins: Plugin[]): void {
 
 function isVitePlugin(option: unknown): option is Plugin {
   return typeof option === 'object' && option !== null && 'name' in option
+}
+
+function registerNuxtRuntimeAutoImports(
+  value: VanityRuntimeAutoImports,
+  resolveSourcePath: (path: string) => string,
+): void {
+  const config = normalizeRuntimeAutoImports(value)
+
+  for (const preset of config.presets) {
+    addImports(preset.imports.map(importName => ({
+      name: importName,
+      from: preset.from,
+    })))
+  }
+
+  for (const source of config.sources) {
+    const sourceFrom = source.from
+
+    if (isPackageSpecifier(source.from)) {
+      const ignore = runtimeAutoImportIgnore(source)
+      const packagePreset: Parameters<typeof addImportsSources>[0] = {
+        package: source.from,
+        ...(ignore === undefined ? {} : { ignore: [ignore] }),
+      }
+      addImportsSources(packagePreset)
+      continue
+    }
+
+    const from = resolveSourcePath(source.from)
+    const names = exportNamesFromFile(from)
+    const selected = selectAutoImportNames(names, source, `[vanity] app.runtimeAutoImports source '${sourceFrom}'`)
+
+    addImports(selected.map(name => ({ name, from })))
+  }
 }

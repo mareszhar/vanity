@@ -42,8 +42,10 @@ describe('the vite build', () => {
       logLevel: 'silent',
       root: local('./test-support/vite-app'),
       plugins: [vanityPlugin({
-        identifiers: 'debug',
-        system: local('./test-support/vite-app/system.ts'),
+        compiler: {
+          identifiers: 'debug',
+          system: local('./test-support/vite-app/system.ts'),
+        },
       })],
       resolve: { alias: aliases },
       build: {
@@ -74,7 +76,7 @@ describe('the vite build', () => {
       configFile: false,
       logLevel: 'silent',
       root,
-      plugins: [vanityPlugin({ identifiers: 'debug' })],
+      plugins: [vanityPlugin({ compiler: { identifiers: 'debug' } })],
       resolve: { alias: aliases },
       build: {
         write: false,
@@ -117,7 +119,7 @@ describe('the vite build', () => {
         customLogger: logger,
         logLevel: 'silent',
         root,
-        plugins: [vanityPlugin({ identifiers: 'debug' })],
+        plugins: [vanityPlugin({ compiler: { identifiers: 'debug' } })],
         resolve: { alias: aliases },
         build: {
           write: false,
@@ -135,7 +137,7 @@ describe('the vite build', () => {
   })
 
   it('does not transform the retired .style.ts suffix', async () => {
-    const compiler = vanityPlugin({ identifiers: 'debug' })[0] as import('vite').Plugin
+    const compiler = vanityPlugin({ compiler: { identifiers: 'debug' } })[0] as import('vite').Plugin
     const transform = typeof compiler.transform === 'object'
       ? compiler.transform.handler
       : compiler.transform
@@ -244,7 +246,7 @@ export function exercise() {
       configFile: false,
       logLevel: 'silent',
       root,
-      plugins: [vanityPlugin({ identifiers: 'debug', system: join(root, 'system.ts') })],
+      plugins: [vanityPlugin({ compiler: { identifiers: 'debug', system: join(root, 'system.ts') } })],
       resolve: { alias: aliases },
       build: {
         write: false,
@@ -287,7 +289,7 @@ export const runtime = ds.runtime
       configFile: false,
       logLevel: 'silent',
       root,
-      plugins: [vanityPlugin({ identifiers: 'debug', system: join(root, 'system.ts') })],
+      plugins: [vanityPlugin({ compiler: { identifiers: 'debug', system: join(root, 'system.ts') } })],
       resolve: { alias: aliases },
       build: {
         write: false,
@@ -316,8 +318,10 @@ export const runtime = ds.runtime
       logLevel: 'silent',
       root,
       plugins: [vanityPlugin({
-        identifiers: 'debug',
-        system: join(root, 'system.ts'),
+        compiler: {
+          identifiers: 'debug',
+          system: join(root, 'system.ts'),
+        },
       })],
       resolve: { alias: aliases },
       build: {
@@ -361,7 +365,7 @@ describe('source-local build diagnostics', () => {
         configFile: false,
         logLevel: 'silent',
         root,
-        plugins: [vanityPlugin({ identifiers: 'debug', diagnostics })],
+        plugins: [vanityPlugin({ compiler: { identifiers: 'debug', diagnostics } })],
         resolve: { alias: aliases },
         build: {
           write: false,
@@ -528,8 +532,10 @@ describe('hmr', () => {
       customLogger: logger,
       root,
       plugins: [vanityPlugin({
-        identifiers: 'debug',
-        system: join(root, 'system.ts'),
+        compiler: {
+          identifiers: 'debug',
+          system: join(root, 'system.ts'),
+        },
       })],
       resolve: { alias: aliases },
       server: { middlewareMode: true, hmr: false, ws: false, watch: null },
@@ -779,9 +785,11 @@ export {}
       logLevel: 'silent',
       root,
       plugins: [vanityPlugin({
-        identifiers: 'debug',
-        system: join(root, 'system.ts'),
-        autoImports: { from: join(root, 'system.ts') },
+        compiler: {
+          identifiers: 'debug',
+          system: join(root, 'system.ts'),
+          styleAutoImports: true,
+        },
       })],
       resolve: { alias: aliases },
       build: {
@@ -820,9 +828,11 @@ export {}
       logLevel: 'silent',
       root,
       plugins: [vanityPlugin({
-        identifiers: 'debug',
-        system,
-        autoImports: { from: system },
+        compiler: {
+          identifiers: 'debug',
+          system,
+          styleAutoImports: system,
+        },
       })],
       resolve: { alias: aliases },
       server: { middlewareMode: true, hmr: false, watch: null },
@@ -848,6 +858,134 @@ export {}
     finally {
       await server.close()
     }
+  })
+
+  it('filters style auto-imports while reusing the configured system', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-style-auto-filter-')))
+    const system = join(root, 'system.ts')
+    const card = join(root, 'card.css.ts')
+    const original = await readFile(local('./test-support/vite-app/system.ts'), 'utf-8')
+
+    await writeFile(join(root, 'package.json'), '{ "name": "vanity-style-auto-filter", "type": "module" }')
+    await writeFile(system, `${original}\nexport const helper = ds.t.space.sm\n`)
+    await writeFile(card, 'export const card = ds.class({ padding: ds.t.space.sm })\n')
+    await writeFile(join(root, 'entry.ts'), 'export { card } from \'./card.css\'\n')
+
+    const result = await build({
+      configFile: false,
+      logLevel: 'silent',
+      root,
+      plugins: [vanityPlugin({
+        compiler: {
+          identifiers: 'debug',
+          system,
+          styleAutoImports: { include: ['ds'] },
+        },
+      })],
+      resolve: { alias: aliases },
+      build: {
+        write: false,
+        minify: false,
+        lib: { entry: join(root, 'entry.ts'), formats: ['es'], fileName: 'entry' },
+      },
+    })
+
+    const { output } = (Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput
+    const css = output
+      .filter((item): item is Rollup.OutputAsset => item.type === 'asset' && item.fileName.endsWith('.css'))
+      .map(asset => String(asset.source))
+      .join('\n')
+
+    expect(css).toContain('padding: var(--vanity-space-sm)')
+    const declarations = await readFile(join(root, 'node_modules/.vanity/auto-imports.d.ts'), 'utf-8')
+    expect(declarations).toContain('const ds: typeof VanityStyleAutoImports.ds')
+    expect(declarations).not.toContain('const helper:')
+  })
+
+  it('injects runtime presets and curated application barrels through one plugin', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-runtime-auto-')))
+    const helpers = join(root, 'helpers.ts')
+    const styles = join(root, 'styles.ts')
+
+    await writeFile(join(root, 'package.json'), '{ "name": "vanity-runtime-auto-fixture", "type": "module" }')
+    await writeFile(helpers, `
+export function visuallyHidden() {
+  return { position: 'absolute', clipPath: 'inset(50%)' }
+}
+export function minTarget() {
+  return { minInlineSize: '44px' }
+}
+`)
+    await writeFile(styles, `export * from './helpers.ts'\n`)
+    await writeFile(join(root, 'entry.ts'), `
+export const hidden = visuallyHidden()
+export const merged = ports()
+`)
+
+    const result = await build({
+      configFile: false,
+      logLevel: 'silent',
+      root,
+      plugins: [vanityPlugin({
+        app: {
+          runtimeAutoImports: {
+            presets: ['core'],
+            sources: [{ from: './styles.ts', include: ['visuallyHidden'] }],
+          },
+        },
+      })],
+      resolve: { alias: aliases },
+      build: {
+        write: false,
+        minify: false,
+        lib: { entry: join(root, 'entry.ts'), formats: ['es'], fileName: 'entry' },
+      },
+    })
+
+    const { output } = (Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput
+    const chunk = output.find((item): item is Rollup.OutputChunk => item.type === 'chunk')
+
+    expect(chunk?.code).toContain('position: "absolute"')
+    expect(chunk?.code).toContain('Object.assign')
+    expect(chunk?.code).not.toContain('minInlineSize')
+  })
+
+  it('scans every named export from an unfiltered local application barrel', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-runtime-barrel-')))
+    const helpers = join(root, 'helpers.ts')
+    const styles = join(root, 'styles.ts')
+
+    await writeFile(join(root, 'package.json'), '{ "name": "vanity-runtime-barrel-fixture", "type": "module" }')
+    await writeFile(helpers, `
+export const visuallyHidden = 'visually-hidden'
+export const minTarget = 'min-target'
+`)
+    await writeFile(styles, `export * from './helpers.ts'\n`)
+    await writeFile(join(root, 'entry.ts'), `
+export const classes = [visuallyHidden, minTarget]
+`)
+
+    const result = await build({
+      configFile: false,
+      logLevel: 'silent',
+      root,
+      plugins: [vanityPlugin({
+        app: {
+          runtimeAutoImports: './styles.ts',
+        },
+      })],
+      build: {
+        write: false,
+        minify: false,
+        lib: { entry: join(root, 'entry.ts'), formats: ['es'], fileName: 'entry' },
+      },
+    })
+
+    const { output } = (Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput
+    const chunk = output.find((item): item is Rollup.OutputChunk => item.type === 'chunk')
+
+    expect(chunk?.code).toContain('visually-hidden')
+    expect(chunk?.code).toContain('min-target')
   })
 })
 

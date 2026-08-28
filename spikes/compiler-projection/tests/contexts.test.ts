@@ -29,7 +29,7 @@ describe('one plain contract serves style, browser, SSR, and tool consumers', ()
     clientHarness = compilerProjection({
       contracts: [mainSystem],
       target: 'browser',
-      cascade: ['vendor', 'neutral'],
+      layerOrder: ['vendor', 'neutral'],
       artifactDirectory: clientArtifacts,
     })
 
@@ -140,7 +140,7 @@ describe('one plain contract serves style, browser, SSR, and tool consumers', ()
     const harness = compilerProjection({
       contracts: [mainSystem],
       target: 'ssr',
-      cascade: ['vendor', 'neutral'],
+      layerOrder: ['vendor', 'neutral'],
       artifactDirectory: join(work, 'artifacts'),
     })
 

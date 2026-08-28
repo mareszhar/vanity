@@ -11,7 +11,7 @@ describe('dev-server invalidation lifecycle', () => {
     const harness = compilerProjection({
       contracts: [fixture.system],
       target: 'browser',
-      cascade: ['vendor', 'neutral'],
+      layerOrder: ['vendor', 'neutral'],
       artifactDirectory: join(fixture.root, 'artifacts'),
     })
     const server = await createServer({
@@ -102,7 +102,7 @@ describe('dev-server invalidation lifecycle', () => {
     const harness = compilerProjection({
       contracts: [fixture.system],
       target: 'browser',
-      cascade: ['vendor', 'neutral'],
+      layerOrder: ['vendor', 'neutral'],
       artifactDirectory: join(fixture.root, 'artifacts'),
     })
     const server = await createServer({

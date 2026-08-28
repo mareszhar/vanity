@@ -100,12 +100,12 @@ import {
 } from './contract'
 import { createRuntimeServices } from './live'
 
-/** Default nested cascade order: `createSystem().consolidate({ layers: VANITY_DEFAULT_LAYERS })`. */
+/** Default nested cascade order: `createSystem().consolidate({ layerOrder: VANITY_DEFAULT_LAYERS })`. */
 export const VANITY_DEFAULT_LAYERS = ['reset', 'tokens', 'recipes', 'utilities', 'overrides'] as const
 
 export type VanityDefaultLayers = typeof VANITY_DEFAULT_LAYERS
 
-/** The system's own layers; authored styles default to the first layer after them. */
+/** The system's own ordered layers; authored styles default to the first layer after them. */
 const SYSTEM_LAYERS: readonly string[] = ['reset', 'tokens']
 
 // ─── Options ─────────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ export interface VanitySystemOptions<
   tokens: T & VanitySystemTokenInput<T>
   conditions?: C & VanityConditionsInput<C>
   /** Cascade-layer order, `['reset', 'tokens', 'recipes', 'utilities', 'overrides']` by default. */
-  layers?: L
+  layerOrder?: L
   /** The emitted custom-property prefix: `--vanity-*` by default. */
   prefix?: P
   /** The absolute selector that owns ordinary token declarations. */
@@ -354,7 +354,7 @@ function createSystemInternal<
     : mode.source ?? diagnosticSource()?.file
   const prefix = options.prefix ?? 'vanity'
   const root = options.root ?? ':root'
-  const layers = options.layers ?? VANITY_DEFAULT_LAYERS
+  const layers = options.layerOrder ?? VANITY_DEFAULT_LAYERS
 
   if (!/^-?(?:[_a-z]|[^\0-\x7F])(?:[-\w]|[^\0-\x7F])*$/i.test(prefix)) {
     throw new VanityError({
@@ -379,7 +379,7 @@ function createSystemInternal<
       code: 'VANITY_SYSTEM_UNKNOWN_LAYER',
       message: 'a system declares at least one layer',
       file,
-      fix: 'drop the layers key to accept the default order, or declare your own',
+      fix: 'drop the layerOrder key to accept the default order, or declare your own',
     })
   }
 
@@ -391,7 +391,7 @@ function createSystemInternal<
       message: `token layer '${tokenLayer}' is not declared by this system`,
       detail: [`declared layers: ${layers.join(', ')}`],
       file,
-      fix: 'add the layer to layers, or choose one of the declared layer names',
+      fix: 'add the layer to layerOrder, or choose one of the declared layer names',
     })
   }
   const qualifiedTokenLayer = tokenLayer === undefined ? undefined : `${prefix}.${tokenLayer}`

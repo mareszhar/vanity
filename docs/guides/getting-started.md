@@ -46,7 +46,9 @@ import { vanityPlugin } from '@mszr/vanity/vite'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  plugins: [vanityPlugin({ system: './src/design/system.ts' })],
+  plugins: [vanityPlugin({
+    compiler: { system: './src/design/system.ts' },
+  })],
 })
 ```
 

@@ -480,7 +480,7 @@ export function checkLayer(declared: string, layers: readonly string[]): Omit<Va
     code: 'VANITY_SYSTEM_UNKNOWN_LAYER',
     message: `'${declared}' is not a layer of this system${suggestion ? ` — did you mean '${suggestion}'?` : ''}`,
     path: 'layer',
-    fix: `use one of: ${layers.join(', ')} — or declare it in createSystem({ layers })`,
+    fix: `use one of: ${layers.join(', ')} — or declare it in createSystem({ layerOrder })`,
   }
 }
 

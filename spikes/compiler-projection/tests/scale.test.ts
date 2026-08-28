@@ -58,7 +58,7 @@ describe('bounded multi-importer scale', () => {
     const harness = compilerProjection({
       contracts: [fixture.system],
       target: 'browser',
-      cascade: ['vendor', 'neutral'],
+      layerOrder: ['vendor', 'neutral'],
       artifactDirectory: join(fixture.root, 'artifacts'),
     })
     await build({

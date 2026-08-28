@@ -178,8 +178,8 @@ export interface VanityPolicies {
   readonly constructors?: VanityConstructorPolicies
   /** Native CSS feature target used for preservation/fallback diagnostics. */
   readonly support?: VanityCssSupportTarget
-  /** Ordered system cascade layers. */
-  readonly layers?: readonly string[]
+  /** The system's ordered cascade-layer policy. */
+  readonly layerOrder?: readonly string[]
   /** Default token reference strategy. */
   readonly reference?: 'val' | 'var'
   /** Validation severity for author-controlled checks. */
@@ -713,7 +713,7 @@ export interface VanityConsolidateOptions<
 > {
   readonly prefix?: Prefix
   readonly root?: string
-  readonly layers?: Layers
+  readonly layerOrder?: Layers
   readonly tokenLayer?: Layers[number]
   readonly baseConditions?: BaseConditions
   readonly axisOrder?: readonly string[]
@@ -2702,12 +2702,12 @@ function materializeOpen(state: OpenState): VanityOpenSystem<any, any, any, any,
         : (state.engine.axisOrder as any)(...options.axisOrder)
       const policyPreview = previewEngineTokens(finalEngine, state.tokens as object)
       enforceConstructorPolicies(state, policyPreview)
-      const declaredLayers = options.layers ?? state.policies.layers ?? VANITY_DEFAULT_LAYERS
+      const declaredLayers = options.layerOrder ?? state.policies.layerOrder ?? VANITY_DEFAULT_LAYERS
       for (const [name, group] of Object.entries(state.rules)) {
         if (group.layer !== undefined && !declaredLayers.includes(group.layer)) {
           throw new TypeError(
             `[vanity] rule group '${name}' references undeclared layer '${group.layer}'; `
-            + `declare it in policies.layers or consolidate({ layers })`,
+            + `declare it in policies.layerOrder or consolidate({ layerOrder })`,
           )
         }
       }
@@ -2723,9 +2723,9 @@ function materializeOpen(state: OpenState): VanityOpenSystem<any, any, any, any,
         {
           tokens: state.tokens as any,
           conditions: state.conditions,
-          ...(systemOptions.layers !== undefined || state.policies.layers === undefined
+          ...(systemOptions.layerOrder !== undefined || state.policies.layerOrder === undefined
             ? {}
-            : { layers: state.policies.layers }),
+            : { layerOrder: state.policies.layerOrder }),
           ...systemOptions,
         } as any,
         {
@@ -3385,7 +3385,7 @@ function enforceConstructorPolicies(state: OpenState, tokens: object): void {
     throw new VanityError(errors)
 }
 
-const POLICY_KEYS = new Set(['constructors', 'support', 'layers', 'reference', 'validation', 'plugins'])
+const POLICY_KEYS = new Set(['constructors', 'support', 'layerOrder', 'reference', 'validation', 'plugins'])
 
 function mergePolicies(
   current: Readonly<VanityPolicies>,
@@ -3394,7 +3394,7 @@ function mergePolicies(
 ): Readonly<VanityPolicies> {
   for (const name of Object.keys(patch)) {
     if (!POLICY_KEYS.has(name))
-      throw new TypeError(`[vanity] unknown policy group '${name}'; use constructors, support, layers, reference, validation, or plugins`)
+      throw new TypeError(`[vanity] unknown policy group '${name}'; use constructors, support, layerOrder, reference, validation, or plugins`)
     if (mode === 'overwrite' && !(name in current))
       throw new TypeError(`[vanity] overwritePolicies() cannot replace unknown policy '${name}'; use addPolicies()`)
   }
@@ -3436,8 +3436,8 @@ function validatePolicies(policies: VanityPolicies): void {
     throw new TypeError(`[vanity] reference policy must be 'val' or 'var'`)
   if (policies.validation !== undefined && !['strict', 'warn', 'off'].includes(policies.validation))
     throw new TypeError(`[vanity] validation policy must be 'strict', 'warn', or 'off'`)
-  if (policies.layers !== undefined && (policies.layers.length === 0 || policies.layers.some(layer => !layer.trim())))
-    throw new TypeError('[vanity] layers policy needs at least one non-empty layer name')
+  if (policies.layerOrder !== undefined && (policies.layerOrder.length === 0 || policies.layerOrder.some(layer => !layer.trim())))
+    throw new TypeError('[vanity] layerOrder policy needs at least one non-empty layer name')
   for (const [name, policy] of Object.entries(policies.constructors ?? {})) {
     if (!isPlainRecord(policy))
       throw new TypeError(`[vanity] constructor policy '${name}' must be a plain object`)

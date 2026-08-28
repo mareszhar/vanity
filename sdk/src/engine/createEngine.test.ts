@@ -260,7 +260,7 @@ describe('engine-owned system finalization', () => {
     expect(() => emit(() => de.createSystem({ tokens: {}, root: '& .widget' }))).toThrow(/absolute system root/)
     expect(() => emit(() => de.createSystem({
       tokens: {},
-      layers: ['base', 'app'],
+      layerOrder: ['base', 'app'],
       tokenLayer: 'missing' as never,
     }))).toThrow(/not declared/)
   })

@@ -72,9 +72,11 @@ describe('the permanent plain-system projection canary', () => {
       logLevel: 'silent',
       root: canary,
       plugins: [vanityPlugin({
-        identifiers: 'debug',
-        system,
-        cascade: ['vendor', 'canary'],
+        compiler: {
+          identifiers: 'debug',
+          system,
+          layerOrder: ['vendor', 'canary'],
+        },
       })],
       resolve: { alias: aliases },
       build: {
@@ -120,7 +122,7 @@ describe('the permanent plain-system projection canary', () => {
       configFile: false,
       logLevel: 'silent',
       root: canary,
-      plugins: [vanityPlugin({ identifiers: 'debug', system })],
+      plugins: [vanityPlugin({ compiler: { identifiers: 'debug', system } })],
       resolve: { alias: aliases },
       build: {
         write: false,
@@ -170,7 +172,7 @@ describe('the permanent plain-system projection canary', () => {
     await writeFile(systemFile, fixtureSystem('red'))
     await writeFile(join(root, 'entry.ts'), `import { ds } from './system'\nexport const name = ds.t.color.brand.$name\n`)
 
-    await buildLibrary(root, vanityPlugin({ system: systemFile }))
+    await buildLibrary(root, vanityPlugin({ compiler: { system: systemFile } }))
     const manifest = JSON.parse(await readFile(join(root, '.vanity/manifest.json'), 'utf-8'))
     const portableFile = join(root, 'portable.json')
     const generatedArtifact = JSON.parse(await readFile(
@@ -181,10 +183,12 @@ describe('the permanent plain-system projection canary', () => {
     await writeFile(systemFile, fixtureSystem('blue'))
 
     await expect(buildLibrary(root, vanityPlugin({
-      system: {
-        entry: systemFile,
-        artifact: portableFile,
-        packageName: '@fixture/stale',
+      compiler: {
+        system: {
+          entry: systemFile,
+          artifact: portableFile,
+          packageName: '@fixture/stale',
+        },
       },
     }))).rejects.toThrow(/@fixture\/stale.*stale|stale.*@fixture\/stale/)
   })
@@ -198,7 +202,7 @@ describe('the permanent plain-system projection canary', () => {
     await writeFile(join(root, 'entry.ts'), `import { ds as one } from './one'\nimport { ds as two } from './two'\nexport const names = [one.t.color.brand.$name, two.t.color.brand.$name]\n`)
 
     await expect(buildLibrary(root, vanityPlugin({
-      system: [one, two],
+      compiler: { system: [one, two] },
     }))).rejects.toThrow(/claim CSS namespace 'owned'/)
   })
 
@@ -212,7 +216,7 @@ describe('the permanent plain-system projection canary', () => {
     await writeFile(join(root, 'two.css.ts'), `import { ds } from './two'\nexport const two = ds.class({ borderColor: ds.t.color.brand })\n`)
     await writeFile(join(root, 'entry.ts'), `export { one } from './one.css.ts'\nexport { two } from './two.css.ts'\nimport { ds as one } from './one'\nimport { ds as two } from './two'\nexport const same = one.t.color.brand.$name === two.t.color.brand.$name\n`)
 
-    const output = outputOf(await buildLibrary(root, vanityPlugin({ system: [one, two] })))
+    const output = outputOf(await buildLibrary(root, vanityPlugin({ compiler: { system: [one, two] } })))
     const css = output
       .filter((item): item is Rollup.OutputAsset => item.type === 'asset' && item.fileName.endsWith('.css'))
       .map(item => String(item.source))
@@ -231,7 +235,7 @@ describe('the permanent plain-system projection canary', () => {
     await writeFile(join(root, 'two.css.ts'), `import { ds } from './system'\nexport const two = ds.class({ borderColor: ds.t.color.brand })\n`)
     await writeFile(join(root, 'entry.ts'), `export { one } from './one.css.ts'\nexport { two } from './two.css.ts'\n`)
 
-    const output = outputOf(await buildLibrary(root, vanityPlugin({ system: systemFile })))
+    const output = outputOf(await buildLibrary(root, vanityPlugin({ compiler: { system: systemFile } })))
     const css = output
       .filter((item): item is Rollup.OutputAsset => item.type === 'asset' && item.fileName.endsWith('.css'))
       .map(item => String(item.source))
@@ -253,7 +257,7 @@ ${fixtureSystem('rebeccapurple', 'single-evaluation')}
     await writeFile(join(root, 'entry.ts'), `export { one } from './one.css.ts'\nexport { two } from './two.css.ts'\n`)
 
     try {
-      await buildLibrary(root, vanityPlugin({ system: systemFile }))
+      await buildLibrary(root, vanityPlugin({ compiler: { system: systemFile } }))
       expect((globalThis as Record<string, unknown>)[counter]).toBe(1)
     }
     finally {
@@ -278,7 +282,7 @@ ${fixtureSystem('rebeccapurple', 'single-evaluation')}
     await writeFile(join(root, 'card.css.ts'), `import { ds } from './dist/system.js'\nexport const card = ds.class({ color: ds.t.color.brand })\n`)
     await writeFile(join(root, 'entry.ts'), `export { card } from './card.css.ts'\nimport { ds } from './dist/system.js'\nexport const token = ds.t.color.brand.$name\n`)
 
-    await buildLibrary(root, vanityPlugin({ system: built }))
+    await buildLibrary(root, vanityPlugin({ compiler: { system: built } }))
     const firstManifest = JSON.parse(await readFile(join(root, '.vanity/manifest.json'), 'utf-8'))
     const portable = join(distribution, 'system.vanity.json')
     const generated = JSON.parse(await readFile(
@@ -288,10 +292,12 @@ ${fixtureSystem('rebeccapurple', 'single-evaluation')}
     await writeFile(portable, `${JSON.stringify(generated, null, 2)}\n`)
 
     const output = outputOf(await buildLibrary(root, vanityPlugin({
-      system: {
-        entry: built,
-        artifact: portable,
-        packageName: '@fixture/precompiled',
+      compiler: {
+        system: {
+          entry: built,
+          artifact: portable,
+          packageName: '@fixture/precompiled',
+        },
       },
     })))
     const javascript = output
@@ -328,7 +334,7 @@ describe('the permanent plain-system HMR canary', () => {
       configFile: false,
       logLevel: 'silent',
       root,
-      plugins: [vanityPlugin({ identifiers: 'debug', system })],
+      plugins: [vanityPlugin({ compiler: { identifiers: 'debug', system } })],
       resolve: { alias: aliases },
       server: { middlewareMode: true, hmr: false, watch: null },
       optimizeDeps: { noDiscovery: true },
