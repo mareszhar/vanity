@@ -64,9 +64,9 @@ Packing and publication use pnpm, which natively materializes both catalog and w
 
 Use `workspace:*` only for local workspace packages: it guarantees a local link during development and is likewise replaced by the publishable version during packing. Do not use it for registry dependencies.
 
-Run `pnpm run upi` to review and select latest eligible upgrades from the default catalog. The script derives pnpm's package selectors from that catalog, so the target list is never duplicated in maintainer code. pnpm's native multiselect then presents each dependency once, even when several workspace packages use it; arrow keys move, Space toggles, `a` selects all, `i` inverts the selection, and Enter confirms. Cancelling the review is a no-op. The updater deliberately excludes TypeScript while its ESLint integration supports only the current workspace toolchain, and preserves the broader `peers` catalog because it defines the SDK's published compatibility contract. Follow an upgrade with `pnpm run validate` before release work.
+Run `pnpm run upi` to review and select latest eligible upgrades from the default catalog. The script derives its package selectors from that catalog, asks pnpm for machine-readable latest-version data, and presents one Clack multiselect option per outdated catalog entry. Each option shows the installed and latest versions, with the changed major, minor, or patch suffix highlighted accordingly; Space toggles an entry, the arrow keys move, and Enter confirms. Cancelling or submitting without a selection is a no-op. The updater deliberately excludes TypeScript while its ESLint integration supports only the current workspace toolchain, and preserves the broader `peers` catalog because it defines the SDK's published compatibility contract. Follow an upgrade with `pnpm run validate` before release work.
 
-The dependency-update mental model has three layers: the workspace discovers projects and provides one install graph; the default catalog owns the exact versions Vanity tests; and the named `peers` catalog owns the broader versions the published SDK promises to support. `upi` derives candidates from the default catalog, delegates resolution and the interactive UI to pnpm, then reapplies the explicit compatibility policies before reconciling the install. A successful pnpm exit without a changed catalog or lockfile is treated as a no-op, which makes canceling safe even though pnpm reports an interactive cancellation with a successful exit status.
+The dependency-update mental model has three layers: the workspace discovers projects and provides one install graph; the default catalog owns the exact versions Vanity tests; and the named `peers` catalog owns the broader versions the published SDK promises to support. `upi` derives candidates from the default catalog, asks pnpm for current registry data, lets the maintainer choose catalog entries once, and then delegates the actual update and install to pnpm before reapplying the explicit compatibility policies. A successful pnpm exit without a changed catalog or lockfile is treated as a no-op, which makes canceling safe.
 
 Repository automation under `scripts/` is TypeScript run through `tsx`, with an introductory comment that states the operational purpose and the invariant each script protects. Published runtime shims and tool-required configuration files may still use their required JavaScript module format outside that directory.
 
@@ -89,7 +89,7 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run validate` | run non-browser gates, the permanent canary, all demo builds, optimized-CSS checks, production/development browsers, and lifecycle cleanup |
 | `pnpm run audit` | build and audit the canonical SDK fixture |
 | `pnpm run docs:examples` | parse documentation fences and typecheck canonical examples |
-| `pnpm run upi` | review default-catalog updates with pnpm's native multiselect |
+| `pnpm run upi` | review default-catalog updates with a catalog-aware Clack multiselect |
 
 ### SDK
 

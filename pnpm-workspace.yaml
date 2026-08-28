@@ -17,6 +17,7 @@ packages:
 
 catalog:
   '@antfu/eslint-config': ^9.2.0
+  '@clack/prompts': ^1.7.0
   '@mszr/selenita': ^0.2.2
   '@nuxt/kit': 4.5.1
   '@nuxt/schema': 4.5.1

@@ -7,6 +7,75 @@ export interface ProtectedCatalogEntry {
   readonly label: string
 }
 
+export interface CatalogUpdateChoice {
+  readonly name: string
+  readonly current: string
+  readonly latest: string
+  readonly dependentPackageCount: number
+}
+
+export type SemverChangeKind = 'major' | 'minor' | 'patch'
+
+export interface SemverChangeParts {
+  readonly kind: SemverChangeKind
+  readonly commonPrefix: string
+  readonly changedSuffix: string
+}
+
+interface ParsedSemver {
+  readonly prefix: string
+  readonly major: string
+  readonly minor: string
+  readonly patch: string
+  readonly suffix: string
+}
+
+function parseSemver(version: string): ParsedSemver | undefined {
+  const match = /^(v?)(\d+)\.(\d+)\.(\d+)([-+].*)?$/.exec(version)
+  if (match === null)
+    return undefined
+
+  return {
+    prefix: match[1]!,
+    major: match[2]!,
+    minor: match[3]!,
+    patch: match[4]!,
+    suffix: match[5] ?? '',
+  }
+}
+
+/** Split a standard version into the plain prefix and the changed target suffix. */
+export function semverChangeParts(current: string, latest: string): SemverChangeParts | undefined {
+  const currentVersion = parseSemver(current)
+  const latestVersion = parseSemver(latest)
+  if (currentVersion === undefined || latestVersion === undefined)
+    return undefined
+
+  if (currentVersion.prefix !== latestVersion.prefix || currentVersion.suffix !== latestVersion.suffix)
+    return undefined
+
+  const currentParts = [currentVersion.major, currentVersion.minor, currentVersion.patch]
+  const latestParts = [latestVersion.major, latestVersion.minor, latestVersion.patch]
+  const firstChangedPart = currentParts.findIndex((part, index) => part !== latestParts[index])
+  if (firstChangedPart === -1)
+    return undefined
+
+  const kind: SemverChangeKind = firstChangedPart === 0
+    ? 'major'
+    : firstChangedPart === 1
+      ? 'minor'
+      : 'patch'
+  const commonParts = latestParts.slice(0, firstChangedPart)
+
+  return {
+    kind,
+    commonPrefix: firstChangedPart === 0
+      ? latestVersion.prefix
+      : `${latestVersion.prefix}${commonParts.join('.')}.`,
+    changedSuffix: `${latestParts.slice(firstChangedPart).join('.')}${latestVersion.suffix}`,
+  }
+}
+
 function indentationOf(line: string): number {
   return line.length - line.trimStart().length
 }
@@ -72,6 +141,64 @@ export function catalogUpdateTargets(
   protectedNames: ReadonlySet<string>,
 ): readonly string[] {
   return names.filter(name => !protectedNames.has(name))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function outdatedRecord(source: string): Record<string, unknown> {
+  const trimmedSource = source.trim()
+  if (trimmedSource === '')
+    return {}
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmedSource)
+  }
+  catch (error) {
+    throw new Error('Unable to read pnpm outdated output as JSON.', { cause: error })
+  }
+
+  if (!isRecord(parsed))
+    throw new Error('The pnpm outdated JSON output must be an object.')
+
+  return parsed
+}
+
+function requiredString(record: Record<string, unknown>, key: string, packageName: string): string {
+  const value = record[key]
+  if (typeof value !== 'string' || value === '')
+    throw new Error(`The pnpm outdated entry for ${packageName} has no ${key} version.`)
+
+  return value
+}
+
+/** Turn pnpm's machine-readable report into one choice for each catalog package. */
+export function catalogUpdateChoices(
+  names: readonly string[],
+  source: string,
+): readonly CatalogUpdateChoice[] {
+  const entries = outdatedRecord(source)
+
+  return names.flatMap((name) => {
+    const value = entries[name]
+    if (!isRecord(value))
+      return []
+
+    const current = requiredString(value, 'current', name)
+    const latest = requiredString(value, 'latest', name)
+    if (current === latest)
+      return []
+
+    const dependentPackages = value.dependentPackages
+    return [{
+      name,
+      current,
+      latest,
+      dependentPackageCount: Array.isArray(dependentPackages) ? dependentPackages.length : 0,
+    }]
+  })
 }
 
 /** Return the named peer catalog block that defines the published contract. */
