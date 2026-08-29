@@ -20,7 +20,6 @@ import { readFileSync } from 'node:fs'
 import { isAbsolute, resolve } from 'node:path'
 import {
   addImports,
-  addImportsSources,
   addPluginTemplate,
   addTypeTemplate,
   addVitePlugin,
@@ -29,19 +28,26 @@ import {
   updateTemplates,
 } from '@nuxt/kit'
 import { selectAutoImportNames } from './internal/autoImportNames'
+import { assertAutoImportLaneSeparation } from './internal/autoImportPlan'
 import { exportNamesFromFile } from './internal/exportNames'
-import {
-  isPackageSpecifier,
-  normalizeRuntimeAutoImports,
-  runtimeAutoImportIgnore,
-} from './internal/runtimeAutoImports'
+import { resolveRuntimeAutoImports } from './internal/runtimeAutoImports'
 import { withVanityViteHost } from './internal/viteHost'
+import { renderVanityNuxtConfigTypes } from './nuxt/configTypes'
 import { protectRelativeColorSyntax } from './nuxt/postcss'
-import { styleAutoImportDeclarations, styleExportNames, vanityPlugin } from './vite'
+import { styleAutoImportDeclarations, vanityPlugin } from './vite'
 
+/**
+ * Options configured under the `vanity` key in `nuxt.config.ts`.
+ *
+ * The shape reuses the shared `VanityConfig` contract so `vanity.config.ts`
+ * can be passed to Nuxt unchanged. Nuxt narrows `compiler.system` to one
+ * project-relative or absolute source entry; paired portable artifacts and
+ * multiple system entries are Vite-only options.
+ */
 export interface VanityNuxtOptions extends Omit<VanityViteOptions, 'compiler'> {
-  /** Nuxt's adapter accepts one configured plain system entry. */
+  /** Build-plane options; Nuxt evaluates one configured plain system entry. */
   compiler?: Omit<VanityCompilerOptions, 'system'> & {
+    /** Path to the consolidated system module; relative paths use Nuxt's root. */
     system?: string
   }
 }
@@ -67,7 +73,12 @@ export default defineNuxtPlugin(() => {
 })
 `
 
-/** Nuxt module entry: `modules: ['@mszr/vanity/nuxt']`. */
+/**
+ * Nuxt module entry: `modules: ['@mszr/vanity/nuxt']`.
+ *
+ * Its `configKey` is `vanity`, so the same `VanityConfig` can be supplied as
+ * `vanity: vanityConfig` in `nuxt.config.ts`.
+ */
 const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> = defineNuxtModule({
   meta: {
     name: '@mszr/vanity',
@@ -75,10 +86,17 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
   },
   defaults: {},
   setup(options, nuxt) {
+    addTypeTemplate({
+      filename: 'vanity-config.d.ts',
+      getContents: renderVanityNuxtConfigTypes,
+    })
+
     const compiler = options.compiler ?? {}
     const app = options.app ?? {}
     const { system, styleAutoImports = false, ...viteOptions } = compiler
     let styleImports: NonNullable<VanityCompilerOptions['styleAutoImports']> | undefined
+    let styleImportNames: readonly string[] | undefined
+    let runtimeImportNames: readonly string[] | undefined
     let systemEntry: string | undefined
     let autoImportEntry: string | undefined
     const resolveSourcePath = (path: string) => {
@@ -106,18 +124,26 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
           ? { from: autoImportEntry, include: styleAutoImports.include }
           : { from: autoImportEntry, exclude: styleAutoImports.exclude }
         : autoImportEntry
+      styleImportNames = selectAutoImportNames(
+        exportNamesFromFile(autoImportEntry, nuxt.options.rootDir),
+        typeof styleAutoImports === 'object' ? styleAutoImports : {},
+        '[vanity] compiler.styleAutoImports',
+      )
 
+      let declarationPath: string | undefined
       const declarations = addTypeTemplate({
         filename: 'vanity-style-auto-imports.d.ts',
         getContents: () => {
           const currentNames = selectAutoImportNames(
-            styleExportNames(readConfiguredModule(autoImportEntry!)),
+            exportNamesFromFile(autoImportEntry!, nuxt.options.rootDir),
             typeof styleAutoImports === 'object' ? styleAutoImports : {},
             '[vanity] compiler.styleAutoImports',
           )
-          return styleAutoImportDeclarations(autoImportEntry!, currentNames)
+          assertAutoImportLaneSeparation(currentNames, runtimeImportNames ?? [])
+          return styleAutoImportDeclarations(autoImportEntry!, currentNames, { relativeTo: declarationPath })
         },
       })
+      declarationPath = declarations.dst
 
       // Nuxt regenerates the type template during prepare. This explicit
       // watch edge also covers export additions/removals while the same dev
@@ -128,8 +154,10 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
       })
     }
 
-    if (app.runtimeAutoImports !== undefined)
-      registerNuxtRuntimeAutoImports(app.runtimeAutoImports, resolveSourcePath)
+    if (app.runtimeAutoImports !== undefined) {
+      runtimeImportNames = registerNuxtRuntimeAutoImports(app.runtimeAutoImports, resolveSourcePath, nuxt.options.rootDir)
+      assertAutoImportLaneSeparation(styleImportNames ?? [], runtimeImportNames)
+    }
 
     // TypeScript cannot natively connect an inferred mapped token handle back
     // to its object-literal definition for rename-symbol. The bundled plugin
@@ -252,33 +280,12 @@ function isVitePlugin(option: unknown): option is Plugin {
 function registerNuxtRuntimeAutoImports(
   value: VanityRuntimeAutoImports,
   resolveSourcePath: (path: string) => string,
-): void {
-  const config = normalizeRuntimeAutoImports(value)
-
-  for (const preset of config.presets) {
-    addImports(preset.imports.map(importName => ({
-      name: importName,
-      from: preset.from,
-    })))
-  }
-
-  for (const source of config.sources) {
-    const sourceFrom = source.from
-
-    if (isPackageSpecifier(source.from)) {
-      const ignore = runtimeAutoImportIgnore(source)
-      const packagePreset: Parameters<typeof addImportsSources>[0] = {
-        package: source.from,
-        ...(ignore === undefined ? {} : { ignore: [ignore] }),
-      }
-      addImportsSources(packagePreset)
-      continue
-    }
-
-    const from = resolveSourcePath(source.from)
-    const names = exportNamesFromFile(from)
-    const selected = selectAutoImportNames(names, source, `[vanity] app.runtimeAutoImports source '${sourceFrom}'`)
-
-    addImports(selected.map(name => ({ name, from })))
-  }
+  rootDir: string,
+): readonly string[] {
+  const resolved = resolveRuntimeAutoImports(value, rootDir, resolveSourcePath)
+  addImports(resolved.sources.flatMap(source => source.imports.map(name => ({
+    name,
+    from: source.from,
+  }))))
+  return resolved.names
 }

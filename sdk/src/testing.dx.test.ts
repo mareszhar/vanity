@@ -1,5 +1,6 @@
 import { cursor, defineVanityProject } from '@mszr/vanity/testing'
 import { describe, expect, it } from 'vitest'
+import { renderVanityNuxtConfigTypes } from './nuxt/configTypes'
 import { styleAutoImportDeclarations } from './vite'
 import '@mszr/selenita/vitest'
 
@@ -12,6 +13,13 @@ const project = defineVanityProject({
       .addTokens({ color: { brand: '#635bff' } })
     export const ds = open.consolidate()
   `,
+})
+
+const nuxtProject = defineVanityProject({
+  tsconfig: './tsconfig.json',
+  files: {
+    'nuxt-config.d.ts': renderVanityNuxtConfigTypes(),
+  },
 })
 
 const autoImportProject = defineVanityProject({
@@ -98,6 +106,7 @@ const ENTRYPOINT_VALUES = {
     'vanityRuntimeAutoImportPresets',
     'vanityVueAutoImports',
   ],
+  config: ['defineVanityConfig'],
   capabilities: [
     'VANITY_CSS_CAPABILITIES',
     'VANITY_CSS_NAMED_API_ROWS',
@@ -125,6 +134,7 @@ const ENTRYPOINT_VALUES = {
   nuxt: ['default'],
   presets: ['hail'],
   cli: ['assertManifest', 'explainManifestPath', 'inspectManifest', 'readManifest'],
+  prepare: ['loadVanityConfig', 'planAutoImportDeclarations', 'writeAutoImportDeclarations'],
   testing: [
     'captureEmission',
     'cursor',
@@ -208,21 +218,25 @@ describe('public Phase 11 editor contract', () => {
     const result = project.query`
       import * as runtime from '@mszr/vanity/runtime'
       import * as imports from '@mszr/vanity/imports'
+      import * as config from '@mszr/vanity/config'
       import * as capabilities from '@mszr/vanity/capabilities'
       import * as vite from '@mszr/vanity/vite'
       import * as vue from '@mszr/vanity/vue'
       import * as nuxt from '@mszr/vanity/nuxt'
       import * as presets from '@mszr/vanity/presets'
       import * as cli from '@mszr/vanity/cli'
+      import * as prepare from '@mszr/vanity/prepare'
       import * as testing from '@mszr/vanity/testing'
       void runtime.${cursor('runtime')}
       void imports.${cursor('imports')}
+      void config.${cursor('config')}
       void capabilities.${cursor('capabilities')}
       void vite.${cursor('vite')}
       void vue.${cursor('vue')}
       void nuxt.${cursor('nuxt')}
       void presets.${cursor('presets')}
       void cli.${cursor('cli')}
+      void prepare.${cursor('prepare')}
       void testing.${cursor('testing')}
     `
 
@@ -330,5 +344,137 @@ describe('public Phase 11 editor contract', () => {
     expect(result.completions).toContainCompletions(['class', 'recipe', 'runtime'])
     for (const name of ['class', 'recipe', 'runtime'])
       expect(result.completionItem(name)?.type, name).not.toMatch(/\bany\b/)
+  })
+
+  it('documents shared config keys at object-literal completion sites', () => {
+    const result = project.query`
+      import { defineVanityConfig } from '@mszr/vanity/config'
+      import { vanityPlugin } from '@mszr/vanity/vite'
+
+      defineVanityConfig({
+        ${cursor('root')}
+      })
+      defineVanityConfig({
+        compiler: {
+          ${cursor('compiler')}
+        },
+        app: {
+          ${cursor('app')}
+        },
+      })
+      defineVanityConfig({
+        c${cursor('configCompiler')}ompiler: {},
+        a${cursor('configApp')}pp: {},
+      })
+      vanityPlugin({
+        compiler: {
+          ${cursor('viteCompiler')}
+        },
+        app: {
+          ${cursor('viteApp')}
+        },
+      })
+      vanityPlugin({
+        c${cursor('viteConfigCompiler')}ompiler: {},
+        a${cursor('viteConfigApp')}pp: {},
+      })
+      vanityPlugin({
+        compiler: {
+          s${cursor('viteSystem')}ystem: './src/system.ts',
+          st${cursor('viteStyle')}yleAutoImports: false,
+        },
+        app: {
+          r${cursor('viteRuntime')}untimeAutoImports: ['core'],
+        },
+      })
+      defineVanityConfig({
+        compiler: {
+          s${cursor('system')}ystem: './src/system.ts',
+          st${cursor('styleAutoImports')}yleAutoImports: false,
+        },
+        app: {
+          r${cursor('runtimeAutoImports')}untimeAutoImports: ['core'],
+        },
+      })
+      defineVanityConfig({
+        compiler: {
+          styleAutoImports: {
+            ${cursor('styleOptions')}
+          },
+          system: {
+            ${cursor('systemOptions')}
+          },
+        },
+        app: {
+          runtimeAutoImports: {
+            ${cursor('runtimeOptions')}
+          },
+        },
+      })
+    `
+
+    const expectDocumented = (at: string, names: readonly string[]) => {
+      for (const name of names)
+        expect(result.at(at).completionItem(name)?.documentation, `${at}:${name}`).not.toBe('')
+    }
+
+    expect(result.at('root').completionItem('compiler')?.documentation).toContain('Build-plane')
+    expect(result.at('root').completionItem('app')?.documentation).toContain('Application-plane')
+    expectDocumented('compiler', [
+      'identifiers',
+      'unstableMode',
+      'styleAutoImports',
+      'system',
+      'layerOrder',
+      'artifactDirectory',
+      'diagnostics',
+    ])
+    expectDocumented('app', ['runtimeAutoImports'])
+    expectDocumented('viteCompiler', ['system', 'styleAutoImports'])
+    expectDocumented('viteApp', ['runtimeAutoImports'])
+    expectDocumented('styleOptions', ['from', 'include'])
+    expectDocumented('systemOptions', ['entry', 'artifact', 'packageName', 'exportName'])
+    expectDocumented('runtimeOptions', ['presets', 'sources'])
+    expect(result.at('configCompiler').hover).toContain('Build-plane')
+    expect(result.at('configApp').hover).toContain('Application-plane')
+    expect(result.at('viteConfigCompiler').hover).toContain('Build-plane')
+    expect(result.at('viteConfigApp').hover).toContain('Application-plane')
+    expect(result.at('viteSystem').hover).toContain('Plain consolidated system')
+    expect(result.at('viteStyle').hover).toContain('Inject named authoring exports')
+    expect(result.at('viteRuntime').hover).toContain('Inject runtime-facing values')
+    expect(result.at('system').hover).toContain('Plain consolidated system')
+    expect(result.at('styleAutoImports').hover).toContain('Inject named authoring exports')
+    expect(result.at('runtimeAutoImports').hover).toContain('Inject runtime-facing values')
+  })
+
+  it('documents the shared config shape through Nuxt module options', () => {
+    const completionResult = nuxtProject.query`
+      import type { NuxtConfig } from 'nuxt/schema'
+
+      const config: NuxtConfig = {
+        va${cursor('nuxtRootCompletion')}nity: {},
+      }
+    `
+    const result = nuxtProject.query`
+      import type { NuxtConfig } from 'nuxt/schema'
+
+      const config: NuxtConfig = {
+        va${cursor('nuxtRoot')}nity: {
+          c${cursor('nuxtCompiler')}ompiler: {
+            ${cursor('nuxtCompilerOptions')}
+          },
+          a${cursor('nuxtApp')}pp: {
+            ${cursor('nuxtAppOptions')}
+          },
+        },
+      }
+    `
+
+    expect(completionResult.at('nuxtRootCompletion').completionItem('vanity')?.documentation).toContain('Vanity\'s Nuxt adapter configuration')
+    expect(result.at('nuxtRoot').hover).toContain('Vanity\'s Nuxt adapter configuration')
+    expect(result.at('nuxtCompiler').completionItem('compiler')?.documentation).toContain('Build-plane')
+    expect(result.at('nuxtCompilerOptions').completionItem('system')?.documentation).toMatch(/consolidated/i)
+    expect(result.at('nuxtApp').completionItem('app')?.documentation).toContain('Application-plane')
+    expect(result.at('nuxtAppOptions').completionItem('runtimeAutoImports')?.documentation).toContain('runtime-facing')
   })
 })

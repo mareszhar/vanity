@@ -9,7 +9,14 @@
     },
     "prep": {
       "dependsOn": ["^build"],
-      "outputs": [".nuxt/**", "auto-imports.d.ts", "styled-system/**"]
+      "outputs": [
+        ".nuxt/**",
+        ".vanity/types/**",
+        "auto-imports.d.ts",
+        "node_modules/@types/vanity-style-auto-imports/**",
+        "node_modules/@types/vanity-runtime-auto-imports/**",
+        "styled-system/**"
+      ]
     },
     "build": {
       "dependsOn": ["^build"],

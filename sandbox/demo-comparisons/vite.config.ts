@@ -7,6 +7,7 @@ import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import AutoImport from 'unplugin-auto-import/vite'
 import { defineConfig } from 'vite'
+import vanityConfig from './vanity.config.ts'
 
 export default defineConfig({
   plugins: [
@@ -19,29 +20,6 @@ export default defineConfig({
     }),
     vue(),
     tailwindcss(),
-    vanityPlugin({
-      compiler: {
-        system: './src/lanes/vanity/system.ts',
-        // This file is loaded before every framework stylesheet, so it owns the
-        // one global layer order. Tailwind/Panda resets precede Vanity recipes.
-        layerOrder: [
-          'properties',
-          'theme',
-          'base',
-          'components',
-          'utilities',
-          'panda-reset',
-          'panda-base',
-          'panda-tokens',
-          'panda-recipes',
-          'panda-utilities',
-          'compare',
-        ],
-        styleAutoImports: './src/lanes/vanity/authoring.ts',
-      },
-      app: {
-        runtimeAutoImports: ['core', 'vue'],
-      },
-    }),
+    vanityPlugin(vanityConfig),
   ],
 })

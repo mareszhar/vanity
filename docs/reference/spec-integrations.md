@@ -146,13 +146,31 @@ vanityPlugin({
 })
 ```
 
+The same host-neutral object may live in the conventional `vanity.config.ts`:
+
+```TS
+import { defineVanityConfig } from '@mszr/vanity/config'
+
+export default defineVanityConfig({
+  compiler: {
+    system: './src/design/system.ts',
+    styleAutoImports: './src/design/authoring.ts',
+  },
+  app: {
+    runtimeAutoImports: ['core', 'vue'],
+  },
+})
+```
+
+The file is optional for adapters and is the CLI's default configuration source. `vanity prepare` reads it without loading Vite or Nuxt, statically discovers the enabled lanes, and reconciles their declarations before a separate typecheck. Use `vanity prepare --root <project>` when running from another directory or `--config <path>` for a differently named module. The equivalent programmatic surface is `planAutoImportDeclarations()` for host-owned registration and `writeAutoImportDeclarations()` for filesystem reconciliation. Shared config paths should be project-relative or absolute; framework aliases such as `~` are available only when an adapter resolves them. Running the command alongside `nuxt prepare` is safe; Nuxt still owns its native application type registry, so Nuxt does not require this extra step.
+
 The common compiler lane evaluates `*.css.ts`, imports a locked system from plain `system.ts`, emits one system CSS artifact and one CSS artifact per style source, preserves lazy splitting, writes the manifest, provides stable dev endpoints and DevTools, recovers from dependency errors without restart, generates browser and SSR projections from portable data, and supports precompiled package contracts. `compiler.layerOrder` establishes the host-wide order of CSS layer roots; its detailed semantics live in [spec-engine.md §9](./spec-engine.md#9-compiler-projection).
 
-`compiler.styleAutoImports` remains opt-in and exposes authoring exports only to evaluated `*.css.ts` modules. `true` reuses the single `compiler.system` entry; a string names another source; a filtered object may omit `from` to reuse `compiler.system`. It generates exact ambient declarations at a stable path, regenerates on configuration or export changes, registers those declarations with the host, includes a generated-file banner, preserves TSDoc and exact types, carries statically declared barrel aliases into debug and source provenance, allows explicit imports or user aliasing, and avoids injecting into modules upstream of the system. Aliases that cannot be resolved syntactically retain ordinary file-level provenance. Use `include` or `exclude` for deliberate narrowing, never both.
+`compiler.styleAutoImports` remains opt-in and exposes authoring exports only to evaluated `*.css.ts` modules. `true` reuses the single `compiler.system` entry; a string names another source; a filtered object may omit `from` to reuse `compiler.system`. It generates exact ambient declarations at a stable path, regenerates on configuration or export changes, registers those declarations with the host, includes a generated-file banner, preserves the authored types through direct `typeof` references, carries statically declared barrel aliases into debug and source provenance, allows explicit imports or user aliasing, and avoids injecting into modules upstream of the system. Aliases that cannot be resolved syntactically retain ordinary file-level provenance. Use `include` or `exclude` for deliberate narrowing, never both.
 
-`app.runtimeAutoImports` remains opt-in and supplies runtime-facing values to application modules. It never changes how `*.css.ts` modules are evaluated. A string names one source, an array selects built-in presets, and the object form combines `presets` with `sources`. Built-in presets provide named Vanity runtime groups; package and local sources are curated barrels and contribute all named value exports by default. Use `{ from, include }` or `{ from, exclude }` for deliberate narrowing; the two filters cannot be combined. Template injection is adapter-specific as shown above.
+`app.runtimeAutoImports` remains opt-in and supplies runtime-facing values to application modules. It never changes how `*.css.ts` modules are evaluated. A string names one source, an array selects built-in presets, and the object form combines `presets` with `sources`. Built-in presets provide named Vanity runtime groups; package and local sources are curated modules or barrels, not directory globs, and their named value exports are discovered statically by default. Use `{ from, include }` or `{ from, exclude }` for deliberate narrowing; the two filters cannot be combined. Template injection is adapter-specific as shown above.
 
-Generated types are the only ambient declaration source. Plain Vite writes the style-lane declarations to the automatically discovered `node_modules/@types/vanity-style-auto-imports` package and the runtime-lane declarations to `node_modules/@types/vanity-runtime-auto-imports`, overwriting both files so removed exports do not linger. Nuxt delegates declaration generation to its native import registry; both adapters preserve the authored exports' overloads, generics, literal types, and TSDoc.
+Vanity's generated declarations are the only ambient source for these two lanes. Plain Vite and `vanity prepare` write canonical declarations to `.vanity/types/style-auto-imports.d.ts` and `.vanity/types/runtime-auto-imports.d.ts`, then place small reference bridges in the automatically discovered `node_modules/@types/vanity-style-auto-imports` and `node_modules/@types/vanity-runtime-auto-imports` packages. They overwrite both files so removed exports do not linger, use relative local references or bare package specifiers so the generated text is portable across checkouts, and preserve the authored exports' overloads, generics, and literal types through `typeof` references. Nuxt renders the style declaration through a Nuxt type template and registers runtime imports through Nuxt's native import registry.
 
 Plain-Vite projects that set `compilerOptions.types` explicitly must include `vanity-style-auto-imports` and/or `vanity-runtime-auto-imports` for the enabled lanes, because an explicit list disables TypeScript's automatic `@types` discovery. Nuxt projects use Nuxt's generated type references instead.
 

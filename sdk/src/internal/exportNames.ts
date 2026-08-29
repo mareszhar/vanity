@@ -11,15 +11,27 @@ const moduleExtensions = ['.mts', '.cts', '.ts', '.tsx', '.mjs', '.cjs', '.js', 
  * intentionally static: discovering an auto-import source must not execute
  * user code during configuration.
  */
-export function exportNamesFromFile(filePath: string): string[] {
-  return [...collectExportNames(resolveModuleFile(filePath), new Set<string>())].sort()
+export function exportNamesFromFile(filePath: string, baseDir = process.cwd()): string[] {
+  return [...collectExportNames(resolveModuleFile(filePath, baseDir), new Set<string>())].sort()
 }
 
-function collectExportNames(filePath: string, seen: Set<string>): Set<string> {
+/** Return the module graph consulted while discovering a source's exports. */
+export function exportModuleFilesFromFile(filePath: string, baseDir = process.cwd()): string[] {
+  const files = new Set<string>()
+  collectExportNames(resolveModuleFile(filePath, baseDir), new Set<string>(), files)
+  return [...files].sort()
+}
+
+function collectExportNames(
+  filePath: string,
+  seen: Set<string>,
+  files?: Set<string>,
+): Set<string> {
   const resolved = resolveModuleFile(filePath)
   if (seen.has(resolved))
     return new Set()
   seen.add(resolved)
+  files?.add(resolved)
 
   const source = readFileSync(resolved, 'utf8')
   const parsed = parseSync(resolved, source)
@@ -45,6 +57,7 @@ function collectExportNames(filePath: string, seen: Set<string>): Set<string> {
       for (const nested of collectExportNames(
         resolveModuleRequest(entry.moduleRequest.value, resolved),
         seen,
+        files,
       )) {
         names.add(nested)
       }
@@ -61,7 +74,7 @@ function resolveModuleRequest(specifier: string, importer: string): string {
   return createRequire(importer).resolve(specifier)
 }
 
-function resolveModuleFile(filePath: string): string {
+function resolveModuleFile(filePath: string, baseDir = process.cwd()): string {
   if (existsSync(filePath) && extname(filePath) !== '')
     return resolve(filePath)
 
@@ -86,5 +99,5 @@ function resolveModuleFile(filePath: string): string {
   if (isAbsolute(filePath))
     return resolve(filePath)
 
-  return createRequire(resolve(process.cwd(), 'package.json')).resolve(filePath)
+  return createRequire(resolve(baseDir, 'package.json')).resolve(filePath)
 }

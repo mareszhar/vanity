@@ -110,25 +110,19 @@ const d = useAnatomy(s.dialog, props)
 
 ```TS
 // nuxt.config.ts
+import vanityConfig from './vanity.config.ts'
+
 export default defineNuxtConfig({
   modules: ['@mszr/vanity/nuxt'],
-  vanity: {
-    compiler: {
-      system: '~/design/system.ts',
-      styleAutoImports: '~/design/authoring.ts',
-    },
-    app: {
-      runtimeAutoImports: ['core', 'vue'],
-    },
-  },
+  vanity: vanityConfig,
 })
 ```
 
-The `compiler` and `app` blocks describe two different execution lanes. Their shared contract and adapter differences are defined in [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters). In Nuxt, `app.runtimeAutoImports` enters Nuxt's native import registry and is therefore available in Nuxt application code and Vue templates; `core` is Vanity's framework-agnostic runtime group and `vue` adds the Vue adapter.
+The shared configuration and the two lane contracts are defined in [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters). The `vanity.config.ts` module is optional; it is shown here because the same object can also be passed to `vanity prepare` when a project wants an explicit pre-typecheck step.
 
 **Contract details.**
 
-- Installs the `/vite` compiler lane (manifest emission included) and registers opted-in application runtime imports with Nuxt's native import registry; the shared lane contract and generated-type rules live in [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters).
+- Installs the `/vite` compiler lane (manifest emission included) and registers opted-in application runtime imports with Nuxt's native import registry; the shared lane contract and declaration rules live in [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters).
 - Nuxt's native registry owns the application declaration surface, so Nuxt projects need neither a separate `imports.presets` entry nor a Vanity-specific Nuxt preset value.
 - **Importing the system module from app code is legal.** Token handles, override classes, runtime factories, and SSR projection helpers cross as serializable contracts; bound authoring functions cross as build-plane stubs that throw the lane redirect if called — never a poisoned module, never a silent no-op.
 - Nuxt DevTools tab: the token browser (values per scheme, liveness, usage counts), recipe/anatomy inspector, ports, conditions, and the escape inventory, with click-through to the `.css.ts` source. It embeds the manifest view the `/vite` plugin serves at `/__vanity/` in dev — one implementation serves plain Vite and Nuxt alike ([spec-introspection.md §5](./spec-introspection.md#5-manifest-v3)).

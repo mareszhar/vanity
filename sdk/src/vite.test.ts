@@ -24,6 +24,7 @@ import {
 import { VanityError } from '@test/legacy'
 import { build, createLogger, createServer } from 'vite'
 import { afterEach, describe, expect, it } from 'vitest'
+import { planAutoImportDeclarations } from './prepare'
 
 function local(path: string) {
   return fileURLToPath(new URL(path, import.meta.url))
@@ -847,10 +848,18 @@ export {}
 
     expect(css).toMatch(/\.card__[\w-]+ \{/)
     expect(css).toContain('padding: var(--vanity-space-sm)')
-    const declarations = await readFile(join(root, 'node_modules/.vanity/style-auto-imports.d.ts'), 'utf-8')
+    const declarations = await readFile(join(root, '.vanity/types/style-auto-imports.d.ts'), 'utf-8')
     const registration = await readFile(join(root, 'node_modules/@types/vanity-style-auto-imports/index.d.ts'), 'utf-8')
     expect(declarations).toContain('const ds: typeof VanityStyleAutoImports.ds')
-    expect(registration).toContain('<reference path="../../.vanity/style-auto-imports.d.ts" />')
+    expect(registration).toContain('<reference path="../../../.vanity/types/style-auto-imports.d.ts" />')
+
+    const plan = await planAutoImportDeclarations({
+      compiler: {
+        system: join(root, 'system.ts'),
+        styleAutoImports: true,
+      },
+    }, { root })
+    expect(declarations).toBe(plan.style?.declaration.text)
   })
 
   it('supports a style auto-import barrel derived from the configured system', async () => {
@@ -894,7 +903,7 @@ export const { class: mk, t } = ds
 
     expect(css).toMatch(/\.card__[\w-]+ \{/)
     expect(css).toContain('padding: var(--vanity-space-sm)')
-    const declarations = await readFile(join(root, 'node_modules/.vanity/style-auto-imports.d.ts'), 'utf-8')
+    const declarations = await readFile(join(root, '.vanity/types/style-auto-imports.d.ts'), 'utf-8')
     expect(declarations).toContain('const mk: typeof VanityStyleAutoImports.mk')
     expect(declarations).toContain('const t: typeof VanityStyleAutoImports.t')
   })
@@ -924,7 +933,7 @@ export const { class: mk, t } = ds
       server: { middlewareMode: true, hmr: false, watch: null },
       optimizeDeps: { noDiscovery: true },
     })
-    const declarations = join(root, 'node_modules/.vanity/style-auto-imports.d.ts')
+    const declarations = join(root, '.vanity/types/style-auto-imports.d.ts')
     const retransform = async () => {
       for (const moduleNode of server.moduleGraph.getModulesByFile(card) ?? [])
         server.moduleGraph.invalidateModule(moduleNode)
@@ -983,7 +992,7 @@ export const { class: mk, t } = ds
       .join('\n')
 
     expect(css).toContain('padding: var(--vanity-space-sm)')
-    const declarations = await readFile(join(root, 'node_modules/.vanity/style-auto-imports.d.ts'), 'utf-8')
+    const declarations = await readFile(join(root, '.vanity/types/style-auto-imports.d.ts'), 'utf-8')
     expect(declarations).toContain('const ds: typeof VanityStyleAutoImports.ds')
     expect(declarations).not.toContain('const helper:')
   })
@@ -1034,6 +1043,10 @@ export const merged = ports()
     expect(chunk?.code).toContain('position: "absolute"')
     expect(chunk?.code).toContain('Object.assign')
     expect(chunk?.code).not.toContain('minInlineSize')
+    const declarations = await readFile(join(root, '.vanity/types/runtime-auto-imports.d.ts'), 'utf8')
+    expect(declarations).toContain('const ports:')
+    expect(declarations).toContain('const visuallyHidden:')
+    expect(declarations).not.toContain('const minTarget:')
   })
 
   it('scans every named export from an unfiltered local application barrel', async () => {
@@ -1072,6 +1085,9 @@ export const classes = [visuallyHidden, minTarget]
 
     expect(chunk?.code).toContain('visually-hidden')
     expect(chunk?.code).toContain('min-target')
+    const declarations = await readFile(join(root, '.vanity/types/runtime-auto-imports.d.ts'), 'utf8')
+    expect(declarations).toContain('const visuallyHidden:')
+    expect(declarations).toContain('const minTarget:')
   })
 })
 

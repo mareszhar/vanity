@@ -2,10 +2,14 @@ import type {
   VanityRuntimeAutoImportPreset,
   VanityRuntimeAutoImportPresetName,
 } from './appImports'
+import { resolve } from 'node:path'
+import { normalizePath } from '@vanilla-extract/integration'
 import { vanityRuntimeAutoImportPresets } from './appImports'
+import { selectAutoImportNames } from './autoImportNames'
+import { exportNamesFromFile } from './exportNames'
 
 interface VanityRuntimeAutoImportSourceBase {
-  /** A package specifier, file path, or adapter alias. */
+  /** Package specifier, project-relative file path, or adapter-resolved alias. */
   from: string
 }
 
@@ -31,16 +35,23 @@ export type VanityRuntimeAutoImportSource
     | VanityRuntimeAutoImportSourceWithInclude
     | VanityRuntimeAutoImportSourceWithExclude
 
+/** Object form for configuring built-in runtime groups and application barrels. */
 export interface VanityRuntimeAutoImportsOptions {
-  /** Built-in runtime groups supplied by Vanity; `vue` adds the Vue adapter. */
+  /** Built-in runtime groups supplied by Vanity; `vue` also enables Vue helpers. */
   presets?: readonly VanityRuntimeAutoImportPresetName[]
-  /** Application barrels; all named value exports are used by default. */
+  /** Application barrels; all named value exports are used unless filtered. */
   sources?: readonly (string | VanityRuntimeAutoImportSource)[]
 }
 
 /**
- * Application-lane imports: a string names one source, an array selects
- * built-in presets, and the object form combines presets with sources.
+ * Controls runtime-facing imports in application and SSR modules.
+ *
+ * - A string names one application barrel or package source.
+ * - An array selects built-in presets such as `core` or `vue`.
+ * - An object combines `presets` with filtered `sources`.
+ *
+ * This affects the application lane only; it does not inject names into
+ * evaluated `*.css.ts` modules.
  */
 export type VanityRuntimeAutoImports
   = string
@@ -50,6 +61,17 @@ export type VanityRuntimeAutoImports
 export interface NormalizedRuntimeAutoImports {
   readonly presets: readonly VanityRuntimeAutoImportPreset[]
   readonly sources: readonly VanityRuntimeAutoImportSource[]
+}
+
+export interface ResolvedRuntimeAutoImportSource {
+  readonly from: string
+  readonly imports: readonly string[]
+}
+
+export interface ResolvedRuntimeAutoImports {
+  readonly sources: readonly ResolvedRuntimeAutoImportSource[]
+  readonly names: readonly string[]
+  readonly vueTemplates: boolean
 }
 
 /**
@@ -82,24 +104,47 @@ export function normalizeRuntimeAutoImports(
   }
 }
 
+/**
+ * Resolve every application source through the same static export discovery
+ * used by preparation. Adapters may provide a local-path resolver for host
+ * aliases; package specifiers remain package specifiers in the result.
+ */
+export function resolveRuntimeAutoImports(
+  value: VanityRuntimeAutoImports,
+  root: string,
+  resolveLocal: (source: string) => string = source => resolveLocalRuntimeSource(source, root),
+): ResolvedRuntimeAutoImports {
+  const normalized = normalizeRuntimeAutoImports(value)
+  const sources: ResolvedRuntimeAutoImportSource[] = normalized.presets.map(preset => ({
+    from: preset.from,
+    imports: [...preset.imports],
+  }))
+
+  for (const source of normalized.sources) {
+    const from = isPackageSpecifier(source.from) ? source.from : normalizePath(resolveLocal(source.from))
+    const names = exportNamesFromFile(from, root)
+    sources.push({
+      from,
+      imports: selectAutoImportNames(
+        names,
+        source,
+        `[vanity] app.runtimeAutoImports source '${source.from}'`,
+      ),
+    })
+  }
+
+  return {
+    sources,
+    names: sources.flatMap(source => source.imports).sort(),
+    vueTemplates: normalized.presets.some(preset => preset.from === '@mszr/vanity/vue'),
+  }
+}
+
 export function isPackageSpecifier(value: string): boolean {
   return !value.startsWith('.')
     && !value.startsWith('/')
     && !value.startsWith('~')
     && !/^[a-z]:[\\/]/i.test(value)
-}
-
-export function runtimeAutoImportIgnore(
-  source: VanityRuntimeAutoImportSource,
-): ((name: string) => boolean) | undefined {
-  assertRuntimeAutoImportSourceFilters(source)
-
-  if (source.include === undefined && source.exclude === undefined)
-    return undefined
-
-  return source.include !== undefined
-    ? name => !source.include.includes(name)
-    : name => source.exclude.includes(name)
 }
 
 function assertRuntimeAutoImportSourceFilters(
@@ -120,4 +165,15 @@ function isRuntimeAutoImportsOptions(
   value: VanityRuntimeAutoImports,
 ): value is VanityRuntimeAutoImportsOptions {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function resolveLocalRuntimeSource(source: string, root: string): string {
+  if (source.startsWith('~')) {
+    throw new Error(
+      `[vanity] app.runtimeAutoImports cannot resolve '${source}' outside a framework alias; `
+      + 'use a project-relative or absolute path',
+    )
+  }
+
+  return resolve(root, source)
 }

@@ -152,6 +152,8 @@ The root `.gitignore` is the single ignore authority. Generated or machine-local
 
 The validation entrypoints clear only the demo-generated declaration and adapter-cache paths before typechecking. This prevents an ignored ambient file from masking a removed or renamed import while preserving the root `.vanity/` receipts, benchmark measurements, and resumable release records.
 
+Non-Nuxt demos run `vanity prepare` before typechecking, so a clean checkout has the generated ambient declarations its `*.css.ts` and application modules rely on; the command's contract lives in [spec-integrations.md §8](../reference/spec-integrations.md#8-integration-adapters). The Turbo `prep` task declares the canonical `.vanity/types/` directory and the `@types/vanity-*-auto-imports` bridges as outputs, so a cached preparation stays usable by the dependent typecheck task.
+
 Checked-in benchmark fixtures under `benchmarks/generated/` are deterministic source artifacts and are guarded by `pnpm run bench:fixtures:check`.
 
 ## 7. CI

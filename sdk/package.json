@@ -50,6 +50,10 @@
       "types": "./dist/cli.d.mts",
       "import": "./dist/cli.mjs"
     },
+    "./config": {
+      "types": "./dist/config.d.mts",
+      "import": "./dist/config.mjs"
+    },
     "./testing": {
       "types": "./dist/testing.d.mts",
       "import": "./dist/testing.mjs"
@@ -66,6 +70,10 @@
     "./nuxt": {
       "types": "./dist/nuxt.d.mts",
       "import": "./dist/nuxt.mjs"
+    },
+    "./prepare": {
+      "types": "./dist/prepare.d.mts",
+      "import": "./dist/prepare.mjs"
     },
     "./typescript": "./typescript.cjs",
     "./presets": {
@@ -133,6 +141,7 @@
     "csstype": "catalog:",
     "culori": "catalog:",
     "esbuild": "catalog:",
+    "jiti": "catalog:",
     "known-css-properties": "catalog:",
     "lightningcss": "catalog:",
     "oxc-parser": "catalog:",

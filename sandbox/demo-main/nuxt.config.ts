@@ -1,20 +1,9 @@
 import { fileURLToPath } from 'node:url'
+import vanityConfig from './vanity.config.ts'
 
 export default defineNuxtConfig({
   modules: ['@mszr/vanity/nuxt'],
-
-  vanity: {
-    // The injection source re-exports the exact locked `ds` plus independent
-    // preset helpers. Nuxt generates the ambient declarations; there is no
-    // tracked hand-written global surface.
-    compiler: {
-      system: '~/assets/styles/design/system.ts',
-      styleAutoImports: '~/assets/styles/design/authoring.ts',
-    },
-    app: {
-      runtimeAutoImports: ['core', 'vue'],
-    },
-  },
+  vanity: vanityConfig,
 
   // `import * as s from 'styled/Button.css.ts'` — component styles live apart
   // from components, reached by a stable alias instead of relative paths.

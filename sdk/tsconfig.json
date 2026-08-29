@@ -7,6 +7,7 @@
       "@mszr/vanity": ["./src/index.ts"],
       "@mszr/vanity/capabilities": ["./src/capabilities.ts"],
       "@mszr/vanity/cli": ["./src/cli.ts"],
+      "@mszr/vanity/config": ["./src/config.ts"],
       "@mszr/vanity/runtime": ["./src/runtime.ts"],
       "@mszr/vanity/imports": ["./src/imports.ts"],
       "@mszr/vanity/testing": ["./src/testing.ts"],
@@ -14,6 +15,7 @@
       "@mszr/vanity/vite": ["./src/vite.ts"],
       "@mszr/vanity/vue": ["./src/vue.ts"],
       "@mszr/vanity/nuxt": ["./src/nuxt.ts"],
+      "@mszr/vanity/prepare": ["./src/prepare.ts"],
       "@test": ["./src/test-support/index.ts"],
       "@test/legacy": ["./src/test-support/legacy.ts"]
     },

@@ -49,12 +49,15 @@ import type { Adapter } from '@vanilla-extract/css'
 import type { Loader } from 'esbuild'
 import type { CallExpression, Expression, ObjectExpression, ObjectProperty } from 'oxc-parser'
 import type { Plugin, PluginOption, ResolvedConfig, ViteDevServer } from 'vite'
-import type { VanityDiagnosticSink } from './diagnostics'
+import type {
+  VanityCompilerOptions,
+  VanityConfig,
+  VanityIdentifierMode,
+  VanityRuntimeAutoImports,
+  VanitySystemSource,
+} from './config'
 import type { autoImportDelegateHooks } from './internal/autoImportDelegate'
 import type { VanityInspectRecord } from './internal/inspect'
-import type {
-  VanityRuntimeAutoImports,
-} from './internal/runtimeAutoImports'
 import type { VanityPortableSystemV1 } from './system/contract'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -73,15 +76,13 @@ import { build as esbuild } from 'esbuild'
 import { parseSync, Visitor } from 'oxc-parser'
 import autoImportVite from 'unplugin-auto-import/vite'
 import { reportDiagnostics, resetDiagnosticSources, VanityError } from './diagnostics'
-import { selectAutoImportNames } from './internal/autoImportNames'
-import { exportNamesFromFile } from './internal/exportNames'
+import { styleAutoImportDeclarations as renderStyleAutoImportDeclarations } from './internal/autoImportDeclarations'
+import { planStyleAutoImports } from './internal/autoImportPlan'
+import { writeAutoImportDeclarationFiles, writeAutoImportDeclarations } from './internal/autoImportWriter'
+import { exportModuleFilesFromFile } from './internal/exportNames'
 import { withEmissionFileScope } from './internal/fileScope'
 import { collectInspection } from './internal/inspect'
-import {
-  isPackageSpecifier,
-  normalizeRuntimeAutoImports,
-  runtimeAutoImportIgnore,
-} from './internal/runtimeAutoImports'
+import { isPackageSpecifier, resolveRuntimeAutoImports } from './internal/runtimeAutoImports'
 import { transformVanityCss } from './internal/transformCss'
 import { vanityViteHost } from './internal/viteHost'
 import { devtoolsPage } from './introspect/devtools'
@@ -93,104 +94,22 @@ import {
   systemContractOf,
 } from './system/contract'
 
-export type VanityIdentifierMode = 'debug' | 'short'
-export type VanityCompilerMode = 'transform' | 'emitCss' | 'inlineCssInDev'
-
-interface VanityStyleAutoImportsWithInclude {
-  /** Optional alternate authoring module; omitted means `compiler.system`. */
-  from?: string
-  /** Restrict the source to these named authoring exports. */
-  include: readonly string[]
-  exclude?: never
-}
-
-interface VanityStyleAutoImportsWithExclude {
-  /** Optional alternate authoring module; omitted means `compiler.system`. */
-  from?: string
-  include?: never
-  /** Omit these named authoring exports. */
-  exclude: readonly string[]
-}
-
-/** A filtered style source; omit `from` to reuse the configured system. */
-export type VanityStyleAutoImportsOptions
-  = VanityStyleAutoImportsWithInclude
-    | VanityStyleAutoImportsWithExclude
-
-/**
- * Compiler-lane authoring imports: `true` reuses `system`, a string names a
- * source, and the filtered object form narrows either source.
- */
-export type VanityStyleAutoImports
-  = false
-    | true
-    | string
-    | VanityStyleAutoImportsOptions
-
-/** A plain consolidated system, optionally paired with package-built portable data. */
-export interface VanitySystemSource {
-  /** Source/build entry retaining the full build-plane contract. */
-  entry: string
-  /** Adjacent portable JSON used for browser/SSR projection. */
-  artifact?: string
-  /** Included in stale-pair diagnostics; inferred from the nearest package when omitted. */
-  packageName?: string
-  /** Contract export name when a precompiled entry cannot be inspected. Defaults to `ds`. */
-  exportName?: string
-}
-
-export interface VanityCompilerOptions {
-  /** Emitted class/variable naming; defaults to `debug` in dev, `short` in production. */
-  identifiers?: VanityIdentifierMode
-  /** Forwarded to the composed vanilla-extract plugin — `*.css.ts` coexistence only. */
-  unstableMode?: VanityCompilerMode
-  /**
-   * Auto-import authoring exports inside evaluated `*.css.ts` modules
-   * ([spec-integrations.md §8]). `true` reuses `system`; a string names an
-   * alternate source; an object adds an `include` or `exclude` filter and may
-   * also name an alternate source. These names exist in Vanity's compiler lane
-   * only, not the application lane. Use the string form for an unfiltered
-   * alternate source. Explicit imports stay untouched.
-   */
-  styleAutoImports?: VanityStyleAutoImports
-  /**
-   * Plain `system.ts` contract(s). App and SSR imports are replaced with a
-   * portable runtime facade; style compilation still executes the full entry.
-   */
-  system?: string | VanitySystemSource | readonly (string | VanitySystemSource)[]
-  /**
-   * Optional cross-system CSS cascade-layer order. Vanity emits the roots once
-   * as the first stylesheet; when omitted, it derives the order from configured
-   * system roots.
-   */
-  layerOrder?: readonly string[]
-  /** Compiler artifacts; defaults to `<root>/.vanity`. */
-  artifactDirectory?: string
-  /** One structured stream for compiler/integration diagnostics. */
-  diagnostics?: VanityDiagnosticSink
-}
-
 export type {
+  VanityAppOptions,
+  VanityCompilerMode,
+  VanityCompilerOptions,
+  VanityConfig,
+  VanityIdentifierMode,
   VanityRuntimeAutoImports,
   VanityRuntimeAutoImportsOptions,
   VanityRuntimeAutoImportSource,
-} from './internal/runtimeAutoImports'
+  VanityStyleAutoImports,
+  VanityStyleAutoImportsOptions,
+  VanitySystemSource,
+} from './config'
 
-export interface VanityAppOptions {
-  /**
-   * Runtime-facing values injected into application modules; template support
-   * follows the host adapter. This lane never changes how `*.css.ts` files are
-   * evaluated.
-   */
-  runtimeAutoImports?: VanityRuntimeAutoImports
-}
-
-export interface VanityViteOptions {
-  /** Build-plane and `*.css.ts` compiler configuration. */
-  compiler?: VanityCompilerOptions
-  /** Application-plane runtime import configuration. */
-  app?: VanityAppOptions
-}
+/** Shared host-neutral configuration accepted by `vanityPlugin`. */
+export type VanityViteOptions = VanityConfig
 
 /** `*.css.ts` (and variants) — vanity's authoring file extension. */
 const styleFileFilter = /\.css\.(?:js|cjs|mjs|jsx|ts|tsx)(?:\?used)?$/
@@ -209,15 +128,21 @@ const selfAcceptFooter = '\nif (import.meta.hot) { import.meta.hot.accept() }\n'
 /**
  * Compile Vanity style modules and maintain CSS, portable data, and Manifest v3.
  *
+ * @param options Shared build-plane and application-plane configuration. The
+ * same object can come from `defineVanityConfig` or a local `vanity.config.ts`.
+ *
  * @example
- * `defineConfig({ plugins: [vanityPlugin({ compiler: { system: './src/system.ts' } })] })`
+ * ```ts
+ * import { vanityPlugin } from '@mszr/vanity/vite'
+ * import vanityConfig from './vanity.config.ts'
+ *
+ * export default defineConfig({ plugins: [vanityPlugin(vanityConfig)] })
+ * ```
  */
 export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const compiler = options.compiler ?? {}
   const app = options.app ?? {}
   const nativeTypeHost = (options as VanityViteOptions & { [vanityViteHost]?: 'nuxt' })[vanityViteHost]
-  const emitStyleDeclarations = nativeTypeHost !== 'nuxt'
-  const registerStyleTypes = nativeTypeHost !== 'nuxt'
   let config: ResolvedConfig
   let server: ViteDevServer | undefined
   let clientServer: ViteDevServer | undefined
@@ -254,6 +179,8 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const systemsByStyleEntry = new Map<string, Set<string>>()
   /** Configured build-plane system → style modules that import it. */
   const styleEntriesBySystem = new Map<string, Set<string>>()
+  /** Local source graph files whose exports can change an auto-import declaration. */
+  let runtimeAutoImportSourceFiles = new Set<string>()
 
   /** The manifest as last written, so unchanged builds skip the write. */
   let writtenManifest: string | undefined
@@ -461,10 +388,6 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
 
   /** The auto-import shim's last written content, so unchanged runs skip the write. */
   let shimContent: string | undefined
-  /** The matching ambient declaration content at the documented stable path. */
-  let declarationsContent: string | undefined
-  /** TypeScript's automatic `@types` discovery bridge to the stable file. */
-  let declarationsRegistrationContent: string | undefined
   /** The system module's own source and import graph — files upstream of the system never get the shim. */
   let systemSource: string | undefined
   let systemDeps = new Set<string>()
@@ -484,8 +407,15 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     if (!autoImports)
       return undefined
 
-    const from = normalizePath(resolveStyleAutoImportSource(autoImports, compiler.system, config.root))
+    const stylePlan = await planStyleAutoImports(autoImports, compiler.system, config.root)
+    if (stylePlan === undefined)
+      return undefined
+
+    const { from, names } = stylePlan
     const source = await readFile(from, 'utf-8')
+
+    if (nativeTypeHost !== 'nuxt')
+      await writeAutoImportDeclarationFiles([stylePlan.declaration, stylePlan.bridge])
 
     if (source !== systemSource) {
       const { watchFiles } = await bundleStyleModule({
@@ -501,55 +431,33 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     if (systemDeps.has(filePath))
       return undefined
 
-    const names = selectAutoImportNames(
-      styleExportNames(source),
-      typeof autoImports === 'object' ? autoImports : {},
-      '[vanity] compiler.styleAutoImports',
-    )
     const ambientAliases = styleAutoImportAliases(source, from, names)
 
     const shim = join(config.root, 'node_modules', '.vanity', 'style-auto-imports.mjs')
     const content = names.length === 0
       ? 'export {}\n'
       : `export { ${names.join(', ')} } from '${from}'\n`
-    const declarations = join(config.root, 'node_modules', '.vanity', 'style-auto-imports.d.ts')
-    const nextDeclarations = emitStyleDeclarations
-      ? styleAutoImportDeclarations(from, names)
-      : undefined
-    const declarationsRegistration = join(
-      config.root,
-      'node_modules',
-      '@types',
-      'vanity-style-auto-imports',
-      'index.d.ts',
-    )
-    const nextDeclarationsRegistration = [
-      '/* generated by vanity — do not edit */',
-      '/// <reference path="../../.vanity/style-auto-imports.d.ts" />',
-      '',
-    ].join('\n')
-
     if (content !== shimContent) {
       await mkdir(dirname(shim), { recursive: true })
       await writeFile(shim, content)
       shimContent = content
     }
-    if (nextDeclarations !== undefined && nextDeclarations !== declarationsContent) {
-      await mkdir(dirname(declarations), { recursive: true })
-      await writeFile(declarations, nextDeclarations)
-      declarationsContent = nextDeclarations
-    }
-    if (
-      nextDeclarations !== undefined
-      && registerStyleTypes
-      && nextDeclarationsRegistration !== declarationsRegistrationContent
-    ) {
-      await mkdir(dirname(declarationsRegistration), { recursive: true })
-      await writeFile(declarationsRegistration, nextDeclarationsRegistration)
-      declarationsRegistrationContent = nextDeclarationsRegistration
-    }
 
     return names.length === 0 ? undefined : { aliases: ambientAliases, path: shim }
+  }
+
+  const rememberRuntimeAutoImportSourceFiles = (plan: Awaited<ReturnType<typeof writeAutoImportDeclarations>>['plan']): void => {
+    const files = new Set<string>()
+
+    for (const source of plan.runtime?.sources ?? []) {
+      if (isPackageSpecifier(source.from))
+        continue
+
+      for (const file of exportModuleFilesFromFile(source.from, config.root))
+        files.add(normalizePath(file))
+    }
+
+    runtimeAutoImportSourceFiles = files
   }
 
   const cssTsPlugin: Plugin = {
@@ -601,6 +509,11 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     },
 
     async buildStart() {
+      if (nativeTypeHost !== 'nuxt') {
+        const result = await writeAutoImportDeclarations(options, { root: config.root })
+        rememberRuntimeAutoImportSourceFiles(result.plan)
+      }
+
       for (const source of systemSources) {
         const system = await ensureConfiguredSystem(source)
         for (const dependency of source.dependencies) {
@@ -863,6 +776,15 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
 
     async handleHotUpdate({ file, server: devServer, modules }) {
       const normalizedFile = normalizePath(file)
+      if (
+        nativeTypeHost !== 'nuxt'
+        && app.runtimeAutoImports !== undefined
+        && runtimeAutoImportSourceFiles.has(normalizedFile)
+      ) {
+        const result = await writeAutoImportDeclarations(options, { root: config.root })
+        rememberRuntimeAutoImportSourceFiles(result.plan)
+      }
+
       const affectedSystems = [...systemDependentsByFile.get(normalizedFile) ?? []]
       const invalidatedRuntimeIdentities = new Set<string>()
       const failures: unknown[] = []
@@ -1089,17 +1011,9 @@ function createApplicationAutoImportPlugin(
     const options = createViteRuntimeAutoImports(value, normalizedRoot)
     delegate = autoImportVite({
       imports: options.imports,
-      packagePresets: options.packagePresets,
-      dirs: options.dirs,
-      dirsScanOptions: {
-        types: false,
-      },
-      // Keep Vanity's declarations distinct from a host's own auto-import file;
-      // the `@types` location is discovered automatically by TypeScript.
-      dts: join(normalizedRoot, 'node_modules', '@types', 'vanity-runtime-auto-imports', 'index.d.ts'),
-      // Vanity owns this declaration file, so removed exports must disappear
-      // instead of accumulating in unplugin-auto-import's append mode.
-      dtsMode: 'overwrite',
+      // Vanity owns the declaration plan and renderer. Unplugin remains the
+      // source transformer, but never becomes a second declaration authority.
+      dts: false,
       // Compiler authoring modules have their own injection lane. Keeping the
       // application lane out of `*.css.ts` prevents runtime presets from
       // leaking into code that Vanity evaluates in-process.
@@ -1167,62 +1081,19 @@ function normalizeAutoImportPlugins(value: PluginOption): Plugin[] {
 
 interface ViteRuntimeAutoImports {
   imports: Array<{ from: string, imports: string[] }>
-  packagePresets: Array<{
-    package: string
-    ignore?: Array<(name: string) => boolean>
-  }>
-  dirs: string[]
 }
 
 function createViteRuntimeAutoImports(
   value: VanityRuntimeAutoImports,
   root: string,
 ): ViteRuntimeAutoImports {
-  const normalized = normalizeRuntimeAutoImports(value)
-  const imports = normalized.presets.map(entry => ({
-    from: entry.from,
-    imports: [...entry.imports],
-  }))
-  const packagePresets: ViteRuntimeAutoImports['packagePresets'] = []
-  const dirs: string[] = []
-
-  for (const source of normalized.sources) {
-    const sourceFrom = source.from
-    if (isPackageSpecifier(source.from)) {
-      const ignored = runtimeAutoImportIgnore(source)
-      packagePresets.push({
-        package: source.from,
-        ...(ignored === undefined ? {} : { ignore: [ignored] }),
-      })
-      continue
-    }
-
-    if (source.include === undefined && source.exclude === undefined) {
-      dirs.push(resolveAutoImportFile(source.from, root))
-      continue
-    }
-
-    const filePath = resolveAutoImportFile(source.from, root)
-    const names = exportNamesFromFile(filePath)
-    const selected = selectAutoImportNames(names, source, `[vanity] app.runtimeAutoImports source '${sourceFrom}'`)
-    imports.push({ from: filePath, imports: selected })
+  const resolved = resolveRuntimeAutoImports(value, root)
+  return {
+    imports: resolved.sources.map(source => ({
+      from: source.from,
+      imports: [...source.imports],
+    })),
   }
-
-  return { imports, packagePresets, dirs }
-}
-
-function resolveAutoImportFile(value: string, root: string): string {
-  if (isAbsolute(value))
-    return normalizePath(value)
-
-  if (value.startsWith('~')) {
-    throw new Error(
-      `[vanity] app.runtimeAutoImports cannot resolve '${value}' in the Vite adapter; `
-      + `use an absolute path or let the Nuxt adapter resolve its aliases`,
-    )
-  }
-
-  return normalizePath(resolve(root, value))
 }
 
 type AutoImportDelegateHook = Extract<typeof autoImportDelegateHooks[number], keyof AutoImportPlugin>
@@ -1250,39 +1121,6 @@ function invokePluginHook<K extends AutoImportDelegateHook>(
     return undefined
 
   return Reflect.apply(handler, context, args) as ReturnType<PluginHookFunction<NonNullable<AutoImportPlugin[K]>>>
-}
-
-function resolveStyleAutoImportSource(
-  value: VanityStyleAutoImports,
-  system: VanityCompilerOptions['system'],
-  root: string,
-): string {
-  if (typeof value === 'string')
-    return isAbsolute(value) ? value : join(root, value)
-
-  if (typeof value === 'object' && value.from !== undefined)
-    return isAbsolute(value.from) ? value.from : join(root, value.from)
-
-  if (value === false)
-    throw new Error('[vanity] compiler.styleAutoImports is disabled')
-
-  if (system === undefined) {
-    throw new TypeError(
-      '[vanity] compiler.styleAutoImports without a source requires one plain compiler.system entry',
-    )
-  }
-
-  if (Array.isArray(system)) {
-    throw new TypeError(
-      '[vanity] compiler.styleAutoImports without a source requires one plain compiler.system entry',
-    )
-  }
-
-  const singleSystem = system as string | VanitySystemSource
-  return normalizeSystemPath(
-    typeof singleSystem === 'string' ? singleSystem : singleSystem.entry,
-    root,
-  )
 }
 
 interface NormalizedSystemSource {
@@ -2123,31 +1961,17 @@ export function styleExportNames(source: string, fileName = 'system.css.ts'): st
  *
  * The declaration references the authored module instead of reconstructing
  * its types, so generic signatures, literal token paths, and overloads stay
- * identical. Plain Vite writes this text to
- * `node_modules/.vanity/style-auto-imports.d.ts`; Nuxt registers the same text at
- * `.nuxt/vanity-style-auto-imports.d.ts`. Plain Vite also writes a tiny generated
- * `@types/vanity-style-auto-imports` reference bridge so ordinary TypeScript
- * automatic type discovery sees the stable file.
+ * identical. Plain Vite writes this text to `.vanity/types/style-auto-imports.d.ts`;
+ * Nuxt registers the same text at `.nuxt/vanity-style-auto-imports.d.ts`. Plain
+ * Vite also writes a tiny generated `@types/vanity-style-auto-imports` reference
+ * bridge so ordinary TypeScript automatic type discovery sees the stable file.
  */
-export function styleAutoImportDeclarations(from: string, names: readonly string[]): string {
-  const moduleSpecifier = normalizePath(from)
-  const declarations = names.map((name) => {
-    if (!/^[$a-z_][$\w]*$/i.test(name))
-      throw new TypeError(`[vanity] '${name}' cannot be exposed as a style auto-import global`)
-    return `  /** Auto-imported from ${moduleSpecifier}. */\n  const ${name}: typeof VanityStyleAutoImports.${name}`
-  })
-
-  return [
-    '/* generated by vanity — do not edit */',
-    `import type * as VanityStyleAutoImports from ${JSON.stringify(moduleSpecifier)}`,
-    '',
-    'declare global {',
-    ...declarations,
-    '}',
-    '',
-    'export {}',
-    '',
-  ].join('\n')
+export function styleAutoImportDeclarations(
+  from: string,
+  names: readonly string[],
+  options: { relativeTo?: string } = {},
+): string {
+  return renderStyleAutoImportDeclarations(from, names, options)
 }
 
 // ─── The debug-name transform ────────────────────────────────────────────────

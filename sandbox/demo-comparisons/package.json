@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "prep": "vite build --mode prepare",
+    "prep": "vanity prepare && vite build --mode prepare",
     "typecheck": "vue-tsc --noEmit",
     "postinstall": "panda codegen"
   },

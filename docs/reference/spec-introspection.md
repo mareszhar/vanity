@@ -118,6 +118,7 @@ The packed package publishes the `vanity` executable:
 vanity inspect [manifest] [--json]
 vanity explain <semantic-path> [manifest] [--json]
 vanity diff <old-manifest> <new-manifest> [--json]
+vanity prepare [--config <path>] [--root <path>]
 ```
 
 The omitted manifest defaults to `.vanity/manifest.json`. `inspect` summarizes the canonical system or prints its JSON. `explain` resolves system and module-level semantic paths. `diff` produces `vanity.manifest-diff/1` and categorizes additions, removals, and changes as:
@@ -126,6 +127,8 @@ The omitted manifest defaults to `.vanity/manifest.json`. `inspect` summarizes t
 - `css`;
 - `runtime`;
 - `docs`.
+
+`prepare` reconciles the enabled auto-import lanes' declarations from `vanity.config.ts` (or `--config`) without compiling styles or evaluating the system, so a host can run it before `tsc`; [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters) owns the full contract.
 
 Identity changes constrain the system categories reported. Module recipes, ports, styles, escapes, contrast, and usage are diffed under their semantic category. The formatted output is stable enough for release review; `--json` is the integration contract.
 

@@ -32,6 +32,13 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
+      input: ['./src/config.ts'],
+      rolldown: {
+        platform: 'neutral',
+      },
+    },
+    {
+      type: 'bundle',
       input: ['./src/capabilities.ts'],
       rolldown: {
         platform: 'neutral',
@@ -66,6 +73,14 @@ export default defineBuildConfig({
       input: ['./src/cli.ts'],
       rolldown: {
         platform: 'node',
+      },
+    },
+    {
+      type: 'bundle',
+      input: ['./src/prepare.ts'],
+      rolldown: {
+        platform: 'node',
+        external: ['jiti'],
       },
     },
     {

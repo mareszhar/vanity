@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 
 import type { VanityManifest } from './introspect/manifest'
-import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { realpathSync } from 'node:fs'
+import { readFile as readFileAsync } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { argv, cwd, exitCode } from 'node:process'
+import { pathToFileURL } from 'node:url'
 import { diffManifests, formatManifestDiff } from './introspect/diff'
 import { VANITY_MANIFEST_FORMAT } from './introspect/manifest'
 import { formatExplanation } from './introspect/semantic'
 
 /** Read and validate a manifest file: `await readManifest('.vanity/manifest.json')`. */
 export async function readManifest(path = '.vanity/manifest.json'): Promise<VanityManifest> {
-  const parsed = JSON.parse(await readFile(resolve(cwd(), path), 'utf8')) as unknown
+  const parsed = JSON.parse(await readFileAsync(resolve(cwd(), path), 'utf8')) as unknown
   assertManifest(parsed)
   return parsed
 }
@@ -73,6 +75,37 @@ export function assertManifest(value: unknown): asserts value is VanityManifest 
 
 async function main(args: readonly string[]): Promise<void> {
   const [command = 'inspect', ...rest] = args
+  if (command === '--help' || command === '-h') {
+    printUsage()
+    return
+  }
+
+  if (rest.includes('--help') || rest.includes('-h')) {
+    if (command === 'prepare') {
+      printPrepareUsage()
+      return
+    }
+    throw new TypeError(`[vanity] ${command} does not accept --help`)
+  }
+
+  if (command === 'prepare') {
+    const { config: configOption, root } = parsePrepareOptions(rest)
+    const configPath = resolve(cwd(), configOption ?? join(root, 'vanity.config.ts'))
+    const { loadVanityConfig, writeAutoImportDeclarations } = await import('./prepare')
+    const options = await loadVanityConfig(configPath)
+    const result = await writeAutoImportDeclarations(options, { root })
+    const changes = result.written.length + result.removed.length
+    if (changes === 0) {
+      console.log('[vanity] auto-import declarations are already current')
+      return
+    }
+    console.log(
+      `[vanity] prepared ${result.plan.declarations.length} declaration lane(s)`
+      + ` (${result.written.length} written, ${result.removed.length} removed)`,
+    )
+    return
+  }
+
   const json = rest.includes('--json')
   const positional = rest.filter(argument => !argument.startsWith('--'))
   if (command === 'inspect') {
@@ -92,10 +125,57 @@ async function main(args: readonly string[]): Promise<void> {
     console.log(json ? JSON.stringify(diff, null, 2) : formatManifestDiff(diff))
     return
   }
-  throw new TypeError(`[vanity] unknown command '${command}'; use inspect, explain, or diff`)
+  throw new TypeError(`[vanity] unknown command '${command}'; use inspect, explain, diff, or prepare`)
 }
 
-if (import.meta.url === `file://${argv[1]}`) {
+function printUsage(): void {
+  console.log([
+    'usage: vanity <command>',
+    '',
+    'commands:',
+    '  inspect [manifest] [--json]',
+    '  explain <semantic-path> [manifest] [--json]',
+    '  diff <old-manifest> <new-manifest> [--json]',
+    '  prepare [--config <path>] [--root <path>]',
+  ].join('\n'))
+}
+
+function printPrepareUsage(): void {
+  console.log('usage: vanity prepare [--config <path>] [--root <path>]')
+}
+
+function parsePrepareOptions(args: readonly string[]): { config?: string, root: string } {
+  let config: string | undefined
+  let root: string | undefined
+
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index]
+    const inline = argument.match(/^--(config|root)=(.+)$/)
+    if (inline) {
+      if (inline[1] === 'config')
+        config = inline[2]
+      else
+        root = inline[2]
+      continue
+    }
+
+    if (argument !== '--config' && argument !== '--root')
+      throw new TypeError(`[vanity] unknown prepare option '${argument}'`)
+
+    const value = args[++index]
+    if (value === undefined || value.startsWith('-'))
+      throw new TypeError(`[vanity] ${argument} requires a path`)
+
+    if (argument === '--config')
+      config = value
+    else
+      root = value
+  }
+
+  return { config, root: resolve(cwd(), root ?? '.') }
+}
+
+if (argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(argv[1])).href) {
   main(argv.slice(2)).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error))
     // eslint-disable-next-line node/prefer-global/process

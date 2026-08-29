@@ -203,10 +203,21 @@ async function main(): Promise<void> {
     },
     include: ['src'],
   }, null, 2))
-  write(join(plainDir, 'vite.config.ts'), `import { defineConfig } from 'vite'
+  write(join(plainDir, 'vanity.config.ts'), `import { defineVanityConfig } from '@mszr/vanity/config'
+
+export default defineVanityConfig({
+  compiler: {
+    system: './src/system.ts',
+    styleAutoImports: './src/authoring.ts',
+  },
+  app: { runtimeAutoImports: ['core'] },
+})
+`)
+  write(join(plainDir, 'vite.config.ts'), `import vanityConfig from './vanity.config.ts'
+import { defineConfig } from 'vite'
 import { vanityPlugin } from '@mszr/vanity/vite'
 
-export default defineConfig({ plugins: [vanityPlugin({ compiler: { system: './src/system.ts' } })] })
+export default defineConfig({ plugins: [vanityPlugin(vanityConfig)] })
 `)
   write(join(plainDir, 'index.html'), '<main id="app"></main><script type="module" src="/src/main.ts"></script>\n')
   write(join(plainDir, 'src/engine.ts'), `import { createSystem } from '@mszr/vanity'
@@ -228,13 +239,16 @@ import { palette } from './palette.tokens'
 
 export const ds = open.addTokens(palette).consolidate()
 `)
-  write(join(plainDir, 'src/card.css.ts'), `import { ds } from './system'
+  write(join(plainDir, 'src/authoring.ts'), `export { ds } from './system'
+`)
+  write(join(plainDir, 'src/card.css.ts'), `
 
 export const card = ds.class({ color: ds.t.color.brand, background: ds.t.color.brandSoft, padding: ds.length.rem(1) })
 `)
   write(join(plainDir, 'src/main.ts'), `import { VANITY_CSS_CAPABILITIES } from '@mszr/vanity/capabilities'
 import { card } from './card.css.ts'
 
+void ports()
 document.querySelector('#app')!.innerHTML = '<button class="' + card + '" data-color="' + VANITY_CSS_CAPABILITIES.oklch.maturity + '">Fresh Vite</button>'
 `)
 
@@ -246,9 +260,21 @@ document.querySelector('#app')!.innerHTML = '<button class="' + card + '" data-c
     devDependencies: { 'typescript': '5.8.3', 'vue-tsc': '3.2.0' },
   }, null, 2))
   write(join(nuxtDir, 'tsconfig.json'), '{ "extends": "./.nuxt/tsconfig.json" }\n')
-  write(join(nuxtDir, 'nuxt.config.ts'), `export default defineNuxtConfig({
+  write(join(nuxtDir, 'vanity.config.ts'), `import { defineVanityConfig } from '@mszr/vanity/config'
+
+export default defineVanityConfig({
+  compiler: {
+    system: './app/design/system.ts',
+    styleAutoImports: './app/design/authoring.ts',
+  },
+  app: { runtimeAutoImports: ['core', 'vue'] },
+})
+`)
+  write(join(nuxtDir, 'nuxt.config.ts'), `import vanityConfig from './vanity.config.ts'
+
+export default defineNuxtConfig({
   modules: ['@mszr/vanity/nuxt'],
-  vanity: { compiler: { system: '~/design/system.ts' } },
+  vanity: vanityConfig,
   devtools: { enabled: false },
   compatibilityDate: '2026-07-10',
   typescript: { tsConfig: { compilerOptions: { allowImportingTsExtensions: true } } },
@@ -272,7 +298,9 @@ import { palette } from './palette.tokens'
 
 export const ds = open.addTokens(palette).consolidate()
 `)
-  write(join(nuxtDir, 'app/app.css.ts'), `import { ds } from './design/system'
+  write(join(nuxtDir, 'app/design/authoring.ts'), `export { ds } from './system'
+`)
+  write(join(nuxtDir, 'app/app.css.ts'), `
 
 export const page = ds.class({ color: ds.t.color.brand, background: ds.t.color.brandSoft, padding: ds.length.rem(2) })
 `)
@@ -378,6 +406,7 @@ describe('packed consumer testing kit', () => {
   run('pnpm', ['--dir', testingDir, 'exec', 'vitest', 'run'])
   console.log('✓ fresh testing kit: packed emit/fold/render and Selenita DX')
 
+  run('pnpm', ['--dir', plainDir, 'exec', 'vanity', 'prepare'])
   run('pnpm', ['--dir', plainDir, 'exec', 'tsc', '--noEmit'])
   run('pnpm', ['--dir', plainDir, 'exec', 'vite', 'build'])
   run('pnpm', ['--dir', plainDir, 'exec', 'vanity', 'inspect'])
@@ -391,6 +420,7 @@ describe('packed consumer testing kit', () => {
   await smokeDev(plainDir, ['vite', '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort'], vitePort, /src\/main\.ts/)
   console.log('✓ fresh plain Vite: strict types, build, packed CLI/schema, and dev lifecycle')
 
+  run('pnpm', ['--dir', nuxtDir, 'exec', 'vanity', 'prepare'])
   run('pnpm', ['--dir', nuxtDir, 'exec', 'nuxt', 'prepare'])
   run('pnpm', ['--dir', nuxtDir, 'exec', 'nuxi', 'typecheck'])
   run('pnpm', ['--dir', nuxtDir, 'exec', 'nuxt', 'build'])
