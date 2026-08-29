@@ -6,7 +6,7 @@
 
 import type { ChildProcess } from 'node:child_process'
 import { execFileSync, spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
@@ -20,6 +20,11 @@ const root = mkdtempSync(join(tmpdir(), 'vanity-fresh-'))
 const plainDir = join(root, 'plain-vite')
 const nuxtDir = join(root, 'nuxt-app')
 const testingDir = join(root, 'testing-kit')
+
+/** Mirror the workspace's own pnpm pin so the fresh consumer matches the repo toolchain. */
+const rootPackageManager = (
+  JSON.parse(readFileSync(join(workspaceDir, 'package.json'), 'utf8')) as { packageManager?: string }
+).packageManager ?? 'pnpm'
 
 interface DevPort {
   anyHost?: boolean
@@ -180,7 +185,7 @@ async function main(): Promise<void> {
   const tarball = isAbsolute(tarballName) ? tarballName : join(root, tarballName)
   const packedDependency = `file:${tarball}`
 
-  write(join(root, 'package.json'), JSON.stringify({ private: true, packageManager: 'pnpm@11.8.0' }, null, 2))
+  write(join(root, 'package.json'), JSON.stringify({ private: true, packageManager: rootPackageManager }, null, 2))
   write(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - plain-vite\n  - nuxt-app\n  - testing-kit\n')
 
   write(join(plainDir, 'package.json'), JSON.stringify({
