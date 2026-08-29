@@ -1,7 +1,7 @@
 {
   "name": "@mszr/vanity",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A delightful design-system engine and TypeScript harness for CSS: typed systems and styling APIs in; standards-aligned CSS out.",
   "author": "Mares (https://github.com/mareszhar)",
   "license": "AGPL-3.0-only",
