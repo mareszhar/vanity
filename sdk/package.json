@@ -82,11 +82,12 @@
     }
   },
   "bin": {
-    "vanity": "./dist/cli.mjs"
+    "vanity": "./bin/vanity.mjs"
   },
   "files": [
     "LICENSE",
     "README.md",
+    "bin",
     "dist",
     "manifest.schema.json",
     "typescript.cjs"

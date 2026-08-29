@@ -73,7 +73,8 @@ export function assertManifest(value: unknown): asserts value is VanityManifest 
   }
 }
 
-async function main(args: readonly string[]): Promise<void> {
+/** Run the published CLI entrypoint from a launcher or directly. */
+export async function runVanityCli(args: readonly string[] = argv.slice(2)): Promise<void> {
   const [command = 'inspect', ...rest] = args
   if (command === '--help' || command === '-h') {
     printUsage()
@@ -176,7 +177,7 @@ function parsePrepareOptions(args: readonly string[]): { config?: string, root: 
 }
 
 if (argv[1] !== undefined && import.meta.url === pathToFileURL(realpathSync(argv[1])).href) {
-  main(argv.slice(2)).catch((error) => {
+  runVanityCli().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error))
     // eslint-disable-next-line node/prefer-global/process
     process.exitCode = exitCode ?? 1

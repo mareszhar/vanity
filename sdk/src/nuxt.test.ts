@@ -55,6 +55,7 @@ describe('nuxt auto-import integration', () => {
       .find(([options]) => options.filename === 'vanity-config.d.ts')?.[0]
     expect(template).toBeDefined()
     expect(template!.getContents()).toContain('Vanity\'s Nuxt adapter configuration')
+    expect(template!.getContents()).toContain('\nexport {}\n')
     expect(template!.getContents()).toContain(
       'type VanityNuxtConfigValue = Partial<import(\'@mszr/vanity/nuxt\').VanityNuxtOptions> | false',
     )

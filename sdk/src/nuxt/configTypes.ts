@@ -5,6 +5,8 @@
  */
 export function renderVanityNuxtConfigTypes(): string {
   return `
+export {}
+
 type VanityNuxtConfigValue = Partial<import('@mszr/vanity/nuxt').VanityNuxtOptions> | false
 
 declare module '@nuxt/schema' {

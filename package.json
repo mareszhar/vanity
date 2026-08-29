@@ -20,7 +20,7 @@
     "typecheck:validation": "pnpm run workspace:typecheck && turbo run typecheck --force",
     "workspace:typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "turbo run test --filter=@mszr/vanity",
-    "test:maintainer": "node --import tsx --test scripts/update-dependencies.test.ts",
+    "test:maintainer": "node --import tsx --test scripts/update-dependencies.test.ts scripts/package-contract.test.ts",
     "audit": "tsx scripts/audit.ts",
     "check:fast": "pnpm run lint && pnpm run workspace:typecheck && pnpm run sdk:typecheck && pnpm run sdk:test:fast",
     "check": "pnpm run clean:validation && pnpm run lint && pnpm run typecheck:validation && pnpm run docs:examples && pnpm run readme:check && pnpm run test && pnpm run test:maintainer && pnpm run audit && pnpm run bench:fixtures:check",
