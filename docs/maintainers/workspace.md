@@ -16,6 +16,7 @@ vanity/
   docs/                    canonical product and maintainer documentation
   scripts/                 audits, benchmarks, smoke tests, release tooling
   tests/                   browser and development integration tests
+  spikes/                  standalone probes of patterns, run before designing
   benchmarks/              generated scale fixtures and accepted baselines
   sandbox/
     fixtures/              shared comparison data
@@ -140,6 +141,21 @@ Repository browser tests live in `tests/`. They own cross-package evidence that 
 The permanent evidence policy is [testing.md](./testing.md). A feature is complete only when the relevant runtime, type, editor, output, integration, packaging, and performance claims are independently proven.
 
 Use `check:fast` while iterating and `check` before handing off non-browser work. `validate` remains the release-shaped gate: it deliberately pays for every canary, optimizer, browser, and development-lifecycle contract. The two levels differ in cadence, not standards; no release evidence was removed from the complete gate.
+
+### 5.1 Spikes
+
+A spike answers one question about what is *possible* before a design commits to it. It is not a test: tests defend behavior Vanity already has, while a spike measures the substrate — TypeScript, the bundler, the module system — to find out what a design may assume. `proven` in [docs/README.md](../README.md) means a pattern has isolated spike evidence behind it.
+
+Four rules keep spikes durable:
+
+1. **Substrate-agnostic.** A spike depends on TypeScript and its own fixtures, never on `@mszr/vanity`. A spike that imports the SDK expires when the SDK changes, which is exactly when its evidence would be most useful. Model Vanity's shape with local fixtures instead.
+2. **Observational, never prescriptive.** A spike reports what happened: what held, what failed, what a measurement establishes, and what it cannot show. Decisions about what Vanity should therefore do belong in a plan or a specification. A spike that carries a verdict outlives the reasoning that produced it and starts to read as policy.
+3. **Reproducible from a clean checkout.** `pnpm install --ignore-workspace` then `pnpm test`. A runner regenerates everything the root `.gitignore` excludes — `node_modules/`, `dist/`, `.vanity/` — so only authored fixture source is committed. Assert results against expectation rather than printing them for a human to interpret.
+4. **Named for its question, not its subject.** The directory says what was asked; the README's opening paragraph says why it was worth asking, and its verdict line answers it.
+
+A README carries: the question, how to run it, the setup, a results table, what the results establish and what they do not, and the footguns hit along the way. Cross-references to product code are welcome as context and should describe rather than cite paths, which rot.
+
+Spikes are permanent references, not scratch work. When a spike's finding still governs a design decision, [architecture.md](./architecture.md) links it.
 
 ## 6. Generated and local state
 
