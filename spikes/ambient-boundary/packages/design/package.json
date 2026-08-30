@@ -1,0 +1,9 @@
+{
+  "name": "@spike/design",
+  "type": "module",
+  "version": "1.0.0",
+  "exports": {
+    "./authoring": { "types": "./dist/authoring.d.ts", "import": "./dist/authoring.js" },
+    "./style-auto-imports": { "types": "./dist/style-auto-imports.d.ts", "import": "./dist/style-auto-imports.js" }
+  }
+}

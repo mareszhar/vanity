@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "rootDir": "./src",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": [],
+    "strict": true,
+    "declaration": true,
+
+    "outDir": "./dist",
+    "verbatimModuleSyntax": true
+  },
+  "files": ["./src/Button.css.ts"]
+}

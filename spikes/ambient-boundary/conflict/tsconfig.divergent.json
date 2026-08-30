@@ -1,0 +1,1 @@
+{ "extends": "../tsconfig.base.json", "files": ["./style.d.ts", "./divergent.d.ts", "./main.ts"] }

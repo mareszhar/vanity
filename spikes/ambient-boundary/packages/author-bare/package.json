@@ -1,0 +1,6 @@
+{
+  "name": "@spike/author-bare",
+  "type": "module",
+  "version": "1.0.0",
+  "exports": { "./Button.css": "./src/Button.css.ts" }
+}

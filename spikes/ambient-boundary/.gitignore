@@ -1,0 +1,4 @@
+node_modules/
+packages/design/dist/
+host-generating/.vanity/
+emit-check/dist/

@@ -1,0 +1,6 @@
+{
+  "name": "@spike/author-unlocked",
+  "type": "module",
+  "version": "1.0.0",
+  "exports": { "./Button.css": "./src/Button.css.ts" }
+}

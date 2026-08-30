@@ -1,0 +1,12 @@
+{
+  "name": "spike-ambient-boundary",
+  "type": "module",
+  "private": true,
+  "description": "Agnostic TS spike: can a generated ambient auto-import declaration travel with SOURCE across a package boundary? Probes the type-only unlock import, host/package declaration collision, and const-vs-var redeclaration semantics.",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}
