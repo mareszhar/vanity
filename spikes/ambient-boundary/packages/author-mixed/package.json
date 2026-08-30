@@ -1,0 +1,9 @@
+{
+  "name": "@spike/author-mixed",
+  "type": "module",
+  "version": "1.0.0",
+  "exports": {
+    "./Explicit.css": "./src/Explicit.css.ts",
+    "./Unlocked.css": "./src/Unlocked.css.ts"
+  }
+}

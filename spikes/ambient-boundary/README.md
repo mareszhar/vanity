@@ -30,6 +30,7 @@ packages/design            publishes ./authoring (the barrel) and
 
 packages/author-unlocked   ships SOURCE; bare `cls`/`t` + one type-only unlock import
 packages/author-bare       ships SOURCE; bare `cls`/`t`, no unlock import   (control)
+packages/author-mixed      ships SOURCE; one explicit-import file beside one unlock file
 
 consumer/                  re-exports the authoring package. No vanity config, no
                            types entry, no devDependency — the innocent middle package.
@@ -52,6 +53,7 @@ emit-check/                the unlock import under verbatimModuleSyntax, with em
 | T6 two `var` declarations, same name, **divergent** types | `var` | `TS2403`, naming both types |
 | T7 two `var` declarations, same name, **identical** type | `var` | clean |
 | T8 unlock import under `verbatimModuleSyntax`, with real emit | `const` | clean; fully elided |
+| T9 consumer of a package whose files mix explicit-import and unlock styles | `const` | clean |
 
 ### 1. The unlock import works, and costs nothing at runtime
 
@@ -60,6 +62,8 @@ T1 against T2 is the whole finding: one line in the authoring package removes th
 T8 confirms the line survives `verbatimModuleSyntax` and is erased from emit: the emitted JS is `export const button = cls({ color: t.color.brand });` with no trace of the import, and the emitted `.d.ts` is a clean `export declare const button: string`.
 
 That emitted JS also makes the division of labour explicit: **the unlock import fixes only the type half.** The value half is unchanged — the building host's compiler still injects the real import when it evaluates the `*.css.ts`. An intermediate consumer only ever typechecks the file, which is exactly why types alone are enough for it.
+
+T9 adds that the choice is **per file, not per package**: one package holding an explicit-import file beside an unlock file compiles clean in an unconfigured consumer, because each file carries its own answer to where its names come from.
 
 ### 2. `const` is the reason declarations cannot compose
 

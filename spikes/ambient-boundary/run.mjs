@@ -60,7 +60,7 @@ function generate(keyword) {
   write('host-generating/.vanity/types/style-auto-imports.d.ts', ambientDeclaration(keyword))
 
   mkdirSync(at('node_modules/@spike'), { recursive: true })
-  for (const name of ['design', 'author-unlocked', 'author-bare']) {
+  for (const name of ['design', 'author-unlocked', 'author-bare', 'author-mixed']) {
     const link = at(`node_modules/@spike/${name}`)
     if (!existsSync(link))
       symlinkSync(resolve(root, 'packages', name), link, 'dir')
@@ -85,6 +85,7 @@ const cases = [
   ['var', 'host-generating/tsconfig.json', true, 'T5  T3 again, with both declarations emitted as `var`'],
   ['var', 'conflict/tsconfig.divergent.json', false, 'T6  two `var` declarations, same name, divergent types'],
   ['var', 'conflict/tsconfig.identical.json', true, 'T7  two `var` declarations, same name, identical type'],
+  ['const', 'consumer/tsconfig.mixed.json', true, 'T9  consumer of a package mixing explicit-import and unlock files'],
 ]
 
 let failed = 0
