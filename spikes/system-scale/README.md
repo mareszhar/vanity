@@ -50,9 +50,11 @@ Each generated chain models a real system build, not a synthetic ladder:
 | **SC3** | additive-only still errors at the cursor at scale, naming `'g0.f0'` |
 | **SC4** | an unmet requirement still collapses to the readable message at scale |
 
-## Load-bearing rules
+## The load-bearing properties
 
-Use plain-intersection accumulation with `Simplify` deferred to read sites and guards by intersection. Keep periodic `derive` reads in benchmarks: every `derive` performs a full `Simplify` read of the accumulation, and a chain with zero reads understates real cost.
+Plain-intersection accumulation with `Simplify` deferred to read sites, and guards by intersection, are what hold at this scale; the alternatives degrade as measured above.
+
+A benchmark without periodic `derive` reads understates real cost: every `derive` performs a full `Simplify` read of the accumulation, so a chain with zero reads measures something cheaper than the pattern it claims to measure.
 
 ## Product guard
 

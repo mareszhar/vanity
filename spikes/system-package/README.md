@@ -38,15 +38,15 @@ pnpm run measure    # the profile sweep (M → XL), lib emit + app check per pro
 - **d.ts size is linear and unremarkable** (~1.9KB per group at this field width), and the two export styles cost roughly the same bytes (21.1KB naive vs 24.1KB portable at M — flattening spells the same fields).
 - **Consumer DX from the d.ts alone is intact** (selenita, all green): completions across the token tree (first group, last group, plugin-provided groups), deep branched reads, helpers, and the portable read-back — with the app resolving nothing but `lib/dist`.
 
-## The rule to carry into the product
+## What the measurements establish
 
-**Publish the portable form.** Not for size or for correctness — both forms work — but because the boundary type is a _read surface_:
+**The two export forms differ in how they read, not in whether they work.** Size and correctness separate them barely or not at all; what separates them is what a consumer sees:
 
-1. hover on the naive export shows an N-way intersection chain; the portable export shows one object type (the §12.2 hover bar, applied at the boundary);
-2. the portable surface contains no builder methods, guard brands, or accumulation machinery — nothing internal can leak into consumer docs;
-3. alias evaluation at emit means zero type-only runtime deps for consumers.
+1. hover on the naive export shows an N-way intersection chain; the portable export shows one object type;
+2. the portable form exposes no builder methods, guard brands, or accumulation machinery, so nothing internal can reach consumer documentation;
+3. alias evaluation at emit means a consumer inherits no type-only runtime dependency.
 
-This is the "defer `Simplify` to read-sites" rule from spikes/type-accumulation extended one level: **a package boundary is a read-site.**
+The generalization these measurements support is that **a package boundary behaves as a read-site** — the same property spikes/type-accumulation observed for hover, holding one level further out.
 
 ## Footguns encountered
 

@@ -32,11 +32,11 @@ The branched (R1) shape does **not** compound the depth problem: an 80-link chai
 
 ## Product guard
 
-The product model carries the same guard in `sdk/src/system/openSystem.scale.test-d.ts`: 80 immutable open-system links, two independently consolidated forks, first/last accumulated reads, and no TS2589. `sdk/src/system/openSystem.test.ts` additionally materializes 32 locked forks from one base and proves their names and constants stay isolated.
+An equivalent guard runs in the product's own type tests: 80 immutable open-system links, two independently consolidated forks, first/last accumulated reads, and no TS2589 — alongside 32 locked forks materialized from one base, holding their names and constants isolated.
 
-## The two rules that make it work
+## The two properties that make it work
 
-**1. Accumulate by plain intersection; defer `Simplify` to read-sites.** The intuitive way to keep hovers clean is `Simplify<Omit<S, k> & { … }>` at every step. It explodes into `TS2589` ("excessively deep") at ~40 links. Accumulate as a plain `S & Record<N, …>` on one type param and only `Simplify` where a human reads the type (callback params, the locked surface):
+**1. Plain-intersection accumulation scales; per-step `Simplify` does not.** The intuitive way to keep hovers clean is `Simplify<Omit<S, k> & { … }>` at every step. It explodes into `TS2589` ("excessively deep") at ~40 links. Accumulating as a plain `S & Record<N, …>` on one type param, with `Simplify` applied only where a human reads the type (callback params, the locked surface), does not:
 
 ```
 kind   N    TS2589?  instantiations
@@ -48,9 +48,9 @@ lean   80   no       8656
 lean   150  no       26716          ← still fine, ~0.12s
 ```
 
-**1b. Guard by INTERSECTION when the parameter carries callbacks.** A wrapping conditional (`[Dup] extends [never] ? Mapped : Msg`) type-checks but defeats contextual typing for callback-valued fields. Intersect instead: `Mapped & Brand`, where `Brand` is `unknown` when clean. The mapped type stays primary, callbacks keep their types, and a collision still errors on the exact argument. Cost: a slightly noisier "property is missing" line alongside the named message.
+**1b. Intersection guards preserve contextual typing; wrapping conditionals do not.** A wrapping conditional (`[Dup] extends [never] ? Mapped : Msg`) type-checks but defeats contextual typing for callback-valued fields. Intersecting instead — `Mapped & Brand`, where `Brand` is `unknown` when clean — keeps the mapped type primary, callbacks keep their types, and a collision still errors on the exact argument. Cost: a slightly noisier "property is missing" line alongside the named message.
 
-**2. Surface requirement failures by collapsing the parameter type to the message.** When a requirement is unmet, make the argument's expected type _be_ the message string. The compiler then prints:
+**2. Collapsing the parameter type to the message makes requirement failures legible.** When a requirement is unmet and the argument's expected type _is_ the message string, the compiler prints:
 
 > Argument of type `Contribution<…>` is not assignable to parameter of type `"group 'color' is missing field(s): ink"`.
 

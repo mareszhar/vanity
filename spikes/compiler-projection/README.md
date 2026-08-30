@@ -77,17 +77,17 @@ One hash cannot drive every cache:
 
 Physical source paths and function object identity never participate in compatibility. That is what lets duplicate installed package instances collapse to one runtime module while still being different JavaScript objects when imported directly.
 
-## Rules to carry into implementation
+## What the probe establishes
 
-1. **`consolidate()` emits nothing.** It resolves names, references, policies, metadata, and identities, then returns an immutable contract. A plain tool import must not require compiler state or create files.
-2. **Lower closures before the portable boundary.** Build extensions execute in the worker. Browser and SSR virtual modules are generated only from portable data; source-module tree-shaking is not a sufficient security boundary.
-3. **Deduplicate by artifact identity, not source path or object reference.** Runtime modules use compatibility + runtime identity; CSS uses CSS identity.
-4. **Keep system CSS separate from module CSS in the graph.** System CSS deduplicates while module CSS stays eligible for lazy splitting.
-5. **Make the prelude a host-owned first asset.** Import order cannot guarantee first occurrence when lazy chunks and independently built systems exist.
-6. **Track attempted transforms and their dependency graphs, including failed transforms.** A failed entry may not remain discoverable through Vite's module graph, but it still needs invalidation and a fresh retry.
-7. **Retain the last good artifacts across an error.** Do not rewrite CSS or the manifest with half-built state. The fixed change replaces them atomically on the next successful evaluation.
-8. **Write artifacts only when bytes change.** Content-addressed filenames are not enough: an unconditional rewrite still creates noisy mtimes and watchers.
-9. **A precompiled package has two useful outputs.** Full Node/build JS preserves build closures for downstream style compilation; the adjacent portable JSON artifact lets consumers project without executing that JS in client/SSR graphs.
+1. **Consolidation can emit nothing.** Resolving names, references, policies, metadata, and identities into an immutable contract is sufficient; no compiler state or file creation is required for a plain tool import to work.
+2. **Closures must be lowered before the portable boundary.** Build extensions execute in the worker, and browser/SSR virtual modules generated only from portable data stay clean — source-module tree-shaking alone does not hold as a security boundary.
+3. **Deduplication is correct on artifact identity and incorrect on source path or object reference.** Runtime modules deduplicate on compatibility + runtime identity; CSS on CSS identity.
+4. **System CSS and module CSS have different graph requirements.** System CSS deduplicates; module CSS stays eligible for lazy splitting. Merging them loses one property or the other.
+5. **Import order cannot guarantee first occurrence** once lazy chunks and independently built systems exist, so a prelude only lands first when the host owns it as an asset.
+6. **A failed transform can disappear from Vite's module graph** while still needing invalidation and retry, so attempted transforms and their dependency graphs must be tracked separately from successful ones.
+7. **Half-built state is recoverable only if last-good artifacts survive the error** and are replaced atomically on the next successful evaluation.
+8. **Content-addressed filenames do not prevent noisy writes.** An unconditional rewrite still churns mtimes and watchers; only a byte comparison avoids it.
+9. **A precompiled package has two independently useful outputs.** Full Node/build JS preserves build closures for downstream style compilation; an adjacent portable JSON artifact lets consumers project without executing that JS in client/SSR graphs.
 
 ## Footguns found
 
