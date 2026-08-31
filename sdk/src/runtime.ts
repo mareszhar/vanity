@@ -111,9 +111,19 @@ export function restoreAtoms(runtime: VanityAtomsRuntime): VanityAtoms<Record<st
  */
 export function restoreStyleAuthoringStub(meta: { name: string }): () => never {
   return () => {
+    const remedy = meta.name === 'class'
+      ? 'Use the generated class export in application modules.'
+      : meta.name === 'rules'
+        ? 'Import the style module for its emitted CSS in application modules.'
+        : meta.name === 'introspect'
+          ? 'Use ds.introspect() in a system module, or consume the generated manifest.'
+          : 'Use ds.runtime() in application modules, or consume serialized style exports.'
+    const location = meta.name === 'introspect'
+      ? 'introspect belongs in a system module.'
+      : `${meta.name} belongs in a *.css.ts style module.`
+
     throw new Error(
-      `[vanity] VANITY_STYLE_MODULE_MISUSE: ${meta.name} belongs in a *.css.ts style module. `
-      + 'Use ds.runtime() in application modules, or consume serialized style exports.',
+      `[vanity] VANITY_STYLE_MODULE_MISUSE: ${location} ${remedy}`,
     )
   }
 }

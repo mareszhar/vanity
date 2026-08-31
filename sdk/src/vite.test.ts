@@ -283,6 +283,8 @@ export const ds = open
     await writeFile(join(root, 'entry.ts'), `import { ds } from './system'
 export const token = ds.t.space.sm
 export const className = ds.class
+export const rules = ds.rules
+export const introspect = ds.introspect
 export const runtime = ds.runtime
 `)
 
@@ -305,7 +307,15 @@ export const runtime = ds.runtime
 
     expect(bundle.token()).toBe('var(--app-space-sm)')
     expect(typeof bundle.runtime).toBe('function')
-    expect(() => bundle.className({})).toThrow('VANITY_STYLE_MODULE_MISUSE: class belongs in a *.css.ts style module')
+    expect(() => bundle.className({})).toThrow(
+      '[vanity] VANITY_STYLE_MODULE_MISUSE: class belongs in a *.css.ts style module. Use the generated class export in application modules.',
+    )
+    expect(() => bundle.rules({})).toThrow(
+      '[vanity] VANITY_STYLE_MODULE_MISUSE: rules belongs in a *.css.ts style module. Import the style module for its emitted CSS in application modules.',
+    )
+    expect(() => bundle.introspect()).toThrow(
+      '[vanity] VANITY_STYLE_MODULE_MISUSE: introspect belongs in a system module. Use ds.introspect() in a system module, or consume the generated manifest.',
+    )
   })
 
   it('writes the manifest beside the CSS — .vanity/manifest.json, versioned', async () => {
