@@ -48,7 +48,7 @@ describe('runtime types', () => {
     runtime.axes.motion.$switchTo('none')
     // @ts-expect-error — mode names come from the chosen axis
     runtime.axes.density.$switchTo('cozy')
-    // @ts-expect-error — plane-neutral handles never imply a target
+    // @ts-expect-error — context-shared handles never imply a DOM target
     ds.t.color.brand.$set('red')
     // @ts-expect-error — nonmutable runtime handles stay read-only
     runtime.t.color.fixed.$set('red')

@@ -1,5 +1,5 @@
 /**
- * The output-plane harness: run a style-module body in-process against the
+ * The output-evidence harness: run a style-module body in-process against the
  * vanilla-extract substrate and return the CSS it emitted — the same adapter +
  * transform pipeline the real compiler drives, without a bundler in the loop.
  */

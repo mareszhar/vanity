@@ -16,6 +16,8 @@ The numbered laws below make that north star operational. None outranks it; none
 
 CSS owns CSS vocabulary. Vanity uses a CSS name only for the platform concept exactly; algorithmic relatives receive distinct names.
 
+A base term preserves the same useful inference everywhere it appears. Qualifiers may specialize that inference by domain, owner, state, representation, or relation; they may not rescue unrelated meanings. Natural reuse is welcome when the relation transfers—for example, system host and build host.
+
 | Form | Meaning |
 | --- | --- |
 | `create*` | create an API kit |
@@ -24,7 +26,7 @@ CSS owns CSS vocabulary. Vanity uses a CSS name only for the platform concept ex
 | `augment*` | fill an unset slot on registered data |
 | `overwrite*` | explicitly replace existing data values without shrinking shape |
 | `consolidate` | resolve and lock an open system |
-| `expect*` | require host-provided shape |
+| `expect*` | require externally supplied shape without claiming ownership |
 | `*dec` | produce CSS declaration data |
 | `$*` | Vanity-owned member sharing a namespace with user keys |
 
@@ -53,13 +55,13 @@ Compatibility survives every composition boundary. A logical, locked, mutable, o
 
 Relative channel operations are immutable typed expressions. Chaining `channel.subtract(pivot).multiply(-1000)` preserves the channel's data type, dependencies, liveness, support requirements, and source provenance.
 
-Every property lane also accepts CSS-wide keywords: `initial`, `inherit`, `unset`, `revert`, and `revert-layer`. Typed helpers may add other grammar-specific keywords such as `none`. A parity matrix, not per-parser folklore, enforces this.
+Every property position also accepts CSS-wide keywords: `initial`, `inherit`, `unset`, `revert`, and `revert-layer`. Typed helpers may add other grammar-specific keywords such as `none`. A parity matrix, not per-parser folklore, enforces this.
 
 ## 3. Context law
 
 A top-level export must satisfy all three:
 
-1. its authored meaning is portable, even if a host policy resolves an intentionally abstract choice later;
+1. its authored meaning is portable, even if system-host policy resolves an intentionally abstract choice later;
 2. its family is closed to user extension;
 3. it describes data resolved at a contextual use site instead of emitting or mutating state.
 
@@ -90,7 +92,7 @@ A policy is system-wide law, not an option bag or a way for plugins to mutate th
 
 - conformance policies adapt unresolved values at the system boundary;
 - restriction policies attach diagnostics and never subtract API shape;
-- portable values acquire host policy when mounted/consolidated;
+- portable values acquire system-host policy when mounted/consolidated;
 - bound values expose restriction diagnostics immediately;
 - prospective enforcement covers contributions after the restriction;
 - retroactive enforcement scans the complete graph;
@@ -107,7 +109,7 @@ Policy groups are additive shape. Overwrite is explicit value replacement. Every
 Three distinct operations remain distinct:
 
 - `add*` requires absence;
-- `augment*` requires presence and an unset destination slot;
+- `augment*` requires presence and an unset target slot;
 - `overwrite*` requires presence and may replace values or grow shape, but never shrink it.
 
 Plugins cannot overwrite. Only the user's visible open-system chain has `overwrite*`.
@@ -125,17 +127,18 @@ Atomic data has no `augment` verb. Functions and constructors have no `overwrite
 
 Utility namespaces merge recursively, but duplicate leaves and namespace/function collisions fail at the complete path.
 
-## 6. Lifecycle law
+## 6. State and handle law
 
-One semantic handle gains capabilities across phases:
+Semantic subjects retain identity across contexts; their handles do not become one travelling object.
 
-| Phase | Token handle capability |
+| Context | Token interface |
 | --- | --- |
-| open system | logical path, type, traits, provenance |
-| locked system | resolved name, `var()`, value preview, emission metadata |
-| runtime | `$set`/`$unset` on mutable addresses |
+| open system | logical token handle: path, type, traits, provenance |
+| locked/build context | resolved token handle: final name, `var()`, value preview, emission metadata |
+| application/SSR context | restored token handle reconstructed from portable data |
+| runtime controller | token control with `$set`/`$unset` on mutable addresses |
 
-Stage misuse receives a designed message with the correct sibling API. It never falls through to `undefined is not a function`.
+Each subject has its own state model. System states are open and locked; runtime control is a projection from a locked contract, not a third universal system phase. Context misuse receives a designed message with the correct sibling API. It never falls through to `undefined is not a function`.
 
 ## 7. CSS preservation law
 
@@ -149,7 +152,7 @@ Styling arrays are ordered contribution sequences, not deep merges. They preserv
 
 CSS cascade semantics decide collisions after lowering. JavaScript object-spread semantics never silently erase conditional siblings in the canonical array form.
 
-Named system rule groups are system-owned contributions. They emit once, order by layer and then registration order (with explicit `order` as an escape), retain metadata/provenance, and remain selectable/introspectable before lowering.
+Named system rules are system-owned contributions. They emit once through the compiler, order by layer and then registration order (with explicit `order` as an escape), retain metadata/provenance, and remain selectable/introspectable before lowering. Their rule input may contain nested selector rules and at-rules.
 
 ## 9. Ownership law
 
@@ -160,7 +163,7 @@ Named system rule groups are system-owned contributions. They emit once, order b
 - A layer decides cascade precedence.
 - The compiler owns emission.
 - The browser owns live cascade and inheritance.
-- A plugin owns only axes and rule/util/constructor shape it explicitly adds; `expect*` names host-owned dependencies honestly.
+- A plugin owns only axes and rule/util/constructor shape it explicitly adds; `expect*` names externally supplied dependencies honestly without claiming ownership.
 
 No API blurs these lifetimes for convenience.
 
@@ -189,12 +192,12 @@ Authored facts are recorded once and projected into tokens, declarations, styles
 
 Built-ins dogfood public contracts. Plain functions are the default extension mechanism. Plugins exist for structural requirements, registered namespaces, identities, and portable/compiler participation.
 
-Detached modules are the unit of portable authored data. A callable constructor family may expose any typed call-like members; those members are build-plane closures and must lower before the portable boundary. Plugins use the same public modules, policies, rules, requirements, and constructors as users—there are no private capability escape hatches.
+Detached modules are the unit of portable authored data. A callable constructor family may expose any typed call-like members; those members are build-only closures and must lower before the portable-contract boundary. Plugins use the same public modules, policies, rules, requirements, and constructors as users—there are no private capability escape hatches.
 
-Closures may exist only in the in-process build contract. They are executed or lowered before the portable artifact boundary.
+Closures may exist only in the in-process build contract. They are executed or lowered before the portable-contract boundary; a portable artifact is the materialized JSON form of that contract.
 
 ## 13. Evidence law
 
-Every feature is proven on every relevant plane: runtime, type, editor, output, conformance, browser, integration, packaging, introspection, documentation, and performance.
+Every feature is proven on every relevant dimension: runtime, type, editor, output, conformance, browser, integration, packaging, introspection, documentation, and performance.
 
-No plane stands in for another. Release evidence matches the behavior it claims.
+No dimension stands in for another. Release evidence matches the behavior it claims.

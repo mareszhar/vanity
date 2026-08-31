@@ -8,9 +8,10 @@ This register records choices that cross more than one specification. Domain spe
 | --- | --- |
 | Vanity is a design-system engine and TypeScript harness for CSS. | CSS remains the semantic authority; Vanity adds structure, inference, and diagnostics. |
 | CSS-owned concepts use CSS names and semantics. Vanity coins names only for concepts CSS does not own. | Readers and tools do not translate between competing dialects. |
+| A base term must preserve one transferable inference; qualifiers specialize it by domain, owner, state, role, or representation. | Readers can reuse learned meaning without forcing unrelated concepts into one taxonomy. |
 | `$` fences Vanity members only on user-shaped namespaces. | Tokens, axes, and modes keep ordinary names without risking member collisions. |
 | Compatible token handles are values wherever their CSS data type is accepted. | Authors never build `var()` adapters by hand. |
-| CSS-wide keywords work in every applicable declaration lane. | A helper cannot narrow the platform grammar by accident. |
+| CSS-wide keywords work in every applicable declaration form. | A helper cannot narrow the platform grammar by accident. |
 
 ## System and types
 
@@ -18,7 +19,7 @@ This register records choices that cross more than one specification. Domain spe
 | --- | --- |
 | `createSystem()` returns an immutable open system; `consolidate()` returns an immutable locked system. | One system grows additively, then gains resolved styling and runtime capabilities. |
 | `add`, `augment`, `overwrite`, and `expect` have distinct contracts. | Names, ownership, and error repair remain explicit. |
-| Token handles preserve one semantic identity across open, locked, and runtime forms. | Values, runtime addresses, manifests, and explanations stay connected. |
+| Logical, resolved, restored, and runtime-control handles are contextual interfaces to one semantic subject. | Values, runtime addresses, manifests, and explanations stay connected without claiming one JavaScript object travels across environments. |
 | Accumulated types use intersections and simplify at read boundaries. | Large systems retain readable hovers and practical type-checking cost. |
 | A package boundary is a read boundary. | Published declarations expose a legible locked surface without builder machinery. |
 
@@ -27,10 +28,10 @@ This register records choices that cross more than one specification. Domain spe
 | Decision | Why it matters |
 | --- | --- |
 | `consolidate()` is pure and emission-free. | Plain TypeScript, SSR, and tools import system modules without compiler state or I/O. |
-| The compiler owns CSS and portable projection. | Build closures remain in the build plane; browser and SSR modules contain data-only projections. |
+| The compiler owns CSS and portable projection. | Build-only closures remain in the in-process contract; browser and SSR modules contain data-only projections. |
 | Compatibility, CSS, runtime, and documentation identities are separate. | Each consumer invalidates only for the change that affects it. |
 | System CSS and style-module CSS are separate virtual modules. | System CSS deduplicates while component CSS preserves lazy splitting. |
-| CSS namespace ownership is stricter than runtime compatibility. | Compatible facades never mask colliding emitted CSS. |
+| CSS namespace ownership is stricter than runtime compatibility. | Compatible runtime controllers never mask colliding emitted CSS. |
 | Artifacts are atomic, last-good, byte-stable, and write-on-change. | Errors do not publish partial state or create watcher noise. |
 
 ## Styling and runtime
@@ -38,8 +39,8 @@ This register records choices that cross more than one specification. Domain spe
 | Decision | Why it matters |
 | --- | --- |
 | Styling inputs are ordered contributions, not deep-merged objects. | Repeated declarations, fallbacks, fragments, and conditions remain lossless. |
-| Emitters name their output: `class`, `fragment`, `rules`, `raw`, `tdec`, `recipe`, `anatomy`, and `atoms`. | The API tells readers what it produces. |
-| Raw CSS remains an explicit standards lane. | Typed support never creates a capability cliff. |
+| `fragment`, `tdec`, and `port.dec` produce style data; `class`, `rules`, `raw`, `recipe`, `anatomy`, `atoms`, `keyframes`, and `fontFace` emit styles. | The taxonomy reflects actual output effects rather than call-site similarity. |
+| Raw CSS remains an explicit standards form. | Typed support never creates a capability cliff. |
 | Conditions are typed AST values; axes declare ordered alternatives. | Selector, at-rule, precedence, locality, and runtime activation stay inspectable. |
 | Mutable tokens and ports solve different lifetimes. | System decisions use runtime token slots; component inputs use component-owned custom properties. |
 | Runtime transactions validate before the first write; snapshots use semantic addresses. | Dynamic state stays truthful across SSR, HMR, and schema evolution. |
@@ -53,6 +54,17 @@ This register records choices that cross more than one specification. Domain spe
 | Introspection, manifest, diagnostics, audit, DTCG, and CLI derive from one semantic record. | Humans and agents receive one consistent explanation surface. |
 | Hover text, completion, TSDoc, and diagnostics are tested API behavior. | The cursor is part of the product, not a secondary presentation. |
 | Evidence spans types, emitted CSS, browsers, packages, tooling, and performance. | A green result proves the relevant user-visible behavior. |
+
+## Language-refactor compatibility
+
+| Decision | Why it matters |
+| --- | --- |
+| This pre-1.0 language refactor uses hard public renames with no deprecated aliases. | One release presents one coherent language; aliases would keep the rejected model alive. |
+| Structured diagnostic `VANITY_STYLE_DESTINATION_MISUSE` becomes `VANITY_STYLE_MODULE_MISUSE`. | The code names the violated module role; diagnostic codes are otherwise stable API. |
+| Runtime-object types use `VanityRuntimeController*`; auto-import configuration uses `VanityAutoImportRouting`. | Public type names describe purpose and relation rather than implementation shape or a false destination taxonomy. |
+| `vanity.system/1`, manifest protocols, snapshot protocols, `VanityPortableSystemV1`, and the serialized `ruleGroups` field do not change in this refactor. | A language cleanup does not silently mutate a versioned data contract. A future schema change must use a new discriminator/version. |
+| Public rule authoring remains `defineRules`, `addRule(s)`, `overwriteRule(s)`, `expectRule(s)`, and `ds.rules`. | Nesting is an expressibility capability, not a reason to introduce an awkward `RuleGroup` authoring family. |
+| The public input types are `VanitySystemRule` and `HailSystemRules`; only existing versioned schemas retain `ruleGroups`/`'rule-group'`. | User-facing names follow the rule API while serialized compatibility remains explicit. |
 
 ## Deliberate boundaries
 

@@ -31,7 +31,7 @@ const autoImportProject = defineVanityProject({
       export const t = ds.t
       export const css = ds.class
     `,
-    'style-auto-imports.d.ts': styleAutoImportDeclarations('./authoring.ts', ['ds', 't', 'css']),
+    'vanity-style-auto-imports.d.ts': styleAutoImportDeclarations([{ from: './authoring.ts', imports: ['ds', 't', 'css'] }]),
   },
 })
 
@@ -89,10 +89,10 @@ const ENTRYPOINT_VALUES = {
     'ports',
     'restoreAnatomy',
     'restoreAtoms',
-    'restoreBuildPlane',
+    'restoreStyleAuthoringStub',
     'restorePort',
     'restoreRecipe',
-    'restoreRuntimeFactory',
+    'restoreRuntimeControllerFactory',
     'restoreRuntimeProps',
     'restoreRuntimeReconciler',
     'restoreRuntimeStyle',
@@ -103,7 +103,7 @@ const ENTRYPOINT_VALUES = {
   ],
   imports: [
     'vanityCoreAutoImports',
-    'vanityRuntimeAutoImportPresets',
+    'vanityAppAutoImportPresets',
     'vanityVueAutoImports',
   ],
   config: ['defineVanityConfig'],
@@ -132,6 +132,7 @@ const ENTRYPOINT_VALUES = {
   ],
   vue: ['propsOf', 'useAnatomy', 'usePorts'],
   nuxt: ['default'],
+  wxt: ['default'],
   presets: ['hail'],
   cli: ['assertManifest', 'explainManifestPath', 'inspectManifest', 'readManifest'],
   prepare: ['loadVanityConfig', 'planAutoImportDeclarations', 'writeAutoImportDeclarations'],
@@ -164,7 +165,7 @@ const CORE_CANONICAL_TYPES = [
   'VanityProps',
   'VanityRecipe',
   'VanityRuleInput',
-  'VanityRuntimeFactory',
+  'VanityRuntimeControllerFactory',
   'VanityStyleValue',
   'VanitySystemMapV1',
   'VanitySystemPlugin',
@@ -184,7 +185,7 @@ const TESTING_CANONICAL_TYPES = [
   'VanityRenderTarget',
 ] as const
 
-describe('public Phase 11 editor contract', () => {
+describe('public editor contract', () => {
   it('prewires a real Vanity system without fixture boilerplate', () => {
     const result = project.query`
       import { ds } from '#vanity/system'
@@ -223,6 +224,7 @@ describe('public Phase 11 editor contract', () => {
       import * as vite from '@mszr/vanity/vite'
       import * as vue from '@mszr/vanity/vue'
       import * as nuxt from '@mszr/vanity/nuxt'
+      import * as wxt from '@mszr/vanity/wxt'
       import * as presets from '@mszr/vanity/presets'
       import * as cli from '@mszr/vanity/cli'
       import * as prepare from '@mszr/vanity/prepare'
@@ -234,6 +236,7 @@ describe('public Phase 11 editor contract', () => {
       void vite.${cursor('vite')}
       void vue.${cursor('vue')}
       void nuxt.${cursor('nuxt')}
+      void wxt.${cursor('wxt')}
       void presets.${cursor('presets')}
       void cli.${cursor('cli')}
       void prepare.${cursor('prepare')}
@@ -358,56 +361,56 @@ describe('public Phase 11 editor contract', () => {
         compiler: {
           ${cursor('compiler')}
         },
-        app: {
-          ${cursor('app')}
+        autoImports: {
+          ${cursor('autoImports')}
         },
       })
       defineVanityConfig({
         c${cursor('configCompiler')}ompiler: {},
-        a${cursor('configApp')}pp: {},
+        a${cursor('configAutoImports')}utoImports: {},
       })
       vanityPlugin({
         compiler: {
           ${cursor('viteCompiler')}
         },
-        app: {
-          ${cursor('viteApp')}
+        autoImports: {
+          ${cursor('viteAutoImports')}
         },
       })
       vanityPlugin({
         c${cursor('viteConfigCompiler')}ompiler: {},
-        a${cursor('viteConfigApp')}pp: {},
+        a${cursor('viteConfigAutoImports')}utoImports: {},
       })
       vanityPlugin({
         compiler: {
           s${cursor('viteSystem')}ystem: './src/system.ts',
-          st${cursor('viteStyle')}yleAutoImports: false,
         },
-        app: {
-          r${cursor('viteRuntime')}untimeAutoImports: ['core'],
+        autoImports: {
+          st${cursor('viteStyle')}yle: '$system',
+          a${cursor('viteApp')}pp: ['core'],
         },
       })
       defineVanityConfig({
         compiler: {
           s${cursor('system')}ystem: './src/system.ts',
-          st${cursor('styleAutoImports')}yleAutoImports: false,
         },
-        app: {
-          r${cursor('runtimeAutoImports')}untimeAutoImports: ['core'],
+        autoImports: {
+          st${cursor('style')}yle: '$system',
+          a${cursor('app')}pp: ['core'],
         },
       })
       defineVanityConfig({
-        compiler: {
-          styleAutoImports: {
+        autoImports: {
+          style: {
             ${cursor('styleOptions')}
           },
-          system: {
-            ${cursor('systemOptions')}
+          app: {
+            ${cursor('appOptions')}
           },
         },
-        app: {
-          runtimeAutoImports: {
-            ${cursor('runtimeOptions')}
+        compiler: {
+          system: {
+            ${cursor('systemOptions')}
           },
         },
       })
@@ -418,33 +421,32 @@ describe('public Phase 11 editor contract', () => {
         expect(result.at(at).completionItem(name)?.documentation, `${at}:${name}`).not.toBe('')
     }
 
-    expect(result.at('root').completionItem('compiler')?.documentation).toContain('Build-plane')
-    expect(result.at('root').completionItem('app')?.documentation).toContain('Application-plane')
+    expect(result.at('root').completionItem('compiler')?.documentation).toContain('Compiler')
+    expect(result.at('root').completionItem('autoImports')?.documentation).toContain('module roles')
     expectDocumented('compiler', [
       'identifiers',
       'unstableMode',
-      'styleAutoImports',
       'system',
       'layerOrder',
       'artifactDirectory',
       'diagnostics',
     ])
-    expectDocumented('app', ['runtimeAutoImports'])
-    expectDocumented('viteCompiler', ['system', 'styleAutoImports'])
-    expectDocumented('viteApp', ['runtimeAutoImports'])
+    expectDocumented('autoImports', ['shared', 'style', 'app'])
+    expectDocumented('viteCompiler', ['system'])
+    expectDocumented('viteAutoImports', ['shared', 'style', 'app'])
     expectDocumented('styleOptions', ['from', 'include'])
     expectDocumented('systemOptions', ['entry', 'artifact', 'packageName', 'exportName'])
-    expectDocumented('runtimeOptions', ['presets', 'sources'])
-    expect(result.at('configCompiler').hover).toContain('Build-plane')
-    expect(result.at('configApp').hover).toContain('Application-plane')
-    expect(result.at('viteConfigCompiler').hover).toContain('Build-plane')
-    expect(result.at('viteConfigApp').hover).toContain('Application-plane')
+    expectDocumented('appOptions', ['presets', 'sources'])
+    expect(result.at('configCompiler').hover).toContain('Compiler')
+    expect(result.at('configAutoImports').hover).toContain('module roles')
+    expect(result.at('viteConfigCompiler').hover).toContain('Compiler')
+    expect(result.at('viteConfigAutoImports').hover).toContain('module roles')
     expect(result.at('viteSystem').hover).toContain('Plain consolidated system')
-    expect(result.at('viteStyle').hover).toContain('Inject named authoring exports')
-    expect(result.at('viteRuntime').hover).toContain('Inject runtime-facing values')
+    expect(result.at('viteStyle').hover).toContain('style modules')
+    expect(result.at('viteApp').hover).toContain('application')
     expect(result.at('system').hover).toContain('Plain consolidated system')
-    expect(result.at('styleAutoImports').hover).toContain('Inject named authoring exports')
-    expect(result.at('runtimeAutoImports').hover).toContain('Inject runtime-facing values')
+    expect(result.at('style').hover).toContain('$system')
+    expect(result.at('app').hover).toContain('core')
   })
 
   it('documents the shared config shape through Nuxt module options', () => {
@@ -463,8 +465,8 @@ describe('public Phase 11 editor contract', () => {
           c${cursor('nuxtCompiler')}ompiler: {
             ${cursor('nuxtCompilerOptions')}
           },
-          a${cursor('nuxtApp')}pp: {
-            ${cursor('nuxtAppOptions')}
+          a${cursor('nuxtAutoImports')}utoImports: {
+            ${cursor('nuxtAutoImportOptions')}
           },
         },
       }
@@ -472,9 +474,9 @@ describe('public Phase 11 editor contract', () => {
 
     expect(completionResult.at('nuxtRootCompletion').completionItem('vanity')?.documentation).toContain('Vanity\'s Nuxt adapter configuration')
     expect(result.at('nuxtRoot').hover).toContain('Vanity\'s Nuxt adapter configuration')
-    expect(result.at('nuxtCompiler').completionItem('compiler')?.documentation).toContain('Build-plane')
+    expect(result.at('nuxtCompiler').completionItem('compiler')?.documentation).toContain('Compiler options')
     expect(result.at('nuxtCompilerOptions').completionItem('system')?.documentation).toMatch(/consolidated/i)
-    expect(result.at('nuxtApp').completionItem('app')?.documentation).toContain('Application-plane')
-    expect(result.at('nuxtAppOptions').completionItem('runtimeAutoImports')?.documentation).toContain('runtime-facing')
+    expect(result.at('nuxtAutoImports').completionItem('autoImports')?.documentation).toContain('module roles')
+    expect(result.at('nuxtAutoImportOptions').completionItem('app')?.documentation).toContain('application')
   })
 })

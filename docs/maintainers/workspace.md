@@ -53,7 +53,7 @@ Scripts that inspect the repository as a whole—lint, documentation examples, a
 - **Task graph:** Turborepo.
 - **Lint and formatting:** ESLint with `@antfu/eslint-config`; formatting is part of the lint configuration.
 - **SDK build:** obuild.
-- **SDK tests:** Vitest across runtime, type, editor-DX, and emitted-output planes.
+- **SDK tests:** Vitest across runtime, type, editor-DX, and emitted-output evidence dimensions.
 - **Demo integration:** Playwright against Nuxt and Vite production/development servers.
 - **Primary integration substrate:** published vanilla-extract packages declared in `sdk/package.json`.
 
@@ -99,10 +99,10 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run sdk:dev` | run the SDK stub development build |
 | `pnpm run sdk:build` | build `@mszr/vanity` |
 | `pnpm run sdk:typecheck` | typecheck the SDK |
-| `pnpm run sdk:test` | run every SDK assertion plane |
+| `pnpm run sdk:test` | run every SDK assertion dimension |
 | `pnpm run sdk:test:fast` | run runtime and emitted-output assertions without starting editor language services |
-| `pnpm run sdk:test:dx` | run the Selenita editor-DX plane |
-| `pnpm run sdk:test:types` | run the compile-time assertion plane |
+| `pnpm run sdk:test:dx` | run the Selenita editor-DX evidence dimension |
+| `pnpm run sdk:test:types` | run the compile-time evidence dimension |
 | `pnpm run sdk:test:watch` | run SDK tests in watch mode |
 
 ### Demos

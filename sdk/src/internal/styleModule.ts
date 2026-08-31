@@ -1,7 +1,9 @@
 /**
  * Setup failures are diagnosed too ([spec-css.md §9]): an authoring call
  * outside a compiled style module gets one friendly error naming the missing
- * plugin and the line to add — never a raw substrate evaluation stack.
+ * plugin and the line to add — never a raw substrate evaluation stack. The
+ * TypeScript plugin catches module-role misuse at the cursor before this
+ * runtime guard is reached.
  */
 
 import { getFileScope, hasFileScope } from '@vanilla-extract/css/fileScope'

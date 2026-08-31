@@ -57,7 +57,7 @@ const css = emitOf(
 void css
 ```
 
-Captures are synchronous because build-plane authoring is synchronous. Systems must still be created and consolidated in plain TypeScript, exactly as in a real project.
+Captures are synchronous because build-time authoring is synchronous. Systems must still be created and consolidated in plain TypeScript, exactly as in a real project.
 
 ## 3. Token folding
 
@@ -82,7 +82,7 @@ type FoldObservation = {
 }
 ```
 
-Fold evidence belongs to the build plane. A token restored into application code retains runtime identity and values but not compiler reasoning; `foldOf(restoredToken)` therefore throws with the fix instead of fabricating a result. Call it on a token from a system consolidated in the test process.
+Fold evidence belongs to an in-process resolved token handle. A token restored into application code retains runtime identity and values but not compiler reasoning; `foldOf(restoredToken)` therefore throws with the fix instead of fabricating a result. Call it on a token from a system consolidated in the test process.
 
 ## 4. Rendered CSS
 
@@ -175,4 +175,4 @@ A first-class Vanity extension should prove:
 | mistakes | one local diagnostic with the valid fix in reach |
 | package boundary | the same Selenita assertion against packed declarations |
 
-Vanity's release gate applies that policy to every named package value, the canonical open/locked surfaces, token phases, conditions, part conditions, generated auto-imports, and the packed testing entrypoint.
+Vanity's release gate applies that policy to every named package value, the canonical open/locked surfaces, contextual token handles and controls, conditions, part conditions, generated auto-imports, and the packed testing entrypoint.

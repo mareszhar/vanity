@@ -9,7 +9,7 @@
  */
 
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
-import type { VanityRuntimeBranchHandle, VanityRuntimeHandle, VanitySemanticTokenAddress, VanityTokenMode } from '../internal/handle'
+import type { VanityInternalTokenBranchHandle, VanityInternalTokenHandle, VanitySemanticTokenAddress, VanityTokenMode } from '../internal/handle'
 import type { VanityAxisDefinition, VanityAxisRegistry, VanityAxisTriggerArm } from '../system/axes'
 import type { VanityRuntimeContract, VanityRuntimeTokenContract } from '../system/live'
 import type { VanityCssSupportTarget, VanityExpressionNode } from '../values/protocol'
@@ -85,7 +85,7 @@ interface TokenNode {
   key: string
   /** The emitted custom-property name: `--vanity-color-brand`. */
   name: string
-  handle: VanityRuntimeHandle
+  handle: VanityInternalTokenHandle
   derived: boolean
   definition: VanityLeafDefinition
   meta: { description?: string, deprecated?: string }
@@ -122,13 +122,13 @@ type TokenBranch
     readonly axis: string
     readonly mode: string
     readonly definition: VanityLeafDefinition
-    readonly handle: VanityRuntimeBranchHandle
+    readonly handle: VanityInternalTokenBranchHandle
   }
   | {
     readonly kind: 'case'
     readonly when: Readonly<Record<string, string>>
     readonly definition: VanityLeafDefinition
-    readonly handle: VanityRuntimeBranchHandle
+    readonly handle: VanityInternalTokenBranchHandle
   }
 
 interface NodeResult {
@@ -298,10 +298,10 @@ export function tokenInspectionsOf(graph: TokenGraph): readonly import('../inter
   return Object.freeze([...cached.values()])
 }
 
-/** Build-plane semantic record used by `ds.explain()` and authored interchange. */
+/** Build-time semantic record used by `ds.explain()` and authored interchange. */
 export function tokenInspectionOf(
   graph: TokenGraph,
-  handle: VanityRuntimeHandle,
+  handle: VanityInternalTokenHandle,
 ): import('../internal/inspect').VanityTokenRecord {
   const node = nodeOf(handle)
   if (!node || graph.nodes.get(node.key) !== node)
@@ -319,16 +319,16 @@ function cssOf(graph: TokenGraph, value: VanityCssValue): string {
   return graph.serializeValue?.(value) ?? value.css
 }
 
-function nodeOf(handle: VanityRuntimeHandle): TokenNode | undefined {
+function nodeOf(handle: VanityInternalTokenHandle): TokenNode | undefined {
   return (handle as unknown as { [NODE]?: TokenNode })[NODE]
 }
 
 /**
- * Whether a graph handle names a color or a plain value — build-plane
+ * Whether a graph handle names a color or a plain value — build-time
  * knowledge for surfaces that infer a type from a token default (ports).
  * Undefined for handles outside a resolved graph.
  */
-export function tokenKindOf(handle: VanityRuntimeHandle): 'color' | 'value' | undefined {
+export function tokenKindOf(handle: VanityInternalTokenHandle): 'color' | 'value' | undefined {
   const node = nodeOf(handle)
 
   if (!node)
@@ -409,7 +409,7 @@ export function defineTokens<const T extends VanityGraphInput = Record<never, ne
   return createTokenBuilder([{ kind: 'seed', graph, emission: {} }], undefined, undefined, {}, true) as unknown as VanityTokenBuilder<T>
 }
 
-/** Canonical, engine-portable module used by the Phase 5 unified builder. */
+/** Canonical, engine-portable module used by the unified token builder. */
 export function definePortableTokenModule<
   const T extends VanityGraphInput = Record<never, never>,
   const Policy extends VanityTokenPolicy = VanityDefaultTokenPolicy,
@@ -493,7 +493,7 @@ export function finalizeTokenModule(
   return (module as RuntimeTokenBuilder)[TOKEN_FINALIZE](options)
 }
 
-/** Phase 4 bridge for explicit user augment/overwrite operations. */
+/** Bridge for explicit user augment/overwrite operations. */
 export function patchTokenModule(
   module: unknown,
   mode: 'augment' | 'overwrite',
@@ -971,7 +971,7 @@ function applyTokenPatch(
       const next = mergePatchedNode(current, replacement, contribution.mode, patchesBase, file)
       nodes.set(key, next)
 
-      // The public preview tree retains the same phase-polymorphic handle.
+      // The public preview tree retains the same resolved handle semantics.
       let target = tree
       for (let index = 0; index < nextPath.length - 1; index++)
         target = target[nextPath[index]!] as Record<string, unknown>
@@ -1002,7 +1002,7 @@ function resolvePatchValue(
   current: TokenNode,
   axes: VanityAxisRegistry<any> | undefined,
 ): unknown {
-  if (typeof raw !== 'function' || nodeOf(raw as VanityRuntimeHandle))
+  if (typeof raw !== 'function' || nodeOf(raw as VanityInternalTokenHandle))
     return raw
 
   const token = createTokenFactory(axes)
@@ -2110,8 +2110,8 @@ function classifyLeafValue(raw: unknown, key: string): VanityLeafDefinition {
   if (raw === null)
     return { kind: 'none' }
 
-  if (typeof raw === 'function' && nodeOf(raw as VanityRuntimeHandle))
-    return { kind: 'color', expr: { kind: 'ref', handle: raw as VanityRuntimeHandle }, markedLive: false }
+  if (typeof raw === 'function' && nodeOf(raw as VanityInternalTokenHandle))
+    return { kind: 'color', expr: { kind: 'ref', handle: raw as VanityInternalTokenHandle }, markedLive: false }
 
   if (isContrastValue(raw))
     return { kind: 'contrast', expr: raw.expr }
@@ -2134,8 +2134,8 @@ function classifyLeafValue(raw: unknown, key: string): VanityLeafDefinition {
 
 /** Classify what a derivation returned; a returned handle is an alias — a plain graph edge. */
 function classifyLeaf(result: unknown, node: TokenNode): VanityLeafDefinition {
-  if (typeof result === 'function' && nodeOf(result as VanityRuntimeHandle))
-    return { kind: 'color', expr: { kind: 'ref', handle: result as VanityRuntimeHandle }, markedLive: false }
+  if (typeof result === 'function' && nodeOf(result as VanityInternalTokenHandle))
+    return { kind: 'color', expr: { kind: 'ref', handle: result as VanityInternalTokenHandle }, markedLive: false }
 
   if (isColorValue(result) || isContrastValue(result))
     node.meta = { ...result.meta, ...node.meta }
@@ -2187,7 +2187,7 @@ export function resolveGraph(
     },
   }
 
-  function requireNode(handle: VanityRuntimeHandle): TokenNode {
+  function requireNode(handle: VanityInternalTokenHandle): TokenNode {
     const node = nodeOf(handle)
 
     if (node && graph.nodes.get(node.key) === node)
@@ -2389,7 +2389,7 @@ export function resolveGraph(
 }
 
 /**
- * Build-plane representative projection shared by derivation fallback,
+ * Build-time representative projection shared by derivation fallback,
  * authored checks, and introspection. Live emission remains untouched: only
  * this folder replaces token var nodes with defaults owned by the graph.
  */
@@ -2461,7 +2461,7 @@ function createAuthoredValueFolder(
 }
 
 /**
- * CSS parsers intentionally preserve `calc()`, but a build-plane color
+ * CSS parsers intentionally preserve `calc()`, but a build-time color
  * representative needs numeric authored defaults. Reduce only the closed,
  * unitless arithmetic grammar; anything with a unit, function, or unresolved
  * reference remains untouched and is diagnosed by the owning color fold.

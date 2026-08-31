@@ -62,7 +62,7 @@ describe('nuxt auto-import integration', () => {
     expect(template!.getContents()).not.toContain('Record<string, any>')
   })
 
-  it('rejects a global collision between style and runtime auto-imports', async () => {
+  it('rejects a global collision between style and app auto-imports', async () => {
     const root = await mkdtemp(join(tmpdir(), 'vanity-nuxt-'))
     roots.push(root)
     await writeFile(join(root, 'authoring.ts'), 'export const ds = {}\n')
@@ -82,10 +82,36 @@ describe('nuxt auto-import integration', () => {
     }
 
     await expect(vanityNuxtModule({
-      compiler: { styleAutoImports: './authoring.ts' },
-      app: { runtimeAutoImports: './runtime.ts' },
+      autoImports: { style: './authoring.ts', app: './runtime.ts' },
     }, nuxt as never)).rejects.toThrow(
-      '[vanity] auto-import \'ds\' is exposed by both compiler.styleAutoImports and app.runtimeAutoImports',
+      '[vanity] auto-import \'ds\' is exposed by different autoImports module roles',
     )
+  })
+
+  it('projects one shared source into Nuxt style and application module roles', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'vanity-nuxt-'))
+    roots.push(root)
+    await writeFile(join(root, 'authoring.ts'), 'export const ds = {}\n')
+
+    const nuxt = {
+      options: {
+        _requiredModules: {},
+        alias: {},
+        dev: false,
+        experimental: {},
+        postcss: {},
+        rootDir: root,
+        typescript: { tsConfig: {} },
+      },
+      hook: vi.fn(),
+    }
+
+    await vanityNuxtModule({ autoImports: { shared: './authoring.ts' } }, nuxt as never)
+
+    expect(nuxtKit.addImports).toHaveBeenCalledWith([{ name: 'ds', from: join(root, 'authoring.ts') }])
+    const template = nuxtKit.addTypeTemplate.mock.calls
+      .find(([options]) => options.filename === 'vanity-style-auto-imports.d.ts')?.[0]
+    expect(template?.getContents()).not.toContain('var ds:')
+    expect(template?.getContents()).toContain('declare global')
   })
 })

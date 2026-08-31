@@ -1,5 +1,5 @@
 /**
- * The type plane for introspection: the audit config is typed at the key
+ * The type evidence dimension for introspection: the audit config is typed at the key
  * ([patterns.md §2]) and the manifest format is a public type external
  * tools can build on.
  */
@@ -17,17 +17,17 @@ import { describe, expectTypeOf, it } from 'vitest'
 import { createEngine, createSystem, exportDesignTokens, importDesignTokens } from '../test-support/characterization'
 
 describe('the audit config', () => {
-  it('accepts the declared lanes at the declared levels', () => {
+  it('accepts the declared audit categories at the declared levels', () => {
     const config: VanityAuditConfig = { unusedTokens: 'error', escapes: 'off', scaleStrays: 'warn' }
 
     void createSystem({ tokens: {}, audit: config })
     void createSystem({ tokens: {}, audit: { nearDuplicates: 'error', contrast: 'warn' } })
   })
 
-  it('rejects an unknown lane and a wrong level, each at the offending key', () => {
+  it('rejects an unknown audit category and a wrong level, each at the offending key', () => {
     void createSystem({
       tokens: {},
-      // @ts-expect-error — 'unusedToken' names no audit lane
+      // @ts-expect-error — 'unusedToken' names no audit category
       audit: { unusedToken: 'error' },
     })
 

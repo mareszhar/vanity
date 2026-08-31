@@ -128,7 +128,7 @@ The omitted manifest defaults to `.vanity/manifest.json`. `inspect` summarizes t
 - `runtime`;
 - `docs`.
 
-`prepare` reconciles the enabled auto-import lanes' declarations from `vanity.config.ts` (or `--config`) without compiling styles or evaluating the system, so a host can run it before `tsc`; [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters) owns the full contract.
+`prepare` reconciles declarations for enabled auto-import module roles from `vanity.config.ts` (or `--config`) without compiling styles or evaluating the system, so a host can run it before `tsc`; [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters) owns the full contract.
 
 Identity changes constrain the system categories reported. Module recipes, ports, styles, escapes, contrast, and usage are diffed under their semantic category. The formatted output is stable enough for release review; `--json` is the integration contract.
 
@@ -177,7 +177,7 @@ Public-surface hover/TSDoc coverage and consumer testing helpers enforce this co
 
 ## 10. Audits
 
-The established lanes remain:
+The established audit categories remain:
 
 - unused tokens and near duplicates;
 - contrast acceptances;
@@ -196,7 +196,7 @@ The release audit includes:
 - stale portable-artifact evidence;
 - root/mode disagreement evidence.
 
-The latter four consume explicit integration/runtime evidence rather than guessing from filenames or static selectors. Every lane is advisory by default, respects consolidation-time `off`/`warn`/`error` policy, and includes a repair direction.
+The latter four consume explicit integration/runtime evidence rather than guessing from filenames or static selectors. Every audit category is advisory by default, respects consolidation-time `off`/`warn`/`error` policy, and includes a repair direction.
 
 ## 11. Agent and DevTools projections
 
@@ -218,7 +218,7 @@ Permanent evidence covers:
 - deterministic module ordering and independent identity changes;
 - token, axis, condition, recipe, anatomy, and port explanation;
 - plugin contribution ownership and overwrite/augment history;
-- all audit lanes and evidence adapters;
+- all audit categories and evidence adapters;
 - normalized diagnostic sinks, related sites, and clickable author frames;
 - Manifest v3 Vite/DevTools/agent projections;
 - CLI formatted/JSON behavior;

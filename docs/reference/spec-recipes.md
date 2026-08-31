@@ -62,7 +62,7 @@ button.variants // → the typed variant map, for prop forwarding and docs
 **Contract details.**
 
 - Every arm — `base`, each variant value, each toggle, each compound `style` — is a full vanity styling input: ordered arrays, fragments, `tdec`, conditions, selectors, ports, and composite tokens are all legal.
-- **Finite choice only:** a recipe call resolves among precompiled classes; the lane redirect diagnostic points non-finite values to ports ([patterns.md §9](../maintainers/patterns.md#9-ports-and-mutable-tokens-solve-different-lifetimes)).
+- **Finite choice only:** a recipe call resolves among precompiled classes; the variability diagnostic points non-finite values to ports ([patterns.md §9](../maintainers/patterns.md#9-ports-and-mutable-tokens-solve-different-lifetimes)).
 - `compound` entries type `when` against declared variants/toggles — an impossible combination errors at the offending key.
 - `defaults` compile into `base` where sound (no extra class for the default case): a default value folds only when every sibling value declares everything it declares, arm for arm — otherwise the fold would leak the default's styling into the other choices, so the default keeps its own class.
 - A recipe lives in one cascade layer, chosen with `ds.recipe.layer(name)` or `ds.inLayer(name).recipe`. A `layer:` option or rule key is a diagnostic; layer placement is emitter configuration everywhere.
@@ -256,4 +256,4 @@ export const accordionItem = ds.class({
 
 - Recipe/anatomy options take **one signature with union-typed arms**, never sibling overloads — a malformed options object reports a single diagnostic at the offending property, never a "no overload matches" wall.
 - A misspelled variant value at a call site names the valid set; a misspelled part names the declared parts.
-- The editor-DX plane locks these messages per the workspace testing law ([workspace.md §5](../maintainers/workspace.md#5-test-organization)).
+- The editor-DX evidence dimension locks these messages per the workspace testing law ([workspace.md §5](../maintainers/workspace.md#5-test-organization)).

@@ -91,7 +91,7 @@ Retain:
 - one precompiled class per declared combination;
 - exact token-key completion;
 - labeled unsafe value escape with audit;
-- runtime lane redirect to ports;
+- dynamic application values redirect to ports;
 - preset-provided default map.
 
 Layer behavior follows the common emitter contract.
@@ -120,12 +120,23 @@ Style-module handles imported in component code are projected serialized runtime
 
 ## 8. Integration adapters
 
-The integrations share compiler and application lanes, but each adapter registers those lanes through its host:
+Vanity's compiler is mounted into an external build host by a Vanity-owned adapter:
 
-| Entry | User-facing adapter | Compiler lane | Application lane |
+```text
+Vanity compiler ── mounted by host adapter ──▶ build host
+       │                                      │
+       ├─ evaluates style modules             ├─ owns module graph/bundling
+       ├─ emits CSS                           ├─ transforms application modules
+       └─ projects portable contracts          └─ registers ambient types/imports
+```
+
+Style modules and application modules are distinct module roles. Each has its own processing pipeline and receives only bindings valid for its job:
+
+| Entry | User-facing adapter | Style-module pipeline | Application-module pipeline |
 | --- | --- | --- | --- |
 | `/vite` | `vanityPlugin` | Evaluates `*.css.ts`, emits CSS, and projects the locked system. | Uses Vite auto-import transforms for application modules and Vue templates when the host uses Vue. |
-| `/nuxt` | The default Nuxt module | Installs the `/vite` compiler lane internally. | Registers runtime imports through Nuxt's native import registry. |
+| `/nuxt` | The default Nuxt module | Mounts the `/vite` compiler through Nuxt's Vite configuration. | Registers app imports through Nuxt's native import registry. |
+| `/wxt` | The default WXT module | Mounts the `/vite` compiler through WXT's Vite configuration. | Registers generated declarations through WXT's `prepare:types` hook. |
 | `/vue` | Vue runtime helpers | None. | Explicit runtime helpers such as `usePorts`, `useAnatomy`, and `propsOf`; no bundler registration. |
 
 The Vite adapter is configured through one registration:
@@ -135,10 +146,10 @@ vanityPlugin({
   compiler: {
     system: './src/design/system.ts',
     layerOrder: ['vendor', 'app'],
-    styleAutoImports: './src/design/authoring.ts',
   },
-  app: {
-    runtimeAutoImports: {
+  autoImports: {
+    style: './src/design/authoring.ts',
+    app: {
       presets: ['core', 'vue'],
       sources: ['@mono/styles', './src/app-imports.ts'],
     },
@@ -154,25 +165,91 @@ import { defineVanityConfig } from '@mszr/vanity/config'
 export default defineVanityConfig({
   compiler: {
     system: './src/design/system.ts',
-    styleAutoImports: './src/design/authoring.ts',
   },
-  app: {
-    runtimeAutoImports: ['core', 'vue'],
+  autoImports: {
+    style: './src/design/authoring.ts',
+    app: ['core', 'vue'],
   },
 })
 ```
 
-The file is optional for adapters and is the CLI's default configuration source. `vanity prepare` reads it without loading Vite or Nuxt, statically discovers the enabled lanes, and reconciles their declarations before a separate typecheck. Use `vanity prepare --root <project>` when running from another directory or `--config <path>` for a differently named module. The equivalent programmatic surface is `planAutoImportDeclarations()` for host-owned registration and `writeAutoImportDeclarations()` for filesystem reconciliation. Shared config paths should be project-relative or absolute; framework aliases such as `~` are available only when an adapter resolves them. Running the command alongside `nuxt prepare` is safe; Nuxt still owns its native application type registry, so Nuxt does not require this extra step.
+The file is optional for adapters and is the CLI's default configuration source. `vanity prepare` reads it without loading Vite or Nuxt, statically discovers enabled module-role routes, and reconciles their declarations before a separate typecheck. Use `vanity prepare --root <project>` when running from another directory or `--config <path>` for a differently named module. The equivalent programmatic surface is `planAutoImportDeclarations()` for host-owned registration and `writeAutoImportDeclarations()` for filesystem reconciliation. Shared config paths should be project-relative or absolute; framework aliases such as `~` are available only when an adapter resolves them. Running the command alongside `nuxt prepare` is safe; Nuxt still owns its native application type registry, so Nuxt does not require this extra step.
 
-The common compiler lane evaluates `*.css.ts`, imports a locked system from plain `system.ts`, emits one system CSS artifact and one CSS artifact per style source, preserves lazy splitting, writes the manifest, provides stable dev endpoints and DevTools, recovers from dependency errors without restart, generates browser and SSR projections from portable data, and supports precompiled package contracts. `compiler.layerOrder` establishes the host-wide order of CSS layer roots; its detailed semantics live in [spec-engine.md §9](./spec-engine.md#9-compiler-projection).
+The shared style-module pipeline evaluates `*.css.ts`, imports a locked system from plain `system.ts`, emits one system CSS artifact and one CSS artifact per style source, preserves lazy splitting, writes the manifest, provides stable dev endpoints and DevTools, recovers from dependency errors without restart, generates browser and SSR projections from portable data, and supports precompiled package contracts. `compiler.layerOrder` establishes the host-wide order of CSS layer roots; its detailed semantics live in [spec-engine.md §9](./spec-engine.md#9-compiler-projection).
 
-`compiler.styleAutoImports` remains opt-in and exposes authoring exports only to evaluated `*.css.ts` modules. `true` reuses the single `compiler.system` entry; a string names another source; a filtered object may omit `from` to reuse `compiler.system`. It generates exact ambient declarations at a stable path, regenerates on configuration or export changes, registers those declarations with the host, includes a generated-file banner, preserves the authored types through direct `typeof` references, carries statically declared barrel aliases into debug and source provenance, allows explicit imports or user aliasing, and avoids injecting into modules upstream of the system. Aliases that cannot be resolved syntactically retain ordinary file-level provenance. Use `include` or `exclude` for deliberate narrowing, never both.
+### Module roles and type consumers
 
-`app.runtimeAutoImports` remains opt-in and supplies runtime-facing values to application modules. It never changes how `*.css.ts` modules are evaluated. A string names one source, an array selects built-in presets, and the object form combines `presets` with `sources`. Built-in presets provide named Vanity runtime groups; package and local sources are curated modules or barrels, not directory globs, and their named value exports are discovered statically by default. Use `{ from, include }` or `{ from, exclude }` for deliberate narrowing; the two filters cannot be combined. Template injection is adapter-specific as shown above.
+| Role/consumer | What happens | Ambient declarations |
+| --- | --- | --- |
+| style modules (`*.css.ts`) | Vanity's compiler evaluates authoring calls at build time and emits CSS. | Exact authoring bindings are injected only here. |
+| application modules | The host transforms application and SSR code; the browser receives restored handles and runtime controllers. | Application-facing bindings are injected only here. |
+| TypeScript program | TypeScript includes declaration files independently of which module role receives a binding. | A declaration can be required while a consumer only typechecks source. |
 
-Vanity's generated declarations are the only ambient source for these two lanes. Plain Vite and `vanity prepare` write canonical declarations to `.vanity/types/style-auto-imports.d.ts` and `.vanity/types/runtime-auto-imports.d.ts`, then place small reference bridges in the automatically discovered `node_modules/@types/vanity-style-auto-imports` and `node_modules/@types/vanity-runtime-auto-imports` packages. They overwrite both files so removed exports do not linger, use relative local references or bare package specifiers so the generated text is portable across checkouts, and preserve the authored exports' overloads, generics, and literal types through `typeof` references. Nuxt renders the style declaration through a Nuxt type template and registers runtime imports through Nuxt's native import registry.
+`autoImports` is opt-in. Its keys route sources into module roles; they do not name processors:
 
-Plain-Vite projects that set `compilerOptions.types` explicitly must include `vanity-style-auto-imports` and/or `vanity-runtime-auto-imports` for the enabled lanes, because an explicit list disables TypeScript's automatic `@types` discovery. Nuxt projects use Nuxt's generated type references instead.
+```TS
+autoImports: {
+  shared: '@acme/design/authoring',
+  app: ['core', 'vue'],
+}
+```
+
+`shared` expands into both module roles and creates no third declaration file. `style` targets only `*.css.ts`; `app` targets only application modules. A direct source string is shorthand for `shared`. `$system` explicitly means `compiler.system`, including inside `sources`; it is not a package specifier. Each source string is otherwise either a relative/absolute path or a package specifier. A bare `src/system.ts` is a package lookup and receives a fix pointing to `./src/system.ts` when that was intended.
+
+Style sources expose exact authoring exports only to evaluated style modules. Application sources expose runtime-facing values only to application modules. A string names one source, an array selects built-in presets, and an object combines `presets` with filtered `sources`. Use `{ from, include }` or `{ from, exclude }` for deliberate narrowing; the two filters cannot be combined. An `app` or `shared` source cannot be a `*.css.ts` style module or re-export one: those modules are compiler-evaluated, not application-safe authoring. Vanity rejects that graph with `VANITY_APP_AUTO_IMPORT_STYLE_MODULE`; keep the style module out of the barrel and import its emitted handle directly where application code uses it. When one source legitimately supplies a name to both module roles, generated `declare var` declarations coexist. Different sources claiming one name fail with Vanity's configuration diagnostic.
+
+Vanity's generated declarations are the ambient source for these two module roles. Plain Vite and `vanity prepare` write canonical declarations to `.vanity/types/vanity-style-auto-imports.d.ts` and `.vanity/types/vanity-app-auto-imports.d.ts`, then place small reference bridges in the automatically discovered `node_modules/@types/vanity-style-auto-imports` and `node_modules/@types/vanity-app-auto-imports` packages. They overwrite both files so removed exports do not linger, use relative local references or bare package specifiers so the generated text is portable across checkouts, and preserve the authored exports' overloads, generics, and literal types through `typeof` references. Nuxt renders the style declaration through a Nuxt type template and registers app imports through Nuxt's native import registry.
+
+Every TypeScript 6 project must include the generated declarations. Plain Vite uses `vanity-style-auto-imports` and/or `vanity-app-auto-imports` in `compilerOptions.types`, or directly includes the canonical `.vanity/types` files. `vanity prepare` checks this and reports `VANITY_AUTO_IMPORT_DECLARATIONS_NOT_INCLUDED` with the missing entry. Nuxt and WXT register their generated references through their native preparation hooks.
+
+### Source-shipping authoring packages
+
+The type half and value half are distinct. A host injects the real value import while compiling a style module. An intermediate package that only typechecks source needs declarations, not that runtime import.
+
+| Mode | In each style file | Package and consumer cost | Suits |
+| --- | --- | --- | --- |
+| Explicit barrel import | `import { cls, t } from '@acme/design/authoring'` | None outside the file. | A package with a handful of style modules. |
+| Per-package host wiring | Nothing | Each TypeScript program reaching a style file prepares declarations. | A styling-heavy package scaffolded with its host setup. |
+| Type-only unlock | `import type {} from '@acme/design/vanity-style-auto-imports'` | Nothing for consumers. | A source-shipping package that keeps its declaration requirement local. |
+
+These are trade-offs, not a ranking, and one workspace may mix them. A package publishing the generated style declaration exports it as a bare package specifier, so the unlock import resolves in every consuming program. Run `vanity prepare` in that package before `npm pack` or publishing: `.vanity/` is normally ignored and the generated declaration must exist for the explicit `files` entry to ship it. Keep the barrel reference bare in the package's Vanity config, then export the generated file:
+
+```json
+{
+  "files": ["src", ".vanity/types/vanity-style-auto-imports.d.ts"],
+  "exports": {
+    "./authoring": "./src/authoring.ts",
+    "./vanity-style-auto-imports": {
+      "types": "./.vanity/types/vanity-style-auto-imports.d.ts"
+    }
+  }
+}
+```
+
+An authoring barrel such as `export const { class: cls, t } = ds` preserves its authored aliases in debug names and provenance, so the concise explicit form remains traceable. For mode 1, the optional `@mszr/vanity/typescript` plugin can also rank those barrel exports above unrelated auto-imports in `*.css.ts` while leaving application-module completions untouched:
+
+```json
+{
+  "compilerOptions": {
+    "plugins": [{
+      "name": "@mszr/vanity/typescript",
+      "authoringBarrels": ["@acme/design/authoring"]
+    }]
+  }
+}
+```
+
+TypeScript still owns the completion's import edit; Vanity only ranks this explicitly named source in style modules. When a generated Vanity declaration already names the barrel, the plugin discovers it and no duplicate `authoringBarrels` entry is needed. In a source-shipping package, the plugin also shows an informational `VANITY_AMBIENT_SOURCE_DECLARATION` notice for an ambient style file without the unlock import. Set `"vanity": { "suppressAmbientSourceDeclarationNotice": true }` in that package's `package.json` when its chosen per-package host wiring makes that notice unhelpful.
+
+For document-level rules, put the selectors in the intended layer rather than hiding a second styling system:
+
+```TS
+ds.inLayer('reset').rules({
+  ':root': { colorScheme: 'light dark' },
+  html: { minBlockSize: '100%' },
+  body: { minBlockSize: '100%', margin: 0 },
+})
+```
 
 ## 9. SSR and HMR
 
@@ -209,7 +286,7 @@ plain system.ts
 The shipped demo set is deliberately differentiated:
 
 - the Prism flagship uses the locked system and Hail's selected opinions;
-- the comparison demo keeps Vanity's lane core-only to make the core/opinion boundary visible;
+- the comparison demo keeps Vanity core-only to make the core/opinion boundary visible;
 - every workspace type/build pipeline includes both demos;
 - generated exact auto-import declarations replace tracked ambient mirrors;
 - browser assertions cover computed outcomes, SSR, HMR, optimizer, accessibility, and lifecycle behavior;

@@ -66,7 +66,7 @@ async function buildLibrary(root: string, plugin: ReturnType<typeof vanityPlugin
 }
 
 describe('the permanent plain-system projection canary', () => {
-  it('deduplicates system CSS, splits lazy CSS, and ships no build plane', async () => {
+  it('deduplicates system CSS, splits lazy CSS, and ships no build-only code', async () => {
     const output = outputOf(await build({
       configFile: false,
       logLevel: 'silent',
@@ -104,10 +104,10 @@ describe('the permanent plain-system projection canary', () => {
     expect(javascript).not.toContain('@vanilla-extract')
     expect(javascript).not.toContain('node:buffer')
     expect(javascript).not.toContain('child_process')
-    expect(javascript).toContain('class: restoreBuildPlane({ name: "class" })')
-    expect(javascript).toContain('fragment: restoreBuildPlane({ name: "fragment" })')
-    expect(javascript).not.toContain('globalCss: restoreBuildPlane')
-    expect(javascript).not.toContain('defineAtoms: restoreBuildPlane')
+    expect(javascript).toContain('class: restoreStyleAuthoringStub({ name: "class" })')
+    expect(javascript).toContain('fragment: restoreStyleAuthoringStub({ name: "fragment" })')
+    expect(javascript).not.toContain('globalCss: restoreStyleAuthoringStub')
+    expect(javascript).not.toContain('defineAtoms: restoreStyleAuthoringStub')
 
     const html = String(assets.find(item => item.fileName === 'index.html')?.source)
     const prelude = html.indexOf('/assets/vanity-cascade.css')
@@ -135,9 +135,9 @@ describe('the permanent plain-system projection canary', () => {
     expect(chunk!.code).not.toContain('createSystem')
     expect(chunk!.code).not.toContain('@vanilla-extract')
     expect(chunk!.code).not.toContain('node:')
-    expect(chunk!.code).toContain('rules: restoreBuildPlane({ name: "rules" })')
-    expect(chunk!.code).toContain('atoms: restoreBuildPlane({ name: "atoms" })')
-    expect(chunk!.code).not.toContain('tokenOverride: restoreBuildPlane')
+    expect(chunk!.code).toContain('rules: restoreStyleAuthoringStub({ name: "rules" })')
+    expect(chunk!.code).toContain('atoms: restoreStyleAuthoringStub({ name: "atoms" })')
+    expect(chunk!.code).not.toContain('tokenOverride: restoreStyleAuthoringStub')
 
     const module = await import(
       `data:text/javascript;base64,${Buffer.from(chunk!.code).toString('base64')}`,
@@ -227,7 +227,7 @@ describe('the permanent plain-system projection canary', () => {
     expect(Object.keys(manifest.systems)).toHaveLength(0)
   })
 
-  it('owns named system rule groups once across multiple style modules', async () => {
+  it('owns named system rules once across multiple style modules', async () => {
     const root = await temporaryApp('system-rules')
     const systemFile = join(root, 'system.ts')
     await writeFile(systemFile, fixtureSystem('rebeccapurple', 'rules', 'rules-once'))
@@ -244,7 +244,7 @@ describe('the permanent plain-system projection canary', () => {
     expect(css.match(/--rules-once:\s*present/g)).toHaveLength(1)
   })
 
-  it('evaluates one configured build-plane system once across its style modules', async () => {
+  it('evaluates one configured build-time system once across its style modules', async () => {
     const root = await temporaryApp('single-system-evaluation')
     const systemFile = join(root, 'system.ts')
     const counter = '__vanityProjectionSystemEvaluations'

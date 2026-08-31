@@ -1,5 +1,5 @@
 /**
- * The editor-DX plane: completions and diagnostics land on the intended key
+ * The editor-DX evidence dimension: completions and diagnostics land on the intended key
  * with the intended message, and hovers stay readable public types
  * ([patterns.md §10]) — locked with selenita against the real language
  * service.
@@ -111,7 +111,7 @@ describe('errors at the cursor', () => {
       import { createEngine } from '@test/legacy'
       void createEngine().createSystem({ tokens: {}, conditions: { color: '&[data-color]' } })
     `
-    // The type plane refuses at the key; the build diagnostic carries the sentence.
+    // The type evidence dimension refuses at the key; the build diagnostic carries the sentence.
     expect(errors).toHaveError(/never/)
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)

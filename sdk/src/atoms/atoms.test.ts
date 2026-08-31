@@ -1,8 +1,8 @@
 /**
- * The runtime plane for atoms ([spec-integrations.md §5]): token keys resolve to
+ * The runtime evidence dimension for atoms ([spec-integrations.md §5]): token keys resolve to
  * precompiled classes, shorthands alias, toggles switch, condition maps pick
  * the pre-generated arms, and the labeled escape emits at build time while
- * runtime calls get the ports-lane redirect.
+ * runtime calls are redirected to the open-value port boundary.
  */
 
 import { restoreAtoms } from '@mszr/vanity/runtime'
@@ -102,7 +102,7 @@ describe('the labeled escape', () => {
     expect(css).toContain('inline-size: 37ch')
   })
 
-  it('redirects to the ports lane at runtime', () => {
+  it('redirects open runtime values to ports', () => {
     const { returned: atoms } = miniAtoms()
     const runtime = restoreAtoms(JSON.parse(JSON.stringify({
       name: 'atoms',

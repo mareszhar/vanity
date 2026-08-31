@@ -1,4 +1,4 @@
 {
   "extends": "../tsconfig.base.json",
-  "files": ["./.vanity/types/style-auto-imports.d.ts", "./src/main.ts"]
+  "files": ["./.vanity/types/vanity-style-auto-imports.d.ts", "./src/main.ts"]
 }

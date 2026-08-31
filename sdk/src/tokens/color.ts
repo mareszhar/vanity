@@ -6,7 +6,7 @@
  * doesn't ship — and every helper exists both as a method and standalone.
  */
 
-import type { VanityRuntimeHandle } from '../internal/handle'
+import type { VanityInternalTokenHandle } from '../internal/handle'
 import type { VanityExpressionNode } from '../values/protocol'
 import type {
   VanityCssInput,
@@ -48,7 +48,7 @@ export type VanityColorExpr
   = | { kind: 'oklch', l: number, c: number, h: number, alpha?: number }
     | { kind: 'parse', css: string }
     | { kind: 'value', value: VanityCssValue<string, 'color'> }
-    | { kind: 'ref', handle: VanityRuntimeHandle }
+    | { kind: 'ref', handle: VanityInternalTokenHandle }
     | { kind: 'alpha', input: VanityColorExpr, amount: number }
     | { kind: 'adjust', input: VanityColorExpr, channel: 'l' | 'c' | 'h', delta: number }
     | { kind: 'channels', input: VanityColorExpr, channels: VanityOklchChannels }
@@ -173,10 +173,10 @@ const COLOR_VALUE = Symbol.for('vanity.colorValue')
 const CONTRAST_VALUE = Symbol.for('vanity.contrastValue')
 
 const standaloneResolver = {
-  foldRef(handle: VanityRuntimeHandle): never {
+  foldRef(handle: VanityInternalTokenHandle): never {
     throw new TypeError(`[vanity] cannot fold ${handle.path} without its token graph`)
   },
-  refTraits: (handle: VanityRuntimeHandle) => modeTraits(handle.mode),
+  refTraits: (handle: VanityInternalTokenHandle) => modeTraits(handle.mode),
   invalidColor(detail: string): never {
     throw new TypeError(`[vanity] cannot resolve color expression: ${detail}`)
   },
@@ -805,7 +805,7 @@ export function colorMix(
 }
 
 /** The color methods every graph handle carries, so derivations read as `color.brand.lighten(0.06)`. */
-export function handleColorMethods(handle: VanityRuntimeHandle): Record<string, (...args: never[]) => unknown> {
+export function handleColorMethods(handle: VanityInternalTokenHandle): Record<string, (...args: never[]) => unknown> {
   const ref = (): VanityColorExpr => ({ kind: 'ref', handle })
 
   return {

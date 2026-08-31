@@ -1,5 +1,5 @@
 /**
- * The runtime plane: port declaration, interpolation, `set()`, the `ports()`
+ * The runtime evidence dimension: port declaration, interpolation, `set()`, the `ports()`
  * merge, `restorePort`, and the diagnostics contract — the behavior contracts
  * of [spec-ports.md], asserted directly.
  */
@@ -340,7 +340,7 @@ describe('restorePort', () => {
     expect(handle.dec('oklch(0.4 0.1 100)')).toEqual({ '--vanity-tint__h4x': 'oklch(0.4 0.1 100)' })
   })
 
-  it('binds app-plane validators by stable id without global state', () => {
+  it('binds application-runtime validators by stable id without global state', () => {
     const restored = restorePort({
       name: '--vanity-fraction__h4x',
       defaultValue: 0,

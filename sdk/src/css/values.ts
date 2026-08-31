@@ -7,7 +7,7 @@
  */
 
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
-import type { VanityRuntimeHandle } from '../internal/handle'
+import type { VanityInternalTokenHandle } from '../internal/handle'
 import type { VanityResolver } from '../tokens/resolve'
 import { VanityError } from '../diagnostics'
 import { isHandle } from '../internal/handle'
@@ -36,7 +36,7 @@ export function serializeStyleValue(value: unknown, path: string, ctx: VanityVal
   if (isCssValue(value))
     return ctx.serializeValue?.(value) ?? value.css
 
-  // The lane redirect ([patterns.md §10]): a callable in a value position
+  // The variability redirect ([patterns.md §10]): a callable in a value position
   // is a Stitches-style dynamic value — runtime data, which never crosses here.
   if (typeof value === 'function') {
     throw new VanityError({
@@ -88,7 +88,7 @@ function valueResolver(path: string, ctx: VanityValueContext): VanityResolver {
       : { serializeValue: value => String(ctx.serializeValue!(value)) }),
     refTraits: handle => modeTraits(handle.mode),
     serializeRef: handle => String(handle),
-    foldRef: (handle: VanityRuntimeHandle) => {
+    foldRef: (handle: VanityInternalTokenHandle) => {
       throw new VanityError({
         code: 'VANITY_CSS_INVALID_VALUE',
         message: `${path} cannot fold ${handle.path} at build time`,

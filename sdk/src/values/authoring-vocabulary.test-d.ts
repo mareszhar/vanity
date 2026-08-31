@@ -27,9 +27,9 @@ describe('public authoring vocabulary', () => {
     acceptLengthToken(open.t.length)
     acceptColor(open.t.color)
 
-    // @ts-expect-error — color values do not satisfy a typed length-value lane
+    // @ts-expect-error — color values do not satisfy a typed length-value form
     acceptLength(open.oklch(0.6, 0.2, 280))
-    // @ts-expect-error — color tokens do not satisfy a typed length-token lane
+    // @ts-expect-error — color tokens do not satisfy a typed length-token form
     acceptLengthToken(open.t.color)
   })
 

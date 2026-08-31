@@ -57,7 +57,7 @@ describe('a precompiled contract consumed from package dist', () => {
     const files = await readTree(output)
     const javascript = joinedByExtension(files, '.js')
     const css = joinedByExtension(files, '.css')
-    expect(javascript).toContain('RUNTIME_FACADE_SENTINEL')
+    expect(javascript).toContain('RUNTIME_CONTROLLER_SENTINEL')
     expect(javascript).not.toContain('PRECOMPILED_BUILD_SENTINEL')
     expect(occurrences(css, '--projection-system-artifact')).toBe(1)
     expect(css).toContain('"from-library"')
@@ -70,7 +70,7 @@ describe('a precompiled contract consumed from package dist', () => {
 
     await importFresh(join(output, 'entry.js'))
     expect((globalThis as Record<string, unknown>).__precompiledProbe).toMatchObject({
-      plane: 'RUNTIME_FACADE_SENTINEL',
+      plane: 'RUNTIME_CONTROLLER_SENTINEL',
       className: 'from-library',
     })
   })

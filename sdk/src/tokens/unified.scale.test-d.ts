@@ -1,5 +1,5 @@
 /**
- * Phase 5 product-side depth guard: a realistic 60-link unified builder,
+ * Product-side depth guard: a realistic 60-link unified builder,
  * followed by system registration and two independently consolidated forks.
  */
 import { createSystem } from '@mszr/vanity'

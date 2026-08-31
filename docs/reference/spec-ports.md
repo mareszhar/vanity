@@ -71,7 +71,7 @@ ports(fraction.dec(progress), enabled && tint.dec('rebeccapurple'))
 
 The same result is useful in authored rules, Vue `:style`, SSR, and any other framework.
 
-Values are narrow by CSS data type but preserve the direct CSS lane:
+Values are narrow by CSS data type but preserve direct CSS input:
 
 - a number port accepts numbers, same-type vanity values, and token/port references;
 - typed non-number ports accept same-type vanity values, CSS strings, and references;
@@ -136,7 +136,7 @@ export const toolbar = ds.class({
 })
 ```
 
-`ports:` publishes handles; it does not declare them. Recipe/anatomy app-plane restoration preserves their defaults, types, metadata, validation contracts, and `dec()` declaration method. A consumer themes descendants through the cascade without depending on internal DOM structure.
+`ports:` publishes handles; it does not declare them. Recipe/anatomy application-module restoration preserves their defaults, types, metadata, validation contracts, and `dec()` declaration method. A consumer themes descendants through the cascade without depending on internal DOM structure.
 
 ## 5. Ports versus mutable tokens
 

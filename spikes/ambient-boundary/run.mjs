@@ -51,13 +51,13 @@ function buildDesignPackage(keyword) {
     .replace(/^\/\*\*[\s\S]*?\*\/\n/, '')
     .replace(/: Record<string, unknown>\): string/, ')')
     .replace(/ as const/, ''))
-  write('packages/design/dist/style-auto-imports.d.ts', ambientDeclaration(keyword))
-  write('packages/design/dist/style-auto-imports.js', 'export {}\n')
+  write('packages/design/dist/vanity-style-auto-imports.d.ts', ambientDeclaration(keyword))
+  write('packages/design/dist/vanity-style-auto-imports.js', 'export {}\n')
 }
 
 function generate(keyword) {
   buildDesignPackage(keyword)
-  write('host-generating/.vanity/types/style-auto-imports.d.ts', ambientDeclaration(keyword))
+  write('host-generating/.vanity/types/vanity-style-auto-imports.d.ts', ambientDeclaration(keyword))
 
   mkdirSync(at('node_modules/@spike'), { recursive: true })
   for (const name of ['design', 'author-unlocked', 'author-bare', 'author-mixed']) {
@@ -107,7 +107,7 @@ rmSync(at('emit-check/dist'), { recursive: true, force: true })
 const emit = check('emit-check/tsconfig.json')
 const js = existsSync(at('emit-check/dist/Button.css.js')) ? readFileSync(at('emit-check/dist/Button.css.js'), 'utf8') : ''
 const dts = existsSync(at('emit-check/dist/Button.css.d.ts')) ? readFileSync(at('emit-check/dist/Button.css.d.ts'), 'utf8') : ''
-const elided = emit.ok && js.length > 0 && !js.includes('style-auto-imports') && !dts.includes('style-auto-imports')
+const elided = emit.ok && js.length > 0 && !js.includes('vanity-style-auto-imports') && !dts.includes('vanity-style-auto-imports')
 if (!elided)
   failed++
 console.log(`${elided ? 'ok  ' : 'FAIL'}  T8  unlock import under verbatimModuleSyntax, with real emit`)

@@ -1,12 +1,12 @@
 # vanity — testing and benchmarks
 
-This document defines Vanity's permanent evidence policy. Product claims are accepted only when reproducible tests observe them on every relevant plane.
+This document defines Vanity's permanent evidence policy. Product claims are accepted only when reproducible tests observe them in every relevant evidence dimension.
 
 ## 1. Evidence rule
 
-A contract is complete only when every relevant observation plane is green.
+A contract is complete only when every relevant evidence dimension is green.
 
-| Plane | Typical suffix/artifact | What it proves |
+| Evidence dimension | Typical suffix/artifact | What it proves |
 | --- | --- | --- |
 | Runtime | `*.test.ts` | Graph evaluation, serializers, recipes, setters, validation, snapshots, diagnostics. |
 | Type | `*.test-d.ts` | Accepted/rejected shapes, inference, trait propagation, axis/mode keys, runtime honesty. |
@@ -26,7 +26,7 @@ Unit coverage cannot substitute for browser cascade behavior. Browser success ca
 
 Every accepted change remains an independently verifiable vertical slice. The public suite, typecheck, build, demos, package rehearsal, and maintained fresh-app smoke stay green at integration boundaries.
 
-Every required evidence plane is green before release acceptance. Slower promotion matrices run on their defined schedule and remain green.
+Every required evidence dimension is green before release acceptance. Slower promotion matrices run on their defined schedule and remain green.
 
 ## 2. Fixture families
 
@@ -110,7 +110,7 @@ Test each data type against:
 - explicit sparse case;
 - mutable base/mode/case set and unset;
 - explicit-target external/vanity custom-property writes on HTML, SVG, and `CSSStyleDeclaration`-like targets;
-- Standard Schema transformed output plus `throw`/`fallback`/`omit`, missing app-plane registry, and async-schema rejection;
+- Standard Schema transformed output plus `throw`/`fallback`/`omit`, missing application-runtime registry, and async-schema rejection;
 - authored/reserved branches appear in handle types while omitted partial modes and unauthored cases do not;
 - mutable `null` mode/case reservation has no authored slot value, accepts `$set()`, and `$unset()` restores the prior effective expression;
 - native scheme output composes a reserved branch fallback inside `light-dark()` and selector emission preserves the equivalent fallback behavior;
@@ -153,7 +153,7 @@ Order matrix:
 
 ## 5. TypeScript/editor DX contract
 
-Selenita is required for the editor-DX plane. Assignability tests alone cannot prove that an API is pleasant at the cursor.
+Selenita is required for the editor-DX evidence dimension. Assignability tests alone cannot prove that an API is pleasant at the cursor.
 
 For every new public API, lock:
 
@@ -167,10 +167,10 @@ For every new public API, lock:
 - no `undefined` pollution in valid staged callbacks;
 - engine/axis/plugin literal preservation without `as const` ceremony;
 - semantically equivalent engine instances compose across HMR/package duplication while incompatible signatures fail locally;
-- plane-neutral and runtime `$axes`/`$case()` paths both return branch handles, with side effects present only on mutable runtime branches;
+- resolved and restored `$axes`/`$case()` paths both return branch handles, with side effects present only on mutable runtime controls;
 - `transaction()` mirrors the exact runtime token/axis trees and validates every queued value/root before the first write;
 - narrow runtime setters for mutable base/mode/case handles;
-- standards lane availability under aliases-only policy.
+- standards-form availability under aliases-only policy.
 - Hail option, constructor, marker, control-resolution, conditional elevation, token-preset, and rule-preset surfaces with compact named hovers and cursor-local invalid tuple/name/conflict diagnostics.
 
 Hover fixtures evaluate the text a user actually reads. They reject leaked compiler internals, unexplained overload counts, repeated expanded shapes when a named public type can preserve the same inference, and documentation blocks too long to scan in an editor popup. When TypeScript forces a trade-off between compact presentation, inference, soundness, and compiler performance, the chosen trade-off is measured and recorded rather than accepted accidentally.
@@ -223,9 +223,9 @@ Store machine-readable results under a generated benchmark artifact path and com
 
 ### 6.1 Resource hygiene
 
-Resource-heavy planes use measured, bounded concurrency. Selenita language services use at most six local workers while leaving one core for the host, and two workers in CI; the compact production browser matrix uses two workers; independent demo builds use at most three. Complete SDK type/editor tests, generated benchmarks, browser matrices, and packed fresh-app lifecycles remain separate phases so their compiler, browser, and filesystem peaks do not stack. A type-level prototype is first measured on the small fixture; recursive growth or a multi-gigabyte compiler heap is a design failure to remove, not a reason to keep rerunning the large corpus. Long-lived dev/browser processes must release watchers, HTTP, and HMR ports before another lifecycle begins. The raw vanilla-extract compatibility compiler must remain lazy and transportless; its regression fixture occupies Vite's default WebSocket port while proving compilation still succeeds without a warning. Sandbox-denied browser/Mach-port or watcher failures are rerun in the supported unsandboxed environment, while assertion failures remain red.
+Resource-heavy evidence dimensions use measured, bounded concurrency. Selenita language services use at most six local workers while leaving one core for the host, and two workers in CI; the compact production browser matrix uses two workers; independent demo builds use at most three. Complete SDK type/editor tests, generated benchmarks, browser matrices, and packed fresh-app lifecycles remain separate runs so their compiler, browser, and filesystem peaks do not stack. A type-level prototype is first measured on the small fixture; recursive growth or a multi-gigabyte compiler heap is a design failure to remove, not a reason to keep rerunning the large corpus. Long-lived dev/browser processes must release watchers, HTTP, and HMR ports before another lifecycle begins. The raw vanilla-extract compatibility compiler must remain lazy and transportless; its regression fixture occupies Vite's default WebSocket port while proving compilation still succeeds without a warning. Sandbox-denied browser/Mach-port or watcher failures are rerun in the supported unsandboxed environment, while assertion failures remain red.
 
-The maintainer loop has two honest gates. `pnpm run check:fast` uses cached lint, root tooling/browser-spec typechecking, incremental SDK typechecking, and the runtime/output test plane; `pnpm run check` adds the complete workspace typecheck, documentation, all Selenita and type assertions, audits, and benchmark-fixture drift. `pnpm run validate` adds canary, optimizer, production/development browser, and lifecycle evidence. Fast feedback never substitutes for the complete release-shaped gate.
+The maintainer loop has two honest gates. `pnpm run check:fast` uses cached lint, root tooling/browser-spec typechecking, incremental SDK typechecking, and the runtime/output evidence dimensions; `pnpm run check` adds the complete workspace typecheck, documentation, all Selenita and type assertions, audits, and benchmark-fixture drift. `pnpm run validate` adds canary, optimizer, production/development browser, and lifecycle evidence. Fast feedback never substitutes for the complete release-shaped gate.
 
 The accepted large fixture records 1.00s TypeScript total time, 287,522 instantiations, 142,142 kB reported memory, 587,110 B declarations, 5.008ms CSS completion, 0.104ms runtime completion, 6.132ms graph rename, and 6.259s production manifest/CSS build. The accepted environment, fixture identities, and complete baseline are in [benchmarks.md](./benchmarks.md).
 

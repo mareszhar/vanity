@@ -12,8 +12,8 @@ import type {
   VanityMathValue,
   VanityNumericColorChannel,
   VanityPluginSetupSystem,
-  VanityRuleGroup,
   VanitySystemPlugin,
+  VanitySystemRule,
 } from '@mszr/vanity'
 
 /** How a Hail control participates in generated CSS. */
@@ -293,7 +293,7 @@ export type HailOklchx<Enabled extends boolean = false>
   ]> & HailOklchElevationMember<Enabled>
 
 export interface HailColorx {
-  /** Author raw `color()` syntax when a future/custom profile needs the CSS lane. */
+  /** Author raw `color()` syntax when a future/custom profile needs the raw CSS form. */
   (css: string): VanityAuthoredColor
   /** Author a three-channel profile color with normalized alpha. */
   (
@@ -542,14 +542,14 @@ export type HailTokenGraph<Options>
     & IfSelected<Options, 'breakpoints', HailBreakpointTokenGraph>
     & IfSelected<Options, 'icons', HailIconTokenGraph>
 
-/** Named rule groups contributed by Hail's rule presets. */
+/** Named system rules contributed by Hail's rule presets. */
 export type HailRuleName = 'hailReset' | 'hailMotion' | 'hailTheming'
 
-/** Exact rule-group shape projected from the selected presets. */
-export type HailRuleGroups<Options>
-  = IfSelected<Options, 'reset', { readonly hailReset: VanityRuleGroup }>
-    & IfSelected<Options, 'motion', { readonly hailMotion: VanityRuleGroup }>
-    & IfSelected<Options, 'theming', { readonly hailTheming: VanityRuleGroup }>
+/** Exact named-system-rule shape projected from the selected presets. */
+export type HailSystemRules<Options>
+  = IfSelected<Options, 'reset', { readonly hailReset: VanitySystemRule }>
+    & IfSelected<Options, 'motion', { readonly hailMotion: VanitySystemRule }>
+    & IfSelected<Options, 'theming', { readonly hailTheming: VanitySystemRule }>
 
 /** Axes conditionally contributed by Hail configuration. */
 export type HailAxes<Options>
@@ -571,5 +571,5 @@ export interface HailPlugin<Options extends HailOptions = HailOptions>
   readonly __vanityPluginConstructors?: HailConstructors<Options>
   readonly __vanityPluginTokens?: HailTokenGraph<Options>
   readonly __vanityPluginUtils?: HailUtils<Options>
-  readonly __vanityPluginRules?: HailRuleGroups<Options>
+  readonly __vanityPluginRules?: HailSystemRules<Options>
 }

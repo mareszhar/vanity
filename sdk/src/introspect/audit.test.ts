@@ -128,7 +128,7 @@ describe('the escape inventory', () => {
     expect(messages.some(message => message.includes('\'body\''))).toBe(false)
   })
 
-  it('separates typed raw assertions and aliases-only standard escapes into actionable lanes', () => {
+  it('separates typed raw assertions and aliases-only standard escapes into actionable categories', () => {
     const ds = createOpenSystem()
       .addPlugin(openPropertyAliases({ py: 'paddingBlock' }, { expose: 'aliases-only' }))
       .consolidate()
@@ -170,7 +170,7 @@ describe('scale strays', () => {
   })
 })
 
-describe('semantic provenance lanes', () => {
+describe('semantic provenance categories', () => {
   it('audits owning/condition specificity, ambiguous arms, mutable roots, and nonportable values', () => {
     const specific = built(() => createEngine().createSystem({
       root: '#application#widget',
@@ -276,7 +276,7 @@ describe('focus visibility', () => {
 })
 
 describe('promotion and the report', () => {
-  it('the system config promotes a lane to error and can silence one', () => {
+  it('the system config promotes an audit category to error and can silence one', () => {
     const { manifest, css } = built(() => {
       const { css: style } = createSystem({
         tokens: { space: { sm: '8px', md: '16px' } },

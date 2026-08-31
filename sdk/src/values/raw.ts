@@ -1,4 +1,4 @@
-/** Typed escape lane for future CSS syntax vanity does not yet understand. */
+/** Typed escape for future CSS syntax Vanity does not yet understand. */
 
 import type { VanityCssDataType, VanityCssValue } from './types'
 import { ExpressionValue, rawNode } from './protocol'

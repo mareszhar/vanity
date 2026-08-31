@@ -132,7 +132,7 @@ describe('symmetric authoring', () => {
     expect(css).toContain('z-index: calc(var(--bound-control) * 3)')
   })
 
-  it('emits ordered named system rule groups once and exposes them to introspection', () => {
+  it('emits ordered named system rules once and exposes them to introspection', () => {
     const groups = defineRules({
       base: {
         description: 'document baseline',

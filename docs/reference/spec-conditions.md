@@ -254,7 +254,7 @@ const control = {
 
 Modes without metadata or adapter are not runtime-activatable and are typed out of `$switchTo`. Intersections retain activation metadata only when one descriptor can satisfy the whole compiled arm; an attribute gated by media, supports, container, scope, or an interactive selector is not presented as activatable. A union remains activatable when one complete arm is activatable.
 
-The root-resolving `rt.axes.*` facade consumes these descriptors directly; runtime never reparses selectors.
+The root-resolving `rt.axes.*` controller surface consumes these descriptors directly; runtime never reparses selectors.
 
 ## 12. Introspection
 

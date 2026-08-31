@@ -1,5 +1,5 @@
 /**
- * The editor-DX plane: port completions and diagnostics land on the intended
+ * The editor-DX evidence dimension: port completions and diagnostics land on the intended
  * key, and hovers stay readable public types ([patterns.md §10]) — locked
  * with selenita against the real language service.
  */

@@ -44,7 +44,7 @@ describe('consumer testing kit', () => {
       { $name: '--restored' },
     )
 
-    expect(() => foldOf(restored as any)).toThrow(/consolidated in this process.*app-plane/)
+    expect(() => foldOf(restored as any)).toThrow(/consolidated in this process.*application handle/)
   })
 
   it('reads and matches exact or patterned computed values', () => {

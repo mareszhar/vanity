@@ -39,7 +39,7 @@ The showcase exercises capabilities because they improve the result, not as a ch
 - axes (scheme/density/motion), partial modes, and — where the platform allows it honestly — sparse cases and deterministic axis order;
 - CSS-reactive derived values and runtime-mutable color and non-color tokens;
 - `ds.runtime()` with validated setters, `$unset()`, snapshot persistence, SSR projection via `runtimeProps()`, and hydration with no theme flash;
-- recipes, anatomy (with part-scoped conditions), ports, atoms, Hail’s semantic elevation/BEM utilities, and standards/raw escape lanes (e.g. `@starting-style`);
+- recipes, anatomy (with part-scoped conditions), ports, atoms, Hail’s semantic elevation/BEM utilities, and raw standards escapes (e.g. `@starting-style`);
 - media queries for viewport/preferences and **container queries** for an independently responsive specimen that visibly reorganizes;
 - selectors, `:focus-visible`, keyframes/transitions, self-hosted `@font-face`, layers, and custom-property integration;
 - `ds.explain()` provenance surfaced in an inspector that answers "why does this look this way?" without exposing private slot names;
@@ -51,7 +51,7 @@ The flagship is Nuxt + Vue + Pug + TypeScript. vanity owns all authored styling;
 
 - **Template first, script second.** SFCs use `<template lang="pug">` then `<script setup lang="ts">`.
 - **No component/style colocation.** Components live in `app/components`; their style modules live apart (e.g. `app/assets/styles/components/*.css.ts`), reached by a stable alias (`import * as s from 'styled/Name.css'`) rather than fragile relative paths. Design-system styles live in `app/assets/styles/design`.
-- **Lane-specific auto-imports, not a mirrored API.** Nuxt-native helpers remain Nuxt-owned; Vanity's runtime helpers are an explicit `app.runtimeAutoImports` choice in `nuxt.config.ts`. `compiler.styleAutoImports` injects the exact locked `ds` value plus the deliberate authoring bindings from `design/authoring.ts` into evaluated `*.css.ts` files only. Longer style modules use those bindings directly (`cls` for the canonical `ds.class`, `t` for tokens); concise reference examples keep the explicit `ds.class` form. Nuxt generates the exact `typeof` ambient declarations, and no hand-maintained global surface exists. The app's own `app/utils` barrel remains the deliberate source for its `ds` and font exports.
+- **Module-role auto-imports, not a mirrored API.** Nuxt-native helpers remain Nuxt-owned; Vanity's runtime helpers are an explicit `autoImports.app` choice in `nuxt.config.ts`. `autoImports.shared` injects the exact locked `ds` and deliberate authoring bindings from `design/authoring.ts` into both module roles. Longer style modules use those bindings directly (`cls` for the canonical `ds.class`, `t` for tokens); concise reference examples keep the explicit `ds.class` form. The studio imports its emitted typeface handles at their style-module boundary, while Nuxt generates the exact `typeof` ambient declarations and no hand-maintained app barrel exists.
 - **`import * as s`** keeps a component's styled imports to one concise line so the TypeScript reads clearly.
 - **OKLCH only.** Every authored color is an OKLCH value or a token derived from one. No hex/rgb/hsl literals, including hidden fixtures.
 - **HMR is real.** Editing a token module updates the running studio; interactive controls move custom properties and axis attributes, never redefine the values the graph already owns.

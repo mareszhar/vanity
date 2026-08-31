@@ -1,11 +1,11 @@
 /**
- * The live plane: the framework-free code that runs in the browser. Runtime code
+ * Framework-free browser runtime code. It
  * writes custom-property values and attributes — it never constructs CSS rules
  * ([patterns.md §1]).
  */
 
 import type { VanityAtoms, VanityAtomsRuntime } from './atoms/types'
-import type { VanityRuntimeHandle } from './internal/handle'
+import type { VanityInternalTokenHandle } from './internal/handle'
 import type { VanityPort, VanityPortBindingOptions, VanityPortMeta } from './ports/types'
 import type { VanityAnatomy, VanityAnatomyRuntime, VanityRecipe, VanityRecipeRuntime } from './recipes/types'
 import { createAtomsHandle } from './atoms/handle'
@@ -19,7 +19,7 @@ export type { VanityPort, VanityPortBindingOptions, VanityPortMeta, VanityPortSt
 export type { VanityAnatomyRuntime, VanityRecipeRuntime } from './recipes/types'
 export type { VanityAxisControl, VanityAxisControlRoot } from './system/axes'
 export {
-  restoreRuntimeFactory,
+  restoreRuntimeControllerFactory,
   restoreRuntimeProps,
   restoreRuntimeReconciler,
   restoreRuntimeStyle,
@@ -28,15 +28,15 @@ export {
   setCustomProperty,
 } from './system/live'
 export type {
-  VanityBoundRuntime,
   VanityCustomPropertyEntries,
   VanityCustomPropertyReference,
   VanityCustomPropertyTarget,
   VanityRuntimeAxes,
+  VanityRuntimeController,
+  VanityRuntimeControllerFactory,
   VanityRuntimeCycleOptions,
   VanityRuntimeDiagnostic,
   VanityRuntimeDiagnosticCode,
-  VanityRuntimeFactory,
   VanityRuntimeInput,
   VanityRuntimeOptions,
   VanityRuntimeProps,
@@ -60,7 +60,7 @@ export { ports }
  * Restores a token handle when a style module's exports are serialized for app
  * code. Generated import target — not for hand-written code.
  */
-export function restoreToken(meta: Parameters<typeof createHandle>[0]): VanityRuntimeHandle {
+export function restoreToken(meta: Parameters<typeof createHandle>[0]): VanityInternalTokenHandle {
   return createHandle(meta)
 }
 
@@ -95,24 +95,25 @@ export function restoreAnatomy(runtime: VanityAnatomyRuntime): VanityAnatomy<str
 
 /**
  * Restores an atoms handle from its serialized class tables. Runtime calls
- * resolve among the precompiled classes; an unsafe value gets the ports-lane
- * redirect. Generated import target — not for hand-written code.
+ * resolve among precompiled classes; an unsafe value is redirected to a port.
+ * Generated import target — not for hand-written code.
  */
 export function restoreAtoms(runtime: VanityAtomsRuntime): VanityAtoms<Record<string, unknown>> {
   return createAtomsHandle(runtime)
 }
 
 /**
- * Restores a build-plane authoring function as a throwing stub, so importing a
+ * Restores a build-only style-authoring function as a throwing stub, so importing a
  * system style module from app code stays legal (`t`, override classes) while
- * calling `css`/`recipe`/`port` there fails with the lane redirect instead of
- * silently doing nothing. Generated import target — not for hand-written code.
+ * calling `css`/`recipe`/`port` there receives a module-role misuse
+ * diagnostic instead of silently doing nothing. Generated import target — not
+ * for hand-written code.
  */
-export function restoreBuildPlane(meta: { name: string }): () => never {
+export function restoreStyleAuthoringStub(meta: { name: string }): () => never {
   return () => {
     throw new Error(
-      `[vanity] ${meta.name} is build-plane — it runs inside *.css.ts modules the compiler evaluates. `
-      + `App code receives its results (classes, tokens, ports), never the function.`,
+      `[vanity] VANITY_STYLE_MODULE_MISUSE: ${meta.name} belongs in a *.css.ts style module. `
+      + 'Use ds.runtime() in application modules, or consume serialized style exports.',
     )
   }
 }

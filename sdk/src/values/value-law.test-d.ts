@@ -2,7 +2,7 @@ import { createEngine } from '@test/legacy'
 import { describe, expectTypeOf, it } from 'vitest'
 
 describe('the value law — compatible handles are values', () => {
-  it('crosses constructors, operations, fallbacks, and property lanes', () => {
+  it('crosses constructors, operations, fallbacks, and property forms', () => {
     const de = createEngine()
     const ds = de.createSystem({
       tokens: {

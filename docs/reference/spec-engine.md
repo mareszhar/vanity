@@ -1,6 +1,6 @@
 # vanity — spec: open and locked system
 
-Vanity itself is the design-system engine. The public lifecycle has two stages: an immutable open system accumulates capabilities, and `consolidate()` returns an immutable locked system that styles and binds runtime behavior.
+Vanity itself is the design-system engine. A system has two public states: an immutable open system accumulates capabilities, and `consolidate()` resolves an immutable locked system that styles and binds runtime behavior.
 
 ```ts
 import { createSystem } from '@mszr/vanity'
@@ -36,7 +36,7 @@ export const ds = open.consolidate({
 - default token reference and emission policy;
 - color, validation, and project semantic policy.
 
-It returns value constructors plus only open-stage operations. Emitters, runtime binding, and resolved token names are absent from the type surface. `tdec` is present because it produces prefix-independent declaration data for open-stage plugin utilities; it does not emit. Runtime property access to a locked-only method returns a designed throwing stub, so JavaScript misuse reports the correct lifecycle rather than `undefined is not a function`.
+It returns value constructors plus only open-state operations. Emitters, runtime binding, and resolved token names are absent from the type surface. `tdec` is present because it produces prefix-independent declaration data for open-system plugin utilities; it does not emit. Runtime property access to a locked-only method returns a designed throwing stub, so JavaScript misuse reports the correct system-state error rather than `undefined is not a function`.
 
 Every operation is immutable. A base may safely produce many independent branches and locked systems:
 
@@ -66,7 +66,7 @@ The additive families are:
 - `addConsts`;
 - `addUtils`.
 
-An `add*` operation requires the destination name or token path to be absent. Duplicate additions fail at the input in TypeScript where possible and through a local runtime diagnostic otherwise.
+An `add*` operation requires the target name or token path to be absent. Duplicate additions fail at the input in TypeScript where possible and through a local runtime diagnostic otherwise.
 
 `addTokens` accepts a raw token graph, a unified token builder, or a callback over the open system. `open.defineTokens()` supplies the system-bound four-form `.t` builder and `tdef`; top-level `defineTokens()` creates a plain-value portable module. Each contribution carries its own requirements, and the composed system validates them at the point of use. The complete token contract is [spec-tokens.md](./spec-tokens.md).
 
@@ -78,7 +78,7 @@ An `add*` operation requires the destination name or token path to be absent. Du
 - already-filled values;
 - shape replacement disguised as augmentation.
 
-Augmentation preserves the registered token's path, handle identity policy, type, traits, existing branches, requirements, and ownership. Its callback target exposes only legal `val`, axis-name, and `$axes` destinations.
+Augmentation preserves the registered token's path, handle identity policy, type, traits, existing branches, requirements, and ownership. Its callback target exposes only legal `val`, axis-name, and `$axes` target slots.
 
 ### 2.3 Overwrite
 
@@ -89,19 +89,19 @@ The user-visible open chain may explicitly call:
 - `overwriteConditions`;
 - `overwriteConsts`.
 
-Overwrite requires an existing destination. It is unavailable to plugin setup, and there is no overwrite for utilities or constructors. Every overwrite is recorded in portable provenance with its kind, affected paths, and authored source when available.
+Overwrite requires an existing target. It is unavailable to plugin setup, and there is no overwrite for utilities or constructors. Every overwrite is recorded in portable provenance with its kind, affected paths, and authored source when available.
 
 ### 2.4 Expect
 
-`expectTokens`, `expectAxis`, `expectPlugin`, and `expectConstructor` express temporal structural requirements. Token requirements may name paths and require data type, mutability, reference, and emission traits; axis requirements may require exact mode subsets. Extra host shape is allowed.
+`expectTokens`, `expectAxis`, `expectPlugin`, and `expectConstructor` declare that a named shape or capability must be supplied outside the current definition; they do not claim ownership of it. Token requirements may name paths and require data type, mutability, reference, and emission traits; axis requirements may require exact mode subsets. Extra supplied shape is allowed.
 
 Requirements called inside plugin setup are carried in the plugin type. They must already be satisfied at the plugin's `.addPlugin()` position. Type failures remain local to that call; runtime failures name the plugin and the missing capability and explain that the supplying `add*` call must move earlier. The full contract is [spec-extensions.md](./spec-extensions.md).
 
 ## 3. Logical and resolved handles
 
-`open.t` is a logical read surface. Its handles expose:
+`open.t` is a logical read surface. Its logical token handles expose:
 
-- `$phase: 'logical'`;
+- `$phase: 'logical'` as a local binding-state discriminant;
 - semantic `$path`;
 - CSS `$type`;
 - reference, emission, and mutability traits;
@@ -109,7 +109,17 @@ Requirements called inside plugin setup are carried in the plugin type. They mus
 
 They deliberately do not expose a final custom-property name or `var()` reference because prefix, root, layers, and final graph resolution belong to consolidation.
 
-`locked.t` contains resolved handles. It adds the final `$name`, `$var()`, resolved/default value information, branches, and emission/runtime metadata. The runtime projection later decorates mutable semantic addresses with `$set`/`$unset`.
+`locked.t` contains resolved token handles. It adds the final `$name`, `$var()`, resolved/default value information, branches, and emission/runtime metadata. Application and SSR modules reconstruct restored token handles from portable data. The runtime controller exposes separate token controls with `$set`/`$unset` only for mutable semantic addresses.
+
+```text
+semantic token subject
+  ├─ logical token handle   (open system)
+  ├─ resolved token handle  (locked/build context)
+  ├─ restored token handle  (application/SSR context)
+  └─ token control          (runtime controller; mutable addresses only)
+```
+
+These are context-specific interfaces to one semantic subject, not one JavaScript object travelling through every environment.
 
 Token-module `.refs` are lazy module-relative handles. They rebind at each mount, including inside expressions, while `open.t` addresses the accumulated mounted graph and `locked.t` owns final CSS identity.
 
@@ -117,7 +127,7 @@ Token-module `.refs` are lazy module-relative handles. They rebind at each mount
 
 Configuration changes how Vanity resolves or emits the system. It belongs in `createSystem()` or `consolidate()` options and participates in the appropriate semantic identities.
 
-Constants are JSON-safe authored data exposed through `open.consts` and `locked.consts`. `addConsts` and `overwriteConsts` validate finite, cycle-free, data-only values. Constants are portable and may participate in the runtime facade.
+Constants are JSON-safe authored data exposed through `open.consts` and `locked.consts`. `addConsts` and `overwriteConsts` validate finite, cycle-free, data-only values. Constants are portable and may participate in the application-system projection.
 
 Utilities are functions added with `addUtils`. They remain in the in-process contract and locked build/tool surface; functions are rejected at the portable JSON boundary. There is intentionally no utility overwrite.
 
@@ -166,7 +176,7 @@ Conditions, roots, axes, range queries, `@scope`, and `colorSchemes()` are docum
 
 ## 7. In-process and portable forms
 
-The locked object owns a private immutable in-process contract:
+The locked object owns a private immutable in-process system contract:
 
 ```ts
 interface VanityInProcessSystemContract {
@@ -175,9 +185,9 @@ interface VanityInProcessSystemContract {
 }
 ```
 
-The emission closure is compiler-only. The portable value is validated, cycle-free JSON data with format discriminator `vanity.system/1`. It contains normalized policies, extensions, axes, conditions, token restoration data, token semantic records, runtime contract, constants, ownership, provenance, and four identities. It contains no functions. This interchange form is private compiler restoration data rather than the public tool schema.
+The emission closure is compiler-only. Its portable system contract is validated, cycle-free JSON data with format discriminator `vanity.system/1`. It contains normalized policies, extensions, axes, conditions, token restoration data, token semantic records, runtime contract, constants, ownership, provenance, and four identities. It contains no functions. This interchange form is private compiler restoration data rather than the public tool schema.
 
-`ds.introspect()` projects that contract into the normalized, versioned `vanity.introspection/1` semantic map. Manifest v3's primary `system` field is byte-order/deep-equal to that map. The compiler continues to write the separate portable artifact under `.vanity/systems/` when app/SSR restoration needs it; tools never need to interpret its private handle records.
+`ds.introspect()` projects that contract into the normalized, versioned `vanity.introspection/1` semantic map. Manifest v3's primary `system` field is byte-order/deep-equal to that map. The compiler continues to materialize a portable JSON artifact under `.vanity/systems/` when application/SSR restoration needs it; tools never need to interpret its private handle records.
 
 ## 8. Four identities
 
@@ -185,7 +195,7 @@ The emission closure is compiler-only. The portable value is validated, cycle-fr
 | --- | --- | --- | --- |
 | compatibility | policy, extension identities, token/axis/condition shape, ownership | token values, docs, object/path identity | composition and duplicate-package resolution |
 | CSS | namespace, layers, roots, emitted token values/branches/registration | docs and runtime-only behavior | one system CSS virtual module |
-| runtime schema | semantic runtime contract, app-visible consts, required handle projection | docs and build-only CSS values | browser/SSR facade |
+| runtime schema | semantic runtime contract, app-visible consts, required handle projection | docs and build-only CSS values | browser/SSR runtime controller |
 | docs | descriptions, metadata, provenance, authored source | CSS/runtime implementation | manifest/documentation revision |
 
 A token-value-only change leaves compatibility, runtime-schema, and docs identities stable. A description-only change changes only docs identity. Physical copies with equal normalized semantics deduplicate even when object and source identities differ.
@@ -205,7 +215,7 @@ vanityPlugin({
 
 For a style transform the compiler executes the full in-process contract, emits its system declarations once under a virtual module keyed by CSS identity, and emits style declarations under a virtual module keyed by source. Eager importers share system CSS; a lazy style retains only its own async CSS.
 
-For ordinary browser and SSR imports of the configured `system.ts`, Vite replaces the source with a facade generated from portable data. The source module, authoring closures, compiler, Vanilla Extract, and Node-only code never enter those graphs.
+For ordinary browser and SSR imports of the configured `system.ts`, Vite replaces the source with an application-system projection generated from portable data. The source module, authoring closures, compiler, Vanilla Extract, and Node-only code never enter those graphs.
 
 A compiler-owned cascade prelude is emitted as the first stylesheet. `compiler.layerOrder` optionally supplies its ordered CSS layer roots; when omitted, Vanity derives the order from the configured systems' roots. Set it when the build also contains external layers whose precedence must be explicit.
 
@@ -226,7 +236,7 @@ const packagedSystem = {
 }
 ```
 
-The compiler evaluates the build JS and compares all four identities with the portable artifact. A mismatch names the package and requires a rebuild; it never silently projects a stale pair.
+The compiler evaluates the build JavaScript and compares all four identities with the portable JSON artifact. A mismatch names the package and requires a rebuild; it never silently projects a stale pair.
 
 Artifacts are written atomically and only when bytes change.
 
@@ -234,7 +244,7 @@ Artifacts are written atomically and only when bytes change.
 
 Two systems may not claim the same prefix/root/layer namespace with different CSS identities. The compiler reports both owners and fingerprints.
 
-Semantically identical physical package copies are valid. Compatibility plus runtime identity selects one facade; CSS identity selects one system stylesheet. Source path and object reference never prevent deduplication.
+Semantically identical physical package copies are valid. Compatibility plus runtime identity selects one application-system projection; CSS identity selects one system stylesheet. Source path and object reference never prevent deduplication.
 
 ## 12. HMR and last-good state
 
@@ -246,7 +256,7 @@ The compiler records:
 - resolved runtime virtual modules;
 - last-good CSS, portable artifacts, and manifest records.
 
-Success → dependency error → repair and first-request error → dependency repair both recover on the same server. A failed attempt never replaces last-good bytes. On repair, affected style entries and runtime facades invalidate and re-evaluate.
+Success → dependency error → repair and first-request error → dependency repair both recover on the same server. A failed attempt never replaces last-good bytes. On repair, affected style entries and runtime projections invalidate and re-evaluate.
 
 ## 13. Evidence
 

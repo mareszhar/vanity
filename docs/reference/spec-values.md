@@ -45,7 +45,7 @@ Every value position accepts:
 - compatible Vanity values;
 - compatible open/locked token handles;
 - valid raw CSS strings where the underlying CSS grammar accepts them;
-- CSS-wide keywords in declaration/property lanes;
+- CSS-wide keywords in declaration/property positions;
 - grammar-specific keywords such as `none`;
 - explicit typed raw syntax when first-class parsing is incomplete.
 
@@ -82,7 +82,7 @@ ds.percent(50)
 ds.oklch(0.6, 0.15, ds.t.color.hue)
 ```
 
-Configured bare constructors affect only their branded lane:
+Configured bare constructors affect only their branded value form:
 
 ```TS
 createSystem({
@@ -109,7 +109,7 @@ ds.tone('red')
 ds.tone.vivid('red')
 ```
 
-Every additional member is call-like, typed, discoverable, introspectable, and lowered before the portable artifact boundary. User-defined families remain system-bound because their names do not exist until registration.
+Every additional member is call-like, typed, discoverable, introspectable, and lowered before the portable-contract boundary. User-defined families remain system-bound because their names do not exist until registration.
 
 ## 5. Policy resolution
 
@@ -275,7 +275,7 @@ Typed raw values:
 - appear in provenance and audits;
 - preserve authored serialization unless normalization is proven.
 
-Raw strings remain the universal direct-CSS lane. A typed raw wrapper is for carrying type information, not for making valid CSS legal.
+Raw strings remain the universal direct-CSS form. A typed raw wrapper is for carrying type information, not for making valid CSS legal.
 
 ## 12. Extensions
 
@@ -308,6 +308,6 @@ Every helper receives:
 
 `boxShadow: 'none'` and the systematic keyword matrix are one contract. A one-off parser exception is insufficient.
 
-The declaration validator has a central property-grammar keyword lane, with `box-shadow`/`text-shadow` `none` and the initial CSS-wide matrix covered across class, recipe, atom, and alias paths.
+The declaration validator has a central property-grammar keyword path, with `box-shadow`/`text-shadow` `none` and the initial CSS-wide matrix covered across class, recipe, atom, and alias paths.
 
-Compatible token handles retain their CSS data type through constructor, operation, fallback, declaration, and runtime setter lanes. The cross-cutting value-law suite covers color channels, math/clamp/negation, grid fragments, typed custom-property fallbacks, image tokens, and snapshot setters. `lightDark(light, dark)` is the only scheme-pair value constructor and implements color/color plus image-or-`none` overloads; mixed forms fail at the cursor. `legibleOn` exposes only `{ contrast }`. `sdk/src/values/parity.ts` is the authoritative machine ledger. Every release emitter preserves these guarantees; broader generated property coverage remains continuous parity work.
+Compatible token handles retain their CSS data type through constructors, operations, fallbacks, declarations, and runtime setters. The cross-cutting value-law suite covers color channels, math/clamp/negation, grid fragments, typed custom-property fallbacks, image tokens, and snapshot setters. `lightDark(light, dark)` is the only scheme-pair value constructor and implements color/color plus image-or-`none` overloads; mixed forms fail at the cursor. `legibleOn` exposes only `{ contrast }`. `sdk/src/values/parity.ts` is the authoritative machine ledger. Every release emitter preserves these guarantees; broader generated property coverage remains continuous parity work.

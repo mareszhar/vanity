@@ -14,7 +14,7 @@
         ".vanity/types/**",
         "auto-imports.d.ts",
         "node_modules/@types/vanity-style-auto-imports/**",
-        "node_modules/@types/vanity-runtime-auto-imports/**",
+        "node_modules/@types/vanity-app-auto-imports/**",
         "styled-system/**"
       ]
     },

@@ -329,8 +329,8 @@ function identity<Kind extends 'compatibility' | 'css' | 'runtime-schema' | 'doc
 /**
  * Only data that can change app/SSR behavior participates in runtime identity.
  * Build-only token values remain in CSS; documentation never dirties a runtime
- * facade. Value-referenced handles are the exception because their value is
- * returned directly by app-plane handle calls.
+ * projection. Value-referenced handles are the exception because their value is
+ * returned directly by restored application-handle calls.
  */
 export function runtimeTokenProjection(token: VanityHandleMeta): VanityHandleMeta {
   return {

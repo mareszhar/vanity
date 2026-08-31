@@ -13,7 +13,7 @@ import { transformVanityCss } from './internal/transformCss'
 type Adapter = Parameters<typeof setAdapter>[0]
 type CssObj = Parameters<Adapter['appendCss']>[0]
 
-/** Options for one isolated build-plane emission capture. */
+/** Options for one isolated build-time emission capture. */
 export interface VanityEmissionOptions {
   /** Virtual style-module path used in debug names and diagnostics. */
   readonly file?: string

@@ -1,4 +1,4 @@
-/** Phase 5's unified additive token builder and system-bound `tdef` facade. */
+/** Unified additive token builder and system-bound `tdef` authoring surface. */
 
 import type { VanityAxisDefinitions, VanityAxisModeName, VanityAxisRegistry } from '../system/axes'
 import type { VanityCondition } from '../system/conditions'

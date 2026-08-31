@@ -15,6 +15,7 @@
       "@mszr/vanity/vite": ["./src/vite.ts"],
       "@mszr/vanity/vue": ["./src/vue.ts"],
       "@mszr/vanity/nuxt": ["./src/nuxt.ts"],
+      "@mszr/vanity/wxt": ["./src/wxt.ts"],
       "@mszr/vanity/prepare": ["./src/prepare.ts"],
       "@test": ["./src/test-support/index.ts"],
       "@test/legacy": ["./src/test-support/legacy.ts"]

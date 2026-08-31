@@ -14,7 +14,7 @@
  * resolver callbacks, so token overrides can re-resolve with substitutions.
  */
 
-import type { VanityRuntimeHandle, VanityTokenMode } from '../internal/handle'
+import type { VanityInternalTokenHandle, VanityTokenMode } from '../internal/handle'
 import type { VanitySerializeContext } from '../values/protocol'
 import type { VanityCssValue } from '../values/types'
 import type { VanityChannelOperation, VanityColorChannel, VanityColorExpr } from './color'
@@ -35,13 +35,13 @@ export interface VanityExprTraits {
 
 export interface VanityResolver {
   /** Fold a graph edge to its per-scheme build value (cycle-guarded by the graph). */
-  foldRef: (handle: VanityRuntimeHandle, scheme: VanityScheme) => VanityOklch
+  foldRef: (handle: VanityInternalTokenHandle, scheme: VanityScheme) => VanityOklch
   /** Classify a graph edge (cycle-guarded by the graph). */
-  refTraits: (handle: VanityRuntimeHandle) => VanityExprTraits
+  refTraits: (handle: VanityInternalTokenHandle) => VanityExprTraits
   /** Reject a non-color value with a diagnostic naming the offending token. */
   invalidColor: (detail: string) => never
   /** Choose a token's declared val/var projection at a graph edge. */
-  serializeRef?: (handle: VanityRuntimeHandle) => string
+  serializeRef?: (handle: VanityInternalTokenHandle) => string
   /** Serialize a value expression with token refs replaced by authored defaults. */
   foldValue?: (value: import('../values/types').VanityCssValue, scheme: VanityScheme) => string
   /** Serialize a value expression with semantic token paths rebound to this graph. */

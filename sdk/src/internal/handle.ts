@@ -1,4 +1,4 @@
-/** Plane-neutral token and branch handles shared by build and runtime planes. */
+/** Token and branch handles shared across build and application contexts. */
 
 import type { VanityCssDataType } from '../values/types'
 import { cssText } from '../values/types'
@@ -35,7 +35,7 @@ export type VanitySemanticTokenAddress
     | { readonly kind: 'axis', readonly axis: string, readonly mode: string }
     | { readonly kind: 'case', readonly when: Readonly<Record<string, string>> }
 
-/** Internal cross-plane identity. Private slot names never enter snapshots. */
+/** Internal cross-context identity. Private slot names never enter snapshots. */
 export interface VanityHandleRuntimeAddress {
   readonly system: string
   readonly token: readonly string[]
@@ -77,7 +77,7 @@ export interface VanityHandleMeta {
   }[]
 }
 
-export interface VanityRuntimeBranchHandle {
+export interface VanityInternalTokenBranchHandle {
   (): string
   readonly [VANITY_BRANCH_HANDLE]: true
   readonly [VANITY_RUNTIME_ADDRESS]?: VanityHandleRuntimeAddress
@@ -87,7 +87,7 @@ export interface VanityRuntimeBranchHandle {
   toString: () => string
 }
 
-export interface VanityRuntimeHandle {
+export interface VanityInternalTokenHandle {
   (): string
   readonly [VANITY_HANDLE]: true
   readonly [VANITY_RUNTIME_ADDRESS]?: VanityHandleRuntimeAddress
@@ -111,14 +111,14 @@ export interface VanityRuntimeHandle {
   readonly $emit: boolean
   readonly $mutable: boolean
   /** Apply this token as a declaration named by its final path segment. */
-  readonly $dec: Readonly<Record<string, VanityRuntimeHandle>>
+  readonly $dec: Readonly<Record<string, VanityInternalTokenHandle>>
   $description?: string
   $deprecated?: string
   $metadata?: VanityHandleMetadata
   readonly $register?: unknown
   readonly $validate?: unknown
-  $axes: Record<string, Record<string, VanityRuntimeBranchHandle>>
-  $case: (when: Readonly<Record<string, string>>) => VanityRuntimeBranchHandle
+  $axes: Record<string, Record<string, VanityInternalTokenBranchHandle>>
+  $case: (when: Readonly<Record<string, string>>) => VanityInternalTokenBranchHandle
   toString: () => string
 }
 
@@ -127,7 +127,7 @@ export interface VanityRuntimeHandle {
  * fields use getters over mutable restoration state; compatibility aliases
  * remain internal and therefore cannot fork from `$val`/`$name`.
  */
-export function createHandle(meta: VanityHandleMeta): VanityRuntimeHandle {
+export function createHandle(meta: VanityHandleMeta): VanityInternalTokenHandle {
   const state: VanityHandleMeta = {
     ...meta,
     reference: meta.reference ?? 'var',
@@ -136,13 +136,13 @@ export function createHandle(meta: VanityHandleMeta): VanityRuntimeHandle {
     type: meta.type ?? 'unknown',
   }
   const variable = `var(${meta.name})` as `var(--${string})`
-  const axes: Record<string, Record<string, VanityRuntimeBranchHandle>> = {}
-  const cases = new Map<string, VanityRuntimeBranchHandle>()
+  const axes: Record<string, Record<string, VanityInternalTokenBranchHandle>> = {}
+  const cases = new Map<string, VanityInternalTokenBranchHandle>()
 
   const render = () => state.reference === 'val' && state.value !== undefined
     ? String(state.value)
     : variable
-  const handle = (() => render()) as VanityRuntimeHandle
+  const handle = (() => render()) as VanityInternalTokenHandle
 
   Object.defineProperty(handle, 'name', { value: meta.name, configurable: true })
   Object.defineProperty(handle, vanityHandleSymbol(), { value: true })
@@ -206,7 +206,7 @@ export function createHandle(meta: VanityHandleMeta): VanityRuntimeHandle {
   return handle
 }
 
-export function updateHandle(handle: VanityRuntimeHandle, update: Partial<VanityHandleMeta>): void {
+export function updateHandle(handle: VanityInternalTokenHandle, update: Partial<VanityHandleMeta>): void {
   if (update.mode !== undefined)
     handle.mode = update.mode
   if ('value' in update)
@@ -223,10 +223,10 @@ export function createBranchHandle(value?: string | number, meta: {
   description?: string
   metadata?: VanityHandleMetadata
   runtime?: VanityHandleRuntimeAddress
-} = {}): VanityRuntimeBranchHandle {
+} = {}): VanityInternalTokenBranchHandle {
   const state = { value, ...meta }
   const render = () => state.value === undefined ? '' : String(state.value)
-  const handle = (() => render()) as VanityRuntimeBranchHandle
+  const handle = (() => render()) as VanityInternalTokenBranchHandle
   Object.defineProperty(handle, vanityBranchHandleSymbol(), { value: true })
   if (meta.runtime)
     Object.defineProperty(handle, vanityRuntimeAddressSymbol(), { configurable: true, value: meta.runtime })
@@ -238,10 +238,10 @@ export function createBranchHandle(value?: string | number, meta: {
 }
 
 export function attachAxisBranch(
-  handle: VanityRuntimeHandle,
+  handle: VanityInternalTokenHandle,
   axis: string,
   mode: string,
-  branch: VanityRuntimeBranchHandle,
+  branch: VanityInternalTokenBranchHandle,
 ): void {
   const axes = handle.$axes
   axes[axis] ??= {}
@@ -249,14 +249,14 @@ export function attachAxisBranch(
 }
 
 export function attachCaseBranch(
-  handle: VanityRuntimeHandle,
+  handle: VanityInternalTokenHandle,
   when: Readonly<Record<string, string>>,
-  branch: VanityRuntimeBranchHandle,
+  branch: VanityInternalTokenBranchHandle,
 ): void {
   // `$case` closes over this map; storing it on a non-enumerable symbol keeps
   // private runtime addresses out of the public token tree.
   const symbol = caseBranchesSymbol()
-  const owner = handle as VanityRuntimeHandle & Record<symbol, Map<string, VanityRuntimeBranchHandle> | undefined>
+  const owner = handle as VanityInternalTokenHandle & Record<symbol, Map<string, VanityInternalTokenBranchHandle> | undefined>
   let cases = owner[symbol]
   if (!cases) {
     cases = new Map()
@@ -266,10 +266,10 @@ export function attachCaseBranch(
 }
 
 /** Called immediately after creation so `$case` and attachment share storage. */
-export function wireCaseBranches(handle: VanityRuntimeHandle): void {
+export function wireCaseBranches(handle: VanityInternalTokenHandle): void {
   const symbol = caseBranchesSymbol()
-  const owner = handle as VanityRuntimeHandle & Record<symbol, Map<string, VanityRuntimeBranchHandle> | undefined>
-  const cases = owner[symbol] ?? new Map<string, VanityRuntimeBranchHandle>()
+  const owner = handle as VanityInternalTokenHandle & Record<symbol, Map<string, VanityInternalTokenBranchHandle> | undefined>
+  const cases = owner[symbol] ?? new Map<string, VanityInternalTokenBranchHandle>()
   if (!owner[symbol])
     Object.defineProperty(owner, symbol, { value: cases })
   Object.defineProperty(handle, '$case', {
@@ -283,12 +283,12 @@ export function wireCaseBranches(handle: VanityRuntimeHandle): void {
   })
 }
 
-export function isHandle(value: unknown): value is VanityRuntimeHandle {
+export function isHandle(value: unknown): value is VanityInternalTokenHandle {
   return typeof value === 'function'
     && (value as unknown as Record<symbol, unknown>)[vanityHandleSymbol()] === true
 }
 
-export function isBranchHandle(value: unknown): value is VanityRuntimeBranchHandle {
+export function isBranchHandle(value: unknown): value is VanityInternalTokenBranchHandle {
   return typeof value === 'function'
     && (value as unknown as Record<symbol, unknown>)[vanityBranchHandleSymbol()] === true
 }
@@ -300,7 +300,7 @@ export function runtimeAddressOf(value: unknown): VanityHandleRuntimeAddress | u
 }
 
 export function setRuntimeAddress(
-  value: VanityRuntimeHandle | VanityRuntimeBranchHandle,
+  value: VanityInternalTokenHandle | VanityInternalTokenBranchHandle,
   runtime: VanityHandleRuntimeAddress,
 ): void {
   Object.defineProperty(value, vanityRuntimeAddressSymbol(), { configurable: true, value: runtime })

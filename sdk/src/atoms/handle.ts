@@ -1,9 +1,9 @@
 /**
- * The plane-neutral atoms resolver: props in, precompiled classes out — a
+ * The context-shared atoms resolver: props in, precompiled classes out — a
  * runtime atoms call never synthesizes CSS ([patterns.md §1]). Shared by
  * the build-time factory (which emits the class tables and can still emit a
  * labeled escape on demand) and `/runtime` (which restores the handle from the
- * serialized tables) — so this module imports nothing from either plane.
+ * serialized tables) — so this module imports nothing build- or browser-specific.
  */
 
 import type { VanityAtoms, VanityAtomsRuntime, VanityUnsafeValue } from './types'
@@ -11,7 +11,7 @@ import type { VanityAtoms, VanityAtomsRuntime, VanityUnsafeValue } from './types
 const UNSAFE = Symbol.for('vanity.unsafeValue')
 
 /**
- * The labeled escape into the atoms lane: `unsafe.value('37ch', 'editorial
+ * The labeled escape from the finite atom set: `unsafe.value('37ch', 'editorial
  * measure')`. The reason is the point — exceptional CSS is sometimes correct,
  * and it should be findable, reviewable, and removable ([patterns.md §8]).
  */
@@ -29,7 +29,7 @@ export function isUnsafeValue(value: unknown): value is VanityUnsafeValue {
 
 /**
  * Emit the class for a labeled escape — provided by the build-time factory,
- * absent at runtime, where the lane redirect names the honest alternative.
+ * absent at runtime, where the variability diagnostic names the honest alternative.
  */
 export type VanityUnsafeEmitter = (property: string, condition: string, escape: VanityUnsafeValue) => string
 
@@ -43,7 +43,7 @@ export function createAtomsHandle(runtime: VanityAtomsRuntime, emitUnsafe?: Vani
       }
       else {
         warn(warned, `${property}:${condition}:unsafe`, `${name(runtime)}: an unsafe value reached a runtime call — `
-        + `runtime data crosses through a port, not the atoms lane ([patterns.md §4])`)
+        + `runtime data crosses through a port, not a finite atom set ([patterns.md §4])`)
       }
 
       return

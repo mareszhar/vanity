@@ -354,7 +354,7 @@ export interface VanityRawEmitter<L extends string> {
 }
 
 interface VanityCssMembers<C extends string, L extends string> {
-  /** Full platform-property lane, even when the primary alias policy is aliases-only. */
+  /** Full platform-property form, even when the primary alias policy is aliases-only. */
   standard: VanityClassEmitter<C, L>
   /** The escape hatch is CSS itself: parsed, validated, scoped under the class ([§8]). */
   raw: (strings: TemplateStringsArray, ...values: VanityRawValue[]) => string
@@ -370,7 +370,7 @@ export interface VanityCssFunction<C extends string, L extends string> extends V
 /** The target spelling for one generated class. */
 export interface VanityClassEmitter<C extends string, L extends string> {
   (rule: VanityRuleInput<C>, debugId?: string): string
-  /** Full platform-property lane, even when the primary alias policy is aliases-only. */
+  /** Full platform-property form, even when the primary alias policy is aliases-only. */
   readonly standard: VanityClassEmitter<C, L>
   readonly layer: <Layer extends L>(name: Layer) => VanityClassEmitter<C, Layer>
 }
@@ -389,7 +389,7 @@ export interface VanityFragmentFactory<C extends string> {
   ): Contributions
 }
 
-/** Alias-aware lane installed only by the optional property-alias plugin. */
+/** Alias-aware authoring form installed only by the optional property-alias plugin. */
 export interface VanityPropertyAliasCssFunction<
   C extends string,
   L extends string,
@@ -456,7 +456,7 @@ export interface VanityPropertyAliasFragmentFactory<
   ): Contributions
 }
 
-/** Strict primary lane: aliased target spellings disappear from completion. */
+/** Strict primary vocabulary: aliased target spellings disappear from completion. */
 export interface VanityStrictPropertyAliasCssFunction<
   C extends string,
   L extends string,

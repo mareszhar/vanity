@@ -9,9 +9,9 @@ These are behavioral laws, not utilities. Domain specs reference them rather tha
 The one semantic system then has two compiler representations:
 
 - an in-process contract, which may retain build-only closures;
-- a validated portable artifact containing data only.
+- a validated portable system contract containing data only.
 
-Tools import the plain `system.ts` contract directly. Style modules execute the build contract. Browser and SSR graphs receive facades generated only from the portable data. Build closures never cross that boundary.
+Tools import the plain `system.ts` contract directly. Style modules execute the build contract. Browser and SSR graphs receive application-system projections generated only from portable data. Build closures never cross that boundary.
 
 ## Identity follows the consumer
 
@@ -168,9 +168,9 @@ Runtime selector-rule injection, if implemented, lives behind an explicit sheet 
 
 ## 11. Capabilities and policies are separate
 
-An engine plugin may define preferred units, aliases, ranges, or allowed inputs. Those are policy on the primary lane.
+An engine plugin may define preferred units, aliases, ranges, or allowed inputs. Those are policy on the primary authoring form.
 
-The standards/raw lane remains:
+The raw standards form remains:
 
 - standard CSS property names;
 - valid raw CSS strings;
@@ -265,7 +265,7 @@ Type correctness that freezes completion is not delightful. Representative small
 
 Type-level convenience is accepted only with measured representative cost.
 
-## 17. Evidence spans every plane
+## 17. Evidence spans independent dimensions
 
 A feature is complete only when the applicable evidence is green:
 
@@ -279,6 +279,6 @@ A feature is complete only when the applicable evidence is green:
 - packaging from the real tarball;
 - performance budget.
 
-One plane cannot stand in for another.
+One evidence dimension cannot stand in for another.
 
-The consumer testing kit exposes the same law to design-system and plugin authors. Output capture owns a style-module callback, fold evidence owns an in-process build handle, rendered assertions own a mounted DOM fixture, and Selenita owns TypeScript editor observations. None pretends to prove another plane.
+The consumer testing kit exposes the same law to design-system and plugin authors. Output capture owns a style-module callback, fold evidence owns an in-process resolved handle, rendered assertions own a mounted DOM fixture, and Selenita owns TypeScript editor observations. None pretends to prove another evidence dimension.

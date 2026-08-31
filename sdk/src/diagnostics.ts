@@ -38,6 +38,9 @@ export type VanityDiagnosticCode
     | 'VANITY_ATOMS_KEY_COLLISION'
     | 'VANITY_VITE_BUILD_FAILED'
     | 'VANITY_VITE_PLUGIN_MISSING'
+    | 'VANITY_STYLE_MODULE_MISUSE'
+    | 'VANITY_AMBIENT_SOURCE_DECLARATION'
+    | 'VANITY_AUTO_IMPORT_DECLARATIONS_NOT_INCLUDED'
 
 export interface VanityDiagnosticRelatedInput {
   /** Why this source site matters to the primary diagnostic. */

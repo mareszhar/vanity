@@ -1,5 +1,5 @@
 /**
- * The public, plane-neutral CSS value contract.
+ * The public CSS value contract shared across build and application contexts.
  *
  * `VanityValue` deliberately does not promise context-free serialization. A
  * self-contained value can be serialized by an engine; a system-bound value
@@ -56,7 +56,7 @@ export interface VanitySystemValue<Type extends VanityCssDataType = VanityCssDat
 }
 
 /**
- * Plane-neutral value union. Separate brands avoid propagating a costly
+ * Context-shared value union. Separate brands avoid propagating a costly
  * resolution generic through every operation while preserving exactness.
  */
 export type VanityValue<Type extends VanityCssDataType = VanityCssDataType>
@@ -77,7 +77,7 @@ export interface VanityCssReference {
   readonly var: `var(--${string})` | `var(--${string}, ${string})`
 }
 
-/** Canonical token input. Its data type follows the handle into every value lane. */
+/** Canonical token input. Its data type follows the handle into every compatible value form. */
 export interface VanityTokenInput<Type extends VanityCssDataType = VanityCssDataType> {
   readonly $var: (fallback?: never) => `var(--${string})` | `var(--${string}, ${string})`
   readonly $path: string
@@ -139,10 +139,10 @@ export function isCssValue(value: unknown): value is VanityCssValue {
 }
 
 /**
- * Anything accepted by a CSS value lane.
+ * Anything accepted by a CSS value form.
  *
  * Supplying a data type keeps typed values and tokens compatible with that
- * lane while retaining strings/numbers as the deliberate raw-CSS escape.
+ * form while retaining strings/numbers as the deliberate raw-CSS escape.
  */
 export type VanityCssInput<Type extends VanityCssDataType = VanityCssDataType>
   = | string

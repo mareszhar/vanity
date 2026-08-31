@@ -12,7 +12,7 @@ const strict = createSystem()
   .consolidate()
 
 describe('property alias typing', () => {
-  it('keeps aliases exact and exposes the standards lane', () => {
+  it('keeps aliases exact and exposes the standards form', () => {
     const fragment = both.fragment({ py: '1rem', bg: 'red' })
     void both.class([fragment, false, both.omit, { py: '2rem' }])
     void both.rules({ body: [fragment, { bg: 'blue' }] })
@@ -32,7 +32,7 @@ describe('property alias typing', () => {
     void strict.class([strictFragment, { py: '2rem' }])
     void strict.rules({ body: [strictFragment, { py: '2rem' }] })
     void strict.class({ 'wide': { py: '1rem' }, '&:hover': { py: '2rem' } })
-    // @ts-expect-error — aliases-only removes aliased standards from the primary lane
+    // @ts-expect-error — aliases-only removes aliased standards from the primary vocabulary
     void strict.class({ paddingBlock: '1rem' })
     // @ts-expect-error — hidden standards stay hidden in fragments
     void strict.fragment({ paddingBlock: '1rem' })

@@ -1,7 +1,7 @@
 /**
- * `globalCss` ([spec-css.md §7]): the explicit global lane — same rule
+ * `globalCss` ([spec-css.md §7]): the explicit global form — same rule
  * shape as `css()` including conditions, no class generated, `reset` layer by
- * default, and just as validated as the scoped lane.
+ * default, and just as validated as scoped authoring.
  */
 
 import type { VanitySystemContext } from './css'

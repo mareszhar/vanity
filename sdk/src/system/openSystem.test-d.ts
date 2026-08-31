@@ -13,7 +13,7 @@ describe('open and locked system types', () => {
     expectTypeOf(open.length(2).css).toEqualTypeOf<'2rem'>()
     // @ts-expect-error — logical handles have no final CSS name
     void open.t.color.brand.$name
-    // @ts-expect-error — styling is locked-stage work
+    // @ts-expect-error — styling requires a locked system
     void open.css
 
     const ds = open.consolidate({ prefix: 'app' as const })
@@ -22,7 +22,7 @@ describe('open and locked system types', () => {
     expectTypeOf(ds.twice(2)).toEqualTypeOf<number>()
     // @ts-expect-error — registration is absent from the locked surface
     void ds.addTokens
-    // @ts-expect-error — the removed engine stage has no destination alias
+    // @ts-expect-error — the removed public engine object has no output alias
     void ds.createSystem
   })
 
@@ -38,7 +38,7 @@ describe('open and locked system types', () => {
     base.addConsts({ density: 2 })
     // @ts-expect-error — addUtils is additive-only
     base.addUtils({ twice: (value: number) => value + value })
-    // @ts-expect-error — locked styling names are reserved across both stages
+    // @ts-expect-error — locked styling names are reserved across both system states
     base.addUtils({ class: () => 'lost' })
     // @ts-expect-error — constructors and registration methods share the same namespace
     base.addUtils({ length: () => 'lost', addTokens: () => 'lost' })

@@ -1,9 +1,8 @@
-import type { VanityDiagnosticSink } from './diagnostics'
 import type {
-  VanityRuntimeAutoImports,
-  VanityRuntimeAutoImportsOptions,
-  VanityRuntimeAutoImportSource,
-} from './internal/runtimeAutoImports'
+  VanityAppAutoImports,
+  VanityAppAutoImportsOptions,
+  VanityAppAutoImportSource,
+} from './internal/applicationImports'
 
 /** Naming strategy for generated classes and custom properties. */
 export type VanityIdentifierMode = 'debug' | 'short'
@@ -11,47 +10,59 @@ export type VanityIdentifierMode = 'debug' | 'short'
 /** Low-level mode forwarded to the underlying vanilla-extract Vite plugin. */
 export type VanityCompilerMode = 'transform' | 'emitCss' | 'inlineCssInDev'
 
+/** A Vanity-owned reference to the configured `compiler.system` module. */
+export type VanitySystemAutoImportSource = '$system'
+
 interface VanityStyleAutoImportsWithInclude {
-  /** Optional alternate authoring module; omitted means `compiler.system`. */
-  from?: string
-  /** Keep only these named authoring exports in the compiler auto-import lane. */
+  /** Source module. `$system` reuses `compiler.system`. */
+  from?: string | VanitySystemAutoImportSource
+  /** Keep only these named exports. */
   include: readonly string[]
   exclude?: never
 }
 
 interface VanityStyleAutoImportsWithExclude {
-  /** Optional alternate authoring module; omitted means `compiler.system`. */
-  from?: string
+  /** Source module. `$system` reuses `compiler.system`. */
+  from?: string | VanitySystemAutoImportSource
   include?: never
-  /** Remove these named authoring exports from the compiler auto-import lane. */
+  /** Remove these named exports. */
   exclude: readonly string[]
 }
 
-/** A filtered style source; omit `from` to reuse the configured system entry. */
+/** A filtered source routed into the style-module role. */
 export type VanityStyleAutoImportsOptions
   = VanityStyleAutoImportsWithInclude
     | VanityStyleAutoImportsWithExclude
 
 /**
- * Controls authoring exports injected into evaluated `*.css.ts` modules.
+ * Names injected into evaluated `*.css.ts` style modules.
  *
- * - `false` disables this lane.
- * - `true` reuses `compiler.system` as the source.
- * - A string names an alternate source module.
- * - An object names an optional source and filters its exports with `include`
- *   or `exclude`.
- *
- * This affects only the compiler lane; application modules use
- * `app.runtimeAutoImports` instead.
+ * A string names a module source. `$system` is the explicit shorthand for the
+ * configured `compiler.system` entry. An object adds `include` or `exclude`;
+ * omitting `from` there also means `$system`.
  */
 export type VanityStyleAutoImports
-  = false
-    | true
-    | string
+  = string
     | VanityStyleAutoImportsOptions
 
+/** One source that can be routed into both module roles. */
+export type VanitySharedAutoImports = VanityStyleAutoImports
+
+/** Module-role auto-import routing. */
+export interface VanityAutoImportRouting {
+  /** Inject this source into both module roles. This is not a third role. */
+  shared?: VanitySharedAutoImports
+  /** Inject authoring values only into evaluated `*.css.ts` style modules. */
+  style?: VanityStyleAutoImports
+  /** Inject application-facing values only into application and SSR modules. */
+  app?: VanityAppAutoImports
+}
+
+/** A direct source string means `shared`; omit the key to inject nothing. */
+export type VanityAutoImports = string | VanityAutoImportRouting
+
 /**
- * Describes one plain consolidated system for the compiler and runtime lanes.
+ * Describes one plain consolidated system for compiler and application projection.
  *
  * A string in `compiler.system` is shorthand for `{ entry: string }`. Use the
  * object form when a prebuilt portable artifact or a non-default contract
@@ -59,8 +70,7 @@ export type VanityStyleAutoImports
  */
 export interface VanitySystemSource {
   /**
-   * Path to the TypeScript module that exports the consolidated system.
-   * Relative paths resolve from the host project root.
+   * Module path or package specifier that exports the consolidated system.
    */
   entry: string
   /** Optional portable JSON artifact to validate and use for browser/SSR projection. */
@@ -71,7 +81,7 @@ export interface VanitySystemSource {
   exportName?: string
 }
 
-/** Build-plane options shared by the Vite and Nuxt adapters. */
+/** Compiler options shared by the Vite, Nuxt, and WXT host adapters. */
 export interface VanityCompilerOptions {
   /**
    * Naming strategy for emitted classes and custom properties. Defaults to
@@ -84,17 +94,11 @@ export interface VanityCompilerOptions {
    */
   unstableMode?: VanityCompilerMode
   /**
-   * Inject named authoring exports into evaluated `*.css.ts` modules.
-   * `true` reuses `system`; a string names an alternate source; an object adds
-   * an `include` or `exclude` filter. These imports exist only in the compiler
-   * lane, and explicit imports remain untouched.
-   */
-  styleAutoImports?: VanityStyleAutoImports
-  /**
    * Plain consolidated system module(s) to evaluate. App and SSR imports are
-   * replaced with a portable runtime facade, while style compilation executes
-   * the full system entry. A string is the common form; use an object or array
-   * for paired artifacts, custom export names, or multiple systems.
+   * replaced with a portable application-system projection, while style
+   * compilation executes the full system entry. A string is the common form;
+   * use an object or array for paired artifacts, custom export names, or
+   * multiple systems.
    */
   system?: string | VanitySystemSource | readonly (string | VanitySystemSource)[]
   /**
@@ -106,38 +110,28 @@ export interface VanityCompilerOptions {
   /** Directory for compiler-owned system artifacts; defaults to `<root>/.vanity`. */
   artifactDirectory?: string
   /** Receives structured compiler and integration diagnostics. */
-  diagnostics?: VanityDiagnosticSink
-}
-
-/** Application-plane options shared by the Vite and Nuxt adapters. */
-export interface VanityAppOptions {
-  /**
-   * Inject runtime-facing values into application and SSR modules. Template
-   * support follows the host adapter. This lane never changes how `*.css.ts`
-   * files are evaluated.
-   */
-  runtimeAutoImports?: VanityRuntimeAutoImports
+  diagnostics?: import('./diagnostics').VanityDiagnosticSink
 }
 
 /**
  * Host-neutral configuration shared by `defineVanityConfig`, `vanityPlugin`,
  * the Nuxt adapter, and `vanity prepare`.
  *
- * `compiler` configures the build plane; `app` configures the application
- * plane. Keeping both lanes here lets one `vanity.config.ts` travel unchanged
- * between adapters and preparation tooling.
+ * `compiler` configures Vanity's compiler. `autoImports` routes sources into
+ * style and application module roles, so the same config travels between
+ * Vite, Nuxt, WXT, and preparation tooling unchanged.
  */
 export interface VanityConfig {
-  /** Build-plane configuration for systems and evaluated `*.css.ts` modules. */
+  /** Compiler configuration for systems and evaluated `*.css.ts` modules. */
   compiler?: VanityCompilerOptions
-  /** Application-plane configuration for runtime-facing auto-imports. */
-  app?: VanityAppOptions
+  /** Sources routed into style and application module roles. */
+  autoImports?: VanityAutoImports
 }
 
 export type {
-  VanityRuntimeAutoImports,
-  VanityRuntimeAutoImportsOptions,
-  VanityRuntimeAutoImportSource,
+  VanityAppAutoImports,
+  VanityAppAutoImportsOptions,
+  VanityAppAutoImportSource,
 }
 
 /**
@@ -154,7 +148,7 @@ export type {
  *
  * export default defineVanityConfig({
  *   compiler: { system: './src/design/system.ts' },
- *   app: { runtimeAutoImports: ['core', 'vue'] },
+ *   autoImports: { shared: './src/design/authoring.ts', app: ['core', 'vue'] },
  * })
  * ```
  */

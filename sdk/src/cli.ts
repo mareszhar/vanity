@@ -91,9 +91,9 @@ export async function runVanityCli(args: readonly string[] = argv.slice(2)): Pro
 
   if (command === 'prepare') {
     const { config: configOption, root } = parsePrepareOptions(rest)
-    const configPath = resolve(cwd(), configOption ?? join(root, 'vanity.config.ts'))
+    const configPath = configOption ?? join(root, 'vanity.config.ts')
     const { loadVanityConfig, writeAutoImportDeclarations } = await import('./prepare')
-    const options = await loadVanityConfig(configPath)
+    const options = await loadVanityConfig(configPath, { root })
     const result = await writeAutoImportDeclarations(options, { root })
     const changes = result.written.length + result.removed.length
     if (changes === 0) {
@@ -101,7 +101,7 @@ export async function runVanityCli(args: readonly string[] = argv.slice(2)): Pro
       return
     }
     console.log(
-      `[vanity] prepared ${result.plan.declarations.length} declaration lane(s)`
+      `[vanity] prepared ${result.plan.declarations.length} module-role declaration set(s)`
       + ` (${result.written.length} written, ${result.removed.length} removed)`,
     )
     return

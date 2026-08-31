@@ -1,5 +1,5 @@
 /**
- * Test-only bridge preserving the pre-Phase-4 engine surface while domain
+ * Test-only bridge preserving the removed engine surface while domain
  * fixtures migrate. It is not a package export and cannot reach consumers.
  */
 

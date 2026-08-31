@@ -2,7 +2,7 @@
  * Audits ([spec-introspection.md §3]): the build knows enough to flag
  * drift lint can't see. Each finding is a warning with a fix-it — never a
  * hard gate unless the system promoted it (`createSystem({ audit })`), and
- * never moralizing: a lane only speaks where the system's own data shows a
+ * never moralizing: a category only speaks where the system's own data shows a
  * convention exists to stray from.
  */
 
@@ -38,7 +38,7 @@ export interface VanityAuditEvidence {
 /** Two colors this close in OKLab read as the same color — the ΔE epsilon. */
 const NEAR_DUPLICATE_EPSILON = 0.02
 
-/** A lane speaks only when tokens already carry it: at least this many tokenized declarations… */
+/** A category speaks only when tokens already carry it: at least this many tokenized declarations… */
 const STRAY_MIN_TOKENIZED = 2
 
 // ─── The audit ───────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ const STRAY_MIN_TOKENIZED = 2
 /**
  * Run every audit over a built manifest and its emitted CSS. Promotion comes
  * from the manifest (the system's own `audit` option), overridable per call;
- * `'off'` silences a lane, `'error'` makes its findings hard-gate material.
+ * `'off'` silences a category, `'error'` makes its findings hard-gate material.
  */
 export function audit(
   manifest: VanityManifest,
@@ -79,7 +79,7 @@ export function audit(
   const findings: VanityAuditFinding[] = []
   const declarations = collectDeclarations(css)
 
-  const lanes: Record<VanityAuditKind, () => VanityAuditFinding[]> = {
+  const categories: Record<VanityAuditKind, () => VanityAuditFinding[]> = {
     unusedTokens: () => unusedTokens(manifest),
     nearDuplicates: () => nearDuplicates(manifest, declarations),
     contrast: () => acceptedContrast(manifest),
@@ -122,7 +122,7 @@ export function audit(
     })),
   }
 
-  for (const [kind, run] of Object.entries(lanes) as Array<[VanityAuditKind, () => VanityAuditFinding[]]>) {
+  for (const [kind, run] of Object.entries(categories) as Array<[VanityAuditKind, () => VanityAuditFinding[]]>) {
     if (levels[kind] === 'off')
       continue
 
@@ -193,7 +193,7 @@ const COLOR_LITERAL = /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch
 /**
  * Parse only what is unmistakably a color. The color library is lenient —
  * `'9999'` reads as bare hex — so plain numbers and lengths must never enter
- * the color lanes.
+ * the color categories.
  */
 function parseColorish(value: string): VanityOklch | undefined {
   if (value.startsWith('#') || /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/i.test(value))
@@ -360,36 +360,36 @@ function targetsForeignDom(selector: string): boolean {
 
 /**
  * A literal value for a property the system already styles through tokens —
- * z-index anarchy, the odd hard-coded padding. Data-driven: a property lane
+ * z-index anarchy, the odd hard-coded padding. Data-driven: a property category
  * only speaks when tokenized declarations dominate it, so a system that never
  * tokenized a property is never lectured about it.
  */
 function scaleStrays(manifest: VanityManifest, declarations: Declaration[]): VanityAuditFinding[] {
-  const lanes = new Map<string, { tokenized: number, strays: Declaration[] }>()
+  const categories = new Map<string, { tokenized: number, strays: Declaration[] }>()
   const graphVars = new Set(Object.values(manifest.system.tokens).flatMap(token => token.name ?? []))
 
   for (const declaration of declarations) {
-    const lane = lanes.get(declaration.property) ?? { tokenized: 0, strays: [] }
+    const category = categories.get(declaration.property) ?? { tokenized: 0, strays: [] }
 
     if (referencesGraph(declaration.value, graphVars))
-      lane.tokenized++
+      category.tokenized++
     else if (!universalValue(declaration.value) && parseColorish(declaration.value) === undefined)
-      lane.strays.push(declaration) // colors are the duplicates lane's business
+      category.strays.push(declaration) // colors belong to the duplicate-color category
 
-    lanes.set(declaration.property, lane)
+    categories.set(declaration.property, category)
   }
 
   const findings: VanityAuditFinding[] = []
 
-  for (const [property, lane] of lanes) {
-    if (lane.tokenized < STRAY_MIN_TOKENIZED || lane.strays.length >= lane.tokenized)
+  for (const [property, category] of categories) {
+    if (category.tokenized < STRAY_MIN_TOKENIZED || category.strays.length >= category.tokenized)
       continue
 
-    for (const stray of lane.strays) {
+    for (const stray of category.strays) {
       findings.push({
         kind: 'scaleStrays',
         level: 'warn',
-        message: `${property}: ${stray.value} (${stray.selector}) — ${lane.tokenized} other ${property} declaration${lane.tokenized === 1 ? '' : 's'} ride the tokens`,
+        message: `${property}: ${stray.value} (${stray.selector}) — ${category.tokenized} other ${property} declaration${category.tokenized === 1 ? '' : 's'} ride the tokens`,
         fix: 'reference the token it means, or add the value to the scale',
       })
     }
@@ -466,7 +466,7 @@ function suppliesOutline({ property, value }: Declaration): boolean {
     || (property === 'outline-width' && !/^0(?:px|rem|em)?$/i.test(value.trim()))
 }
 
-// ─── Semantic/provenance lanes ─────────────────────────────────────────────
+// ─── Semantic/provenance categories ────────────────────────────────────────
 
 function specificityContexts(manifest: VanityManifest): VanityAuditFinding[] {
   const findings: VanityAuditFinding[] = []
@@ -604,7 +604,7 @@ function manifestStyles(manifest: VanityManifest): Readonly<Record<string, Vanit
 
 // ─── The report ──────────────────────────────────────────────────────────────
 
-const LANE_TITLES: Record<VanityAuditKind, string> = {
+const AUDIT_CATEGORY_TITLES: Record<VanityAuditKind, string> = {
   unusedTokens: 'unused tokens',
   nearDuplicates: 'near-duplicate values',
   contrast: 'contrast acceptances',
@@ -631,15 +631,15 @@ export function formatAuditFindings(findings: readonly VanityAuditFinding[]): st
 
   const lines: string[] = []
 
-  for (const kind of Object.keys(LANE_TITLES) as VanityAuditKind[]) {
-    const lane = findings.filter(finding => finding.kind === kind)
+  for (const kind of Object.keys(AUDIT_CATEGORY_TITLES) as VanityAuditKind[]) {
+    const category = findings.filter(finding => finding.kind === kind)
 
-    if (lane.length === 0)
+    if (category.length === 0)
       continue
 
-    lines.push(`${LANE_TITLES[kind]} (${lane.length})`)
+    lines.push(`${AUDIT_CATEGORY_TITLES[kind]} (${category.length})`)
 
-    for (const finding of lane) {
+    for (const finding of category) {
       const mark = finding.level === 'error' ? '✖' : '•'
       lines.push(`  ${mark} ${finding.message}${finding.file === undefined ? '' : `\n      at ${finding.file}`}`)
 

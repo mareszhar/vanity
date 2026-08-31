@@ -1,7 +1,7 @@
 /**
  * The introspection channel ([spec-introspection.md]): build-time factories
  * record what they defined — tokens with resolved per-scheme values, systems,
- * recipes, ports, escapes, contrast results — and the build plane drains the
+ * recipes, ports, escapes, contrast results — and the build-time compiler drains the
  * records into the manifest. The channel lives on `globalThis` under a
  * registered symbol because a style-module bundle carries its own copy of this
  * module ([vite.ts]): the two copies must observe one store.
@@ -192,7 +192,7 @@ export interface VanitySystemRecord extends VanitySourceRecord {
     readonly system: string
     readonly root: string
   }
-  /** Phase 4 projection identities derived from normalized semantic records. */
+  /** Projection identities derived from normalized semantic records. */
   identities?: import('../system/contract').VanitySystemIdentities
   /** Validated data-only compiler projection. Never contains build closures. */
   portable?: import('../system/contract').VanityPortableSystemV1
@@ -224,7 +224,7 @@ export type VanityEscapeForm
     | 'rules'
     | 'unsafe'
     | 'overrides'
-    // Internal characterization lanes retained below the public lifecycle.
+    // Internal characterization fields retained below the public system model.
     | 'css.raw'
     | 'css.standard'
     | 'globalCss'

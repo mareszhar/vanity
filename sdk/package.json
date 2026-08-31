@@ -71,6 +71,10 @@
       "types": "./dist/nuxt.d.mts",
       "import": "./dist/nuxt.mjs"
     },
+    "./wxt": {
+      "types": "./dist/wxt.d.mts",
+      "import": "./dist/wxt.mjs"
+    },
     "./prepare": {
       "types": "./dist/prepare.d.mts",
       "import": "./dist/prepare.mjs"
@@ -110,7 +114,8 @@
     "nuxt": "catalog:peers",
     "typescript": "catalog:peers",
     "vite": "catalog:peers",
-    "vue": "catalog:peers"
+    "vue": "catalog:peers",
+    "wxt": "catalog:peers"
   },
   "peerDependenciesMeta": {
     "@mszr/selenita": {
@@ -132,6 +137,9 @@
       "optional": true
     },
     "vue": {
+      "optional": true
+    },
+    "wxt": {
       "optional": true
     }
   },
@@ -160,6 +168,7 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "vue": "catalog:"
+    "vue": "catalog:",
+    "wxt": "catalog:"
   }
 }

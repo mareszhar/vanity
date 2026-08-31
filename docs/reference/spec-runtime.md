@@ -2,6 +2,25 @@
 
 The runtime changes declared custom-property slots and axis controls. It does not reconstruct the graph, inject component styles, patch extracted rules, or compute design relationships in JavaScript.
 
+```text
+locked system ── projects ──▶ runtime-controller factory
+                                      │ creates
+                                      ▼
+                              runtime controller
+                                ├─ binds declared roots
+                                ├─ writes declared token slots
+                                ├─ activates declared modes
+                                └─ snapshots/reconciles its state
+                                      │
+                                      ▼
+                                  DOM roots
+                                      │
+                                      ▼
+                          browser-owned CSS cascade
+```
+
+The browser evaluates CSS. The controller changes only degrees of freedom declared by the system.
+
 ## 1. Construction and roots
 
 ```TS
@@ -68,7 +87,7 @@ Contracts:
 
 `setMode`, `clearMode`, and boolean `$activate(false)` do not exist because their names make false promises for `&`-conditioned modes.
 
-For unusual axes, `axis({ control })` or the direct `addAxis()` config may declare `{ id, read(root), activate(root, mode), project?(mode) }`. The stable `id` and optional data-only style/attribute projections enter the portable runtime contract; closures do not. An in-process locked system binds its control automatically. A restored portable facade receives the same implementation explicitly through `runtime({ controls: { [id]: control } })`, just as Standard Schema validators cross the boundary by stable ID. A control adapter makes every declared mode activatable and remains responsible for honest reads. A custom control that affects first paint supplies `project`; otherwise SSR projection stays honestly empty for that custom effect. Changing control semantics requires a new `id`; reusing an id promises the same read/activate/projection contract across compiler and app planes.
+For unusual axes, `axis({ control })` or the direct `addAxis()` config may declare `{ id, read(root), activate(root, mode), project?(mode) }`. The stable `id` and optional data-only style/attribute projections enter the portable runtime contract; closures do not. An in-process locked system binds its control automatically. A restored application-system projection receives the same implementation explicitly through `runtime({ controls: { [id]: control } })`, just as Standard Schema validators cross the boundary by stable ID. A control adapter makes every declared mode activatable and remains responsible for honest reads. A custom control that affects first paint supplies `project`; otherwise SSR projection stays honestly empty for that custom effect. Changing control semantics requires a new `id`; reusing an id promises the same read/activate/projection contract across compiler and application environments.
 
 ## 4. Root targeting
 
@@ -175,7 +194,7 @@ These capabilities preserve:
 
 Optional Standard Schema contracts:
 
-- cross planes by stable `id`, not function serialization;
+- cross build/application boundaries by stable `id`, not function serialization;
 - default to `runtime: 'dev'` and `onInvalid: 'throw'`;
 - reject async schemas for synchronous APIs;
 - serialize transformed output only after CSS data-type validation;
@@ -200,7 +219,7 @@ The property input accepts:
 - `{ name }`;
 - a token/custom-property handle directly.
 
-This lane works for external or Vanity-owned custom properties, does not require token mutability, does not enter the system snapshot, and explicitly targets one element.
+This escape works for external or Vanity-owned custom properties, does not require token mutability, does not enter the system snapshot, and explicitly targets one element.
 
 Serialization prevents `"[object Object]"` mistakes for branded values.
 

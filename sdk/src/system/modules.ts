@@ -38,7 +38,7 @@ export type VanityConstructorFamily<
   Definition extends VanityConstructorDefinition,
 > = Definition['call'] & Omit<Definition, 'call'>
 
-export interface VanityRuleGroup<
+export interface VanitySystemRule<
   Condition extends string = never,
   Layer extends string = string,
 > {
@@ -120,7 +120,7 @@ type DefinitionValueGuard<Kind extends VanityDefinitionKind, Value>
     : Kind extends 'conditions' ? Value extends VanityConditionInput ? Value : never
       : Kind extends 'consts' ? DefinitionJson<Value>
         : Kind extends 'constructors' ? Value extends VanityConstructorDefinition ? Value : never
-          : Kind extends 'rules' ? Value extends VanityRuleGroup ? Value : never
+          : Kind extends 'rules' ? Value extends VanitySystemRule ? Value : never
             : Kind extends 'utils'
               ? Value extends ((...args: any[]) => unknown) | VanityUtilTree ? Value : never
               : Value
@@ -277,8 +277,8 @@ export function defineUtils<const Seed extends VanityUtilTree = Record<never, ne
   return defineRecordModule('utils', seed)
 }
 
-/** Define named system CSS rule groups; mount them with `addRules()`. */
-export function defineRules<const Seed extends Readonly<Record<string, VanityRuleGroup>> = Record<never, never>>(
+/** Define named system CSS rules; mount them with `addRules()`. */
+export function defineRules<const Seed extends Readonly<Record<string, VanitySystemRule>> = Record<never, never>>(
   seed?: Seed,
 ): VanityDefinitionModule<'rules', Seed> {
   return defineRecordModule('rules', seed)

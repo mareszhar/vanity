@@ -1,5 +1,5 @@
 /**
- * The editor-DX plane: variant authoring is where beginners live
+ * The editor-DX evidence dimension: variant authoring is where beginners live
  * ([spec-recipes.md §6]) — diagnostics land on the offending key with the
  * valid set in reach, hovers collapse to readable public types, and the
  * call-site law holds at the cursor.

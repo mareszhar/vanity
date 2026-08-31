@@ -105,7 +105,7 @@ function runtimeModule(contract: PortableContract, target: 'browser' | 'ssr'): s
     return [
       `const projection = ${JSON.stringify(shared)};`,
       `export const ds = Object.freeze({`,
-      `  plane: "SSR_FACADE_SENTINEL",`,
+      `  plane: "SSR_PROJECTION_SENTINEL",`,
       `  ...projection,`,
       `  snapshot(values = {}) { return JSON.stringify({ schema: projection.runtimeSchemaId, values }) },`,
       `});`,
@@ -117,7 +117,7 @@ function runtimeModule(contract: PortableContract, target: 'browser' | 'ssr'): s
   return [
     `const projection = ${JSON.stringify(shared)};`,
     `export const ds = Object.freeze({`,
-    `  plane: "RUNTIME_FACADE_SENTINEL",`,
+    `  plane: "RUNTIME_CONTROLLER_SENTINEL",`,
     `  ...projection,`,
     `  apply(root, name, value) { root.style.setProperty(projection.tokenNames[name], value) },`,
     `});`,

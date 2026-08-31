@@ -1,5 +1,5 @@
 /**
- * The type-shape plane: port type inference, `set()` typing, and the
+ * The type-shape evidence dimension: port type inference, `set()` typing, and the
  * `VanityPort` interface — the contracts of [spec-ports.md §1-3], asserted
  * at the type level.
  */
@@ -10,7 +10,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 
 const de = createEngine()
 
-// Never evaluated — the typecheck plane only reads types.
+// Never evaluated — the typecheck evidence dimension only reads types.
 function system() {
   return de.createSystem({
     tokens: {

@@ -1,5 +1,5 @@
 /**
- * The editor-DX plane for the Vue overlay: the composables' hovers stay
+ * The editor-DX evidence dimension for the Vue overlay: the composables' hovers stay
  * readable public types, part names autocomplete off the computed record, and
  * a wrong variant value dies at the key ([patterns.md §10]).
  */

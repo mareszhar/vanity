@@ -1,17 +1,17 @@
-import type { VanityRuntimeAutoImports } from './runtimeAutoImports'
+import type { VanityAppAutoImports } from './applicationImports'
 import autoImportVite from 'unplugin-auto-import/vite'
 import { describe, expect, it } from 'vitest'
+import { normalizeAppAutoImports } from './applicationImports'
 import { autoImportDelegateHooks } from './autoImportDelegate'
-import { normalizeRuntimeAutoImports } from './runtimeAutoImports'
 
-describe('runtime auto-import normalization', () => {
+describe('application auto-import normalization', () => {
   it('rejects conflicting source filters before an adapter renders them', () => {
     const value = {
       sources: [{ from: './source.ts', include: [], exclude: [] }],
-    } as unknown as VanityRuntimeAutoImports
+    } as unknown as VanityAppAutoImports
 
-    expect(() => normalizeRuntimeAutoImports(value)).toThrow(
-      `[vanity] app.runtimeAutoImports source './source.ts' cannot use both include and exclude`,
+    expect(() => normalizeAppAutoImports(value)).toThrow(
+      `[vanity] autoImports.app source './source.ts' cannot use both include and exclude`,
     )
   })
 

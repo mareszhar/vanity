@@ -224,7 +224,7 @@ Each child remains independently addressable and themeable.
 
 **Contract — global CSS is named, selectable, inspectable, and overridable.** No global side effect is inseparable from the plugin.
 
-| Selection name | Rule group | Purpose |
+| Selection name | Named system rule | Purpose |
 | --- | --- | --- |
 | `reset` | `hailReset` | box model and document defaults |
 | `motion` | `hailMotion` | smooth defaults with reduced-motion floor |

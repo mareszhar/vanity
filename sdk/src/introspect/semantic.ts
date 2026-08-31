@@ -1,4 +1,4 @@
-/** Plane-neutral marker shared by semantic handles and the build-plane explainer. */
+/** Context-shared marker used by semantic handles and the build-time explainer. */
 export const VANITY_EXPLAINABLE = Symbol.for('vanity.explainable')
 
 export function explainable<T extends object>(value: T, explanation: Readonly<Record<string, unknown>>): T {

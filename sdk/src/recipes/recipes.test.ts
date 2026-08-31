@@ -1,5 +1,5 @@
 /**
- * The runtime plane: recipe/anatomy resolution — props in, classes out,
+ * The runtime evidence dimension: recipe/anatomy resolution — props in, classes out,
  * unknown keys ignored, defaults filling gaps — and the diagnostics contract:
  * exactly one per mistake, at the offending key, naming the fix
  * ([patterns.md §10], [spec-recipes.md]).

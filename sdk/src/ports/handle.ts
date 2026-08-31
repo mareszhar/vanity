@@ -1,4 +1,4 @@
-/** Plane-neutral port handles and synchronous Standard Schema validation. */
+/** Port handles shared across contexts, with synchronous Standard Schema validation. */
 
 import type { VanityStandardSchemaV1 } from '../tokens/types'
 import type {

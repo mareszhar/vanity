@@ -1,6 +1,6 @@
 /**
- * Portable semantic kernel behind public `createEngine()` revisions.
- * The internal default engine and every public engine revision share this kernel.
+ * Immutable capability kernel behind `createSystem()` and internal engine revisions.
+ * This architecture term does not introduce a second public construction workflow.
  */
 
 import type { VanityCssSupportTarget, VanityExtensionIdentity } from '../values/protocol'
@@ -115,7 +115,7 @@ export function createEngineKernel<const Constructors extends object>(
 
 /**
  * Constructors are shared by an engine and every system finalized from it.
- * Prepare their app-plane stubs before freezing the engine kernel so systems
+ * Prepare their application-module stubs before freezing the engine kernel so systems
  * can preserve exact constructor identity instead of wrapping them later.
  */
 function serializableConstructors<T extends object>(
@@ -138,7 +138,7 @@ function serializableConstructors<T extends object>(
 
     addFunctionSerializer(wrapper, {
       importPath: '@mszr/vanity/runtime',
-      importName: 'restoreBuildPlane',
+      importName: 'restoreStyleAuthoringStub',
       args: [{ name: path }],
     })
 

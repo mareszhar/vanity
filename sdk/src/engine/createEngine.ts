@@ -332,7 +332,7 @@ export function updateEnginePolicies<
   return materializeEngine(next, axes as VanityAxisRegistry<Axes>, dtcg)
 }
 
-/** Internal bridge from the Phase 4 open system into the proven domain finalizer. */
+/** Internal bridge from the open system into the domain finalizer. */
 export function consolidateEngineSystem<
   const Constructors extends object,
   const TokenPolicy extends VanityTokenPolicy,
@@ -385,7 +385,7 @@ export function consolidateEngineSystem<
   )
 }
 
-/** User-plane Phase 4 overwrite bridge; plugins never receive this operation. */
+/** User-context overwrite bridge; plugins never receive this operation. */
 export function overwriteEngineAxis<
   const Constructors extends object,
   const TokenPolicy extends VanityTokenPolicy,

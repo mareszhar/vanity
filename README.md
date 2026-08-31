@@ -10,7 +10,7 @@ Vanity gives design-system authors inferred, composable, refactorable, and inspe
 
 ## Highlights
 
-- **🎨 Use all of CSS without giving up TypeScript.** Author the platform’s names, grammar, selectors, at-rules, layers, custom properties, and future syntax with typed values and token handles. A raw standards lane remains available whenever CSS moves first.
+- **🎨 Use all of CSS without giving up TypeScript.** Author the platform’s names, grammar, selectors, at-rules, layers, custom properties, and future syntax with typed values and token handles. A raw standards escape remains available whenever CSS moves first.
 - **🧩 Grow a system without breaking its foundations.** Add tokens, axes, conditions, plugins, and utilities immutably; get loud, local conflicts instead of silent redefinition; then consolidate independent forks from the same base.
 - **✂️ Remove the work that should have been inferred.** Tokens flow from definition to use without copied paths, hand-built `var()` calls, mirrored registries, or framework-specific glue.
 - **⚡ Ship ordinary CSS, not a client styling engine.** Vanity compiles classes, custom properties, selectors, conditions, and code-split stylesheets that remain legible, portable, optimizable, and useful without Vanity at runtime.
@@ -84,8 +84,8 @@ export default defineConfig({
       system: './src/design/system.ts',
       layerOrder: ['vendor', 'app'],
     },
-    app: {
-      runtimeAutoImports: ['core'],
+    autoImports: {
+      app: ['core'],
     },
   })],
 })
@@ -95,7 +95,7 @@ Vanity evaluates the style module at build time and emits ordinary CSS: classes,
 
 ## What you can build
 
-Use the locked system to create classes, ordered fragments, selector rules, recipes, anatomies, atom sets, ports, keyframes, font faces, and raw CSS. Mutable tokens and activatable axes lower to declared browser-native slots; the optional runtime facade sets those slots and can create SSR-safe snapshots.
+Use the locked system to create classes, ordered fragments, selector rules, recipes, anatomies, atom sets, ports, keyframes, font faces, and raw CSS. Mutable tokens and activatable axes lower to declared browser-native slots; the optional runtime controller sets those slots and can create SSR-safe snapshots.
 
 Vite projects manifests and portable system data from the same semantic contract. The CLI can inspect, explain, and diff those artifacts; the testing kit verifies emitted CSS, folding, rendered values, and editor DX.
 

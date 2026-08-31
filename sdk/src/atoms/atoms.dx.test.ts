@@ -1,5 +1,5 @@
 /**
- * The editor-DX plane for atoms: property, shorthand, and toggle keys
+ * The editor-DX evidence dimension for atoms: property, shorthand, and toggle keys
  * autocomplete together; token keys autocomplete as values; a wrong value is
  * one diagnostic at the offending key ([patterns.md §10]).
  */

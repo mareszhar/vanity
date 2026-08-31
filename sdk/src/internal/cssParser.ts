@@ -18,7 +18,7 @@ const CSS_WIDE_KEYWORDS = new Set(['initial', 'inherit', 'unset', 'revert', 'rev
 /**
  * Property grammar keywords that the parser currently reports as unresolved
  * despite accepting their declaration syntax. Keep this centralized and
- * fixture-backed: declaration lanes must never grow local keyword exceptions.
+ * fixture-backed: declaration forms must never grow local keyword exceptions.
  */
 const PROPERTY_GRAMMAR_KEYWORDS: Readonly<Record<string, ReadonlySet<string>>> = Object.freeze({
   'box-shadow': new Set(['none']),

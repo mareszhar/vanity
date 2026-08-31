@@ -12,8 +12,8 @@ type VanityNuxtConfigValue = Partial<import('@mszr/vanity/nuxt').VanityNuxtOptio
 declare module '@nuxt/schema' {
   interface NuxtConfig {
     /**
-     * Vanity's Nuxt adapter configuration. \`compiler\` controls the build
-     * plane and \`app\` controls runtime-facing application imports.
+     * Vanity's Nuxt adapter configuration. \`compiler\` configures Vanity's
+     * compiler and \`autoImports\` routes sources into module roles.
      */
     vanity?: VanityNuxtConfigValue
   }
@@ -22,8 +22,8 @@ declare module '@nuxt/schema' {
 declare module 'nuxt/schema' {
   interface NuxtConfig {
     /**
-     * Vanity's Nuxt adapter configuration. \`compiler\` controls the build
-     * plane and \`app\` controls runtime-facing application imports.
+     * Vanity's Nuxt adapter configuration. \`compiler\` configures Vanity's
+     * compiler and \`autoImports\` routes sources into module roles.
      */
     vanity?: VanityNuxtConfigValue
   }

@@ -26,7 +26,7 @@ export function tokenDeclarations<T extends object>(
 }
 
 /**
- * Keep open-stage declaration data independent from the temporary preview
+ * Keep open-system declaration data independent from the temporary preview
  * prefix. The locked rule compiler resolves this token-shaped payload against
  * the final graph when the utility is used in a style module.
  */

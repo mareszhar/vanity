@@ -3,7 +3,7 @@
 
 export { unsafe } from './atoms/handle'
 
-// ─── Atoms: the strict utility lane ─────────────────────────────────────────
+// ─── Atoms: finite declared utility selection ───────────────────────────────
 
 export type {
   VanityAtomInput,
@@ -235,15 +235,15 @@ export type {
 } from './system/createSystem'
 
 export type {
-  VanityBoundRuntime,
   VanityCustomPropertyEntries,
   VanityCustomPropertyReference,
   VanityCustomPropertyTarget,
   VanityRuntimeAxes,
+  VanityRuntimeController,
+  VanityRuntimeControllerFactory,
   VanityRuntimeCycleOptions,
   VanityRuntimeDiagnostic,
   VanityRuntimeDiagnosticCode,
-  VanityRuntimeFactory,
   VanityRuntimeInput,
   VanityRuntimeInspection,
   VanityRuntimeOptions,
@@ -279,7 +279,7 @@ export type {
   VanityConstructorMembers,
   VanityDefinitionKind,
   VanityDefinitionModule,
-  VanityRuleGroup,
+  VanitySystemRule,
   VanityUtilTree,
 } from './system/modules'
 
@@ -382,6 +382,7 @@ export type {
   VanityTokenConfig,
   VanityTokenDeclarationError,
   VanityTokenDeprecation,
+  VanityTokenDerivationStage,
   VanityTokenFactory,
   VanityTokenFallback,
   VanityTokenHandle,
@@ -398,7 +399,6 @@ export type {
   VanityTokenRegistration,
   VanityTokens,
   VanityTokensOptions,
-  VanityTokenStage,
   VanityTokenValidation,
   VanityTypedNoDefaultTokenFactory,
   VanityValueToken,

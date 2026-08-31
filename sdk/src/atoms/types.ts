@@ -1,5 +1,5 @@
 /**
- * The public atoms types ([spec-integrations.md §5]): the strict utility lane.
+ * Public atom-set types ([spec-integrations.md §5]): finite declared utility selection.
  * Token keys autocomplete; values outside the map are rejected at the key —
  * unless passed through the labeled escape (`unsafe.value`). Conditional maps
  * use the same condition grammar as everything else (principle 5), over the
@@ -47,7 +47,7 @@ export interface VanityAtomsOptions<
   G,
   TCond extends readonly VanityConditionKeyName<C>[],
 > {
-  /** Property → its closed value set. The token map guides *and* gates — that's the lane. */
+  /** Property → its closed value set. The token map both guides and gates. */
   properties?: P & VanityAtomsPropertiesInput<P>
   /** Call-site aliases: `{ p: 'padding', bg: 'background' }`. */
   shorthands?: S

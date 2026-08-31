@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createEngine } from '../engine/createEngine'
 
 describe('the value law — compatible handles are values', () => {
-  it('serializes one handle vocabulary across value and declaration lanes', () => {
+  it('serializes one handle vocabulary across value and declaration forms', () => {
     const { css, returned } = emit(() => {
       const de = createEngine()
       const ds = de.createSystem({

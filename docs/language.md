@@ -1,22 +1,67 @@
 # vanity — language
 
-One word has one meaning. This page is the compact public map; domain specs own exact behavior.
+Vanity's language follows its behavior. The mental model comes first; the glossary indexes it.
 
-## 0. House style
+## 0. House style and naming law
 
-The style for every Vanity document.
+The style for every Vanity document:
 
-- **Precise, not padded.** One concept has one term; synonyms signal different concepts. Use the technical word when the domain calls for it. Lower the reader’s effort instead of performing thoroughness.
-- **Decisions, not deliberations.** State the answer: “use X” or “X is Y.” Do not narrate options the document does not endorse.
-- **Rationale earns its place.** Explain a choice when the reason is non-obvious or prevents a known trap. Keep rules visible; do not make them feel arbitrary.
-- **No hedging.** Remove “generally,” “usually,” and “try to.” State real exceptions directly.
-- **DRY.** A fact has one canonical home. Link to it instead of restating it.
-- **Renderer-owned layout.** Paragraphs are semantic units, not hand-wrapped lines. Let the Markdown renderer place text and tables; reserve hard line breaks for code and intentional breaks.
-- **Concrete by default.** Pair an abstract contract with the smallest representative snippet, table, or flow that makes its shape visible. Use `TS` fences for TypeScript snippets; a focused fragment is valid when its prose names the missing context.
+- **Precise, not padded.** Lower the reader's effort instead of performing thoroughness.
+- **Decisions, not deliberations.** State the endorsed answer.
+- **Rationale earns its place.** Explain a choice when the reason prevents a known trap.
+- **No hedging.** State real exceptions directly.
+- **DRY.** A fact has one canonical home.
+- **Concrete by default.** Pair an abstract contract with the smallest useful snippet, table, or diagram.
+- **Renderer-owned layout.** Paragraphs are semantic units; the Markdown renderer owns wrapping.
 
-## 1. Canonical sentence
+The naming law is:
+
+> **A base term preserves the same useful inference everywhere it appears. Qualifiers may specialize that inference by domain, owner, state, representation, or relation; they may not rescue unrelated meanings.**
+
+The test is predictive: after learning a term once, a reader should correctly infer something useful from every new compound containing it.
+
+CSS owns CSS vocabulary. Vanity uses a CSS name only for the platform concept exactly. Vanity-specific behavior receives Vanity-specific language.
+
+## 1. Behavioral spine
 
 > **Grow a system additively; consolidate it; style with it.**
+
+```text
+portable descriptions + reusable contributions
+                         │
+                         │ define / add / mount
+                         ▼
+               persistent open system
+                 ├─ immutable history
+                 ├─ may keep growing
+                 └─ may fork safely
+                         │
+                         │ consolidate
+                         │ resolve policy · names · roots · layers · references
+                         ▼
+                  locked system
+             + in-process system contract
+                ┌────────┼───────────────┐
+                │        │               │
+         style authoring │        semantic observation
+          + compiler     │         and interchange
+                │        │               │
+                ▼        ▼               ▼
+          CSS artifacts portable      semantic map
+          style handles contract      manifest
+                        │             explain / audit
+                        ▼             DTCG / DevTools
+                 browser and SSR
+                 restored handles
+                 runtime controller
+```
+
+This is a branching projection graph, not a linear continuum:
+
+- one open system may produce several locked forks;
+- CSS, runtime data, manifests, explanations, and interchange are sibling projections;
+- the browser evaluates CSS;
+- the runtime controller changes only deliberately declared token slots and mode controls.
 
 ```TS
 import { createSystem } from '@mszr/vanity'
@@ -28,51 +73,303 @@ const locked = open.consolidate({
 })
 ```
 
-`ds` is the recommended local name at both stages because it remains the same design system. `open` and `locked` are explanatory names when both objects appear in one module.
+`ds` is the recommended local name at both system states. `open` and `locked` are explanatory names when both appear together.
 
-## 2. Vocabulary
+## 2. Independent facets
+
+No single lifecycle word classifies all of Vanity. Ask the exact question:
+
+| Question | Facet | Examples |
+| --- | --- | --- |
+| What kind of semantic thing is it? | semantic kind | token, condition, axis, recipe, port |
+| Who owns its meaning and lifetime? | ownership | engine, system, module, component, instance, build host, browser |
+| Can system shape still grow? | system state | open, locked |
+| How much context is attached? | binding state | portable, system-bound, resolved, restored, root-bound |
+| What does it do? | effect | describe data, register shape, register style output, materialize an artifact, write DOM, observe |
+| When does code execute? | execution time | authoring time, build time, runtime |
+| Where does it execute? | execution environment | Node/build worker, SSR server, browser |
+| What form is it in? | representation | in-process contract, portable contract, generated module, CSS, manifest |
+| Has it been materialized? | materialization | in-memory representation, artifact |
+| What job does a module perform? | module role | system, style, application, generated |
+| How open is the choice space? | variability | finite declared choice, open value |
+| What guarantees apply? | guarantee profile | typed, validated, raw standards, audited unsafe |
+| What independent proof is required? | evidence dimension | runtime, type, editor, output, browser, integration, packaging, performance |
+
+Use the facet name instead of a generic umbrella such as plane, lane, destination, phase, or stage. Those ordinary words remain valid when they name a precise local concept.
+
+## 3. Actors, hosts, and mounting
+
+```text
+engine
+  supplies constructors · operations · policies · extension capabilities
+        │ powers
+        ▼
+system
+  owns one project's accumulated design decisions and styling contract
+        │ consumed by
+        ▼
+compiler
+  evaluates build-time authoring and materializes CSS/data outputs
+        │ projects
+        ▼
+runtime controller
+  changes declared token slots and mode controls
+```
+
+The engine is Vanity's immutable capability kernel and an internal architectural boundary. `createSystem()` uses the default engine; users do not need a separate engine-construction step.
+
+A host is a context into which a guest mounts and from which it receives policy, capability, or lifecycle participation:
+
+| Host | Guests | Supplies |
+| --- | --- | --- |
+| system host | plugins, definition contributions, portable values | policy, registered shape, ownership, resolution context |
+| build host | Vanity's compiler through a host adapter | module graph, build lifecycle, transforms, bundling, type hooks |
+
+Vite, Nuxt, and WXT are build hosts. `/vite`, `/nuxt`, and `/wxt` are Vanity-owned host adapters. Integration names the activity or resulting relationship, not the adapter object.
+
+## 4. System states and composition
 
 | Term | Exact meaning |
 | --- | --- |
-| open system | Immutable accumulating builder with `add*`, `expect*`, `augment*`, `overwrite*`, definition utilities, constructors, and logical handles. |
-| locked system | Consolidated, immutable system with resolved tokens, styling emitters, runtime binding, and introspection; no registration methods. |
-| in-process contract | Locked build-plane representation; deterministic and emission-free but allowed to contain build closures. |
-| portable artifact | Data-only compiler projection used to generate browser, SSR, manifest, and CSS artifacts. |
-| CSS data type | A platform category such as `<color>`, `<length>`, or `<image>`. |
-| expression | A CSS-producing literal, function, calculation, reference, operation, composite, or raw value. |
-| token | A named design decision, not necessarily a custom property. |
-| token definition | A value, traits, axis values, registration, validation, and metadata before name resolution. |
-| token handle | One phase-polymorphic identity that gains resolved and runtime capabilities over time. |
-| token module | A composable `defineTokens` builder output, mountable under a key or unscoped. |
-| definition module | Detached immutable data for one registrable kind, built with `define*().add()` and mountable on an open system. |
-| condition | A typed AST describing selectors and conditional at-rules. |
+| open system | Immutable system whose structural vocabulary can still grow through registration operations. |
+| locked system | Immutable system whose structural vocabulary is closed and whose contextual names, references, roots, layers, policies, and identities are resolved. |
+| consolidation | Pure transition that resolves deferred system context, validates the complete model, establishes identities, and returns a locked system. It emits no CSS and performs no I/O. |
+| definition module | Detached immutable reusable definition data for one registrable kind. |
+| plugin | Identified reusable contribution that can add shape and declare external requirements. |
+| named system rule | Metadata-bearing system-owned rule contribution emitted once by the compiler; it may contain nested selector rules and at-rules. |
+
+Composition verbs form an algebra:
+
+| Form | Meaning |
+| --- | --- |
+| `create*` | create an identity-bearing API environment |
+| `define*` / `*def` | describe a detached reusable definition |
+| `add*` | register absent shape additively |
+| `augment*` | fill an unset slot on existing shape |
+| `overwrite*` | explicitly replace existing value-data without shrinking shape |
+| `expect*` | require shape/capability supplied outside this definition without claiming ownership |
+| `consolidate` | resolve deferred context and return a locked system |
+| `*dec` | produce CSS declaration data |
+| `$*` | fence Vanity-owned members beside user-owned names |
+
+`defineRules`, `addRule(s)`, `overwriteRule(s)`, and `expectRule(s)` remain the symmetric system-composition family. `ds.rules()` authors selector rules inside a style module; receiver and context make the distinction.
+
+## 5. Contracts, projections, artifacts, and handles
+
+```text
+locked system
+      │ owns
+      ▼
+in-process system contract
+  may contain build-only closures
+      │ projects
+      ▼
+portable system contract
+  validated data only
+      │ compiler materializes
+      ├──────────────┬───────────────┬───────────────┐
+      ▼              ▼               ▼               ▼
+portable JSON    CSS artifact    generated module    manifest artifact
+artifact
+      │ restoration
+      ▼
+restored handles + runtime-controller factory
+```
+
+| Term | Exact meaning |
+| --- | --- |
+| contract | Structured behavioral/data agreement consumed by another part of the system; it may exist only in memory. |
+| in-process system contract | Locked build-time representation allowed to retain build-only closures. |
+| portable system contract | Validated serializable data-only representation used for restoration and generation. |
+| projection | Derived representation preserving selected meaning from a source contract. |
+| artifact | Materialized build output such as CSS, JSON, a generated module, manifest, or package. |
+| restoration | Reconstruction of a context-appropriate handle or service from portable data. |
+| handle | Small context-specific usable interface/reference to a semantic subject or compiled output. |
+
+The semantic subject persists; its contextual interfaces differ:
+
+```text
+token definition
+      │ mounted into an open system
+      ▼
+logical token handle
+      │ consolidation
+      ▼
+resolved token handle
+      ├─ build-time styling use
+      ├─ serialized/restored application or SSR handle
+      └─ mutable token control inside a runtime controller
+```
+
+Do not describe one JavaScript handle as travelling between environments and gaining methods.
+
+Canonical handle compounds:
+
+- logical token handle;
+- resolved token handle;
+- restored token handle;
+- class handle;
+- keyframes handle;
+- recipe handle;
+- anatomy handle;
+- atom-set handle;
+- port handle.
+
+Inside a runtime controller, a mutable token leaf is a token control, not a generic runtime handle.
+
+## 6. Canonical semantic vocabulary
+
+| Term | Exact meaning |
+| --- | --- |
+| CSS data type | Platform category such as `<color>`, `<length>`, or `<image>`. |
+| expression | CSS-producing literal, function, calculation, reference, operation, composite, or raw value. |
+| token | Named design decision, not necessarily a custom property. |
+| token definition | Value, traits, axis values, registration, validation, and metadata before final name resolution. |
+| token module | Definition module with graph references, axes, roots, and token-definition grammar. |
+| condition | Typed AST describing selectors and conditional at-rules. |
 | arm | One lowered conjunction of selector and at-rule conditions. |
-| axis | An ordered set of intended alternative modes plus optional default and runtime control metadata. |
-| mode | A named condition within an axis. |
-| root | The selector or scope owning a system/module token declaration. |
-| fragment | Ordered declaration/rule data with no class or selector of its own. |
-| mixin | A normal TypeScript function returning a fragment or other styling input. |
-| recipe | A finite variant function returning classes. |
-| anatomy | A part-keyed multi-part recipe. |
-| atom set | A bounded utility-class map plus resolver produced by `ds.atoms`. |
-| port | A style/component-owned, defaulted custom-property input that produces declaration fragments. |
-| mutable token | A system decision with runtime-addressable semantic slots. |
-| runtime | A root-resolving facade for token mutation, mode control, snapshots, and hydration. |
+| axis | Ordered set of intended alternative modes plus optional default and runtime-control metadata. |
+| mode | Named condition within an axis. |
+| root | Selector or scope owning a system/module token declaration. |
+| policy | System-wide conformance, restriction, output, or support law. |
+| constructor | System-extensible typed CSS value family. |
+| portable constructor | Built-in top-level constructor whose system policy resolves when its value enters a system. |
+| bound constructor | Corresponding `ds` constructor projected through that system's policies and authoring diagnostics. |
 | const | JSON-serializable convenience data added to and read from a system. |
-| util | A function contributed to the system; use a plain function unless registration is valuable. |
-| constructor | A system-extensible typed CSS value family. |
-| portable constructor | A built-in top-level constructor whose host policy resolves when its value enters a system. |
-| bound constructor | The corresponding `ds` constructor projected through that system's policies and authoring diagnostics. |
-| policy | System-wide conformance, restriction, output, or support law; `createSystem(config)` supplies the initial policy book. |
-| rule group | A named, metadata-bearing system CSS contribution emitted once at consolidation output. |
-| plugin | An identified reusable contribution that can add and expect system shape. |
-| Hail | The optional opinionated plugin: normalized color/size constructors, controls, starter tokens, and selectable rule presets. |
-| declaration bundle | A token leaf/group projected through its argless `$dec` property into themeable styling declarations. |
-| projection | A derived typed representation of one semantic contract, such as names, vars, props, runtime schema, or manifest data. |
+| util | Function contributed to the system; use a plain function unless registration is valuable. |
+| surface | Members a thing exposes for reading or calling. |
+| position | Place in CSS grammar that accepts a value. |
+| dimension | Independent non-substitutable classification or proof axis. |
 
-`theme` remains an application word. `scope` is reserved for CSS `@scope`. `override` remains cascade language; definition-plane destructive replacement is `overwrite`.
+`theme` remains an application word. `scope` is reserved for CSS `@scope`. `override` remains cascade language; definition-data replacement is `overwrite`.
 
-## 3. Surface map
+## 7. Styling vocabulary
+
+```text
+style data producer
+  returns inert ordered declaration/rule data
+        │ consumed by
+        ▼
+style emitter
+  registers CSS output during style-module evaluation
+        │ materialized by
+        ▼
+compiler
+  emits CSS artifacts
+        │ evaluated by
+        ▼
+browser
+```
+
+| Class | APIs | Effect |
+| --- | --- | --- |
+| style-data producers | `fragment`, `tdec`, `port.dec`, declaration bundles | return inert data; do not register or emit output |
+| style emitters | `class`, `rules`, `raw`, `recipe`, `anatomy`, `atoms`, `keyframes`, `fontFace` | register style output while a style module is evaluated |
+| restored resolvers | recipe, anatomy, atom-set, port, and other restored handles | select precompiled classes or produce declaration data; never synthesize arbitrary browser CSS |
+
+Names state their result:
+
+```text
+class      → generated class handle/string
+recipe     → finite class-selection function
+anatomy    → part-keyed class-selection functions
+atoms      → bounded utility-class resolver
+fragment   → reusable ordered style data
+rules      → authored selector rules
+tdec       → token custom-property declaration data
+keyframes  → animation-name handle
+fontFace   → font-family handle
+raw        → raw CSS in the declared layer
+```
+
+| Concept | Ownership and variability |
+| --- | --- |
+| recipe | finite component-owned choices |
+| anatomy | finite choices across named component parts |
+| atom set | finite declared property/value utility table |
+| port | open component/style-owned per-instance input |
+| mutable token | system-owned design decision with declared runtime-addressable slots |
+
+Finite declared choice belongs in recipes, anatomy, or atom sets. An open per-instance value belongs in a port. A system-owned live decision belongs in a mutable token.
+
+A fragment is ordered declaration/rule data with no class or selector of its own. A mixin is a normal TypeScript function returning a fragment or another styling input.
+
+`ds.omit` means no declaration. CSS `unset` keeps its platform meaning.
+
+## 8. Runtime vocabulary
+
+The object returned by `ds.runtime()` is the runtime controller:
+
+```TS
+const rt = ds.runtime()
+
+rt.t.color.brand.$set('#635bff')
+rt.axes.scheme.$switchTo('dark')
+```
+
+The controller resolves/binds declared roots, validates and batches declared operations, snapshots its state, reconciles/hydrates snapshots, and inspects its own writes. It does not generate arbitrary CSS or calculate the full cascade.
+
+Runtime mutation uses fenced verbs because they sit beside user token/axis/mode names. Build-time declaration producers do not:
+
+```TS
+port.dec(value)
+ds.tdec({ color: { brand: value } })
+
+rt.t.color.brand.$set(value)
+rt.axes.scheme.$switchTo('dark')
+```
+
+Bare `runtime` keeps its temporal meaning in compounds such as runtime validation, runtime schema, runtime snapshot, runtime props, and runtime styles.
+
+## 9. Module roles and integration vocabulary
+
+| Module role | Purpose | Processing |
+| --- | --- | --- |
+| system module | creates, grows, and consolidates a system in plain TypeScript | evaluated by compiler/tools; replaced by projections in application graphs |
+| style module | performs build-time styling authoring in `*.css.ts` / `*.css.js` | evaluated by Vanity's compiler; produces CSS contributions and serialized exports |
+| application module | consumes style handles and runtime/application APIs | transformed by the build host; may execute in SSR or browser environments |
+| generated module | carries compiler-projected browser, SSR, CSS, or metadata content | consumed by the build host/application |
+
+A TypeScript program is a separate type consumer. It may include generated declarations even when no module receives an injected value.
+
+```text
+style-module pipeline
+system module + *.css.ts
+        │ compiler evaluates
+        ▼
+CSS contributions + serialized style exports
+
+application-module pipeline
+system/style imports
+        │ build host transforms using adapter projections
+        ▼
+restored handles + runtime/application APIs
+```
+
+Configuration uses compact module-role keys:
+
+```TS
+{
+  compiler: { system, layerOrder },
+  autoImports: { shared, style, app },
+}
+```
+
+`compiler` configures a Vanity-owned actor. `autoImports` configures import routing. `style` and `app` target their module roles; `shared` is shorthand for routing one source to both roles, not a third role.
+
+## 10. Canonical file roles
+
+```text
+open-system.ts     create and extend the open system
+*.tokens.ts        define portable or system-bound token modules
+system.ts          add modules and consolidate; plain TypeScript
+*.css.ts           emit classes, rules, recipes, anatomy, ports, and at-rules
+component/app code consume serialized style handles and the runtime controller
+```
+
+A system must not be created or consolidated inside `*.css.ts`. The compiler serializes style-module exports; it diagnoses this mistake and points to a plain `system.ts`.
+
+## 11. Public surface map
 
 ### Top level
 
@@ -90,10 +387,10 @@ range / fromEntries / mapRecord / ports
 ### Open system
 
 ```text
-add{Kind} / add{Kinds} for every registrable data kind; addPlugin
+add{Kind} / add{Kinds}; addPlugin
 augmentToken(s) / augmentAxis(es)
 overwrite token(s) / axis(es) / condition(s) / const(s) / rule(s) / policy(ies)
-expect singular/plural tokens, axes, conditions, consts, utils, rules, constructors, policies
+expect tokens, axes, conditions, consts, utils, rules, plugins, constructors, policies
 define* detached modules / tdef
 t / tdec / constructors / conditions
 consolidate
@@ -107,13 +404,11 @@ constructors and added utils
 class / recipe / anatomy / atoms / fragment / rules
 tdec / port / keyframes / fontFace / raw
 inLayer / omit / serialize
-runtime / snapshotFrom
+runtime / snapshotFrom / reconcileRuntimeSnapshot / runtimeStyle / runtimeProps
 introspect / explain / audit
 ```
 
-Every logical and locked token handle exposes `$dec`. On a CSS-property leaf it declares that property; on a property/condition group it recursively projects a themeable declaration bundle. `tdec` points the other direction: it assigns values to token custom properties.
-
-### Runtime
+### Runtime controller
 
 ```text
 t.<path>.$set / $unset
@@ -123,7 +418,7 @@ refreshRoots / bindRoot / transaction
 snapshot / hydrate / inspect
 ```
 
-### Component projections
+### Component/framework projections
 
 ```text
 propsOf
@@ -131,22 +426,12 @@ usePorts
 useAnatomy
 fromTokenGroup
 button.ports
-namesOf / varsOf / tokensOf and future uniform projections
+namesOf / varsOf / tokensOf
 ```
 
-## 4. Canonical file roles
+The effective locked/public surface is authoritative. Removed or internal compatibility members such as `css`, `globalCss`, `tokenOverride`, and `defineAtoms` are not part of this language merely because lower-level implementation types retain them.
 
-```text
-open-system.ts     create and extend the open system
-*.tokens.ts        define portable or system-bound token modules
-system.ts          add modules and consolidate; plain TypeScript
-*.css.ts           emit classes, rules, recipes, anatomy, ports, and at-rules
-component/app code consume serialized style handles and runtime facade
-```
-
-A system must not be created or consolidated inside `*.css.ts`. The compiler serializes style-module exports; it diagnoses this mistake and points to a plain `system.ts`.
-
-## 5. Token language
+## 12. Token language
 
 ```TS
 const palette = ds.defineTokens()
@@ -157,11 +442,13 @@ const palette = ds.defineTokens()
   }))
 ```
 
-`.add()` adds a literal/configured token, a derived token, a derived batch, or another builder. Every form merges additively.
+`.add()` adds a literal/configured token, derived token, derived batch, or another builder. Every form merges additively.
 
-Tree syntax uses `ds.tdef({...})` to disambiguate a definition from a group. `.add(name, config)` accepts the raw config directly because that position cannot be a group.
+Tree syntax uses `ds.tdef({...})` to distinguish a definition from a group. `.add(name, config)` accepts raw config directly because that position cannot be a group.
 
-## 6. Condition language
+Every logical and resolved token handle exposes `$dec`. On a CSS-property leaf it declares that property; on a property/condition group it recursively projects themeable declaration data. `tdec` points the other direction: it assigns values to token custom properties.
+
+## 13. Condition language
 
 ```TS
 const wide = media({ width: { '>=': '60rem' } })
@@ -169,46 +456,13 @@ const interactive = selector('&:hover').or('&:focus-visible')
 const inCard = scope('.card').to('.card-media')
 ```
 
-Conditions are AST values with `.and`, `.or`, and `.not()`. Plain selector/query strings remain the raw standards lane. Strings are never preprocessed as a private Vanity dialect.
+Conditions are AST values with `.and`, `.or`, and `.not()`. Plain selector/query strings remain the raw standards escape. Strings are never preprocessed as a private Vanity dialect.
 
-## 7. Styling language
-
-Names state their output:
-
-```text
-class → class
-recipe → finite class family
-anatomy → part-keyed class families
-atoms → bounded utility-class resolver
-fragment → reusable ordered data
-rules → authored selector rules
-tdec → token custom-property declarations
-keyframes → animation-name handle
-fontFace → font-family handle
-raw → raw CSS in the declared layer
-```
-
-`ds.omit` means no declaration. CSS `unset` keeps its platform meaning.
-
-## 8. Runtime language
-
-Runtime mutation uses fenced verbs because they sit beside user token/axis/mode names. Build-plane declaration producers do not:
-
-```TS
-port.dec(value)
-ds.tdec({ color: { brand: value } })
-
-rt.t.color.brand.$set(value)
-rt.axes.scheme.$switchTo('dark')
-```
-
-This is deliberate asymmetry: build APIs produce CSS declarations as data; runtime APIs mutate state now.
-
-## 9. Import patterns
+## 14. Import patterns
 
 Three forms are blessed:
 
-1. generated style auto-imports, including ambient types;
+1. generated style/application auto-imports with exact ambient types;
 2. `import * as de from '@mszr/vanity'` for definition modules;
 3. explicit named imports.
 

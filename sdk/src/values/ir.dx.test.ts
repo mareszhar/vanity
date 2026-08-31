@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 const project = vanityProject()
 
 describe('shared value editor DX', () => {
-  it('groups units and typed raw lanes into focused namespaces', () => {
+  it('groups units and typed raw forms into focused namespaces', () => {
     const result = project.query`
       import { createEngine } from '@test/legacy'
       const de = createEngine()

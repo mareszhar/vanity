@@ -17,7 +17,7 @@ describe('property alias editor DX', () => {
     expect(result.completions).not.toContainCompletion('pb')
   })
 
-  it('aliases-only narrows the primary lane and leaves class.standard complete', () => {
+  it('aliases-only narrows the primary vocabulary and leaves class.standard complete', () => {
     const result = project.query`
       import { createSystem, propertyAliases } from '@mszr/vanity'
       const ds = createSystem()

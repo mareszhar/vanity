@@ -1,26 +1,25 @@
 # vanity — architecture
 
-## 1. Lifecycle
+## 1. Behavioral spine
 
 ```text
-createSystem(config)
-  → open immutable system
-      → add / expect / augment / overwrite
-      → mount detached token/axis/condition/const/util/rule/constructor/policy modules
-      → resolve portable built-ins through the accumulating policy book
-      → consolidate({ prefix, root, axisOrder, layerRoot, audit })
-          → immutable in-process contract
-              → compiler projections
-              → locked authoring surface
+compose                                  resolve                     project
+──────────────────────────────────────  ──────────────────────────  ──────────────────────
+createSystem(config)                     consolidate(options)        CSS
+  → open immutable system                 → locked system            application modules
+  → define detached contributions         → in-process contract      runtime contract
+  → add / expect / augment / overwrite    → portable contract        semantic map/manifest
 ```
 
-Every chain link returns a new object. An open system may produce multiple locked forks. The locked object removes all registration and consolidation methods.
+Composition accumulates meaning. Resolution binds deferred context and validates the whole. Projection derives representations for particular consumers. These are not one object's universal phases: a semantic subject may have distinct logical, resolved, and runtime handles.
+
+Every open-system chain link returns a new object. One open system may produce multiple locked forks. The locked object removes all registration and consolidation methods.
 
 `consolidate()`:
 
 - resolves logical names, references, roots, conditions, axes, layers, registrations, runtime schema, metadata, and identities;
 - resolves adaptive portable values and scans constructor restrictions;
-- validates named system rule groups and orders them by layer, explicit order, then registration;
+- validates named system rules and orders them by layer, explicit order, then registration;
 - performs no CSS emission, DOM access, filesystem writes, global registration, or style-module lookup;
 - returns a deterministic in-process contract importable by Node tools and config;
 - retains build-only closures only inside that in-process boundary.
@@ -29,15 +28,15 @@ Every chain link returns a new object. An open system may produce multiple locke
 
 ```text
 plain system.ts
-  └─ consolidate() → in-process contract
-       ├─ compiler worker evaluates build closures
-       ├─ portable data artifact
-       │    ├─ system CSS virtual module
-       │    ├─ browser runtime virtual module
-       │    ├─ DOM-free SSR virtual module
-       │    └─ manifest
-       └─ style modules
-            └─ one CSS virtual module per source
+  └─ consolidate() → locked system + in-process contract
+       ├─ compiler evaluates build-only closures
+       ├─ portable system contract
+       │    ├─ application-system projection
+       │    ├─ browser runtime-controller factory
+       │    └─ DOM-free SSR projection
+       ├─ semantic map → manifest artifact
+       ├─ system CSS → virtual CSS artifact
+       └─ style modules → one virtual CSS artifact per source
 ```
 
 Style sources use the ecosystem-standard `*.css.ts` / `*.css.js` suffix. Plain `system.ts` owns creation and consolidation. The compiler intentionally recognizes only `*.css.ts` and `*.css.js` style modules.
@@ -58,6 +57,26 @@ The compiler:
 
 This model is proven in [`spikes/compiler-projection`](../../spikes/compiler-projection/README.md) and the permanent compiler integration suite.
 
+### Actors and hosts
+
+```text
+Vanity-owned                         external
+────────────                         ────────
+compiler ── mounted by adapter ──▶ build host (Vite / Nuxt / WXT)
+   │                                  │
+   ├─ evaluates style modules         ├─ module graph
+   ├─ projects contracts              ├─ bundling and transforms
+   └─ emits CSS/artifacts              └─ type-registration lifecycle
+```
+
+A **host** supplies context or capability to a mounted guest:
+
+- a **system host** supplies policy and registered shape to plugins and portable values;
+- a **build host** supplies the module graph and build lifecycle to Vanity's compiler;
+- a **host adapter** is Vanity-owned code that mounts the compiler and registers bindings with one build host.
+
+The **engine** is the immutable capability kernel behind `createSystem()`. It is architecture and maintainer vocabulary, not a second public construction layer; users do not need a `createEngine()` workflow.
+
 ## 3. Four identities
 
 One fingerprint cannot serve all consumers. Each ID is a hash of its complete normalized projection, not a manually maintained field list.
@@ -66,7 +85,7 @@ One fingerprint cannot serve all consumers. Each ID is a hash of its complete no
 | --- | --- | --- |
 | compatibility ID | structural public schema, policies, plugin IDs/versions/options, recorded overwrites | duplicate-package/HMR compatibility and package composition |
 | CSS-artifact fingerprint | complete emission IR: values, names, roots, scopes, axes, layers, registrations, fallbacks | system CSS |
-| runtime schema ID | mutable slots, roots/query strategies, controls, validators, hydration addresses | runtime/SSR facade and snapshot compatibility |
+| runtime schema ID | mutable slots, roots/query strategies, controls, validators, hydration addresses | runtime-controller and snapshot compatibility |
 | docs/provenance revision | descriptions, source locations, explanations, documentation metadata | manifest/docs only |
 
 A token value edit changes CSS identity without invalidating runtime shape. A description edit changes only documentation identity and must not rewrite CSS or churn mtimes.
@@ -94,7 +113,7 @@ One system owns one CSS namespace:
 - declared root/scope set;
 - system CSS artifact.
 
-Two runtime-compatible systems may share a runtime facade. They may not emit different CSS into the same effective namespace unless their ownership is demonstrably disjoint. A collision fails and names both sources and CSS identities.
+Two runtime-compatible systems may share a runtime controller. They may not emit different CSS into the same effective namespace unless their ownership is demonstrably disjoint. A collision fails and names both sources and CSS identities.
 
 Per-system layers are nested:
 
@@ -129,7 +148,7 @@ The open environment tracks constructors, token policy, axes, plugin requirement
 
 Every non-plugin registrable kind shares a detached definition-module carrier: immutable entries, kind identity, and a scoped `.add()` grammar. Token modules retain their graph-specific carrier but implement the same grammar. Mounting—not definition—normalizes entries against the current system.
 
-Callable constructor families project `call` as the function and every other call-like definition member onto that function object. The projection is type-exact while its closures remain build-plane only.
+Callable constructor families project `call` as the function and every other call-like definition member onto that function object. The projection is type-exact while its closures remain build-only.
 
 ## 7. Rule and value IR
 
@@ -147,7 +166,7 @@ Every styling emitter lowers to one ordered, lossless rule IR supporting:
 
 `@property` is unlayered and resolves duplicate registrations by stylesheet order. `@font-face` and `@keyframes` may live inside layers, where layer priority participates in name collision resolution. The IR records those differences explicitly.
 
-Named system rule groups sit above rule IR. Their name and metadata are shape/provenance; `css` lowers into the same ordered IR as every emitter. The system artifact records group fingerprints and emits each group once, independent of how many styling surfaces are evaluated.
+Named system rules sit above rule IR. Their name and metadata are shape/provenance; `css` lowers into the same ordered IR as every emitter. The versioned portable contract currently stores this low-level shape in `ruleGroups`, but the public authoring language remains `defineRules`, `addRule(s)`, `overwriteRule(s)`, `expectRule(s)`, and `ds.rules`. The system artifact records fingerprints and emits each named rule once, independent of how many styling surfaces are evaluated.
 
 Relative colors add a value-IR node carrying the selected color space, origin, component map, and alpha. Component expressions retain references, liveness, requirements, and constructor provenance; serialization chooses native relative syntax or an exact fold. No intermediate stage stringifies a live value.
 
@@ -174,7 +193,7 @@ Required recovery sequences:
 ## 9. Trust boundaries
 
 - Build closures never cross into browser or SSR bundles.
-- Portable artifacts are validated data, not serialized arbitrary objects.
+- Portable contracts and their materialized artifacts are validated data, not serialized arbitrary objects.
 - Runtime validator implementations cross by stable IDs and explicit binding.
 - DTCG plugin codecs cross by stable identity/version and JSON-safe payload.
 - Source maps and structured diagnostics carry authored locality through compiler layers.

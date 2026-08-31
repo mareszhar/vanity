@@ -53,7 +53,7 @@ export type VanityPortDecValue<Type extends VanityCssDataType>
     | VanityPortLegacyReference
 
 export interface VanityPortValidation<Input = unknown, Output = Input> {
-  /** Stable app-plane lookup key. */
+  /** Stable application-runtime lookup key. */
   readonly id: string
   readonly schema?: VanityStandardSchemaV1<Input, Output>
   /** `dev` by default; `false` is type-only, `always` includes production. */

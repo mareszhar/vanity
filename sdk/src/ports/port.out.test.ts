@@ -1,5 +1,5 @@
 /**
- * The output plane: the emitted CSS with ports — interpolation, direct value
+ * The output evidence dimension: the emitted CSS with ports — interpolation, direct value
  * usage, static `set()` in rules, and the `var(--name, <default>)` reference —
  * locked as a public contract ([workspace.md §5]).
  */

@@ -1,5 +1,5 @@
 /**
- * The runtime plane: system binding, class identity, and the diagnostics
+ * The runtime evidence dimension: system binding, class identity, and the diagnostics
  * contract — exactly one per mistake, naming the offending key and the fix
  * ([patterns.md §10]).
  */

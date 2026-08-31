@@ -1,5 +1,5 @@
 /**
- * The type-shape plane: system inference — inline tokens bind, condition and
+ * The type-shape evidence dimension: system inference — inline tokens bind, condition and
  * layer names flow as literals, both nesting directions type, and every
  * unknown key dies at the cursor ([patterns.md §2]).
  */
@@ -10,7 +10,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 
 const de = createEngine()
 
-// Never evaluated — the typecheck plane only reads types.
+// Never evaluated — the typecheck evidence dimension only reads types.
 function system() {
   return de.createSystem({
     tokens: {

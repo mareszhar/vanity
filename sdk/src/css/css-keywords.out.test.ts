@@ -3,7 +3,7 @@ import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
 
 describe('css declaration keywords', () => {
-  it('accepts box-shadow none through class, recipe, atom, and alias lanes', () => {
+  it('accepts box-shadow none through class, recipe, atom, and alias forms', () => {
     const ds = createSystem()
       .addPlugin(propertyAliases({ shadow: 'boxShadow' }))
       .consolidate()

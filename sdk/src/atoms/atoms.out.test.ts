@@ -1,5 +1,5 @@
 /**
- * The output plane for atoms: bounded pre-generation is the contract — one
+ * The output evidence dimension for atoms: bounded pre-generation is the contract — one
  * class per property value, plus one per declared condition, in the
  * `utilities` layer; CSS output scales with conditions, never with values.
  */

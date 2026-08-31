@@ -1,15 +1,15 @@
 /**
  * Low-level application auto-import projections for custom host adapters.
- * Most applications should use `app.runtimeAutoImports` on the Vite or Nuxt
+ * Most applications should use `autoImports.app` on the Vite, Nuxt, or WXT
  * integration instead of importing these descriptors directly.
  */
 
 export type {
-  VanityRuntimeAutoImportPreset,
-  VanityRuntimeAutoImportPresetName,
-} from './internal/appImports'
+  VanityAppAutoImportPreset,
+  VanityAppAutoImportPresetName,
+} from './internal/applicationImports'
 export {
+  vanityAppAutoImportPresets,
   vanityCoreAutoImports,
-  vanityRuntimeAutoImportPresets,
   vanityVueAutoImports,
-} from './internal/appImports'
+} from './internal/applicationImports'

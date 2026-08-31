@@ -1,5 +1,5 @@
 /**
- * The runtime plane for the Vue overlay ([spec-vue.md §1–2]): `usePorts`
+ * The runtime evidence dimension for the Vue overlay ([spec-vue.md §1–2]): `usePorts`
  * merges fragments reactively (thunk) or statically (plain fragments), and
  * `useAnatomy` keeps the record of part classes tracking its props.
  */

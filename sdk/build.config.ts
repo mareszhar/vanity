@@ -3,6 +3,7 @@ import { defineBuildConfig } from 'obuild/config'
 const browserExternal = ['@vanilla-extract/css']
 const viteExternal = ['@vanilla-extract/vite-plugin', 'unplugin-auto-import', 'vite']
 const nuxtExternal = ['@nuxt/kit', 'nuxt', 'unplugin-auto-import', 'vite']
+const wxtExternal = ['wxt', 'vite', 'unplugin-auto-import']
 const vueExternal = ['vue']
 const testingExternal = ['@mszr/selenita']
 
@@ -66,6 +67,14 @@ export default defineBuildConfig({
       rolldown: {
         platform: 'node',
         external: nuxtExternal,
+      },
+    },
+    {
+      type: 'bundle',
+      input: ['./src/wxt.ts'],
+      rolldown: {
+        platform: 'node',
+        external: wxtExternal,
       },
     },
     {

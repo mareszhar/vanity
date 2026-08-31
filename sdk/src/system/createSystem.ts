@@ -224,7 +224,7 @@ export interface VanityBoundSystem<
   readonly anatomy: VanityAnatomyFactory<C, L>
   /** The typed runtime boundary: declare a port with a default, typed by it. */
   readonly port: VanityPortFactory
-  /** The strict utility lane, defined over your token map ([spec-integrations.md §5]). */
+  /** Finite declared utility selection over your token map ([spec-integrations.md §5]). */
   readonly defineAtoms: VanityAtomsFactory<C, L>
   readonly atoms: VanityAtomsFactory<C, L>
   readonly inLayer: <Layer extends L>(name: Layer) => VanityBoundSystem<T, C, Layer, Axes, Css>
@@ -306,7 +306,7 @@ export function createSystemForEngine<
   )
 }
 
-/** Pure Phase 4 contract boundary used by the open system's `consolidate()`. */
+/** Pure contract boundary used by the open system's `consolidate()`. */
 export function createSystemContractForEngine<
   const Constructors extends object,
   const TokenPolicy extends VanityTokenPolicy,
@@ -621,14 +621,14 @@ function createSystemInternal<
     const placed = inDeclaredLayer(system, name)
     return Object.freeze({
       ...bound,
-      class: buildPlane('class', bindClass(placed)),
-      rules: buildPlane('rules', bindRules(placed)),
-      raw: buildPlane('raw', bindGlobalRaw(placed)),
-      keyframes: buildPlane('keyframes', bindKeyframes(placed)),
-      fontFace: buildPlane('fontFace', bindFontFace(placed)),
-      recipe: buildPlane('recipe', bindRecipe(placed)),
-      anatomy: buildPlane('anatomy', bindAnatomy(placed)),
-      atoms: buildPlane('atoms', bindAtoms(placed, name)),
+      class: buildOnly('class', bindClass(placed)),
+      rules: buildOnly('rules', bindRules(placed)),
+      raw: buildOnly('raw', bindGlobalRaw(placed)),
+      keyframes: buildOnly('keyframes', bindKeyframes(placed)),
+      fontFace: buildOnly('fontFace', bindFontFace(placed)),
+      recipe: buildOnly('recipe', bindRecipe(placed)),
+      anatomy: buildOnly('anatomy', bindAnatomy(placed)),
+      atoms: buildOnly('atoms', bindAtoms(placed, name)),
     })
   }
 
@@ -636,47 +636,47 @@ function createSystemInternal<
     ...binding.kernel.constructors,
 
     t: tokens as Bound['t'],
-    class: buildPlane('class', bindClass(system) as Bound['class']),
-    rules: buildPlane('rules', bindRules(system) as Bound['rules']),
-    raw: buildPlane('raw', bindGlobalRaw(system) as Bound['raw']),
-    fragment: buildPlane('fragment', createFragmentFactory()),
+    class: buildOnly('class', bindClass(system) as Bound['class']),
+    rules: buildOnly('rules', bindRules(system) as Bound['rules']),
+    raw: buildOnly('raw', bindGlobalRaw(system) as Bound['raw']),
+    fragment: buildOnly('fragment', createFragmentFactory()),
     omit,
-    tdec: buildPlane('tdec', (declarations: VanityTokenDeclarations<Bound['t']>) =>
+    tdec: buildOnly('tdec', (declarations: VanityTokenDeclarations<Bound['t']>) =>
       tokenDeclarations(tokens as Bound['t'], declarations)),
-    css: buildPlane('css', bindCss(system) as Bound['css']),
-    keyframes: buildPlane('keyframes', bindKeyframes(system)),
-    fontFace: buildPlane('fontFace', bindFontFace(system)),
-    globalCss: buildPlane('globalCss', bindGlobalCss(system) as Bound['globalCss']),
-    tokenOverride: buildPlane('tokenOverride', (overrides: VanityTokenOverrides<Bound['t']>, debugId?: string) => standaloneTokenOverride(
+    css: buildOnly('css', bindCss(system) as Bound['css']),
+    keyframes: buildOnly('keyframes', bindKeyframes(system)),
+    fontFace: buildOnly('fontFace', bindFontFace(system)),
+    globalCss: buildOnly('globalCss', bindGlobalCss(system) as Bound['globalCss']),
+    tokenOverride: buildOnly('tokenOverride', (overrides: VanityTokenOverrides<Bound['t']>, debugId?: string) => standaloneTokenOverride(
       tokens as Bound['t'],
       overrides as VanityTokenOverrides<Bound['t']>,
       debugId,
     )),
-    recipe: buildPlane('recipe', bindRecipe(system) as Bound['recipe']),
-    anatomy: buildPlane('anatomy', bindAnatomy(system) as Bound['anatomy']),
-    port: buildPlane('port', ((input: VanityPortInput, options?: object) =>
+    recipe: buildOnly('recipe', bindRecipe(system) as Bound['recipe']),
+    anatomy: buildOnly('anatomy', bindAnatomy(system) as Bound['anatomy']),
+    port: buildOnly('port', ((input: VanityPortInput, options?: object) =>
       createPort(input, options as any, { prefix, serialize: serializeSystemValue })) as Bound['port']),
-    defineAtoms: buildPlane('defineAtoms', bindAtoms(system) as Bound['defineAtoms']),
-    atoms: buildPlane('atoms', bindAtoms(system) as Bound['atoms']),
-    inLayer: buildPlane('inLayer', layered as Bound['inLayer']),
-    tokensOf: buildPlane('tokensOf', projectTokens as Bound['tokensOf']),
-    namesOf: buildPlane('namesOf', ((selection: object) => project(selection, 'name')) as Bound['namesOf']),
-    varsOf: buildPlane('varsOf', ((selection: object) => project(selection, 'var')) as Bound['varsOf']),
-    explain: buildPlane('explain', ((token: VanityTokenHandleAny) => explainToken(resolvedGraph, token)) as Bound['explain']),
-    runtime: appPlane(runtimeServices.runtime, 'restoreRuntimeFactory', runtimeContract),
-    snapshotFrom: appPlane(runtimeServices.snapshotFrom, 'restoreSnapshotFrom', runtimeContract),
-    reconcileRuntimeSnapshot: appPlane(runtimeServices.reconcileRuntimeSnapshot, 'restoreRuntimeReconciler', runtimeContract),
-    runtimeStyle: appPlane(runtimeServices.runtimeStyle, 'restoreRuntimeStyle', runtimeContract),
-    runtimeProps: appPlane(runtimeServices.runtimeProps, 'restoreRuntimeProps', runtimeContract),
+    defineAtoms: buildOnly('defineAtoms', bindAtoms(system) as Bound['defineAtoms']),
+    atoms: buildOnly('atoms', bindAtoms(system) as Bound['atoms']),
+    inLayer: buildOnly('inLayer', layered as Bound['inLayer']),
+    tokensOf: buildOnly('tokensOf', projectTokens as Bound['tokensOf']),
+    namesOf: buildOnly('namesOf', ((selection: object) => project(selection, 'name')) as Bound['namesOf']),
+    varsOf: buildOnly('varsOf', ((selection: object) => project(selection, 'var')) as Bound['varsOf']),
+    explain: buildOnly('explain', ((token: VanityTokenHandleAny) => explainToken(resolvedGraph, token)) as Bound['explain']),
+    runtime: applicationProjection(runtimeServices.runtime, 'restoreRuntimeControllerFactory', runtimeContract),
+    snapshotFrom: applicationProjection(runtimeServices.snapshotFrom, 'restoreSnapshotFrom', runtimeContract),
+    reconcileRuntimeSnapshot: applicationProjection(runtimeServices.reconcileRuntimeSnapshot, 'restoreRuntimeReconciler', runtimeContract),
+    runtimeStyle: applicationProjection(runtimeServices.runtimeStyle, 'restoreRuntimeStyle', runtimeContract),
+    runtimeProps: applicationProjection(runtimeServices.runtimeProps, 'restoreRuntimeProps', runtimeContract),
     serialize: (value: VanityValue) => String(serializeSystemValue(value)),
     conditions: describedConditions,
     layers: Object.freeze([...layers]) as readonly L[number][],
   } as any
 
   // A whole system can cross into app code (for example through a project's
-  // explicit Nuxt auto-import surface). Keep build-plane functions callable
+  // explicit Nuxt auto-import surface). Keep build-only functions callable
   // while the compiler evaluates this module, but give the exported surface a
-  // serializable wrapper for the app plane. The wrapper restores the same
+  // serializable application projection. The wrapper restores the same
   // throwing stub used by individual authoring methods; token handles and
   // runtime services already carry their own serializers and are preserved.
   for (const [key, value] of Object.entries(bound))
@@ -783,21 +783,21 @@ type RuntimeTokenBuilder = object
 /**
  * Let a bound authoring function cross the build/app boundary as a stub:
  * importing the system module from app code is legal and useful (`t` and
- * published classes), so the build-plane functions beside those
+ * published classes), so the build-only functions beside those
  * exports serialize into throwing stubs instead of poisoning the module
  * ([patterns.md §1] — app code never executes styling work at runtime).
  */
-function buildPlane<F>(name: string, fn: F): F {
+function buildOnly<F>(name: string, fn: F): F {
   addFunctionSerializer(fn as Parameters<typeof addFunctionSerializer>[0], {
     importPath: '@mszr/vanity/runtime',
-    importName: 'restoreBuildPlane',
+    importName: 'restoreStyleAuthoringStub',
     args: [{ name }],
   })
 
   return fn
 }
 
-function appPlane<F>(fn: F, importName: string, contract: object): F {
+function applicationProjection<F>(fn: F, importName: string, contract: object): F {
   addFunctionSerializer(fn as Parameters<typeof addFunctionSerializer>[0], {
     importPath: '@mszr/vanity/runtime',
     importName,
@@ -816,7 +816,7 @@ function serializableSystemValue(value: unknown, name: string, seen = new WeakMa
     if (!Object.hasOwn(value, '__recipe__')) {
       addFunctionSerializer(value, {
         importPath: '@mszr/vanity/runtime',
-        importName: 'restoreBuildPlane',
+        importName: 'restoreStyleAuthoringStub',
         args: [{ name }],
       })
     }

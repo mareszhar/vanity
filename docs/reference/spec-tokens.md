@@ -1,6 +1,15 @@
 # vanity — spec: tokens
 
-Tokens are named design decisions in an additive typed graph. Definition, logical reference, resolved CSS identity, and runtime mutation are phases of one semantic handle.
+Tokens are named design decisions in an additive typed graph. One semantic token subject is exposed through context-specific interfaces:
+
+```text
+semantic token subject
+  ├─ token definition       (portable authored meaning)
+  ├─ logical token handle   (open system)
+  ├─ resolved token handle  (locked/build context)
+  ├─ restored token handle  (application/SSR context)
+  └─ token control          (runtime controller; mutable addresses only)
+```
 
 ## 1. One builder
 
@@ -148,7 +157,7 @@ Builders expose module-relative lazy `.refs` for internal module work. They rebi
 
 `addTokens()` registers definitions on the open system. It accepts modules and callbacks over the accumulated system.
 
-Logical open-stage `ds.t` exists after registration and carries:
+Logical open-system `ds.t` exists after registration and carries:
 
 - path;
 - data type;
@@ -176,7 +185,7 @@ Its input mirrors the token tree:
 - existing paths complete;
 - unknown paths fail with “use `addTokens`”;
 - already-filled slots fail;
-- `val`, axis methods, and `$axes` bulk forms expose only legal unset destinations;
+- `val`, axis methods, and `$axes` bulk forms expose only legal unset target slots;
 - provenance records the augmenter.
 
 The real type harness must stress nested augmentation chains before integration.
@@ -270,7 +279,7 @@ $dec
 registration, description, provenance, explanation metadata
 ```
 
-Branch handles expose authored value/condition/provenance, not another public `$name`. Runtime handles add `$set`/`$unset` only for mutable addresses.
+Branch handles expose authored value/condition/provenance, not another public `$name`. Runtime-controller token controls add `$set`/`$unset` only for mutable addresses.
 
 ### Declaration projection with `$dec`
 

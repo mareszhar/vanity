@@ -1,5 +1,6 @@
-import type { Typeface } from '~/utils/vanity'
-import { ds, typefaces } from '~/utils/vanity'
+import type { Typeface } from '../assets/styles/design/base.css.ts'
+
+import { typefaces } from '../assets/styles/design/base.css.ts'
 
 /**
  * The studio's live design decisions. Every field maps to one system input:

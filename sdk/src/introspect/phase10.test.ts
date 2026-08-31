@@ -32,7 +32,7 @@ function manifestOf(ds: ReturnType<typeof fixture>) {
   return buildManifest(records, result.css)
 }
 
-describe('phase 10 canonical introspection', () => {
+describe('canonical introspection', () => {
   it('uses the exact same canonical map for ds.introspect() and Manifest v3', () => {
     const ds = fixture()
     const manifest = manifestOf(ds)

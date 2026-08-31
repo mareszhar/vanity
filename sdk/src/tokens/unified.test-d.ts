@@ -66,7 +66,7 @@ describe('unified token and axis types', () => {
     portable.add('invalidConfig', { val: 'red', mutable: true })
   })
 
-  it('carries reservations, fluent axis methods, bulk axes, and exact patch destinations', () => {
+  it('carries reservations, fluent axis methods, bulk axes, and exact patch targets', () => {
     const open = createSystem()
       .addAxis('scheme', colorSchemes({ locality: 'root' }))
       .addAxis('density', {

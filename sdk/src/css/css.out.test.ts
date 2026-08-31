@@ -1,7 +1,7 @@
 /**
- * The output plane: the emitted CSS is a public contract
+ * The output evidence dimension: the emitted CSS is a public contract
  * ([workspace.md §5]) — layer order, condition compilation in both
- * directions, arm intersection, scheme arms, global and raw lanes, locked.
+ * directions, arm intersection, scheme arms, and global/raw forms.
  */
 
 import { emit } from '@test'

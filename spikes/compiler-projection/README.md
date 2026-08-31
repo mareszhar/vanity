@@ -28,14 +28,14 @@ Every compiler subprocess has an 8-second timeout and 1 MB output limit. Static 
 | id | asserted claim | evidence |
 | --- | --- | --- |
 | **CP1** | one plain `system.ts` runs as a full, emission-free contract in an ordinary Node tool | `tests/contexts.test.ts` |
-| **CP2** | style modules execute the full build contract, while the browser receives a projected runtime facade from that same import | `tests/contexts.test.ts` |
+| **CP2** | style modules execute the full build contract, while the browser receives a projected runtime controller from that same import | `tests/contexts.test.ts` |
 | **CP3** | many importers produce one system-CSS occurrence; a lazy style remains in its own CSS chunk and does not repeat system CSS | `tests/contexts.test.ts`, `tests/scale.test.ts` |
 | **CP4** | the compiler-owned cascade prelude is the first stylesheet in built HTML; lazy CSS is not loaded until its chunk | `tests/contexts.test.ts` |
-| **CP5** | SSR receives a DOM-free facade from the same `system.ts`; its built module executes in Node with no `document` reference | `tests/contexts.test.ts` |
+| **CP5** | SSR receives a DOM-free projection from the same `system.ts`; its built module executes in Node with no `document` reference | `tests/contexts.test.ts` |
 | **CP6** | browser output contains no contract implementation, Node built-ins, build extension marker, or compiler code | `tests/contexts.test.ts` |
 | **CP7** | an unused runtime projection export disappears from the bundle | `tests/contexts.test.ts` |
 | **CP8** | two physical copies of the contract implementation create distinct objects but equal identities; Vite resolves both imports to one runtime virtual module and emits one CSS occurrence | `tests/identity.test.ts` |
-| **CP9** | a library ships full build-plane JS plus a precompiled portable artifact from `dist/`; an app compiles library-authored styles and receives only the projected facade | `tests/precompiled.test.ts` |
+| **CP9** | a library ships full build-time JavaScript plus a precompiled portable artifact from `dist/`; an app compiles library-authored styles and receives only the projected application surface | `tests/precompiled.test.ts` |
 | **CP10** | a token-value edit changes only the CSS identity and the next style transform imports the new artifact | `tests/hmr.test.ts` |
 | **CP11** | a failed transform caused by an imported contract dependency recovers after the dependency is fixed, without restarting Vite | `tests/hmr.test.ts` |
 | **CP12** | a docs-only edit changes the docs identity and manifest bytes while compatibility/CSS/runtime identities, CSS bytes, write count, and mtime remain unchanged | `tests/hmr.test.ts` |
@@ -72,7 +72,7 @@ One hash cannot drive every cache:
 | --- | --- | --- | --- |
 | compatibility | normalized policy, extension id/version/options, token shape, runtime shape | token values, descriptions, closure identity | duplicate-package resolution |
 | CSS | layer/prefix plus emitted token names and values | descriptions, runtime-only shape | system CSS filename/module ID |
-| runtime schema | mutable token and port shape | token values and docs | runtime/SSR hydration facade |
+| runtime schema | mutable token and port shape | token values and docs | runtime-controller and SSR hydration compatibility |
 | docs | descriptions and provenance | CSS and runtime implementation | manifest revision |
 
 Physical source paths and function object identity never participate in compatibility. That is what lets duplicate installed package instances collapse to one runtime module while still being different JavaScript objects when imported directly.

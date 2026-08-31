@@ -213,9 +213,8 @@ async function main(): Promise<void> {
 export default defineVanityConfig({
   compiler: {
     system: './src/system.ts',
-    styleAutoImports: './src/authoring.ts',
   },
-  app: { runtimeAutoImports: ['core'] },
+  autoImports: { style: './src/authoring.ts', app: ['core'] },
 })
 `)
   write(join(plainDir, 'vite.config.ts'), `import vanityConfig from './vanity.config.ts'
@@ -270,9 +269,8 @@ document.querySelector('#app')!.innerHTML = '<button class="' + card + '" data-c
 export default defineVanityConfig({
   compiler: {
     system: './app/design/system.ts',
-    styleAutoImports: './app/design/authoring.ts',
   },
-  app: { runtimeAutoImports: ['core', 'vue'] },
+  autoImports: { style: './app/design/authoring.ts', app: ['core', 'vue'] },
 })
 `)
   write(join(nuxtDir, 'nuxt.config.ts'), `import vanityConfig from './vanity.config.ts'

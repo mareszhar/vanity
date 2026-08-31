@@ -1,5 +1,5 @@
 /**
- * The type-shape plane: the call-site law — strict on literals, permissive on
+ * The type-shape evidence dimension: the call-site law — strict on literals, permissive on
  * widened props ([spec-recipes.md §4]) — `VanityProps` inference, compound
  * `when` typing, part-scoped condition keys, and published-port typing.
  */
@@ -8,7 +8,7 @@ import type { VanityPort, VanityProps } from '../test-support/characterization'
 import { describe, expectTypeOf, it } from 'vitest'
 import { createSystem } from '../test-support/characterization'
 
-// Never evaluated — the typecheck plane only reads types.
+// Never evaluated — the typecheck evidence dimension only reads types.
 function system() {
   return createSystem({
     tokens: { color: { brand: '#635bff' }, space: { sm: '8px', md: '16px' } },

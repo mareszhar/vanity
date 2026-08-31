@@ -1,8 +1,8 @@
 /** Browser-safe runtime binding over pre-emitted mutable custom-property slots. */
 
 import type {
-  VanityRuntimeBranchHandle as InternalBranchHandle,
-  VanityRuntimeHandle as InternalTokenHandle,
+  VanityInternalTokenBranchHandle as InternalBranchHandle,
+  VanityInternalTokenHandle as InternalTokenHandle,
   VanityHandleMeta,
   VanityHandleRuntimeAddress,
   VanitySemanticTokenAddress,
@@ -224,9 +224,9 @@ export interface VanityRuntimeOptions {
   /** Resolve the system's declared selectors within this document/subtree. */
   readonly within?: VanityRuntimeQueryScope | VanityRuntimeTarget
   readonly initial?: unknown
-  /** App-plane Standard Schema implementations keyed by token.validate.id. */
+  /** Application-runtime Standard Schema implementations keyed by token.validate.id. */
   readonly validators?: Readonly<Record<string, VanityStandardSchemaV1>>
-  /** App-plane implementations for portable custom axis control ids. */
+  /** Application-runtime implementations for portable custom axis control ids. */
   readonly controls?: Readonly<Record<string, VanityAxisControl<any>>>
   /** Explicit dev signal for `runtime: 'dev'`; inferred when omitted. */
   readonly dev?: boolean
@@ -299,21 +299,21 @@ export type VanityRuntimeAxes<Axes extends VanityAxisDefinitions> = {
   }
 }
 
-interface VanityBoundRuntimeCore<T, Axes extends VanityAxisDefinitions> {
+interface VanityRuntimeControllerCore<T, Axes extends VanityAxisDefinitions> {
   readonly t: VanityRuntimeTokens<T>
   readonly axes: VanityRuntimeAxes<Axes>
   readonly diagnostics: readonly VanityRuntimeDiagnostic[]
   readonly refreshRoots: (path?: '$system' | string) => void
   readonly bindRoot: (path: '$system' | string, element: VanityRuntimeTarget) => void
-  readonly transaction: (configure: (runtime: VanityBoundRuntime<T, Axes>) => void) => void
+  readonly transaction: (configure: (runtime: VanityRuntimeController<T, Axes>) => void) => void
   readonly hydrate: (snapshot: unknown) => VanityRuntimeReconciliation
   readonly snapshot: () => VanityRuntimeSnapshotV1
   /** Inspect semantic overrides together with the concrete slots they write. */
   readonly inspect: () => VanityRuntimeInspection
 }
 
-export type VanityBoundRuntime<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions>
-  = VanityBoundRuntimeCore<T, Axes>
+export type VanityRuntimeController<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions>
+  = VanityRuntimeControllerCore<T, Axes>
 
 /**
  * Root-resolving runtime entry returned by `ds.runtime`.
@@ -321,21 +321,21 @@ export type VanityBoundRuntime<T, Axes extends VanityAxisDefinitions = VanityAxi
  * @example
  * `type Runtime = ReturnType<typeof ds.runtime>`
  */
-export type VanityRuntimeFactory<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions> = (
+export type VanityRuntimeControllerFactory<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions> = (
   options?: VanityRuntimeOptions,
-) => VanityBoundRuntime<T, Axes>
+) => VanityRuntimeController<T, Axes>
 
 export type VanitySnapshotFrom<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions> = (
   /**
    * Apply the same semantic token and mode operations available on a live
    * runtime. The controller is backed only by memory and never resolves DOM.
    */
-  configure: (runtime: VanityBoundRuntime<T, Axes>) => void,
+  configure: (runtime: VanityRuntimeController<T, Axes>) => void,
   options?: VanityRuntimeOptions,
 ) => VanityRuntimeSnapshotV1
 
 export interface VanityRuntimeServices<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions> {
-  readonly runtime: VanityRuntimeFactory<T, Axes>
+  readonly runtime: VanityRuntimeControllerFactory<T, Axes>
   /**
    * Build an SSR/hydration seed with the live runtime's exact validation and
    * semantic-address model, without creating or querying a DOM element.
@@ -463,8 +463,8 @@ export function createRuntimeServices<T, Axes extends VanityAxisDefinitions = Va
         { ...options, controls: { ...embeddedControls, ...options.controls } },
         mergeSchemas(embeddedSchemas, options.validators),
       )
-    }) as VanityRuntimeFactory<T, Axes>,
-    snapshotFrom: ((configure: (runtime: VanityBoundRuntime<T, Axes>) => void, options: VanityRuntimeOptions = {}) => {
+    }) as VanityRuntimeControllerFactory<T, Axes>,
+    snapshotFrom: ((configure: (runtime: VanityRuntimeController<T, Axes>) => void, options: VanityRuntimeOptions = {}) => {
       if (typeof configure !== 'function')
         throw new TypeError('[vanity] snapshotFrom() needs a callback that configures the seed runtime')
 
@@ -493,10 +493,10 @@ function assertRuntimeOptions(options: unknown): asserts options is VanityRuntim
     throw new TypeError('[vanity] ds.runtime() accepts only an options object; selector strings are not accepted')
 }
 
-/** Generated app-plane restoration targets. */
-export function restoreRuntimeFactory<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions>(
+/** Generated application-module restoration target for `ds.runtime()`. */
+export function restoreRuntimeControllerFactory<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions>(
   contract: VanityRuntimeContract,
-): VanityRuntimeFactory<T, Axes> {
+): VanityRuntimeControllerFactory<T, Axes> {
   return createRuntimeServices<T, Axes>(contract).runtime
 }
 
@@ -527,7 +527,7 @@ function bindRuntime<T, Axes extends VanityAxisDefinitions>(
   options: VanityRuntimeOptions,
   schemas: RuntimeSchemaStore,
   memory = false,
-): VanityBoundRuntime<T, Axes> {
+): VanityRuntimeController<T, Axes> {
   const family = `${contract.prefix}\0${contract.root}`
   const scope = memory ? undefined : resolutionScope(options)
   const bindings = scope === undefined
@@ -568,7 +568,7 @@ function bindRuntime<T, Axes extends VanityAxisDefinitions>(
   const snapshot = 'snapshot' in initial ? initial.snapshot : initial
   if (effectiveOptions.initial !== undefined)
     hydrateState(contract, state, snapshot)
-  return createRuntimeFacade<T, Axes>(contract, state, schemas)
+  return createRuntimeController<T, Axes>(contract, state, schemas)
 }
 
 function memoryRuntimeTarget(): VanityRuntimeTarget {
@@ -622,12 +622,12 @@ type RuntimeMutation
     readonly value?: string | null
   }
 
-function createRuntimeFacade<T, Axes extends VanityAxisDefinitions>(
+function createRuntimeController<T, Axes extends VanityAxisDefinitions>(
   contract: VanityRuntimeContract,
   state: RuntimeState,
   schemas: RuntimeSchemaStore,
   queued?: RuntimeMutation[],
-): VanityBoundRuntime<T, Axes> {
+): VanityRuntimeController<T, Axes> {
   const emit = (mutation: RuntimeMutation): void => {
     if (queued)
       queued.push(mutation)
@@ -637,7 +637,7 @@ function createRuntimeFacade<T, Axes extends VanityAxisDefinitions>(
   const t = runtimeTree(contract, state, schemas, emit) as VanityRuntimeTokens<T>
   const axes = runtimeAxes<Axes>(contract, state, emit)
 
-  const facade = {
+  const controller = {
     t,
     axes,
     get diagnostics() {
@@ -665,12 +665,12 @@ function createRuntimeFacade<T, Axes extends VanityAxisDefinitions>(
       root.bound = true
       applyStateToRoot(state, root)
     },
-    transaction(configure: (runtime: VanityBoundRuntime<T, Axes>) => void) {
+    transaction(configure: (runtime: VanityRuntimeController<T, Axes>) => void) {
       assertActive(state)
       if (typeof configure !== 'function')
         throw new TypeError('[vanity] runtime.transaction() needs a callback')
       const mutations: RuntimeMutation[] = []
-      configure(createRuntimeFacade<T, Axes>(contract, state, schemas, mutations))
+      configure(createRuntimeController<T, Axes>(contract, state, schemas, mutations))
       applyMutations(state, mutations)
     },
     hydrate(input: unknown) {
@@ -683,7 +683,7 @@ function createRuntimeFacade<T, Axes extends VanityAxisDefinitions>(
     snapshot: () => snapshotOf(contract, state),
     inspect: () => inspectRuntime(contract, state),
   }
-  return Object.freeze(facade) as unknown as VanityBoundRuntime<T, Axes>
+  return Object.freeze(controller) as unknown as VanityRuntimeController<T, Axes>
 }
 
 function runtimeAxes<Axes extends VanityAxisDefinitions>(
@@ -1216,7 +1216,7 @@ function validateAndSerialize(
   if (policy && shouldValidate(policy.runtime, options)) {
     const schema = schemas[policy.id]
     if (!schema)
-      throw new TypeError(`validation schema '${policy.id}' is not registered on this app-plane runtime`)
+      throw new TypeError(`validation schema '${policy.id}' is not registered on this application runtime controller`)
     const result = schema['~standard'].validate(input)
     if (isPromiseLike(result))
       throw new TypeError(`validation schema '${policy.id}' is async; runtime setters are synchronous`)

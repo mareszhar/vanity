@@ -1,6 +1,6 @@
 # vanity — spec: system authoring
 
-This contract owns the open system's registration grammar, detached modules, policy book, requirements, named rule groups, and plugin ownership.
+This contract owns the open system's registration grammar, detached modules, policy book, requirements, named system rules, and plugin ownership.
 
 ## 1. Canonical model
 
@@ -212,9 +212,9 @@ registerPluginPolicy(valueOrCallback)
 
 It records readable/introspectable data about that plugin's own configuration. It cannot write host-global policy.
 
-## 9. Named system rule groups
+## 9. Named system rules
 
-Rule groups contribute system CSS that emits once:
+Named system rules contribute system CSS that emits once:
 
 ```TS
 createSystem().addRules({
@@ -228,13 +228,13 @@ createSystem().addRules({
 })
 ```
 
-Group identity is its name. Duplicate add fails. Cross-group order is layer order; within a layer registration order is the default and numeric `order` is the deliberate escape. Groups appear in compatibility/CSS/docs identities, portable artifacts, `introspect()`, provenance, and diffs.
+Rule identity is its name. Duplicate add fails. Cross-rule order is layer order; within a layer registration order is the default and numeric `order` is the deliberate escape. Rules may contain any number of selectors and nested rules; that is expressibility within one named contribution, not a separate public grouping concept. Named rules appear in compatibility/CSS/docs identities, the portable contract, `introspect()`, provenance, and diffs.
 
-`overwriteRule(s)` patches metadata and replaces `css` when supplied. Styling emitters do not cause a group to emit more than once.
+`overwriteRule(s)` patches metadata and replaces `css` when supplied. Styling emitters do not cause a named rule to emit more than once.
 
 ## 10. Requirements and plugin ownership
 
-Every dependency kind is granularly expectable. Tokens/axes/conditions/consts/ policies check shape; utils/rules check complete-path/name identity; constructors check existence; plugins check id.
+Every dependency kind is granularly expectable. `expect*` declares that a named shape or capability must be supplied outside the current definition; it does not claim ownership. Tokens/axes/conditions/consts/policies check shape; utils/rules check complete-path/name identity; constructors check existence; plugins check id.
 
 A plugin may add an exact literal axis it genuinely owns:
 
@@ -248,15 +248,15 @@ definePlugin({
 
 The returned chain retains the literal `density` and its mode union. If the host already owns the name, ordinary additive collision law applies.
 
-The same projection law applies to every plugin contribution. Token trees, constructor families, recursively nested utils, consts, conditions, axes, and named rule groups all remain exact on the returned open system. A plugin’s declared contribution type carries its axes and rules even though those members live in the open system’s dedicated `axes` and rule registries.
+The same projection law applies to every plugin contribution. Token trees, constructor families, recursively nested utils, consts, conditions, axes, and named rules all remain exact on the returned open system. A plugin’s declared contribution type carries its axes and rules even though those members live in the open system’s dedicated `axes` and rule registries.
 
-Host-plane wiring remains a requirement:
+Externally supplied wiring remains a requirement:
 
 ```TS
 setup: ds => ds.expectAxis('scheme', ['light', 'dark'])
 ```
 
-This is the honest choice for root selectors, native synchronization, or other policy the plugin should not silently own.
+This is the honest choice for root selectors, native synchronization, or other policy the plugin should not silently own. A system host is one common supplier, but the requirement itself does not prescribe who owns it.
 
 ## 11. Scale and diagnostics
 

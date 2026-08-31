@@ -193,9 +193,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
 /**
  * Stable helpers must cover their capability table under the default target.
  * Experimental helpers must expose the maturity and preserve a raw/standard
- * lane; they are never silently promoted by market-data drift.
+ * form; they are never silently promoted by market-data drift.
  */
 export const VANITY_HELPER_MATURITY_POLICY = Object.freeze({
   stable: 'grammar and output are locked by type/output/spec-derived fixtures under the published support target',
-  experimental: 'capability is explicit, fallback/diagnostic behavior is mandatory, and a standards/raw lane remains available',
+  experimental: 'capability is explicit, fallback/diagnostic behavior is mandatory, and a raw standards form remains available',
 })

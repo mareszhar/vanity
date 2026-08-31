@@ -536,7 +536,7 @@ export type VanityResolvedTokenVal<Val>
       : Val extends string | number ? Val
         : string
 
-/** Canonical plane-neutral public-property handle. */
+/** Canonical public-property handle shared across build and application contexts. */
 export interface VanityTokenHandle<
   Val = unknown,
   Name extends string = string,
@@ -615,8 +615,8 @@ export interface VanityGraphInput {
 }
 
 /** A nested set of tokens produced by one topological derivation stage. */
-export interface VanityTokenStage {
-  [token: string]: VanityDerivedResult | VanityTokenStage
+export interface VanityTokenDerivationStage {
+  [token: string]: VanityDerivedResult | VanityTokenDerivationStage
 }
 
 /** Type-only marker: a stage-produced leaf is always a graph derivation. */
@@ -750,7 +750,7 @@ export interface VanityTokenModule<
   compose: <const M extends object>(
     module: VanityTokenDefinition<M, Policy> & VanityCompositionGuard<G, M>,
   ) => VanityTokenModule<VanityMergeGraph<G, M>, Policy>
-  derive: <const S extends VanityTokenStage>(
+  derive: <const S extends VanityTokenDerivationStage>(
     stage: (m: VanityCanonicalTokens<G, string, Policy>) => S & VanityAddition<G, S>,
   ) => VanityTokenModule<VanityMergeGraph<G, VanityMarkDerived<S>>, Policy>
 }
@@ -763,7 +763,7 @@ export interface VanityTokenBuilder<G extends object> extends VanityTokenDefinit
   compose: <const M extends object>(
     module: VanityTokenDefinition<M> & VanityCompositionGuard<G, M>,
   ) => VanityTokenBuilder<VanityMergeGraph<G, M>>
-  derive: <const S extends VanityTokenStage>(
+  derive: <const S extends VanityTokenDerivationStage>(
     stage: (m: VanityTokens<G, string>) => S & VanityAddition<G, S>,
   ) => VanityTokenBuilder<VanityMergeGraph<G, VanityMarkDerived<S>>>
   /** Finalize the standalone graph for characterization. */

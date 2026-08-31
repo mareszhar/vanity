@@ -165,7 +165,7 @@ Hail is the sole export from `@mszr/vanity/presets`. It is assembled from the sa
 - detached constructors and recursively nested utils;
 - ordinary token modules and `$dec` declaration bundles;
 - an optional plugin-owned or host-expected scheme axis;
-- named rule groups;
+- named system rules;
 - plugin-scoped policy and ownership metadata.
 
 Its normalized colors, semantic elevation, sizing, controls, tokens, and rules are specified in [spec-hail.md](./spec-hail.md). The core and standalone elevation/BEM plugins do not ship.
@@ -195,6 +195,6 @@ No SVG/Iconify core API. Ports plus uniform projections are the model. A future 
 ## 10. Evidence
 
 - `sdk/src/system/openSystem.{test.ts,test-d.ts,dx.test.ts}` covers callable configuration, inferred nested utils/constructors/consts, trait requirements, temporal failures, additive setup lineage, overwrite exclusion, stable options identity, and JSON-safe consts.
-- `sdk/src/plugins/propertyAliases.*` proves the standard/aliases-only lanes entirely through `createSystem().addPlugin(...)`.
+- `sdk/src/plugins/propertyAliases.*` proves the standard and aliases-only authoring vocabularies entirely through `createSystem().addPlugin(...)`.
 - `sdk/src/presets/hail/hail.{test.ts,test-d.ts,dx.test.ts}` dogfoods public plugins and locks Hail’s exact behavior, types, hover, completions, diagnostics, selection, and ownership.
-- emitted package declarations expose a compact named Hail contract; browser/SSR projection tests keep setup closures out of portable artifacts.
+- emitted package declarations expose a compact named Hail contract; browser/SSR projection tests keep setup closures out of portable contracts.

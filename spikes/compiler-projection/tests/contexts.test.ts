@@ -101,18 +101,18 @@ describe('one plain contract serves style, browser, SSR, and tool consumers', ()
     expect(joinedByExtension(clientFiles, '.js')).toContain(lazyFile)
   })
 
-  it('the browser graph receives a working facade and no build-plane code', async () => {
+  it('the browser graph receives a working application projection and no build-only code', async () => {
     const javascript = joinedByExtension(clientFiles, '.js')
-    expect(javascript).toContain('RUNTIME_FACADE_SENTINEL')
+    expect(javascript).toContain('RUNTIME_CONTROLLER_SENTINEL')
     expect(javascript).not.toContain('BUILD_PLANE_SENTINEL')
     expect(javascript).not.toContain('BUILD_PLUGIN_SENTINEL')
     expect(javascript).not.toContain('compiler-projection-spike')
     expect(javascript).not.toContain('node:crypto')
 
-    const [entryFile] = fileContaining(clientFiles, 'RUNTIME_FACADE_SENTINEL')
+    const [entryFile] = fileContaining(clientFiles, 'RUNTIME_CONTROLLER_SENTINEL')
     await importFresh(join(clientOutput, entryFile))
     expect((globalThis as Record<string, unknown>).__projectionProbe).toMatchObject({
-      plane: 'RUNTIME_FACADE_SENTINEL',
+      plane: 'RUNTIME_CONTROLLER_SENTINEL',
       classes: ['one', 'two'],
     })
   })
@@ -159,18 +159,18 @@ describe('one plain contract serves style, browser, SSR, and tool consumers', ()
 
     const files = await readTree(output)
     const javascript = joinedByExtension(files, '.js')
-    expect(javascript).toContain('SSR_FACADE_SENTINEL')
+    expect(javascript).toContain('SSR_PROJECTION_SENTINEL')
     expect(javascript).not.toContain('document')
     expect(javascript).not.toContain('BUILD_PLANE_SENTINEL')
     expect([...files.keys()]).not.toContain('assets/cascade.css')
 
-    const [entryFile] = fileContaining(files, 'SSR_FACADE_SENTINEL')
+    const [entryFile] = fileContaining(files, 'SSR_PROJECTION_SENTINEL')
     const module = await importFresh<{ renderSnapshot: () => {
       plane: string
       snapshot: string
     } }>(join(output, entryFile))
     expect(module.renderSnapshot()).toMatchObject({
-      plane: 'SSR_FACADE_SENTINEL',
+      plane: 'SSR_PROJECTION_SENTINEL',
     })
     expect(JSON.parse(module.renderSnapshot().snapshot)).toMatchObject({
       values: { brand: '#ffffff' },

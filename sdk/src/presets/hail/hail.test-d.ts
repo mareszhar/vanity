@@ -48,7 +48,7 @@ describe('Hail public types', () => {
     open.overwriteRule('hailTheming', { description: 'host theming refinement' })
     // @ts-expect-error — renamed markers do not leave aliases behind
     void open.span
-    // @ts-expect-error — unselected rule groups are absent
+    // @ts-expect-error — unselected named system rules are absent
     open.overwriteRule('hailMotion', {})
   })
 

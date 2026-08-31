@@ -6,14 +6,14 @@ Vanity's public types answer two different questions: what a helper accepts, and
 
 | Need | Type |
 | --- | --- |
-| Any CSS input, including the raw lane | `VanityCssInput` |
+| Any CSS input, including the raw form | `VanityCssInput` |
 | A CSS input compatible with one data type | `VanityCssInput<'length'>` |
 | Any compatible token | `VanityToken` |
 | A token compatible with one data type | `VanityToken<'color'>` |
 | A color accepted by color operations | `VanityColorish` |
 | Infer an input's CSS data type | `VanityDataTypeOf<Value>` |
 
-`VanityCssInput<Type>` keeps typed values and tokens within `Type`, while strings and numbers remain the explicit raw-CSS lane. `VanityToken<Type>` is the discoverable author-facing alias; `VanityTokenInput` remains the plane-neutral low-level carrier used by compiler and integration boundaries.
+`VanityCssInput<Type>` keeps typed values and tokens within `Type`, while strings and numbers remain the explicit raw-CSS form. `VanityToken<Type>` is the discoverable author-facing alias; `VanityTokenInput` remains the context-shared low-level carrier used by compiler and integration boundaries.
 
 ```ts
 import type { VanityCssInput, VanityToken } from '@mszr/vanity'

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 const project = vanityProject()
 
 describe('open and locked system editor DX', () => {
-  it('shows only accumulation on the open stage and styling on the locked stage', () => {
+  it('shows only accumulation on the open system and styling on the locked system', () => {
     const result = project.query`
       import { createSystem } from '@mszr/vanity'
       const open = createSystem().addTokens({ color: { brand: '#635bff' } })

@@ -45,7 +45,7 @@ export default defineConfig({
     // concurrency at the measured sweet spot.
     maxWorkers: process.env.CI ? 2 : Math.max(1, Math.min(6, availableParallelism() - 1)),
     typecheck: {
-      // The type-shape plane, run via --typecheck (wired into the test scripts).
+      // The type-shape evidence dimension, run via --typecheck.
       // Vitest forces tsc --incremental into a shared cache under vitest/dist;
       // the shim delegates to tsc after stripping those cache flags.
       checker: local('../scripts/vitest-typecheck.ts'),

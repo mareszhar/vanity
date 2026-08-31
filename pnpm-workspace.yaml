@@ -51,12 +51,13 @@ catalog:
   tsx: ^4.23.12
   turbo: 2.10.11
   # @typescript-eslint 8.x supports TypeScript < 6.1; do not upgrade to 7 yet.
-  typescript: ^6.0.3
+  typescript: '>=6.0.3 <6.1.0'
   unplugin-auto-import: ^21.1.0
   vite: 8.2.2
   vitest: ^4.1.11
   vue: ^3.5.41
   vue-tsc: ^3.3.11
+  wxt: ^0.21.4
 
 # Published compatibility contracts are deliberately broader than the exact
 # versions above that exercise the maintainer workspace and release gates.
@@ -66,9 +67,10 @@ catalogs:
     '@nuxt/kit': '>=4.4.8 <5.0.0'
     '@nuxt/schema': '>=4.4.8 <5.0.0'
     nuxt: '>=4.4.8 <5.0.0'
-    typescript: '>=5.8.0'
+    typescript: '>=6.0.3 <7.0.0'
     vite: '^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0'
     vue: ^3.5.39
+    wxt: '>=0.21.4 <1.0.0'
 
 blockExoticSubdeps: true
 allowBuilds:

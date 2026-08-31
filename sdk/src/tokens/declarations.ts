@@ -4,7 +4,7 @@
  * not validate it as a property bundle until an author asks for `$dec`.
  */
 
-import type { VanityRuntimeHandle } from '../internal/handle'
+import type { VanityInternalTokenHandle } from '../internal/handle'
 import { isSelectorKey } from '../css/rule'
 import { VanityError } from '../diagnostics'
 import { isCssProperty } from '../internal/cssParser'
@@ -152,7 +152,7 @@ function isDeclarationProperty(
     || isCssProperty(name.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`))
 }
 
-function isHandleLike(value: unknown): value is VanityRuntimeHandle | (object & {
+function isHandleLike(value: unknown): value is VanityInternalTokenHandle | (object & {
   readonly $path: string
   readonly $var: (...args: unknown[]) => string
 }) {

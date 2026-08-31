@@ -1,5 +1,5 @@
 /**
- * Public lifecycle through Phase 8: one immutable open system accumulates
+ * Public composition model: one immutable open system accumulates
  * shape and plugins; `consolidate()` returns an emission-free locked contract.
  */
 
@@ -77,7 +77,7 @@ import type {
   VanityDefinitionMerge,
   VanityDefinitionModule,
   VanityDefinitionModulesShape,
-  VanityRuleGroup,
+  VanitySystemRule,
   VanityUtilTree,
 } from './modules'
 import { getFileScope, hasFileScope } from '@vanilla-extract/css/fileScope'
@@ -1529,7 +1529,7 @@ export interface VanityOpenSystemMethods<
   }
 
   readonly defineRules: typeof defineRules
-  readonly addRule: <const Name extends string, const Rule extends VanityRuleGroup>(
+  readonly addRule: <const Name extends string, const Rule extends VanitySystemRule>(
     name: Name extends keyof RulesOf<Consts> ? never : Name,
     rule: Rule | ((system: VanityOpenSystem<Engine, Tokens, Conditions, Consts, Utils, Plugins>) => Rule),
   ) => VanityOpenSystem<
@@ -1541,7 +1541,7 @@ export interface VanityOpenSystemMethods<
     Plugins
   >
   readonly addRules: {
-    <const Added extends Readonly<Record<string, VanityRuleGroup>>>(
+    <const Added extends Readonly<Record<string, VanitySystemRule>>>(
       rules: Added | ((system: VanityOpenSystem<Engine, Tokens, Conditions, Consts, Utils, Plugins>) => Added),
     ): VanityOpenSystem<
       Engine,
@@ -1552,8 +1552,8 @@ export interface VanityOpenSystemMethods<
       Plugins
     >
     <const Input extends
-    | VanityDefinitionModule<'rules', Readonly<Record<string, VanityRuleGroup>>>
-    | readonly VanityDefinitionModule<'rules', Readonly<Record<string, VanityRuleGroup>>>[]>(
+    | VanityDefinitionModule<'rules', Readonly<Record<string, VanitySystemRule>>>
+    | readonly VanityDefinitionModule<'rules', Readonly<Record<string, VanitySystemRule>>>[]>(
       rules: Input,
     ): VanityOpenSystem<
       Engine,
@@ -1564,19 +1564,19 @@ export interface VanityOpenSystemMethods<
       Plugins
     >
   }
-  readonly overwriteRule: <const Name extends keyof RulesOf<Consts> & string, const Patch extends Partial<VanityRuleGroup>>(
+  readonly overwriteRule: <const Name extends keyof RulesOf<Consts> & string, const Patch extends Partial<VanitySystemRule>>(
     name: Name,
     patch: Patch | ((system: VanityOpenSystem<Engine, Tokens, Conditions, Consts, Utils, Plugins>) => Patch),
   ) => VanityOpenSystem<Engine, Tokens, Conditions, Consts, Utils, Plugins>
   readonly overwriteRules: {
-    <const Patch extends Partial<Record<keyof RulesOf<Consts>, Partial<VanityRuleGroup>>>>(
+    <const Patch extends Partial<Record<keyof RulesOf<Consts>, Partial<VanitySystemRule>>>>(
       rules: Patch | ((system: VanityOpenSystem<Engine, Tokens, Conditions, Consts, Utils, Plugins>) => Patch),
     ): VanityOpenSystem<Engine, Tokens, Conditions, Consts, Utils, Plugins>
     <const Input extends
     | VanityDefinitionModule<'rules', object>
     | readonly VanityDefinitionModule<'rules', object>[]>(
       rules: Input & (
-        DefinitionShape<'rules', Input> extends Partial<Record<keyof RulesOf<Consts>, Partial<VanityRuleGroup>>>
+        DefinitionShape<'rules', Input> extends Partial<Record<keyof RulesOf<Consts>, Partial<VanitySystemRule>>>
           ? unknown
           : never
       ),
@@ -1752,7 +1752,7 @@ export interface VanityOpenSystemMethods<
     WithRequirements<Engine, { readonly rules: Name }>,
     Tokens,
     Conditions,
-    WithRules<Consts, RulesOf<Consts> & Record<Name, VanityRuleGroup>>,
+    WithRules<Consts, RulesOf<Consts> & Record<Name, VanitySystemRule>>,
     Utils,
     Plugins
   >
@@ -1762,7 +1762,7 @@ export interface VanityOpenSystemMethods<
     WithRequirements<Engine, { readonly rules: Names[number] }>,
     Tokens,
     Conditions,
-    WithRules<Consts, RulesOf<Consts> & Record<Names[number], VanityRuleGroup>>,
+    WithRules<Consts, RulesOf<Consts> & Record<Names[number], VanitySystemRule>>,
     Utils,
     Plugins
   >
@@ -1843,7 +1843,7 @@ export type VanityOpenSystem<
 
 /**
  * Compact open-system helper boundary. It deliberately exposes only the
- * built-in constructor kit and system-bound token-definition facade; shape
+ * built-in constructor kit and system-bound token-definition surface; shape
  * accumulation methods stay on the concrete `VanityOpenSystem<…>` type.
  */
 export type VanityOpenSystemBase
@@ -1919,7 +1919,7 @@ interface OpenState {
   readonly conditions: Readonly<Record<string, VanityConditionInput>>
   readonly consts: Readonly<Record<string, unknown>>
   readonly utils: VanityUtilTree
-  readonly rules: Readonly<Record<string, VanityRuleGroup>>
+  readonly rules: Readonly<Record<string, VanitySystemRule>>
   readonly policies: Readonly<VanityPolicies>
   readonly sequence: number
   readonly singularAdds: number
@@ -2543,10 +2543,10 @@ function materializeOpen(state: OpenState): VanityOpenSystem<any, any, any, any,
       return materializeOpen({ ...resultState, singularAdds: state.singularAdds + 1 })
     },
     addRules(input: unknown) {
-      const added = resolveRecordInput('rules', input) as Record<string, VanityRuleGroup>
+      const added = resolveRecordInput('rules', input) as Record<string, VanitySystemRule>
       assertAdditive('rule', state.rules, added)
-      for (const [name, group] of Object.entries(added))
-        assertRuleGroup(name, group)
+      for (const [name, rule] of Object.entries(added))
+        assertSystemRule(name, rule)
       return next({
         rules: immutableCopy({ ...state.rules, ...added }),
         owners: contributionOwners('rule', Object.keys(added)),
@@ -2572,10 +2572,10 @@ function materializeOpen(state: OpenState): VanityOpenSystem<any, any, any, any,
       const rules = { ...state.rules }
       for (const [name, patch] of Object.entries(patches)) {
         if (!isPlainRecord(patch))
-          throw new TypeError(`[vanity] overwriteRule('${name}', ...) needs a partial rule-group object`)
+          throw new TypeError(`[vanity] overwriteRule('${name}', ...) needs a partial system-rule object`)
         const current = rules[name]!
         const merged = { ...current, ...patch }
-        assertRuleGroup(name, merged)
+        assertSystemRule(name, merged)
         rules[name] = merged
       }
       return next({
@@ -2706,7 +2706,7 @@ function materializeOpen(state: OpenState): VanityOpenSystem<any, any, any, any,
       for (const [name, group] of Object.entries(state.rules)) {
         if (group.layer !== undefined && !declaredLayers.includes(group.layer)) {
           throw new TypeError(
-            `[vanity] rule group '${name}' references undeclared layer '${group.layer}'; `
+            `[vanity] named system rule '${name}' references undeclared layer '${group.layer}'; `
             + `declare it in policies.layerOrder or consolidate({ layerOrder })`,
           )
         }
@@ -2732,7 +2732,7 @@ function materializeOpen(state: OpenState): VanityOpenSystem<any, any, any, any,
           ...(source === undefined ? {} : { source }),
           consts: state.consts,
           utilities: flattenPaths(state.utils),
-          ruleGroups: describeRuleGroups(state.rules),
+          ruleGroups: describeSystemRules(state.rules),
           plugins: [...state.plugins],
           owners: state.owners,
           overwrites: state.overwrites,
@@ -2940,14 +2940,14 @@ function materializeLocked(
   consts: Readonly<Record<string, unknown>>,
   utils: VanityUtilTree,
   policies: Readonly<VanityPolicies>,
-  ruleGroups: Readonly<Record<string, VanityRuleGroup>>,
+  systemRules: Readonly<Record<string, VanitySystemRule>>,
 ): object {
   const contract = systemContractOf(legacy)
   if (!contract)
     throw new TypeError('[vanity] consolidate() did not produce an in-process contract')
 
   const semantic = introspectSystem(contract.portable)
-  let ruleGroupsEmitted = false
+  let systemRulesEmitted = false
   const materialize = (source: object): object => {
     const target = Object.create(Object.getPrototypeOf(source))
     const sourceDescriptors = Object.getOwnPropertyDescriptors(source)
@@ -2992,12 +2992,12 @@ function materializeLocked(
             recordPortableSystem(contract.portable)
           if (BUILD_SURFACES.has(key)) {
             contract.emit()
-            if (!ruleGroupsEmitted) {
+            if (!systemRulesEmitted) {
               withEmissionFileScope(
                 contract.portable.source ?? getFileScope().filePath,
-                () => emitSystemRuleGroups(legacy, ruleGroups, contract.portable.layers),
+                () => emitNamedSystemRules(legacy, systemRules, contract.portable.layers),
               )
-              ruleGroupsEmitted = true
+              systemRulesEmitted = true
             }
           }
         }
@@ -3196,16 +3196,16 @@ function mergeUtilityTrees(
   return merged
 }
 
-function assertRuleGroup(name: string, group: unknown): asserts group is VanityRuleGroup {
-  if (!isPlainRecord(group) || !isPlainRecord(group.css))
-    throw new TypeError(`[vanity] rule group '${name}' needs a css selector map`)
-  if (group.layer !== undefined && (typeof group.layer !== 'string' || group.layer.length === 0))
-    throw new TypeError(`[vanity] rule group '${name}.layer' must be a non-empty layer name`)
-  if (group.order !== undefined && (typeof group.order !== 'number' || !Number.isFinite(group.order)))
-    throw new TypeError(`[vanity] rule group '${name}.order' must be a finite number`)
+function assertSystemRule(name: string, rule: unknown): asserts rule is VanitySystemRule {
+  if (!isPlainRecord(rule) || !isPlainRecord(rule.css))
+    throw new TypeError(`[vanity] named system rule '${name}' needs a css selector map`)
+  if (rule.layer !== undefined && (typeof rule.layer !== 'string' || rule.layer.length === 0))
+    throw new TypeError(`[vanity] named system rule '${name}.layer' must be a non-empty layer name`)
+  if (rule.order !== undefined && (typeof rule.order !== 'number' || !Number.isFinite(rule.order)))
+    throw new TypeError(`[vanity] named system rule '${name}.order' must be a finite number`)
 }
 
-function describeRuleGroups(groups: Readonly<Record<string, VanityRuleGroup>>): readonly {
+function describeSystemRules(rules: Readonly<Record<string, VanitySystemRule>>): readonly {
   readonly name: string
   readonly description?: string
   readonly layer?: string
@@ -3213,13 +3213,13 @@ function describeRuleGroups(groups: Readonly<Record<string, VanityRuleGroup>>): 
   readonly selectors: readonly string[]
   readonly fingerprint: string
 }[] {
-  return Object.entries(groups).map(([name, group]) => ({
+  return Object.entries(rules).map(([name, rule]) => ({
     name,
-    ...(group.description === undefined ? {} : { description: group.description }),
-    ...(group.layer === undefined ? {} : { layer: group.layer }),
-    ...(group.order === undefined ? {} : { order: group.order }),
-    selectors: Object.keys(group.css),
-    fingerprint: ruleFingerprint(group.css),
+    ...(rule.description === undefined ? {} : { description: rule.description }),
+    ...(rule.layer === undefined ? {} : { layer: rule.layer }),
+    ...(rule.order === undefined ? {} : { order: rule.order }),
+    selectors: Object.keys(rule.css),
+    fingerprint: ruleFingerprint(rule.css),
   }))
 }
 
@@ -3236,7 +3236,7 @@ function ruleFingerprint(value: unknown): string {
     if (typeof input !== 'object')
       return String(input)
     if (seen.has(input))
-      throw new TypeError('[vanity] a system rule group cannot contain cycles')
+      throw new TypeError('[vanity] a named system rule cannot contain cycles')
     seen.add(input)
     if ('$path' in input)
       return { token: String((input as any).$path) }
@@ -3256,28 +3256,28 @@ function ruleFingerprint(value: unknown): string {
   return `rule-${(hash >>> 0).toString(16).padStart(8, '0')}`
 }
 
-function emitSystemRuleGroups(
+function emitNamedSystemRules(
   locked: object,
-  groups: Readonly<Record<string, VanityRuleGroup>>,
+  rules: Readonly<Record<string, VanitySystemRule>>,
   layers: readonly string[],
 ): void {
   const layerIndex = new Map(layers.map((layer, index) => [layer, index]))
-  const ordered = Object.entries(groups)
-    .map(([name, group], registration) => ({ name, group, registration }))
+  const ordered = Object.entries(rules)
+    .map(([name, rule], registration) => ({ name, registration, rule }))
     .sort((left, right) => {
-      const leftLayer = layerIndex.get(left.group.layer ?? '') ?? Number.MAX_SAFE_INTEGER
-      const rightLayer = layerIndex.get(right.group.layer ?? '') ?? Number.MAX_SAFE_INTEGER
+      const leftLayer = layerIndex.get(left.rule.layer ?? '') ?? Number.MAX_SAFE_INTEGER
+      const rightLayer = layerIndex.get(right.rule.layer ?? '') ?? Number.MAX_SAFE_INTEGER
       return leftLayer - rightLayer
-        || (left.group.order ?? 0) - (right.group.order ?? 0)
+        || (left.rule.order ?? 0) - (right.rule.order ?? 0)
         || left.registration - right.registration
     })
-  for (const { name, group } of ordered) {
-    if (group.layer !== undefined && !layerIndex.has(group.layer))
-      throw new TypeError(`[vanity] rule group '${name}' references undeclared layer '${group.layer}'`)
-    const emitter = group.layer === undefined
+  for (const { name, rule } of ordered) {
+    if (rule.layer !== undefined && !layerIndex.has(rule.layer))
+      throw new TypeError(`[vanity] named system rule '${name}' references undeclared layer '${rule.layer}'`)
+    const emitter = rule.layer === undefined
       ? (locked as any).rules
-      : (locked as any).rules.layer(group.layer)
-    emitter(group.css)
+      : (locked as any).rules.layer(rule.layer)
+    emitter(rule.css)
   }
 }
 

@@ -1,10 +1,10 @@
 /**
- * The plane-neutral recipe/anatomy resolvers: the most-executed lines in the
+ * The context-shared recipe/anatomy resolvers: the most-executed lines in the
  * SDK. A call resolves among precompiled classes — it never synthesizes CSS
  * ([patterns.md §7]). Shared by the build-time factories (which emit the
  * classes and attach serialization) and `/runtime` (which restores handles
  * from the serialized table) — so this module imports nothing from either
- * plane, exactly like `ports/handle.ts`.
+ * application context, exactly like `ports/handle.ts`.
  */
 
 import type { VanityAnatomy, VanityAnatomyRuntime, VanityRecipe, VanityRecipeRuntime } from './types'

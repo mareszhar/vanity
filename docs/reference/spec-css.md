@@ -1,25 +1,44 @@
 # vanity — spec: styling and output
 
-The locked system exposes one CSS input language through emitters named for their output.
+The locked system exposes one CSS input language through style-data producers and style emitters. The distinction is behavioral: producers return reusable data; emitters register output for compiler materialization.
 
-## 1. Emitter family
+## 1. Styling families
 
-| API | Output |
+### Style-data producers
+
+| API | Result |
+| --- | --- |
+| `ds.fragment(input)` | reusable ordered styling data, no selector and no output effect |
+| `ds.tdec(tree)` | token custom-property declarations as reusable style data |
+| `port.dec(value)` | one component-owned custom-property declaration fragment |
+
+### Style emitters
+
+| API | Registered output |
 | --- | --- |
 | `ds.class(input)` | one generated class |
 | `ds.recipe(config)` | finite class-selection function |
 | `ds.anatomy(config)` | part-keyed class-selection functions |
 | `ds.atoms(config)` | bounded utility-class map and resolver |
-| `ds.fragment(input)` | reusable ordered styling data, no selector |
 | `ds.rules(map)` | author-specified selector rules |
-| `ds.tdec(tree)` | token custom-property declarations as a fragment |
 | `ds.keyframes(steps)` | keyframes plus animation-name handle |
 | `ds.fontFace(descriptors)` | font-face rule(s) plus family handle |
 | `ds.raw(css)` | raw CSS emitted in the declared layer |
 
-This list is exhaustive. A public emitter absent here is a documentation bug.
+These lists describe the effective locked public surface. Removed or internal compatibility members such as `css`, `globalCss`, `tokenOverride`, and `defineAtoms` are not alternate public styling families.
 
-All emitters consume the same property/value, condition, nesting, selector, at-rule, alias, token-handle, fragment, and raw lanes appropriate to their context.
+All applicable APIs consume the same property/value, condition, nesting, selector, at-rule, alias, token-handle, fragment, and raw standards forms appropriate to their context.
+
+### Variability and ownership
+
+| Need | Use | Why |
+| --- | --- | --- |
+| finite component choices | recipe or anatomy | precompiled classes; no runtime CSS generation |
+| finite declared utility choices | atom set | bounded property/value space; precompiled classes |
+| open per-instance component value | port | component-owned custom-property boundary |
+| live system-wide design decision | mutable token | system-owned runtime control with snapshots and reconciliation |
+
+Learning ownership predicts lifetime: ports belong to component instances; mutable tokens belong to the system.
 
 ## 2. Classes
 
@@ -58,7 +77,7 @@ export { ds }
 export const { class: cls, t } = ds
 ```
 
-The integration adapter can expose that barrel to evaluated `*.css.ts` modules through `compiler.styleAutoImports` ([spec-integrations.md §8](./spec-integrations.md#8-integration-adapters)). Consuming application modules use the generated style exports as a namespace when that keeps the component boundary clear:
+The integration adapter can expose that barrel to evaluated `*.css.ts` modules through `autoImports.style` ([spec-integrations.md §8](./spec-integrations.md#8-integration-adapters)). Consuming application modules use the generated style exports as a namespace when that keeps the component boundary clear:
 
 ```TS
 import * as s from './Card.css'
@@ -131,9 +150,9 @@ It:
 - does not rewrite consumer styles;
 - rejects a non-inheriting registered token with an explanation;
 - records subtree override provenance;
-- remains usable at open stage by utils because it can produce data over logical handles.
+- remains usable on an open system by utils because it can produce data over logical handles.
 
-Definition-plane replacement is `overwriteTokens`; subtree cascade is `tdec`; runtime mutation is `$set`.
+Definition replacement is `overwriteTokens`; subtree cascade is `tdec`; runtime mutation is `$set`.
 
 ## 6. Rules and ordinary TypeScript
 
@@ -219,13 +238,13 @@ Diagnostics:
 - use stable codes and structured locality;
 - point to the authored property/value;
 - distinguish an unknown property from a known property with invalid grammar;
-- preserve future CSS through the standards/raw lane;
+- preserve future CSS through the raw standards form;
 - wrap compiler/substrate errors;
 - recover through HMR after a fix without restart.
 
 A system created in `*.css.ts` receives the dedicated plain-`system.ts` fix, not the substrate's invalid-export error.
 
-Under an aliases-only property policy, `ds.class.standard({...})` preserves exact standard-property object authoring and `ds.raw(...)` preserves full raw CSS. An alias policy may change the preferred completion lane but cannot make a platform property unreachable.
+Under an aliases-only property policy, `ds.class.standard({...})` preserves exact standard-property object authoring and `ds.raw(...)` preserves full raw CSS. An alias policy may change the preferred completion vocabulary but cannot make a platform property unreachable.
 
 ## 11. Delivery
 

@@ -39,7 +39,7 @@ describe('typed CSS value contracts', () => {
     min('1s', '2px')
   })
 
-  it('types the full color-channel lanes and interpolation-only .in()', () => {
+  it('types the full color-channel forms and interpolation-only .in()', () => {
     const chroma = customProperty('--chroma', { type: 'number' }).$var()
     void oklch(percent(50), chroma, angle.deg(285), cssNumber(0.5))
     void hwb(angle.deg(20), 'none', percent(10))

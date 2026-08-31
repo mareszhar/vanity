@@ -100,7 +100,7 @@ export interface VanitySerializeContext {
   serialize: (value: VanityValue | VanityCssInput) => string
   resolveReference: (reference: VanityReference) => string
   /**
-   * Build-plane projection used by graph-aware folders. When present, a
+   * Build-time projection used by graph-aware folders. When present, a
    * reference may be replaced by its authored representative instead of
    * serializing as `var()`. Ordinary serializers deliberately omit it.
    */
@@ -261,7 +261,7 @@ export function serializeNode(node: VanityExpressionNode, context: VanitySeriali
 
     throw new TypeError(
       `[vanity] ${node.source?.helper ?? node.kind} requires ${missing.join(', ')}, which is outside CSS support target "${context.support.id}"; `
-      + 'provide a proven fallback, choose a compatible support target, or use an acknowledged raw/experimental lane',
+      + 'provide a proven fallback, choose a compatible support target, or use an acknowledged raw/experimental form',
     )
   }
 

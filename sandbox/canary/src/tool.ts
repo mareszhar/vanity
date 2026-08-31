@@ -1,4 +1,4 @@
-/** Plain Node/tool-plane import: no style scope, DOM, or compiler projection. */
+/** Plain Node/tool import: no style scope, DOM, or compiler projection. */
 
 import { ds } from './system'
 

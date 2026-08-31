@@ -20,7 +20,7 @@ const validationPaths = [
   'sandbox/demo-comparisons/.vanity/types',
   'sandbox/demo-comparisons/node_modules/.vanity',
   'sandbox/demo-comparisons/node_modules/@types/vanity-style-auto-imports',
-  'sandbox/demo-comparisons/node_modules/@types/vanity-runtime-auto-imports',
+  'sandbox/demo-comparisons/node_modules/@types/vanity-app-auto-imports',
   'sandbox/demo-main/.nuxt',
   'sandbox/demo-main/.vanity/types',
   'sandbox/demo-main/node_modules/.cache/nuxt/.nuxt',

@@ -1,5 +1,5 @@
 /**
- * Canonical Phase 10 semantic map. Every outward projection starts here:
+ * Canonical semantic map. Every outward projection starts here:
  * `ds.introspect()`, Manifest v3, CLI output, DevTools, agents, and diffs.
  */
 

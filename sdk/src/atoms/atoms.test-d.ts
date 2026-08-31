@@ -1,5 +1,5 @@
 /**
- * The type plane for atoms: token keys autocomplete and values outside the map
+ * The type evidence dimension for atoms: token keys autocomplete and values outside the map
  * are rejected at the key — unless labeled through `unsafe.value`. Conditions
  * are typed to the subset the atoms declare.
  */
@@ -7,7 +7,7 @@
 import { describe, it } from 'vitest'
 import { createSystem, unsafe } from '../test-support/characterization'
 
-// The type plane never executes — these calls are shapes, not effects.
+// The type evidence dimension never executes — these calls are shapes, not effects.
 const { defineAtoms, t } = createSystem({
   tokens: { space: { sm: '8px', md: '16px' }, color: { brand: '#635bff' } },
   conditions: { md: '@media (min-width: 768px)', lg: '@media (min-width: 1024px)' },

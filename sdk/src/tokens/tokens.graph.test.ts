@@ -4,7 +4,7 @@ import { createEngine, defineCssSupportTarget, VanityError } from '@test/legacy'
 import { describe, expect, it } from 'vitest'
 
 describe('token-graph traits and handles', () => {
-  it('makes shorthand reactive by default and keeps the explicit folded lane', () => {
+  it('makes shorthand reactive by default and keeps the explicit folded form', () => {
     const de = createEngine()
     const module = de.defineTokens({
       color: {
@@ -169,7 +169,7 @@ describe('token-graph traits and handles', () => {
     expect(() => emit(() => de.createSystem({ tokens }))).toThrow(/reference: 'val'/)
   })
 
-  it('restores the same handle and branch semantics on the app plane', () => {
+  it('restores the same handle and branch semantics in application code', () => {
     const restored = restoreToken({
       name: '--app-color-accent',
       path: 'color.accent',

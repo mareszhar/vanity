@@ -2,18 +2,18 @@ import type { VanityConfig } from './config'
 import type { VanityAutoImportPlan } from './internal/autoImportPlan'
 import type { VanityAutoImportWriteResult } from './internal/autoImportWriter'
 import { access } from 'node:fs/promises'
-import { resolve } from 'node:path'
 import { cwd } from 'node:process'
 import { createJiti } from 'jiti'
 import { planAutoImportDeclarations as plan } from './internal/autoImportPlan'
 import { writeAutoImportDeclarations as write } from './internal/autoImportWriter'
+import { resolveConfiguredModuleSource } from './internal/exportNames'
 
 export type { AutoImportDeclarationSource } from './internal/autoImportDeclarations'
 export type {
   AutoImportDeclarationFile,
   AutoImportDeclarationPaths,
+  VanityAppAutoImportPlan,
   VanityAutoImportPlan,
-  VanityRuntimeAutoImportPlan,
   VanityStyleAutoImportPlan,
 } from './internal/autoImportPlan'
 export type { VanityAutoImportWriteResult } from './internal/autoImportWriter'
@@ -24,7 +24,7 @@ export interface VanityPrepareContext {
 }
 
 /**
- * Read-only, static declaration planning for a host's configured import lanes.
+ * Read-only, static declaration planning for a host's configured module-role routing.
  * The returned canonical files carry `typeScriptReference: true`, so a host
  * with its own preparation hook can register their text without granting
  * Vanity ownership of that hook or writing to its filesystem.
@@ -51,8 +51,12 @@ export function writeAutoImportDeclarations(
  * Load a TypeScript Vanity configuration module. The CLI uses this helper so
  * consumers can author config with the same syntax as their host config.
  */
-export async function loadVanityConfig(path: string): Promise<VanityConfig> {
-  const configPath = resolve(cwd(), path)
+export async function loadVanityConfig(
+  path: string,
+  context: VanityPrepareContext = {},
+): Promise<VanityConfig> {
+  const root = context.root ?? cwd()
+  const configPath = resolveConfiguredModuleSource(path, root, 'the --config option').file
   try {
     await access(configPath)
   }

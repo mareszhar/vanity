@@ -88,7 +88,7 @@ describe('open and locked systems', () => {
     expect(second.t.color.brand.$name).toBe('--two-color-brand')
   })
 
-  it('keeps augment, overwrite, and expect semantics explicit across every Phase 4 facet', () => {
+  it('keeps augment, overwrite, and expect semantics explicit across every system facet', () => {
     const origin = createSystem()
     const density = origin.addAxis('density', {
       modes: {

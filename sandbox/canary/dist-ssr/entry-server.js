@@ -218,7 +218,7 @@ function assertRuntimeOptions(options) {
 	if (isRuntimeTarget(options)) throw new TypeError("[vanity] ds.runtime() resolves declared roots; use runtime({ within: element }) or runtime().bindRoot(path, element)");
 	if (!isPlainObject(options)) throw new TypeError("[vanity] ds.runtime() accepts only an options object; selector strings are not accepted");
 }
-function restoreRuntimeFactory(contract) {
+function restoreRuntimeControllerFactory(contract) {
 	return createRuntimeServices(contract).runtime;
 }
 function restoreSnapshotFrom(contract) {
@@ -267,7 +267,7 @@ function bindRuntime(contract, options, schemas, memory = false) {
 	if ("diagnostics" in initial) state.diagnostics.push(...initial.diagnostics);
 	const snapshot = "snapshot" in initial ? initial.snapshot : initial;
 	if (effectiveOptions.initial !== void 0) hydrateState(contract, state, snapshot);
-	return createRuntimeFacade(contract, state, schemas);
+	return createRuntimeController(contract, state, schemas);
 }
 function memoryRuntimeTarget() {
 	const values = /* @__PURE__ */ new Map();
@@ -297,12 +297,12 @@ function memoryRuntimeTarget() {
 		}
 	};
 }
-function createRuntimeFacade(contract, state, schemas, queued) {
+function createRuntimeController(contract, state, schemas, queued) {
 	const emit = (mutation) => {
 		if (queued) queued.push(mutation);
 		else applyMutations(state, [mutation]);
 	};
-	const facade = {
+	const controller = {
 		t: runtimeTree(contract, state, schemas, emit),
 		axes: runtimeAxes(contract, state, emit),
 		get diagnostics() {
@@ -334,7 +334,7 @@ function createRuntimeFacade(contract, state, schemas, queued) {
 			assertActive(state);
 			if (typeof configure !== "function") throw new TypeError("[vanity] runtime.transaction() needs a callback");
 			const mutations = [];
-			configure(createRuntimeFacade(contract, state, schemas, mutations));
+			configure(createRuntimeController(contract, state, schemas, mutations));
 			applyMutations(state, mutations);
 		},
 		hydrate(input) {
@@ -347,7 +347,7 @@ function createRuntimeFacade(contract, state, schemas, queued) {
 		snapshot: () => snapshotOf(contract, state),
 		inspect: () => inspectRuntime(contract, state)
 	};
-	return Object.freeze(facade);
+	return Object.freeze(controller);
 }
 function runtimeAxes(contract, state, emit) {
 	const tree = {};
@@ -725,7 +725,7 @@ function validateAndSerialize(token, input, schemas, options) {
 	let output = input;
 	if (policy && shouldValidate(policy.runtime, options)) {
 		const schema = schemas[policy.id];
-		if (!schema) throw new TypeError(`validation schema '${policy.id}' is not registered on this app-plane runtime`);
+		if (!schema) throw new TypeError(`validation schema '${policy.id}' is not registered on this application runtime controller`);
 		const result = schema["~standard"].validate(input);
 		if (isPromiseLike(result)) throw new TypeError(`validation schema '${policy.id}' is async; runtime setters are synchronous`);
 		if ("issues" in result && result.issues !== void 0) {
@@ -1062,9 +1062,9 @@ function errorMessage(error) {
 function restoreToken(meta) {
 	return createHandle(meta);
 }
-function restoreBuildPlane(meta) {
+function restoreStyleAuthoringStub(meta) {
 	return () => {
-		throw new Error(`[vanity] ${meta.name} is build-plane — it runs inside *.css.ts modules the compiler evaluates. App code receives its results (classes, tokens, ports), never the function.`);
+		throw new Error(`[vanity] VANITY_STYLE_MODULE_MISUSE: ${meta.name} belongs in a *.css.ts style module. Use ds.runtime() in application modules, or consume serialized style exports.`);
 	};
 }
 //#endregion
@@ -1242,7 +1242,7 @@ for (const _meta of _tokenRecords) {
 	for (let _index = 0; _index < _parts.length - 1; _index++) _target = _target[_parts[_index]] ||= {};
 	_target[_parts.at(-1)] = restoreToken(_meta);
 }
-var _runtime = restoreRuntimeFactory(_runtimeContract);
+var _runtime = restoreRuntimeControllerFactory(_runtimeContract);
 var _snapshotFrom = restoreSnapshotFrom(_runtimeContract);
 var _reconcileRuntimeSnapshot = restoreRuntimeReconciler(_runtimeContract);
 var _runtimeStyle = restoreRuntimeStyle(_runtimeContract);
@@ -1276,25 +1276,25 @@ var ds = Object.freeze({
 		"overrides"
 	]),
 	consts: Object.freeze({ "product": "reorientation-canary" }),
-	plane: "ssr",
-	class: restoreBuildPlane({ name: "class" }),
-	rules: restoreBuildPlane({ name: "rules" }),
-	raw: restoreBuildPlane({ name: "raw" }),
-	fragment: restoreBuildPlane({ name: "fragment" }),
-	tdec: restoreBuildPlane({ name: "tdec" }),
-	keyframes: restoreBuildPlane({ name: "keyframes" }),
-	fontFace: restoreBuildPlane({ name: "fontFace" }),
-	recipe: restoreBuildPlane({ name: "recipe" }),
-	anatomy: restoreBuildPlane({ name: "anatomy" }),
-	port: restoreBuildPlane({ name: "port" }),
-	atoms: restoreBuildPlane({ name: "atoms" }),
-	inLayer: restoreBuildPlane({ name: "inLayer" }),
-	tokensOf: restoreBuildPlane({ name: "tokensOf" }),
-	namesOf: restoreBuildPlane({ name: "namesOf" }),
-	varsOf: restoreBuildPlane({ name: "varsOf" }),
-	explain: restoreBuildPlane({ name: "explain" }),
-	serialize: restoreBuildPlane({ name: "serialize" }),
-	introspect: restoreBuildPlane({ name: "introspect" })
+	environment: "ssr",
+	class: restoreStyleAuthoringStub({ name: "class" }),
+	rules: restoreStyleAuthoringStub({ name: "rules" }),
+	raw: restoreStyleAuthoringStub({ name: "raw" }),
+	fragment: restoreStyleAuthoringStub({ name: "fragment" }),
+	tdec: restoreStyleAuthoringStub({ name: "tdec" }),
+	keyframes: restoreStyleAuthoringStub({ name: "keyframes" }),
+	fontFace: restoreStyleAuthoringStub({ name: "fontFace" }),
+	recipe: restoreStyleAuthoringStub({ name: "recipe" }),
+	anatomy: restoreStyleAuthoringStub({ name: "anatomy" }),
+	port: restoreStyleAuthoringStub({ name: "port" }),
+	atoms: restoreStyleAuthoringStub({ name: "atoms" }),
+	inLayer: restoreStyleAuthoringStub({ name: "inLayer" }),
+	tokensOf: restoreStyleAuthoringStub({ name: "tokensOf" }),
+	namesOf: restoreStyleAuthoringStub({ name: "namesOf" }),
+	varsOf: restoreStyleAuthoringStub({ name: "varsOf" }),
+	explain: restoreStyleAuthoringStub({ name: "explain" }),
+	serialize: restoreStyleAuthoringStub({ name: "serialize" }),
+	introspect: restoreStyleAuthoringStub({ name: "introspect" })
 });
 //#endregion
 //#region src/entry-server.ts

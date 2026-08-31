@@ -4,7 +4,7 @@ A **library-agnostic** probe of the question raised by a monorepo adopter: a pac
 
 Two questions, both empirical:
 
-1. can a **type-only unlock import** (`import type {} from '<pkg>/style-auto-imports'`) carry the declaration dependency with the source, so consumers need nothing?
+1. can a **type-only unlock import** (`import type {} from '<pkg>/vanity-style-auto-imports'`) carry the declaration dependency with the source, so consumers need nothing?
 2. if it can, does it **compose** with a host that generates its own declarations the way vanity does today?
 
 Verdict: **yes to (1); (2) collides under `declare const` and composes under `declare var`, which still rejects genuinely divergent declarations.**
@@ -25,7 +25,7 @@ Real package boundaries via `node_modules` links and `exports` maps — not `pat
 
 ```text
 packages/design            publishes ./authoring (the barrel) and
-                           ./style-auto-imports (the generated ambient module,
+                           ./vanity-style-auto-imports (the generated ambient module,
                            byte-shaped like sdk/src/internal/autoImportDeclarations.ts)
 
 packages/author-unlocked   ships SOURCE; bare `cls`/`t` + one type-only unlock import
