@@ -82,9 +82,9 @@ export default defineConfig({
   plugins: [vanityPlugin({
     compiler: {
       system: './src/design/system.ts',
-      layerOrder: ['vendor', 'app'],
     },
     autoImports: {
+      shared: '$system', // `ds` in both style and application modules
       app: ['core'],
     },
   })],

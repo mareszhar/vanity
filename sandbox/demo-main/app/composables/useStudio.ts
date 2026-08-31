@@ -1,6 +1,6 @@
-import type { Typeface } from '../assets/styles/design/base.css.ts'
+import type { Typeface } from 'design/base.css.ts'
 
-import { typefaces } from '../assets/styles/design/base.css.ts'
+import { typefaces } from 'design/base.css.ts'
 
 /**
  * The studio's live design decisions. Every field maps to one system input:
