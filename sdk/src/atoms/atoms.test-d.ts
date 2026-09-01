@@ -8,12 +8,12 @@ import { describe, it } from 'vitest'
 import { createSystem, unsafe } from '../test-support/characterization'
 
 // The type evidence dimension never executes — these calls are shapes, not effects.
-const { defineAtoms, t } = createSystem({
+const { atoms: makeAtoms, t } = createSystem({
   tokens: { space: { sm: '8px', md: '16px' }, color: { brand: '#635bff' } },
   conditions: { md: '@media (min-width: 768px)', lg: '@media (min-width: 1024px)' },
 })
 
-const atoms = defineAtoms({
+const atoms = makeAtoms({
   properties: {
     display: ['none', 'flex'],
     gap: t.space,
@@ -59,14 +59,14 @@ describe('the call site', () => {
 
 describe('the definition site', () => {
   it('a non-CSS property dies at its key', () => {
-    void defineAtoms({
+    void makeAtoms({
       // @ts-expect-error — `paddin` is not a CSS property
       properties: { paddin: t.space },
     })
   })
 
   it('a shorthand must target a declared property', () => {
-    void defineAtoms({
+    void makeAtoms({
       properties: { padding: t.space },
       // @ts-expect-error — margin is not declared in this map
       shorthands: { m: 'margin' },
@@ -74,7 +74,7 @@ describe('the definition site', () => {
   })
 
   it('conditions must exist on the system', () => {
-    void defineAtoms({
+    void makeAtoms({
       properties: { padding: t.space },
       // @ts-expect-error — not a condition of this system
       conditions: ['xxl'],

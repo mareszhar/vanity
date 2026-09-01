@@ -38,7 +38,6 @@ describe('open and locked systems', () => {
     expect('css' in ds).toBe(false)
     expect('globalCss' in ds).toBe(false)
     expect('tokenOverride' in ds).toBe(false)
-    expect('defineAtoms' in ds).toBe(false)
   })
 
   it('emits only when a locked build surface is used', () => {

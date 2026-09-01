@@ -225,7 +225,6 @@ export interface VanityBoundSystem<
   /** The typed runtime boundary: declare a port with a default, typed by it. */
   readonly port: VanityPortFactory
   /** Finite declared utility selection over your token map ([spec-integrations.md §5]). */
-  readonly defineAtoms: VanityAtomsFactory<C, L>
   readonly atoms: VanityAtomsFactory<C, L>
   readonly inLayer: <Layer extends L>(name: Layer) => VanityBoundSystem<T, C, Layer, Axes, Css>
   /** Resolve an unfinished module, subtree, or composed selection against this system. */
@@ -656,7 +655,6 @@ function createSystemInternal<
     anatomy: buildOnly('anatomy', bindAnatomy(system) as Bound['anatomy']),
     port: buildOnly('port', ((input: VanityPortInput, options?: object) =>
       createPort(input, options as any, { prefix, serialize: serializeSystemValue })) as Bound['port']),
-    defineAtoms: buildOnly('defineAtoms', bindAtoms(system) as Bound['defineAtoms']),
     atoms: buildOnly('atoms', bindAtoms(system) as Bound['atoms']),
     inLayer: buildOnly('inLayer', layered as Bound['inLayer']),
     tokensOf: buildOnly('tokensOf', projectTokens as Bound['tokensOf']),

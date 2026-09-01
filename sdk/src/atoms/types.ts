@@ -87,12 +87,12 @@ export type VanityAtomsProps<P, S extends Record<string, keyof P & string>, G, C
   & { [K in keyof G]?: boolean }
 >
 
-/** What `defineAtoms` returns: props in, a class string out — never new CSS at runtime. */
+/** What `atoms` returns: props in, a class string out — never new CSS at runtime. */
 export interface VanityAtoms<TProps extends object = VanityNoInput> {
   (props?: TProps): string
 }
 
-/** The system-bound `defineAtoms` — one signature, generics inferred from the options literal. */
+/** The system-bound `atoms` — one signature, generics inferred from the options literal. */
 export interface VanityAtomsFactory<C extends string, L extends string> {
   <
     const P extends object = VanityNoInput,

@@ -1444,7 +1444,7 @@ function runtimeSystemModule(system: EvaluatedSystem, target: 'browser' | 'ssr')
         'recipe',
         'anatomy',
         'port',
-        'defineAtoms',
+        'atoms',
         'tokensOf',
         'namesOf',
         'varsOf',
@@ -2070,10 +2070,9 @@ const authoringNames = new Set([
   'keyframes',
   'fontFace',
   'atoms',
-  // Internal legacy fixtures remain recognizable until the final substrate
-  // characterization suite is retired; these names are not public aliases.
+  // The internal substrate emitter is recognized so it is never mistaken
+  // for a public authoring name.
   'css',
-  'defineAtoms',
 ])
 const sourceAuthoringNames = new Set([
   ...authoringNames,

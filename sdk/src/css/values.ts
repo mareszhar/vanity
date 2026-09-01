@@ -73,7 +73,7 @@ function contrastDiagnostic(path: string, ctx: VanityValueContext): VanityDiagno
     message: `${path} uses legibleOn, which is graph knowledge — the check needs both endpoints at build time`,
     path,
     file: ctx.file,
-    fix: 'define it in a derive() contribution — defineTokens(...).derive(m => ({ color: { onX: legibleOn(m.color.x) } })) — then reference that token here',
+    fix: 'define it in a derived token — defineTokens(...).add(m => ({ color: { onX: legibleOn(m.color.x) } })) — then reference that token here',
   }
 }
 

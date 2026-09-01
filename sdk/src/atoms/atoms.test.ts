@@ -12,12 +12,12 @@ import { createSystem, unsafe, VanityError } from '../test-support/characterizat
 
 function miniAtoms() {
   return emit(() => {
-    const { defineAtoms, t } = createSystem({
+    const { atoms, t } = createSystem({
       tokens: { space: { sm: '8px', md: '16px' }, color: { brand: '#635bff' } },
       conditions: { md: '@media (min-width: 768px)' },
     })
 
-    return defineAtoms({
+    return atoms({
       properties: {
         display: ['none', 'flex'],
         gap: t.space,
@@ -86,10 +86,10 @@ describe('atoms resolution', () => {
 describe('the labeled escape', () => {
   it('emits at build time, memoized, with the label in the class', () => {
     const { returned, css } = emit(() => {
-      const { defineAtoms, t } = createSystem({
+      const { atoms: makeAtoms, t } = createSystem({
         tokens: { space: { sm: '8px' } },
       })
-      const atoms = defineAtoms({ properties: { inlineSize: t.space } }, 'atoms')
+      const atoms = makeAtoms({ properties: { inlineSize: t.space } }, 'atoms')
 
       const first = atoms({ inlineSize: unsafe.value('37ch', 'editorial measure') })
       const second = atoms({ inlineSize: unsafe.value('37ch', 'editorial measure') })
@@ -122,20 +122,20 @@ describe('the labeled escape', () => {
 describe('definition diagnostics', () => {
   it('an unknown condition dies at definition with the fix', () => {
     expect(() => emit(() => {
-      const { defineAtoms, t } = createSystem({
+      const { atoms, t } = createSystem({
         tokens: { space: { sm: '8px' } },
         conditions: { md: '@media (min-width: 768px)' },
       })
 
-      return defineAtoms({ properties: { gap: t.space }, conditions: ['mdd' as never] })
+      return atoms({ properties: { gap: t.space }, conditions: ['mdd' as never] })
     })).toThrowError(/VANITY_ATOMS_UNKNOWN_CONDITION[\s\S]*did you mean 'md'/)
   })
 
   it('a toggle colliding with a property dies at definition', () => {
     expect(() => emit(() => {
-      const { defineAtoms, t } = createSystem({ tokens: { space: { sm: '8px' } } })
+      const { atoms, t } = createSystem({ tokens: { space: { sm: '8px' } } })
 
-      return defineAtoms({
+      return atoms({
         properties: { padding: t.space },
         toggles: { padding: { display: 'flex' } } as never,
       })

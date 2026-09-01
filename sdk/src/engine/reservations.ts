@@ -82,16 +82,15 @@ export const VANITY_BUILTIN_CONSTRUCTOR_NAMES = Object.freeze([
 export type VanityBuiltinConstructorName = typeof VANITY_BUILTIN_CONSTRUCTOR_NAMES[number]
 
 const SYSTEM_MEMBER_SET: ReadonlySet<string> = new Set(VANITY_SYSTEM_MEMBERS)
-const LEGACY_INTERNAL_MEMBERS: ReadonlySet<string> = new Set([
+const RESERVED_INTERNAL_MEMBERS: ReadonlySet<string> = new Set([
   'css',
   'globalCss',
   'tokenOverride',
-  'defineAtoms',
 ])
 
 export function assertSystemNamespaceAvailable(names: Iterable<string>, owner: string): void {
   for (const name of names) {
-    if (SYSTEM_MEMBER_SET.has(name) || LEGACY_INTERNAL_MEMBERS.has(name)) {
+    if (SYSTEM_MEMBER_SET.has(name) || RESERVED_INTERNAL_MEMBERS.has(name)) {
       throw new TypeError(
         `[vanity] ${owner} cannot define '${name}' because it is reserved by system surface v${VANITY_SYSTEM_SURFACE_VERSION}`,
       )

@@ -207,7 +207,7 @@ The progression is:
 ```text
 first-class typed helper
 → typed raw value/selector/at-rule
-→ css.raw
+→ ds.raw
 → explicit unsafe escape with reason
 ```
 

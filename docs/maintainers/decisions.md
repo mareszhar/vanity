@@ -33,6 +33,7 @@ This register records choices that cross more than one specification. Domain spe
 | System CSS and style-module CSS are separate virtual modules. | System CSS deduplicates while component CSS preserves lazy splitting. |
 | CSS namespace ownership is stricter than runtime compatibility. | Compatible runtime controllers never mask colliding emitted CSS. |
 | Artifacts are atomic, last-good, byte-stable, and write-on-change. | Errors do not publish partial state or create watcher noise. |
+| A versioned serialized contract never changes shape under its existing discriminator. | A changed field or semantics takes a new version, so a consumer pinned to a version stays correct. |
 
 ## Styling and runtime
 
@@ -54,17 +55,6 @@ This register records choices that cross more than one specification. Domain spe
 | Introspection, manifest, diagnostics, audit, DTCG, and CLI derive from one semantic record. | Humans and agents receive one consistent explanation surface. |
 | Hover text, completion, TSDoc, and diagnostics are tested API behavior. | The cursor is part of the product, not a secondary presentation. |
 | Evidence spans types, emitted CSS, browsers, packages, tooling, and performance. | A green result proves the relevant user-visible behavior. |
-
-## Language-refactor compatibility
-
-| Decision | Why it matters |
-| --- | --- |
-| This pre-1.0 language refactor uses hard public renames with no deprecated aliases. | One release presents one coherent language; aliases would keep the rejected model alive. |
-| Structured diagnostic `VANITY_STYLE_DESTINATION_MISUSE` becomes `VANITY_STYLE_MODULE_MISUSE`. | The code names the violated module role; diagnostic codes are otherwise stable API. |
-| Runtime-object types use `VanityRuntimeController*`; auto-import configuration uses `VanityAutoImportRouting`. | Public type names describe purpose and relation rather than implementation shape or a false destination taxonomy. |
-| `vanity.system/1`, manifest protocols, snapshot protocols, `VanityPortableSystemV1`, and the serialized `ruleGroups` field do not change in this refactor. | A language cleanup does not silently mutate a versioned data contract. A future schema change must use a new discriminator/version. |
-| Public rule authoring remains `defineRules`, `addRule(s)`, `overwriteRule(s)`, `expectRule(s)`, and `ds.rules`. | Nesting is an expressibility capability, not a reason to introduce an awkward `RuleGroup` authoring family. |
-| The public input types are `VanitySystemRule` and `HailSystemRules`; only existing versioned schemas retain `ruleGroups`/`'rule-group'`. | User-facing names follow the rule API while serialized compatibility remains explicit. |
 
 ## Deliberate boundaries
 

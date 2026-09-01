@@ -802,7 +802,7 @@ export type VanityLockedSystem<
   Layers[number],
   EngineConstructors<Engine>,
   EngineAxes<Engine>
->, 'class' | 'css' | 'explain' | 'fragment' | 'globalCss' | 'rules' | 'tokenOverride' | 'defineAtoms' | 'inLayer'> & Readonly<Utils> & {
+>, 'class' | 'css' | 'explain' | 'fragment' | 'globalCss' | 'rules' | 'tokenOverride' | 'inLayer'> & Readonly<Utils> & {
   readonly class: LockedClassEmitter<
     VanitySystemConditionName<Conditions, BaseConditions>,
     Layers[number],
@@ -2009,7 +2009,7 @@ const BUILD_SURFACES = new Set([
   'atoms',
   'inLayer',
 ])
-const REMOVED_STYLING_MEMBERS = new Set(['css', 'globalCss', 'tokenOverride', 'defineAtoms'])
+const INTERNAL_STYLING_MEMBERS = new Set(['css', 'globalCss', 'tokenOverride'])
 
 /** Create the immutable open system. */
 export function createSystem(): VanityOpenSystem
@@ -2952,7 +2952,7 @@ function materializeLocked(
     const target = Object.create(Object.getPrototypeOf(source))
     const sourceDescriptors = Object.getOwnPropertyDescriptors(source)
     for (const key of Reflect.ownKeys(sourceDescriptors)) {
-      if (typeof key === 'string' && (REMOVED_STYLING_MEMBERS.has(key) || key === 'explain' || key === 'inLayer'))
+      if (typeof key === 'string' && (INTERNAL_STYLING_MEMBERS.has(key) || key === 'explain' || key === 'inLayer'))
         continue
       Object.defineProperty(target, key, Reflect.get(sourceDescriptors, key) as PropertyDescriptor)
     }
@@ -3004,7 +3004,7 @@ function materializeLocked(
         return Reflect.get(object, key, receiver)
       },
       has(object, key) {
-        return typeof key === 'string' && (LOCKED_ONLY_MISUSE.has(key) || REMOVED_STYLING_MEMBERS.has(key))
+        return typeof key === 'string' && (LOCKED_ONLY_MISUSE.has(key) || INTERNAL_STYLING_MEMBERS.has(key))
           ? false
           : Reflect.has(object, key)
       },

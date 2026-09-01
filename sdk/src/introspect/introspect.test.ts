@@ -16,7 +16,7 @@ import { buildManifest, countVarRefs, manifestModules, manifestTokenUsage } from
 /** Prism plus a representative styled surface, collected as the plugin would. */
 function prismManifest() {
   const { records, result } = collectInspection(() => emit(() => {
-    const { t, css, recipe, port, globalCss, defineAtoms } = definePrismSystem()
+    const { t, css, recipe, port, globalCss, atoms: makeAtoms } = definePrismSystem()
 
     const fraction = port(0, { label: 'fraction' })
 
@@ -41,7 +41,7 @@ function prismManifest() {
     globalCss('body', { color: t.color.ink })
     globalCss('.third-party-widget', { borderRadius: t.radius.md })
 
-    const atoms = defineAtoms({ properties: { gap: { sm: t.space.sm } } }, 'atoms')
+    const atoms = makeAtoms({ properties: { gap: { sm: t.space.sm } } }, 'atoms')
     const escaped = atoms({ gap: unsafe.value('37px', 'editorial measure') })
 
     return { button, fill, promo, prose, escaped }

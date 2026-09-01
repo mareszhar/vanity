@@ -107,7 +107,7 @@ describe('the permanent plain-system projection canary', () => {
     expect(javascript).toContain('class: restoreStyleAuthoringStub({ name: "class" })')
     expect(javascript).toContain('fragment: restoreStyleAuthoringStub({ name: "fragment" })')
     expect(javascript).not.toContain('globalCss: restoreStyleAuthoringStub')
-    expect(javascript).not.toContain('defineAtoms: restoreStyleAuthoringStub')
+    expect(javascript).toContain('atoms: restoreStyleAuthoringStub({ name: "atoms" })')
 
     const html = String(assets.find(item => item.fileName === 'index.html')?.source)
     const prelude = html.indexOf('/assets/vanity-cascade.css')

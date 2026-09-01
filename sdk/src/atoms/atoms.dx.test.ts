@@ -14,12 +14,12 @@ const defineFixture = `
 import { createEngine } from '@test/legacy'
 
 const de = createEngine()
-const { defineAtoms, t } = de.createSystem({
+const { atoms: makeAtoms, t } = de.createSystem({
   tokens: { space: { sm: '8px', md: '16px' }, color: { brand: '#635bff' } },
   conditions: { md: '@media (min-width: 768px)' },
 })
 
-const atoms = defineAtoms({
+const atoms = makeAtoms({
   properties: { display: ['none', 'flex'], gap: t.space, padding: t.space },
   shorthands: { p: 'padding' },
   toggles: { stack: { display: 'flex', flexDirection: 'column' } },

@@ -13,12 +13,15 @@ The style for every Vanity document:
 - **DRY.** A fact has one canonical home.
 - **Concrete by default.** Pair an abstract contract with the smallest useful snippet, table, or diagram.
 - **Renderer-owned layout.** Paragraphs are semantic units; the Markdown renderer owns wrapping.
+- **Current, not historical.** Describe how Vanity works now. A document never narrates what a term used to mean, what was tried, or how the current shape was reached; a decision states what Vanity commits to, not what it moved away from. The changelog owns migration — the repository keeps no diary.
 
 The naming law is:
 
 > **A base term preserves the same useful inference everywhere it appears. Qualifiers may specialize that inference by domain, owner, state, representation, or relation; they may not rescue unrelated meanings.**
 
 The test is predictive: after learning a term once, a reader should correctly infer something useful from every new compound containing it.
+
+Names carry no history. Vanity keeps one canonical spelling per concept and ships no deprecated aliases, so a renamed concept leaves no trace of its former name in code, types, or documentation.
 
 CSS owns CSS vocabulary. Vanity uses a CSS name only for the platform concept exactly. Vanity-specific behavior receives Vanity-specific language.
 
@@ -429,7 +432,7 @@ button.ports
 namesOf / varsOf / tokensOf
 ```
 
-The effective locked/public surface is authoritative. Removed or internal compatibility members such as `css`, `globalCss`, `tokenOverride`, and `defineAtoms` are not part of this language merely because lower-level implementation types retain them.
+The effective locked/public surface is authoritative: a member that appears only in a lower-level implementation type is not public API.
 
 ## 12. Token language
 

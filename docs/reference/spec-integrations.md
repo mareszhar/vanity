@@ -81,7 +81,7 @@ Contracts:
 
 ## 5. Atoms
 
-`defineAtoms` becomes `ds.atoms()` because atoms are emitted output, not a modular definition registered into system shape.
+Atoms are emitted through `ds.atoms()` rather than a `define*` module, because atoms are output, not a modular definition registered into system shape.
 
 Retain:
 

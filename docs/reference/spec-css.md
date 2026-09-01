@@ -25,7 +25,7 @@ The locked system exposes one CSS input language through style-data producers an
 | `ds.fontFace(descriptors)` | font-face rule(s) plus family handle |
 | `ds.raw(css)` | raw CSS emitted in the declared layer |
 
-These lists describe the effective locked public surface. Removed or internal compatibility members such as `css`, `globalCss`, `tokenOverride`, and `defineAtoms` are not alternate public styling families.
+These lists describe the effective locked public surface: a member that appears only in a lower-level implementation type is not an alternate public styling family.
 
 All applicable APIs consume the same property/value, condition, nesting, selector, at-rule, alias, token-handle, fragment, and raw standards forms appropriate to their context.
 

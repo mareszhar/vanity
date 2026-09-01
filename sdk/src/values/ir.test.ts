@@ -171,7 +171,7 @@ describe('the shared CSS value IR', () => {
         { from: { padding: length.px(0) }, to: { padding: length.px(8) } },
         'valueAnimation',
       )
-      const atoms = system.defineAtoms({ properties: { gap: { compact: length.px(8) } } }, 'valueAtoms')
+      const atoms = system.atoms({ properties: { gap: { compact: length.px(8) } } }, 'valueAtoms')
       return {
         animation,
         atomClass: atoms({ gap: 'compact' }),

@@ -24,8 +24,7 @@ describe('target styling types', () => {
     void ds.globalCss
     // @ts-expect-error — token subtree declarations use tdec
     void ds.tokenOverride
-    // @ts-expect-error — atoms are an emitter, not a definition registry
-    void ds.defineAtoms
+    void ds.atoms
 
     const built = fromEntries([['sm', 4], ['md', 8]] as const)
     expectTypeOf(built.sm).toEqualTypeOf<4>()

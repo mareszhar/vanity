@@ -11,12 +11,12 @@ import { createSystem } from '../test-support/characterization'
 describe('atoms, emitted', () => {
   it('pre-generates value × condition classes in the utilities layer', () => {
     const { css } = emit(() => {
-      const { defineAtoms, t } = createSystem({
+      const { atoms, t } = createSystem({
         tokens: { space: { sm: '8px', md: '16px' } },
         conditions: { md: '@media (min-width: 768px)' },
       })
 
-      return defineAtoms({
+      return atoms({
         properties: { gap: t.space },
         conditions: ['md'],
       }, 'atoms')
@@ -60,10 +60,10 @@ describe('atoms, emitted', () => {
 
   it('output scales with conditions, never with call sites', () => {
     const { css } = emit(() => {
-      const { defineAtoms, t } = createSystem({
+      const { atoms: makeAtoms, t } = createSystem({
         tokens: { space: { sm: '8px', md: '16px' } },
       })
-      const atoms = defineAtoms({ properties: { padding: t.space } }, 'atoms')
+      const atoms = makeAtoms({ properties: { padding: t.space } }, 'atoms')
 
       // Many calls, same bounded output.
       atoms({ padding: 'sm' })
@@ -77,9 +77,9 @@ describe('atoms, emitted', () => {
 
   it('toggles compile as full rules', () => {
     const { css } = emit(() => {
-      const { defineAtoms } = createSystem({ tokens: {} })
+      const { atoms } = createSystem({ tokens: {} })
 
-      return defineAtoms({
+      return atoms({
         toggles: { stack: { display: 'flex', flexDirection: 'column', hover: { gap: 4 } } },
       }, 'atoms')
     })

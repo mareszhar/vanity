@@ -104,14 +104,14 @@ describe('contrast acceptances', () => {
 describe('the escape inventory', () => {
   it('enumerates css.raw, unsafe values with reasons, foreign globalCss, overrides rules', () => {
     const { manifest, css } = built(() => {
-      const { t, css: style, globalCss, defineAtoms } = createSystem({ tokens: { space: { sm: '8px' } } })
+      const { t, css: style, globalCss, atoms: makeAtoms } = createSystem({ tokens: { space: { sm: '8px' } } })
 
       style.layer('overrides')({ padding: t.space.sm }, 'fix')
       void style.raw`h2 { margin-block: 1rem; }`
       globalCss('body', { margin: 0 })
       globalCss('.cookie-banner', { display: 'none' })
 
-      const atoms = defineAtoms({ properties: { gap: { sm: t.space.sm } } }, 'atoms')
+      const atoms = makeAtoms({ properties: { gap: { sm: t.space.sm } } }, 'atoms')
       return atoms({ gap: unsafe.value('37px', 'editorial measure') })
     })
 
