@@ -204,6 +204,7 @@ async function main(): Promise<void> {
       moduleResolution: 'Bundler',
       target: 'ES2022',
       lib: ['ES2022', 'DOM'],
+      types: ['vanity-style-auto-imports', 'vanity-app-auto-imports'],
       plugins: [{ name: '@mszr/vanity/typescript' }],
     },
     include: ['src'],
@@ -423,7 +424,6 @@ describe('packed consumer testing kit', () => {
   await smokeDev(plainDir, ['vite', '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort'], vitePort, /src\/main\.ts/)
   console.log('✓ fresh plain Vite: strict types, build, packed CLI/schema, and dev lifecycle')
 
-  run('pnpm', ['--dir', nuxtDir, 'exec', 'vanity', 'prepare'])
   run('pnpm', ['--dir', nuxtDir, 'exec', 'nuxt', 'prepare'])
   run('pnpm', ['--dir', nuxtDir, 'exec', 'nuxi', 'typecheck'])
   run('pnpm', ['--dir', nuxtDir, 'exec', 'nuxt', 'build'])
