@@ -19,21 +19,26 @@ import type {
   VanityTokenFactory,
   VanityTokenHandleAny,
   VanityTokenPolicy,
+  VanityTokenTraitDiagnostic,
 } from './types'
 import { isVanityValue } from '../values/types'
 import { isColorValue, isContrastValue } from './color'
 import { isConfiguredToken } from './config'
 import {
-  definePortableTokenModule,
-  finalizeTokenModule,
-  identifyTokenModule,
-  isTokenBuilder,
+  applyTokenModuleRoot,
+  composeTokenModules,
+  deriveTokenModule,
+  markTokenModule,
   prefixTokenModule,
-  rootTokenModule,
+} from './derive'
+import {
+  definePortableTokenModule,
+  isTokenModule,
   VANITY_MODULE_TOKEN_REF,
-} from './graph'
+} from './module'
+import { resolveTokenModule } from './resolve'
 
-export const VANITY_UNIFIED_TOKEN_BUILDER = Symbol.for('vanity.unifiedTokenBuilder')
+export const VANITY_TOKEN_BUILDER = Symbol.for('vanity.tokenBuilder')
 
 type GraphOfBuilder<Builder>
   = Builder extends VanityTokenDefinition<infer Graph, any> ? Graph : never
@@ -108,7 +113,7 @@ export interface VanityTokenTreeContext<
   readonly [name: string]:
     | VanityLeafInput
     | VanityTokenDefinition<any, any>
-    | VanityUnifiedTokenBuilder<any, any, any>
+    | VanityTokenBuilder<any, any, any>
     | VanityTokenTreeContext<Axes>
     | VanityBulkAxisCallbacks<Axes>
     | undefined
@@ -133,7 +138,7 @@ export type VanityTokenTreeInputGuard<
   readonly [Key in keyof Input]:
   Key extends '$axes' ? unknown
     : Key extends `$${string}` ? never
-      : Input[Key] extends VanityLeafInput | VanityTokenDefinition<any, any> | VanityUnifiedTokenBuilder<any, any, any> ? unknown
+      : Input[Key] extends VanityLeafInput | VanityTokenDefinition<any, any> | VanityTokenBuilder<any, any, any> ? unknown
         : Input[Key] extends object ? VanityTokenTreeInputGuard<Input[Key], Axes>
           : unknown
 }
@@ -164,7 +169,7 @@ type VanityPortableTokenInput
     | null
     | import('../values/types').VanityCssValue
     | import('./types').VanityAuthoredColor
-    | import('./types').VanityContrast<any>
+    | import('./types').VanityAuthoredContrast
     | VanityTokenHandleAny
 
 type VanityBuilderTokenInput<Bound extends boolean>
@@ -276,9 +281,10 @@ type TdefAxesGuard<Configured, Axes extends VanityAxisDefinitions>
   } : never
 
 type TdefVocabularyGuard<Config, Axes extends VanityAxisDefinitions>
-  = Config extends { readonly axes: infer Configured }
+  = (Config extends { readonly axes: infer Configured }
     ? { readonly axes: TdefAxesGuard<Configured, Axes> }
-    : unknown
+    : unknown)
+  & VanityTokenTraitDiagnostic<Config>
 
 type NormalizeTdefAxes<Config extends object, Axes extends VanityAxisDefinitions>
   = Config extends { readonly axes: infer Configured extends object } ? Omit<Config, 'axes'> & {
@@ -416,20 +422,20 @@ const TYPED_FACTORY_NAMES = [
   'url',
 ] as const
 
-export interface VanityUnifiedTokenBuilder<
+export interface VanityTokenBuilder<
   Graph extends object = Record<never, never>,
   Policy extends VanityTokenPolicy = VanityDefaultTokenPolicy,
   Axes extends VanityAxisDefinitions = Record<never, never>,
   Bound extends boolean = true,
 > extends VanityTokenDefinition<Graph, Policy> {
-  readonly [VANITY_UNIFIED_TOKEN_BUILDER]: true
+  readonly [VANITY_TOKEN_BUILDER]: true
   /** Lazy module-relative handles. Direct aliases rebind at every mount. */
   readonly refs: VanityCanonicalTokens<Graph, 'module', Policy>
   readonly add: {
     <const Name extends string, const Input extends VanityBuilderTokenInput<Bound>>(
       name: AdditiveName<Graph, Name>,
       input: Input,
-    ): VanityUnifiedTokenBuilder<
+    ): VanityTokenBuilder<
       Graph & Record<Name, NamedTokenNode<Input>>,
       Policy,
       Axes,
@@ -438,7 +444,7 @@ export interface VanityUnifiedTokenBuilder<
     <const Name extends string, const Result extends VanityBuilderTokenInput<Bound>>(
       name: AdditiveName<Graph, Name>,
       factory: (m: VanityCanonicalTokens<Graph, 'module', Policy>) => Result,
-    ): VanityUnifiedTokenBuilder<
+    ): VanityTokenBuilder<
       Graph & Record<Name, NamedDerivedTokenNode<Result>>,
       Policy,
       Axes,
@@ -447,7 +453,7 @@ export interface VanityUnifiedTokenBuilder<
     <const Stage extends object>(
       factory: (m: VanityCanonicalTokens<Graph, 'module', Policy>) =>
       Stage & (Bound extends true ? unknown : VanityPortableStageGuard<Stage>),
-    ): VanityUnifiedTokenBuilder<
+    ): VanityTokenBuilder<
       VanityAdditiveGraph<Graph, MarkDerivedTree<Stage>>,
       Policy,
       Axes,
@@ -455,7 +461,7 @@ export interface VanityUnifiedTokenBuilder<
     >
     <const Builder extends VanityTokenDefinition<any, Policy>>(
       builder: Builder,
-    ): VanityUnifiedTokenBuilder<
+    ): VanityTokenBuilder<
       VanityAdditiveGraph<Graph, GraphOfBuilder<Builder>>,
       Policy,
       Axes,
@@ -463,7 +469,7 @@ export interface VanityUnifiedTokenBuilder<
     >
     <const Builders extends readonly VanityTokenDefinition<any, Policy>[]>(
       builders: Builders,
-    ): VanityUnifiedTokenBuilder<
+    ): VanityTokenBuilder<
       VanityAdditiveGraph<Graph, GraphsOfBuilders<Builders>>,
       Policy,
       Axes,
@@ -471,7 +477,7 @@ export interface VanityUnifiedTokenBuilder<
     >
     <const Stage extends VanityTokenTreeContext<Axes>>(
       stage: Stage & VanityTokenTreeInputGuard<Stage, Axes>,
-    ): VanityUnifiedTokenBuilder<
+    ): VanityTokenBuilder<
       VanityAdditiveGraph<Graph, VanityTokenTreeGraph<Stage>>,
       Policy,
       Axes,
@@ -479,13 +485,13 @@ export interface VanityUnifiedTokenBuilder<
     >
   }
   readonly root: (root: string | VanityCondition) =>
-  VanityUnifiedTokenBuilder<Graph, Policy, Axes, Bound>
+  VanityTokenBuilder<Graph, Policy, Axes, Bound>
 }
 
 export type VanityPortableTokenBuilder<Graph extends object = Record<never, never>>
-  = VanityUnifiedTokenBuilder<Graph, VanityDefaultTokenPolicy, Record<never, never>, false>
+  = VanityTokenBuilder<Graph, VanityDefaultTokenPolicy, Record<never, never>, false>
 
-interface BuilderRuntimeContext {
+interface TokenBuilderContext {
   readonly module: object
   readonly defineModule: (seed: VanityGraphInput) => object
   readonly tdef?: VanityTokenFactory<any>
@@ -493,14 +499,14 @@ interface BuilderRuntimeContext {
   readonly preview: (module: object) => object
 }
 
-interface RuntimeFacade {
-  readonly [VANITY_UNIFIED_TOKEN_BUILDER]: true
+interface TokenBuilderImplementation {
+  readonly [VANITY_TOKEN_BUILDER]: true
   readonly module: object
-  readonly context: BuilderRuntimeContext
+  readonly context: TokenBuilderContext
   readonly id: symbol
   readonly refs: object
-  readonly add: (...args: unknown[]) => RuntimeFacade
-  readonly root: (root: string | VanityCondition) => RuntimeFacade
+  readonly add: (...args: unknown[]) => TokenBuilderImplementation
+  readonly root: (root: string | VanityCondition) => TokenBuilderImplementation
 }
 
 /** Portable builder: plain values, callbacks, handoff, roots, and lazy refs. */
@@ -512,13 +518,13 @@ export function defineTokens<
   const id = Symbol('vanity.tokenModule')
   const defineModule = (graph: VanityGraphInput) => definePortableTokenModule(graph)
   const prepared = prepareSeed(seed ?? {}, undefined, undefined)
-  let module: any = identifyTokenModule(defineModule(prepared.graph), id)
+  let module: any = markTokenModule(defineModule(prepared.graph), id)
   for (const mount of prepared.mounts)
-    module = module.compose(prefixTokenModule(mount.module, mount.path))
-  return facade({
+    module = composeTokenModules(module, prefixTokenModule(mount.module, mount.path))
+  return createTokenBuilder({
     module,
     defineModule,
-    preview: value => finalizeTokenModule(value, { prefix: 'module', emitCss: false }),
+    preview: value => resolveTokenModule(value, { prefix: 'module', emitCss: false }),
   }, id) as unknown as VanityPortableTokenBuilder<VanityTokenTreeGraph<Seed>>
 }
 
@@ -535,32 +541,32 @@ export function defineSystemTokens<
     readonly preview: (module: object) => object
   },
   seed?: Seed & VanityTokenTreeContext<Axes> & VanityTokenTreeInputGuard<Seed, Axes>,
-): VanityUnifiedTokenBuilder<VanityTokenTreeGraph<Seed>, Policy, Axes> {
+): VanityTokenBuilder<VanityTokenTreeGraph<Seed>, Policy, Axes> {
   const id = Symbol('vanity.tokenModule')
   const prepared = prepareSeed(seed ?? {}, context.tdef, context.axes)
-  let module: any = identifyTokenModule(context.defineModule(prepared.graph), id)
+  let module: any = markTokenModule(context.defineModule(prepared.graph), id)
   for (const mount of prepared.mounts)
-    module = module.compose(prefixTokenModule(mount.module, mount.path))
-  return facade({ ...context, module }, id) as unknown as VanityUnifiedTokenBuilder<VanityTokenTreeGraph<Seed>, Policy, Axes>
+    module = composeTokenModules(module, prefixTokenModule(mount.module, mount.path))
+  return createTokenBuilder({ ...context, module }, id) as unknown as VanityTokenBuilder<VanityTokenTreeGraph<Seed>, Policy, Axes>
 }
 
 /** @internal */
-export function unwrapUnifiedTokenBuilder(value: unknown): object | undefined {
-  return isUnifiedTokenBuilder(value) ? (value as unknown as RuntimeFacade).module : undefined
+export function getTokenModule(value: unknown): object | undefined {
+  return isTokenBuilder(value) ? (value as unknown as TokenBuilderImplementation).module : undefined
 }
 
 /** @internal */
-export function isUnifiedTokenBuilder(value: unknown): value is VanityUnifiedTokenBuilder {
+export function isTokenBuilder(value: unknown): value is VanityTokenBuilder {
   return typeof value === 'object' && value !== null
-    && (value as Partial<RuntimeFacade>)[VANITY_UNIFIED_TOKEN_BUILDER] === true
+    && (value as Partial<TokenBuilderImplementation>)[VANITY_TOKEN_BUILDER] === true
 }
 
 /** @internal */
-export function createTdefFacade<Axes extends VanityAxisDefinitions>(
+export function createTdefFactory<Axes extends VanityAxisDefinitions>(
   token: VanityTokenFactory<Axes>,
   axes: VanityAxisRegistry<Axes>,
 ): VanityTdefFactory<Axes> {
-  const wrap = (configured: VanityConfiguredToken): VanityTokenDefinitionValue<any, any, Axes> =>
+  const createConfiguredToken = (configured: VanityConfiguredToken): VanityTokenDefinitionValue<any, any, Axes> =>
     new Proxy(configured, {
       get(target, key, receiver) {
         if (typeof key !== 'string' || !(key in axes.definitions))
@@ -580,7 +586,7 @@ export function createTdefFacade<Axes extends VanityAxisDefinitions>(
                 : value
             }
           }
-          return wrap((token as any)({
+          return createConfiguredToken((token as any)({
             ...target.config,
             axes: {
               ...(target.config as VanityTokenConfig).axes,
@@ -591,80 +597,80 @@ export function createTdefFacade<Axes extends VanityAxisDefinitions>(
       },
     }) as VanityTokenDefinitionValue<any, any, Axes>
 
-  const target = ((config: VanityTokenConfig) => wrap((token as any)(normalizeAxisCallbacks(config, axes)))) as VanityTdefFactory<Axes>
+  const target = ((config: VanityTokenConfig) => createConfiguredToken((token as any)(normalizeAxisCallbacks(config, axes)))) as VanityTdefFactory<Axes>
   for (const name of TYPED_FACTORY_NAMES) {
     const typed = (token as any)[name] as (config?: object) => VanityConfiguredToken
     Object.defineProperty(target, name, {
       enumerable: true,
-      value: (config: object = {}) => wrap(typed(normalizeAxisCallbacks(config as VanityTokenConfig, axes))),
+      value: (config: object = {}) => createConfiguredToken(typed(normalizeAxisCallbacks(config as VanityTokenConfig, axes))),
     })
   }
   return Object.freeze(target) as unknown as VanityTdefFactory<Axes>
 }
 
-function facade(context: BuilderRuntimeContext, id = Symbol('vanity.tokenModule')): RuntimeFacade {
+function createTokenBuilder(context: TokenBuilderContext, id = Symbol('vanity.tokenModule')): TokenBuilderImplementation {
   let cachedRefs: object | undefined
-  const next = (module: object) => facade({
+  const createNextBuilder = (module: object) => createTokenBuilder({
     ...context,
-    module: identifyTokenModule(module, id) as object,
+    module: markTokenModule(module, id) as object,
   }, id)
-  const target: Omit<RuntimeFacade, 'refs'> & { readonly refs?: object } = {
-    [VANITY_UNIFIED_TOKEN_BUILDER]: true,
+  const target: Omit<TokenBuilderImplementation, 'refs'> & { readonly refs?: object } = {
+    [VANITY_TOKEN_BUILDER]: true,
     module: context.module,
     context,
     id,
     add(...args: unknown[]) {
       const [first, second] = args
       if (Array.isArray(first) && args.length === 1) {
-        return first.reduce((builder, module) => builder.add(module), target as RuntimeFacade)
+        return first.reduce((builder, module) => builder.add(module), target as TokenBuilderImplementation)
       }
-      if (isUnifiedTokenBuilder(first) || (args.length === 1 && isTokenBuilder(first))) {
-        const mounted = unwrapUnifiedTokenBuilder(first) ?? first as object
-        return next((context.module as any).compose(mounted))
+      if (isTokenBuilder(first) || (args.length === 1 && isTokenModule(first))) {
+        const mounted = getTokenModule(first) ?? first as object
+        return createNextBuilder(composeTokenModules(context.module, mounted) as object)
       }
       if (args.length === 1 && first && typeof first === 'object') {
         const prepared = prepareSeed(first, context.tdef, context.axes)
         let addition = context.defineModule(prepared.graph)
         for (const mount of prepared.mounts)
-          addition = (addition as any).compose(prefixTokenModule(mount.module, mount.path))
-        return next((context.module as any).compose(addition))
+          addition = composeTokenModules(addition, prefixTokenModule(mount.module, mount.path)) as object
+        return createNextBuilder(composeTokenModules(context.module, addition) as object)
       }
       if (typeof first === 'function' && args.length === 1) {
-        return next((context.module as any).derive((m: Record<string, unknown>) => {
+        return createNextBuilder(deriveTokenModule(context.module, (m: Record<string, unknown>) => {
           const result = first(m)
           return prepareSeed(result as object, context.tdef, context.axes).graph
-        }))
+        }) as object)
       }
       if (typeof first !== 'string' || args.length !== 2)
         throw new TypeError('[vanity] add() needs (name, value/callback), a tree/callback, or one or more token builders')
       if (first.startsWith('$'))
         throw new TypeError(`[vanity] token name '${first}' cannot begin with '$'`)
-      const moduleRef = moduleRefOf(second)
+      const moduleRef = getModuleRef(second)
       if (moduleRef?.module === id) {
-        return next((context.module as any).derive((m: Record<string, unknown>) => ({
+        return createNextBuilder(deriveTokenModule(context.module, (m: Record<string, unknown>) => ({
           [first]: readPath(m, moduleRef.path),
-        })))
+        })) as object)
       }
       if (typeof second === 'function' && !isConfiguredToken(second)) {
-        return next((context.module as any).derive((m: Record<string, unknown>) => ({
+        return createNextBuilder(deriveTokenModule(context.module, (m: Record<string, unknown>) => ({
           [first]: normalizeNamedToken(
             (second as (...args: any[]) => unknown)(m),
             context.tdef,
           ),
-        })))
+        })) as object)
       }
       const addition = context.defineModule({
         [first]: normalizeNamedToken(second, context.tdef),
       } as VanityGraphInput)
-      return next((context.module as any).compose(addition))
+      return createNextBuilder(composeTokenModules(context.module, addition) as object)
     },
     root(root: string | VanityCondition) {
       if (typeof root === 'string')
-        return next(rootTokenModule(context.module, root) as object)
+        return createNextBuilder(applyTokenModuleRoot(context.module, root) as object)
       const ast = root.ast
       if (ast?.kind === 'anchor') {
         if (ast.anchor === 'system-root')
-          return next(rootTokenModule(context.module, { systemRoot: true }) as object)
+          return createNextBuilder(applyTokenModuleRoot(context.module, { systemRoot: true }) as object)
         throw new TypeError(
           `[vanity] ${ast.anchor === 'module-root' ? 'moduleRoot' : 'thisMode'} `
           + 'has no enclosing root in this token-module position',
@@ -672,7 +678,7 @@ function facade(context: BuilderRuntimeContext, id = Symbol('vanity.tokenModule'
       }
       if (ast?.kind === 'scope') {
         const scopes = root.arms.flatMap(arm => arm.scopes ?? [])
-        return next(rootTokenModule(context.module, {
+        return createNextBuilder(applyTokenModuleRoot(context.module, {
           root: ':scope',
           scopes,
           runtimeRoot: ast.start,
@@ -686,7 +692,7 @@ function facade(context: BuilderRuntimeContext, id = Symbol('vanity.tokenModule'
       )
       if (selectors.length !== 1)
         throw new TypeError('[vanity] a token module root needs one concrete selector, systemRoot, or scope()')
-      return next(rootTokenModule(context.module, selectors[0]!) as object)
+      return createNextBuilder(applyTokenModuleRoot(context.module, selectors[0]!) as object)
     },
   }
   Object.defineProperty(target, 'refs', {
@@ -694,12 +700,12 @@ function facade(context: BuilderRuntimeContext, id = Symbol('vanity.tokenModule'
     get() {
       if (cachedRefs === undefined) {
         cachedRefs = context.preview(context.module)
-        brandModuleRefs(cachedRefs, id)
+        markModuleRefs(cachedRefs, id)
       }
       return cachedRefs
     },
   })
-  const surface = Object.freeze(target) as RuntimeFacade
+  const surface = Object.freeze(target) as TokenBuilderImplementation
   return surface
 }
 
@@ -732,8 +738,8 @@ function prepareSeed(
         continue
       if (name.startsWith('$'))
         throw new TypeError(`[vanity] token name '${[...path, name].join('.')}' cannot begin with '$'`)
-      if (isUnifiedTokenBuilder(value)) {
-        mounts.push({ path: [...path, name], module: unwrapUnifiedTokenBuilder(value)! })
+      if (isTokenBuilder(value)) {
+        mounts.push({ path: [...path, name], module: getTokenModule(value)! })
         continue
       }
       if (!tdef && isConfiguredToken(value))
@@ -852,11 +858,11 @@ function isPlainGroup(value: unknown): value is Record<string, unknown> {
     && !isColorValue(value)
     && !isContrastValue(value)
     && !isConfiguredToken(value)
-    && !isUnifiedTokenBuilder(value)
+    && !isTokenBuilder(value)
     && !('type' in value)
 }
 
-function brandModuleRefs(value: object, module: symbol): void {
+function markModuleRefs(value: object, module: symbol): void {
   for (const child of Object.values(value)) {
     if ((typeof child === 'object' || typeof child === 'function') && child !== null) {
       if (typeof child === 'function' && '$path' in child) {
@@ -865,13 +871,13 @@ function brandModuleRefs(value: object, module: symbol): void {
         })
       }
       else {
-        brandModuleRefs(child as object, module)
+        markModuleRefs(child as object, module)
       }
     }
   }
 }
 
-function moduleRefOf(value: unknown): { readonly module: symbol, readonly path: readonly string[] } | undefined {
+function getModuleRef(value: unknown): { readonly module: symbol, readonly path: readonly string[] } | undefined {
   if (typeof value !== 'function')
     return undefined
   return (value as any)[VANITY_MODULE_TOKEN_REF]

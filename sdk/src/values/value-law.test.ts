@@ -1,33 +1,41 @@
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { createEngine } from '../engine/createEngine'
+import { angle, createSystem, length, number, rawValue } from '../index'
+import { substrate } from '../substrate'
+
+function createValueLawSystem() {
+  return substrate.modules.runInFileScope({
+    filePath: 'src/values/value-law.system.ts',
+    packageName: '@vanity/fixture',
+  }, () => {
+    const open = createSystem()
+    return open.addTokens({
+      channel: {
+        lightness: open.tdef({ val: number(0.6), mutable: true }),
+        chroma: open.tdef({ val: number(0.18), mutable: true }),
+        hue: open.tdef({ val: angle.deg(285), mutable: true }),
+      },
+      space: {
+        sm: open.tdef({ val: length.rem(0.5), mutable: true }),
+        md: open.tdef({ val: length.rem(1), mutable: true }),
+      },
+      image: {
+        hero: open.tdef({ val: rawValue.image('url(hero.png)') }),
+      },
+    }).consolidate()
+  })
+}
 
 describe('the value law — compatible handles are values', () => {
   it('serializes one handle vocabulary across value and declaration forms', () => {
     const { css, returned } = emit(() => {
-      const de = createEngine()
-      const ds = de.createSystem({
-        tokens: {
-          channel: {
-            lightness: de.token({ val: de.number(0.6), mutable: true }),
-            chroma: de.token({ val: de.number(0.18), mutable: true }),
-            hue: de.token({ val: de.angle.deg(285), mutable: true }),
-          },
-          space: {
-            sm: de.token({ val: de.length.rem(0.5), mutable: true }),
-            md: de.token({ val: de.length.rem(1), mutable: true }),
-          },
-          image: {
-            hero: de.token({ val: de.rawValue.image('url(hero.png)') }),
-          },
-        },
-      })
+      const ds = createValueLawSystem()
 
       const color = ds.oklch(ds.t.channel.lightness, ds.t.channel.chroma, ds.t.channel.hue)
       const calculation = ds.calc(ds.t.space.md).negate()
       const image = ds.lightDark(ds.rawValue.image('url(day.png)'), 'none')
       const tokenImage = ds.lightDark('none', ds.t.image.hero)
-      const className = ds.css({
+      const className = ds.class({
         color,
         marginInline: calculation,
         padding: ds.t.space.md,

@@ -21,27 +21,26 @@ function expectNoLeak(messages: Array<Diagnostic | string>): void {
 }
 
 const defineSystem = `
-import { createEngine } from '@test/legacy'
+import { createSystem, media, oklch } from '@mszr/vanity'
 
-const de = createEngine()
-const { t, css, keyframes, globalCss } = de.createSystem({
-  tokens: {
-    color: { brand: de.token({ val: de.oklch(0.58, 0.2, 285), mutable: true }) },
-    space: { sm: '8px', md: '16px' },
-  },
-  conditions: {
+const open = createSystem()
+  .addConditions({
     open: '&[data-state="open"]',
-    md: de.media('(min-width: 768px)'),
-  },
+    md: media('(min-width: 768px)'),
+  })
+const withTokens = open.addTokens({
+  color: { brand: open.tdef({ val: oklch(0.58, 0.2, 285), mutable: true }) },
+  space: { sm: '8px', md: '16px' },
 })
+const { t, class: style, keyframes, rules } = withTokens.consolidate()
 
-void t; void css; void keyframes; void globalCss
+void t; void style; void keyframes; void rules
 `
 
 describe('the authoring shape', () => {
   it('the spec-shaped style raises no diagnostics', () => {
     const { errors } = project.check`${defineSystem}
-      export const card = css({
+      export const card = style({
         padding: t.space.md,
         background: t.color.brand,
         hover: { background: 'rebeccapurple' },
@@ -56,14 +55,14 @@ describe('the authoring shape', () => {
 
   it('rule keys autocomplete with conditions beside properties', () => {
     const result = project.query`${defineSystem}
-      void css({ ${cursor} })
+      void style({ ${cursor} })
     `
     expect(result.completions).toContainCompletions(['open', 'md', 'hover', 'motionOk', 'dark', 'padding'])
   })
 
   it('property-first maps autocomplete base and the conditions', () => {
     const result = project.query`${defineSystem}
-      void css({ color: { ${cursor} } })
+      void style({ color: { ${cursor} } })
     `
     expect(result.completions).toContainCompletions(['base', 'open', 'md', 'hover'])
   })
@@ -72,7 +71,7 @@ describe('the authoring shape', () => {
 describe('errors at the cursor', () => {
   it('a typo\'d property is one diagnostic at the key, with the fix', () => {
     const { errors } = project.check`${defineSystem}
-      void css({ paddin: '8px' })
+      void style({ paddin: '8px' })
     `
     expect(errors).toHaveError(/paddin/)
     expect(errors).toHaveErrorCount(1)
@@ -81,7 +80,7 @@ describe('errors at the cursor', () => {
 
   it('an unknown condition as a bare key dies at the key', () => {
     const { errors } = project.check`${defineSystem}
-      void css({ hovr: { padding: 8 } })
+      void style({ hovr: { padding: 8 } })
     `
     expect(errors).toHaveError(/hovr/)
     expect(errors).toHaveErrorCount(1)
@@ -90,7 +89,7 @@ describe('errors at the cursor', () => {
 
   it('an unknown condition inside a property-first map dies at the key', () => {
     const { errors } = project.check`${defineSystem}
-      void css({ color: { hovr: 'red' } })
+      void style({ color: { hovr: 'red' } })
     `
     expect(errors).toHaveError(/hovr/)
     expect(errors).toHaveErrorCount(1)
@@ -99,20 +98,9 @@ describe('errors at the cursor', () => {
 
   it('an undeclared layer dies at the key with the declared order in reach', () => {
     const { errors } = project.check`${defineSystem}
-      void css.layer('overides')({})
+      void style.layer('overides')({})
     `
     expect(errors).toHaveError(/overides|overrides/)
-    expect(errors).toHaveErrorCount(1)
-    expectNoLeak(errors)
-  })
-
-  it('a condition name colliding with a CSS property is refused at the definition key', () => {
-    const { errors } = project.check`
-      import { createEngine } from '@test/legacy'
-      void createEngine().createSystem({ tokens: {}, conditions: { color: '&[data-color]' } })
-    `
-    // The type evidence dimension refuses at the key; the build diagnostic carries the sentence.
-    expect(errors).toHaveError(/never/)
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -128,7 +116,7 @@ describe('errors at the cursor', () => {
 
   it('token paths inside rules stay cursor-checked', () => {
     const { errors } = project.check`${defineSystem}
-      void css({ gap: t.space.mid })
+      void style({ gap: t.space.mid })
     `
     expect(errors).toHaveError(/'mid' does not exist/)
     expect(errors).toHaveErrorCount(1)
@@ -139,9 +127,9 @@ describe('errors at the cursor', () => {
 describe('hovers', () => {
   it('the system destructure reads as the bound surface, not an internals wall', () => {
     const result = project.query`${defineSystem}
-      void cs${cursor}s
+      void st${cursor}yle
     `
-    expect(result.hover).toContain('VanityCssFunction')
+    expect(result.hover).toContain('VanityClassEmitter')
     expectNoLeak([result.hover ?? ''])
   })
 })

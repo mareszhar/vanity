@@ -6,11 +6,11 @@
 
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { createSystem } from '../test-support/characterization'
+import { createFixtureSystem } from '../test-support/current'
 
 /** A tiny system: inline tokens, spec-shaped conditions, default layers. */
 function miniSystem() {
-  return createSystem({
+  return createFixtureSystem({
     tokens: {
       color: { brand: '#635bff' },
       space: { sm: '8px', md: '16px' },
@@ -23,12 +23,12 @@ function miniSystem() {
   })
 }
 
-describe('css()', () => {
+describe('class()', () => {
   it('compiles the spec card: both nesting directions, plain selectors, at-rules', () => {
     const { css: emitted } = emit(() => {
-      const { css, t } = miniSystem()
+      const { class: style, t } = miniSystem()
 
-      return css({
+      return style({
         'padding': t.space.md,
         'background': t.color.brand,
         'hover': { background: 'rebeccapurple' },
@@ -86,9 +86,9 @@ describe('css()', () => {
 
   it('intersects nested conditions into one arm', () => {
     const { css: emitted } = emit(() => {
-      const { css } = miniSystem()
+      const { class: style } = miniSystem()
 
-      return css({
+      return style({
         overflow: 'hidden',
         open: { motionOk: { animationDuration: '200ms' } },
       }, 'content')
@@ -127,9 +127,9 @@ describe('css()', () => {
 
   it('a comma-list condition multiplies through nesting', () => {
     const { css: emitted } = emit(() => {
-      const { css } = miniSystem()
+      const { class: style } = miniSystem()
 
-      return css({
+      return style({
         open: { hoverFocus: { outlineOffset: '2px' } },
       }, 'pair')
     })
@@ -141,9 +141,9 @@ describe('css()', () => {
 
   it('compiles the scheme conditions to pinned-subtree and preference arms', () => {
     const { css: emitted } = emit(() => {
-      const { css } = miniSystem()
+      const { class: style } = miniSystem()
 
-      return css({
+      return style({
         dark: { borderColor: 'white' },
       }, 'panel')
     })
@@ -181,10 +181,10 @@ describe('css()', () => {
 
   it('a class handle interpolates into a selector as a typed reference', () => {
     const { css: emitted } = emit(() => {
-      const { css } = miniSystem()
-      const button = css({ display: 'inline-flex' }, 'button')
+      const { class: style } = miniSystem()
+      const button = style({ display: 'inline-flex' }, 'button')
 
-      return css({
+      return style({
         display: 'flex',
         [`${button} + ${button}`]: { marginInlineStart: 0 },
         [`& ${button}`]: { borderRadius: 0 },
@@ -228,8 +228,8 @@ describe('css()', () => {
 
   it('numbers take the substrate unit rule: px where lengths, unitless where unitless', () => {
     const { css: emitted } = emit(() => {
-      const { css } = miniSystem()
-      return css({ padding: 8, lineHeight: 1.5, zIndex: 10, flexGrow: 1 }, 'numbers')
+      const { class: style } = miniSystem()
+      return style({ padding: 8, lineHeight: 1.5, zIndex: 10, flexGrow: 1 }, 'numbers')
     })
 
     expect(emitted).toMatchInlineSnapshot(`
@@ -263,9 +263,9 @@ describe('css()', () => {
 
   it('custom properties are plain keys; fallback arrays emit repeated declarations', () => {
     const { css: emitted } = emit(() => {
-      const { css } = miniSystem()
+      const { class: style } = miniSystem()
 
-      return css({
+      return style({
         '--track-size': 8,
         'position': ['-webkit-sticky', 'sticky'],
       }, 'escape')
@@ -301,9 +301,9 @@ describe('css()', () => {
 
   it('layers: declared once in order; styles land in the default layer or an explicit one', () => {
     const { css: emitted } = emit(() => {
-      const { css } = miniSystem()
-      css({ display: 'grid' }, 'inRecipes')
-      css.layer('overrides')({ maxWidth: '100%' }, 'fixup')
+      const { class: style } = miniSystem()
+      style({ display: 'grid' }, 'inRecipes')
+      style.layer('overrides')({ maxWidth: '100%' }, 'fixup')
     })
 
     expect(emitted).toMatchInlineSnapshot(`
@@ -339,9 +339,9 @@ describe('css()', () => {
 
   it('@starting-style and container conditions are plain keys', () => {
     const { css: emitted } = emit(() => {
-      const { css } = miniSystem()
+      const { class: style } = miniSystem()
 
-      return css({
+      return style({
         'opacity': 1,
         '@starting-style': { opacity: 0 },
         'cardWide': { padding: '24px' },
@@ -385,16 +385,16 @@ describe('css()', () => {
   })
 })
 
-describe('keyframes and globalCss', () => {
+describe('keyframes and rules', () => {
   it('keyframes emit under the export-held name; the handle interpolates', () => {
     const { css: emitted } = emit(() => {
-      const { css, keyframes } = miniSystem()
+      const { class: style, keyframes } = miniSystem()
       const slideDown = keyframes({
         from: { blockSize: 0, opacity: 0 },
         to: { blockSize: '100px', opacity: 1 },
       }, 'slideDown')
 
-      return css({
+      return style({
         open: { motionOk: { animation: `${slideDown} 200ms ease-out` } },
       }, 'accordion')
     })
@@ -440,15 +440,15 @@ describe('keyframes and globalCss', () => {
     `)
   })
 
-  it('globalCss lands in the reset layer with conditions intact', () => {
+  it('rules lands in the reset layer with conditions intact', () => {
     const { css: emitted } = emit(() => {
-      const { globalCss, t } = miniSystem()
+      const { rules, t } = miniSystem()
 
-      globalCss('html, body', {
+      rules({ 'html, body': {
         margin: 0,
         background: t.color.brand,
         motionReduce: { scrollBehavior: 'auto' },
-      })
+      } })
     })
 
     expect(emitted).toMatchInlineSnapshot(`
@@ -484,12 +484,12 @@ describe('keyframes and globalCss', () => {
   })
 })
 
-describe('css.raw', () => {
+describe('raw', () => {
   it('scopes a raw block under the generated class, descendants included', () => {
     const { css: emitted } = emit(() => {
-      const { css, t } = miniSystem()
+      const { raw, t } = miniSystem()
 
-      return css.raw`
+      return raw`
         h2 { margin-block: 1.5em 0.5em; }
         a {
           color: ${t.color.brand};

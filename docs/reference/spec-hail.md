@@ -1,6 +1,6 @@
 # vanity — spec: Hail
 
-Hail is Vanity’s opinionated layer: one configurable, independently deletable plugin that installs ergonomic constructors, design controls, token presets, and named system rules. Core remains an opinion-free design-system engine and TypeScript harness for CSS.
+Hail is Vanity’s opinionated layer: one configurable, independently deletable plugin that installs ergonomic constructors, design controls, token presets, and named system rules. Core remains an opinion-free design-system capability set for typed CSS.
 
 Every entry states the durable behavior and why it matters before naming the implementation.
 
@@ -247,6 +247,6 @@ const optOut = { presets: { mode: 'opt-out', listed: ['motion'] } } as const
 
 ## 12. Packaging and evidence
 
-Hail is authored from public detached token, constructor, utility, and rule modules. Plugin setup uses only additive public methods. It has no privileged compiler or engine hook.
+Hail is authored from public detached token, constructor, utility, and rule modules. Plugin setup uses only additive public methods. It has no privileged compiler or system hook.
 
 Release evidence includes runtime, output, exact type, and Selenita suites; every color family and authoring mode; control-resolution output; scheme-live elevation; preset selection; ownership/introspection; packed `/presets` consumption; and the Hail-backed flagship.

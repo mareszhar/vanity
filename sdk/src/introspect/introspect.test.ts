@@ -7,16 +7,24 @@
  */
 
 import { definePrismSystem, emit } from '@test'
-import { createEngine, unsafe } from '@test/legacy'
 import { describe, expect, it } from 'vitest'
-import { collectInspection } from '../internal/inspect'
+import { createSystem, unsafe } from '../index'
+import { substrate } from '../substrate'
 import { buildAgentContext, generateAgentContext } from './agent'
-import { buildManifest, countVarRefs, manifestModules, manifestTokenUsage } from './manifest'
+import { buildManifest, countVariableReferences, createManifestModules, getManifestTokenUsage } from './manifest'
+import { collectInspection } from './records'
+
+function locked(open: { readonly consolidate: (options?: object) => object }, options: object = {}) {
+  return substrate.modules.runInFileScope({
+    filePath: 'src/introspect/introspect.system.ts',
+    packageName: '@vanity/introspect-fixture',
+  }, () => open.consolidate(options)) as any
+}
 
 /** Prism plus a representative styled surface, collected as the plugin would. */
 function prismManifest() {
   const { records, result } = collectInspection(() => emit(() => {
-    const { t, css, recipe, port, globalCss, atoms: makeAtoms } = definePrismSystem()
+    const { t, class: style, raw, rules, recipe, port, atoms: makeAtoms } = definePrismSystem()
 
     const fraction = port(0, { label: 'fraction' })
 
@@ -34,12 +42,11 @@ function prismManifest() {
       ports: { fraction },
     }, 'button')
 
-    const fill = css({ inlineSize: `calc(${fraction} * 100%)`, background: t.color.brand }, 'fill')
-    const promo = css.layer('overrides')({ padding: t.space.lg }, 'promo')
-    const prose = css.raw`h2 { margin-block: 0.5rem; }`
+    const fill = style({ inlineSize: `calc(${fraction} * 100%)`, background: t.color.brand }, 'fill')
+    const promo = style.layer('overrides')({ padding: t.space.lg }, 'promo')
+    const prose = raw`h2 { margin-block: 0.5rem; }`
 
-    globalCss('body', { color: t.color.ink })
-    globalCss('.third-party-widget', { borderRadius: t.radius.md })
+    rules({ 'body': { color: t.color.ink }, '.third-party-widget': { borderRadius: t.radius.md } })
 
     const atoms = makeAtoms({ properties: { gap: { sm: t.space.sm } } }, 'atoms')
     const escaped = atoms({ gap: unsafe.value('37px', 'editorial measure') })
@@ -52,15 +59,15 @@ function prismManifest() {
 
 describe('the manifest', () => {
   const { manifest, css } = prismManifest()
-  const modules = manifestModules(manifest)
+  const modules = createManifestModules(manifest)
   const recipes = Object.assign({}, ...modules.map(module => module.recipes))
   const ports = Object.assign({}, ...modules.map(module => module.ports))
   const escapes = modules.flatMap(module => module.escapes)
   const contrast = modules.flatMap(module => module.contrast)
-  const usage = manifestTokenUsage(manifest)
+  const usage = getManifestTokenUsage(manifest)
 
   it('is versioned and carries the system: layers in order, conditions serialized', () => {
-    expect(manifest.version).toBe(3)
+    expect(manifest.version).toBe(4)
     expect(manifest.system.layers.map(layer => layer.name)).toEqual(['reset', 'tokens', 'recipes', 'utilities', 'overrides'])
     expect(manifest.system.conditions.open.readable).toBe('&[data-state="open"]')
     expect(manifest.system.conditions.md.readable).toBe('@media (min-width: 768px)')
@@ -102,7 +109,7 @@ describe('the manifest', () => {
     expect(usage['color.brand']).toBe(2)
     // canvas: defined, never referenced anywhere.
     expect(usage['color.canvas']).toBe(0)
-    // ink: used once, by the body globalCss.
+    // ink: used once, by the body rule.
     expect(usage['color.ink']).toBe(1)
   })
 
@@ -120,13 +127,13 @@ describe('the manifest', () => {
     expect(ports['prism.fraction'].var).toMatch(/^--vanity-fraction/)
   })
 
-  it('inventories every escape: css.raw, unsafe, foreign globalCss, overrides layer', () => {
+  it('inventories every escape: raw, unsafe, foreign rules, overrides layer', () => {
     const forms = escapes.map(escape => escape.form)
 
-    expect(forms).toContain('css.raw')
+    expect(forms).toContain('raw')
     expect(forms).toContain('unsafe')
     expect(forms).toContain('overrides')
-    expect(forms.filter(form => form === 'globalCss')).toHaveLength(2)
+    expect(forms.filter(form => form === 'rules')).toHaveLength(2)
 
     const unsafeEscape = escapes.find(escape => escape.form === 'unsafe')!
     expect(unsafeEscape.detail).toBe('gap: 37px')
@@ -142,15 +149,16 @@ describe('the manifest', () => {
   })
 
   it('the emitted CSS itself still carries every reference the counts claim', () => {
-    expect(countVarRefs(css, '--vanity-color-brand')).toBeGreaterThanOrEqual(2)
-    expect(countVarRefs('var(--vanity-a) var(--vanity-a, 1px) var(--vanity-a-b)', '--vanity-a')).toBe(2)
+    expect(countVariableReferences(css, '--vanity-color-brand')).toBeGreaterThanOrEqual(2)
+    expect(countVariableReferences('var(--vanity-a) var(--vanity-a, 1px) var(--vanity-a-b)', '--vanity-a')).toBe(2)
   })
 })
 
 describe('the audit config', () => {
   it('rides the system record into the manifest', () => {
-    const { records, result } = collectInspection(() => emit(() =>
-      createEngine().createSystem({ tokens: { space: { sm: '8px' } }, audit: { unusedTokens: 'error' } })))
+    const open = createSystem().addTokens({ space: { sm: '8px' } })
+    const ds = locked(open, { audit: { unusedTokens: 'error' } })
+    const { records, result } = collectInspection(() => emit(() => ds.class({ padding: ds.t.space.sm })))
 
     expect(buildManifest(records, result.css).system.audits.unusedTokens.level).toBe('error')
   })
@@ -158,22 +166,17 @@ describe('the audit config', () => {
 
 describe('structured explanation and agent context', () => {
   it('explains one token from source expression through declarations and runtime slots', () => {
-    const de = createEngine().axes(({ scheme }) => ({ scheme: scheme({ locality: 'root' }) }))
-    const explanation = emit(() => {
-      const ds = de.createSystem({
-        prefix: 'app',
-        tokens: de.defineTokens({
-          color: {
-            brand: de.token({
-              val: de.oklch(0.58, 0.2, 285),
-              mutable: true,
-              axes: { scheme: { dark: de.oklch(0.72, 0.14, 285) } },
-            }),
-          },
+    const open = createSystem().addAxis('scheme', { modes: { light: '&', dark: '&[data-scheme=dark]' }, default: 'light' })
+    const ds = locked(open.addTokens(open.defineTokens({
+      color: {
+        brand: open.tdef({
+          val: open.oklch(0.58, 0.2, 285),
+          mutable: true,
+          axes: { scheme: { dark: open.oklch(0.72, 0.14, 285) } },
         }),
-      })
-      return ds.explain(ds.t.color.brand)
-    }).returned
+      },
+    })), { prefix: 'app' })
+    const explanation = ds.explain(ds.t.color.brand)
 
     expect(explanation).toMatchObject({
       path: ['color', 'brand'],
@@ -185,7 +188,7 @@ describe('structured explanation and agent context', () => {
       runtime: { addresses: expect.arrayContaining([expect.objectContaining({ address: { kind: 'base' } })]) },
       portability: { status: 'portable' },
     })
-    expect(explanation.declarations.some(declaration => declaration.kind === 'axis')).toBe(true)
+    expect(explanation.declarations.some((declaration: any) => declaration.kind === 'axis')).toBe(true)
     expect(explanation.branches).toContainEqual(expect.objectContaining({
       address: { kind: 'axis', axis: 'scheme', mode: 'dark' },
     }))

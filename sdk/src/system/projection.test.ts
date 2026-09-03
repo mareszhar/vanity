@@ -155,8 +155,8 @@ describe('the permanent plain-system projection canary', () => {
       local(`../../../sandbox/canary/.vanity/systems/${manifest.system.identities.compatibility}.json`),
       'utf-8',
     ))
-    expect(manifest.system.format).toBe('vanity.introspection/1')
-    expect(artifact.format).toBe('vanity.system/1')
+    expect(manifest.system.format).toBe('vanity.introspection/2')
+    expect(artifact.format).toBe('vanity.system/2')
     expect(manifest.system.identities).toEqual(artifact.identities)
     expect(Object.keys(manifest.system.identities).sort()).toEqual([
       'compatibility',

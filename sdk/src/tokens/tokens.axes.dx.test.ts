@@ -5,17 +5,16 @@ import { describe, expect, it } from 'vitest'
 const project = vanityProject()
 
 describe('axis editor DX', () => {
-  it('discovers axis helpers, axis names, modes, and ordered handles', () => {
+  it('discovers axis names, modes, order, and canonical branch handles', () => {
     const result = project.query`
-      import { createEngine } from '@test/legacy'
-      const de = createEngine().axes(({ axis, data, defaultMode, scheme }) => ({
-        scheme: scheme(),
-        density: axis({ modes: { cozy: defaultMode(), compact: data('density', 'compact') } }),
-      }))
-      const ordered = de.axisOrder(${cursor('order')})
-      ordered.token({ val: '1rem', axes: { ${cursor('axes')}: {} } })
-      const token = ordered.token({ val: '1rem', axes: { scheme: { ${cursor('modes')}: '0.75rem' } } })
-      const ds = ordered.createSystem({ tokens: { space: { control: token } } })
+      import { colorSchemes, createSystem, data } from '@mszr/vanity'
+      const open = createSystem().addAxis('scheme', colorSchemes()).addAxis('density', {
+        modes: { cozy: '&', compact: data('density', 'compact') },
+      })
+      const token = open.tdef({ val: '1rem', axes: { scheme: { dark: '0.75rem' } } })
+      const ds = open.addTokens({ space: { control: token } }).consolidate({ axisOrder: [${cursor('order')}] })
+      open.tdef({ val: '1rem', axes: { ${cursor('axes')}: {} } })
+      open.tdef({ val: '1rem', axes: { scheme: { ${cursor('modes')}: '0.75rem' } } })
       void ds.t.space.control.$axes.${cursor('handleAxes')}
     `
 
@@ -27,18 +26,17 @@ describe('axis editor DX', () => {
 
   it('keeps invalid axes, modes, and incomplete order diagnostics local', () => {
     const { errors } = project.check`
-      import { createEngine } from '@test/legacy'
-      const de = createEngine().axes(({ axis, data, scheme }) => ({
-        scheme: scheme(),
-        density: axis({ modes: { compact: data('density', 'compact') } }),
-      }))
-      de.axisOrder('scheme')
-      de.token({ val: 'red', axes: { scheme: { midnight: 'black' } } })
-      de.token({ val: 'red', axes: { contrast: { high: 'black' } } })
+      import { colorSchemes, createSystem, data } from '@mszr/vanity'
+      const open = createSystem().addAxis('scheme', colorSchemes()).addAxis('density', {
+        modes: { compact: data('density', 'compact') },
+      })
+      open.consolidate({ axisOrder: ['scheme'] })
+      open.tdef({ val: 'red', axes: { scheme: { midnight: 'black' } } })
+      open.tdef({ val: 'red', axes: { contrast: { high: 'black' } } })
     `
 
     expect(errors).toHaveErrorCount(3)
-    expect(errors).toHaveError(/axisOrder|never|scheme/)
+    expect(errors).toHaveError(/axisOrder|never|density/)
     expect(errors).toHaveError(/midnight|never/)
     expect(errors).toHaveError(/contrast|never/)
   })

@@ -1,7 +1,7 @@
 import type { VanityTokenDeclarations } from './types'
 import { VanityError } from '../diagnostics'
-import { isHandle } from '../internal/handle'
-import { requireStyleModule } from '../internal/styleModule'
+import { substrate } from '../substrate'
+import { isHandle } from '../tokens/handle'
 import { serializeStyleValue } from './values'
 
 export const VANITY_DEFERRED_TDEC = Symbol.for('vanity.deferredTdec')
@@ -19,7 +19,7 @@ export function tokenDeclarations<T extends object>(
   tokens: T,
   input: VanityTokenDeclarations<T>,
 ): Record<`--${string}`, string | number> {
-  const file = requireStyleModule('tdec')
+  const file = substrate.modules.requireStyleModule('tdec')
   const declarations: Record<string, string | number> = {}
   collect(tokens, input as object, [], declarations, file)
   return declarations
@@ -30,7 +30,7 @@ export function tokenDeclarations<T extends object>(
  * prefix. The locked rule compiler resolves this token-shaped payload against
  * the final graph when the utility is used in a style module.
  */
-export function deferredTokenDeclarations<T extends object>(
+export function createDeferredTokenDeclarations<T extends object>(
   tokens: T,
   input: VanityTokenDeclarations<T>,
 ): VanityDeferredTokenDeclarations {
@@ -41,7 +41,7 @@ export function deferredTokenDeclarations<T extends object>(
   })) as VanityDeferredTokenDeclarations
 }
 
-export function deferredTokenDeclarationInput(value: object): object | undefined {
+export function resolveDeferredTokenDeclarationInput(value: object): object | undefined {
   return VANITY_DEFERRED_TDEC in value
     ? (value as VanityDeferredTokenDeclarations)[VANITY_DEFERRED_TDEC]
     : undefined

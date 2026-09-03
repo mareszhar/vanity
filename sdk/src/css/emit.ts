@@ -8,22 +8,28 @@
  */
 
 import type { VanityArm, VanityCompiled, VanityUnit } from './rule'
-import { globalStyle, style } from '@vanilla-extract/css'
+import { substrate } from '../substrate'
 import { splitTopLevel } from './rule'
 
 type SubstrateRule = Record<string, unknown>
 
 export function emitStyle(compiled: VanityCompiled, debugId?: string): string {
-  const layer = qualifiedLayer(compiled)
+  const layer = getQualifiedLayer(compiled)
   const [baseUnit, rest] = splitBase(compiled.units)
-  const className = style(inLayer(layer, toSubstrateRule(baseUnit?.declarations ?? {})), debugId)
+  const className = substrate.css.emitClassRule({
+    rule: applyLayer(layer, toSubstrateRule(baseUnit?.declarations ?? {})),
+    debugId,
+  })
 
   for (const unit of rest) {
     const selector = unit.arm.selector === undefined
       ? className
       : unit.arm.selector.replaceAll('&', className)
 
-    globalStyle(selector, inLayer(layer, wrapAtRules(unit.arm, toSubstrateRule(unit.declarations))))
+    substrate.css.emitGlobalRule({
+      selector,
+      rule: applyLayer(layer, applyAtRules(unit.arm, toSubstrateRule(unit.declarations))),
+    })
   }
 
   return className
@@ -35,31 +41,37 @@ export function emitStyle(compiled: VanityCompiled, debugId?: string): string {
  * need every part's class name first), so their rules land here.
  */
 export function emitOnto(className: string, compiled: VanityCompiled): void {
-  const layer = qualifiedLayer(compiled)
+  const layer = getQualifiedLayer(compiled)
 
   for (const unit of compiled.units) {
     const selector = unit.arm.selector === undefined
       ? className
       : unit.arm.selector.replaceAll('&', className)
 
-    globalStyle(selector, inLayer(layer, wrapAtRules(unit.arm, toSubstrateRule(unit.declarations))))
+    substrate.css.emitGlobalRule({
+      selector,
+      rule: applyLayer(layer, applyAtRules(unit.arm, toSubstrateRule(unit.declarations))),
+    })
   }
 }
 
 export function emitGlobal(selector: string, compiled: VanityCompiled): void {
-  const layer = qualifiedLayer(compiled)
+  const layer = getQualifiedLayer(compiled)
 
   for (const unit of compiled.units) {
     const resolved = unit.arm.selector === undefined
       ? selector
       : composeOnto(selector, unit.arm.selector)
 
-    globalStyle(resolved, inLayer(layer, wrapAtRules(unit.arm, toSubstrateRule(unit.declarations))))
+    substrate.css.emitGlobalRule({
+      selector: resolved,
+      rule: applyLayer(layer, applyAtRules(unit.arm, toSubstrateRule(unit.declarations))),
+    })
   }
 }
 
 /** `recipes` under root `prism` → `prism.recipes` — the emitted, namespaced form. */
-function qualifiedLayer(compiled: VanityCompiled): string {
+function getQualifiedLayer(compiled: VanityCompiled): string {
   return `${compiled.layerRoot}.${compiled.layer}`
 }
 
@@ -92,7 +104,7 @@ export function toSubstrateRule(declarations: Record<string, string | number | A
   return vars === undefined ? rule : { ...rule, vars }
 }
 
-export function wrapAtRules(arm: VanityArm, rule: SubstrateRule): SubstrateRule {
+export function applyAtRules(arm: VanityArm, rule: SubstrateRule): SubstrateRule {
   let wrapped = rule
 
   if (arm.startingStyle)
@@ -113,7 +125,7 @@ export function wrapAtRules(arm: VanityArm, rule: SubstrateRule): SubstrateRule 
   return wrapped
 }
 
-export function inLayer(layer: string, rule: SubstrateRule): SubstrateRule {
+export function applyLayer(layer: string, rule: SubstrateRule): SubstrateRule {
   return { '@layer': { [layer]: rule } }
 }
 

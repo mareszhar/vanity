@@ -9,8 +9,8 @@ import type {
   VanityPortStyle,
   VanityPortValue,
 } from './types'
-import { isHandle } from '../internal/handle'
 import { explainable } from '../introspect/semantic'
+import { isHandle } from '../tokens/handle'
 import { isCssValue, isVanityValue } from '../values/types'
 
 const PORT = Symbol.for('vanity.port')

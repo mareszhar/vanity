@@ -3,9 +3,10 @@ import { createSystem, data } from '@mszr/vanity'
 import { emit } from '@test'
 import Ajv2020 from 'ajv/dist/2020.js'
 import { describe, expect, it } from 'vitest'
-import { collectInspection } from '../internal/inspect'
+import { assertManifest } from '../cli'
 import { diffManifests } from './diff'
 import { buildManifest } from './manifest'
+import { collectInspection } from './records'
 
 function fixture(value = 'red', description = 'Brand color') {
   const origin = createSystem()
@@ -33,15 +34,15 @@ function manifestOf(ds: ReturnType<typeof fixture>) {
 }
 
 describe('canonical introspection', () => {
-  it('uses the exact same canonical map for ds.introspect() and Manifest v3', () => {
+  it('uses the exact same canonical map for ds.introspect() and Manifest v4', () => {
     const ds = fixture()
     const manifest = manifestOf(ds)
 
     expect(manifest.system).toEqual(ds.introspect())
     expect(JSON.stringify(manifest.system)).toBe(JSON.stringify(ds.introspect()))
     expect(manifest.system).toMatchObject({
-      format: 'vanity.introspection/1',
-      version: 1,
+      format: 'vanity.introspection/2',
+      version: 2,
       prefix: 'phase10',
       tokens: { 'color.brand': { id: 'token:color.brand', owner: { kind: 'system' } } },
       axes: { density: { id: 'axis:density', description: 'Layout density.' } },
@@ -86,6 +87,48 @@ describe('canonical introspection', () => {
 
     expect(validate(manifestOf(fixture()))).toBe(true)
     expect(validate.errors).toBeNull()
+  })
+
+  it('rejects malformed, legacy, unknown, and semantically invalid Manifest v4 data at the CLI boundary', () => {
+    const manifest = manifestOf(fixture())
+    expect(() => assertManifest(manifest)).not.toThrow()
+    const { modules: _modules, ...withoutModules } = manifest
+    const { runtime: _runtime, ...withoutRuntime } = manifest.system
+    const moduleId = Object.keys(manifest.modules)[0]!
+
+    expect(() => assertManifest(withoutModules)).toThrow(/modules.*required/)
+    expect(() => assertManifest({ ...manifest, engine: {} })).toThrow(/engine.*not a property/)
+    expect(() => assertManifest({ ...manifest, version: 3 })).toThrow(/version.*must be 4/)
+    expect(() => assertManifest({ ...manifest, format: 'vanity.manifest/3', version: 3 })).toThrow(/format.*must be/)
+    expect(() => assertManifest({
+      ...manifest,
+      system: withoutRuntime,
+    })).toThrow(/runtime.*required/)
+    expect(() => assertManifest({
+      ...manifest,
+      system: {
+        ...manifest.system,
+        policies: { ...manifest.system.policies, tokens: { reference: 'inline' } },
+      },
+    })).toThrow(/policies\.tokens\.reference.*var or val/)
+    const [constructorName, constructor] = Object.entries(manifest.system.constructors)[0]!
+    expect(() => assertManifest({
+      ...manifest,
+      system: {
+        ...manifest.system,
+        constructors: {
+          ...manifest.system.constructors,
+          [constructorName]: { ...constructor, origin: { kind: 'unknown' } },
+        },
+      },
+    })).toThrow(/origin\.kind.*builtin, system, plugin, or extension|origin.*must be/)
+    expect(() => assertManifest({
+      ...manifest,
+      modules: {
+        ...manifest.modules,
+        [moduleId]: { ...manifest.modules[moduleId], stale: true },
+      },
+    })).toThrow(/stale.*not a property/)
   })
 
   it('categorizes docs-only and CSS-only evolution independently', () => {

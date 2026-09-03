@@ -18,7 +18,7 @@ export function protectRelativeColorSyntax(postcss: unknown): void {
     return
 
   if (configured === true) {
-    postcss.plugins.cssnano = withSafeDefaultPreset({})
+    postcss.plugins.cssnano = createSafePresetOptions({})
     return
   }
 
@@ -28,12 +28,12 @@ export function protectRelativeColorSyntax(postcss: unknown): void {
   const preset = configured.preset
 
   if (preset == null) {
-    configured.preset = safeDefaultPreset()
+    configured.preset = createSafeDefaultPreset()
     return
   }
 
   if (preset === 'default') {
-    configured.preset = safeDefaultPreset()
+    configured.preset = createSafeDefaultPreset()
     return
   }
 
@@ -43,11 +43,11 @@ export function protectRelativeColorSyntax(postcss: unknown): void {
   }
 }
 
-function withSafeDefaultPreset(options: Record<string, unknown>): Record<string, unknown> {
-  return { ...options, preset: safeDefaultPreset() }
+function createSafePresetOptions(options: Record<string, unknown>): Record<string, unknown> {
+  return { ...options, preset: createSafeDefaultPreset() }
 }
 
-function safeDefaultPreset(): ['default', { calc: false }] {
+function createSafeDefaultPreset(): ['default', { calc: false }] {
   return ['default', { calc: false }]
 }
 

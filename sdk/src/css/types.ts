@@ -13,7 +13,7 @@ import type {
   VanityConditionKeyHover,
   VanityConditionKeyName,
 } from '../system/conditions'
-import type { VanityAuthoredColor, VanityColor, VanityTokenFallback, VanityTokenHandleAny } from '../tokens/types'
+import type { VanityAuthoredColor, VanityTokenFallback, VanityTokenHandleAny } from '../tokens/types'
 import type { VanityCssValue, VanityTokenInput } from '../values/types'
 
 type CSSTypeProperties = CSS.Properties<number | (string & {})>
@@ -38,7 +38,7 @@ export interface VanityVarReference {
  * design — the token map guides, it never gates.
  */
 export type VanityStyleValue<P extends VanityCssPropertyName = VanityCssPropertyName>
-  = CSSTypeProperties[P] | VanityVarReference | VanityTokenInput | VanityColor<any> | VanityAuthoredColor | VanityCssValue | VanityOmit
+  = CSSTypeProperties[P] | VanityVarReference | VanityTokenInput | VanityAuthoredColor | VanityCssValue | VanityOmit
 
 declare const VANITY_RULE_CONDITION: unique symbol
 declare const VANITY_FRAGMENT: unique symbol
@@ -97,7 +97,6 @@ type VanityRuleScalar
     | number
     | VanityVarReference
     | VanityTokenInput
-    | VanityColor<any>
     | VanityAuthoredColor
     | VanityCssValue
     | readonly (string | number | VanityVarReference | VanityTokenInput | VanityAuthoredColor | VanityCssValue)[]
@@ -146,7 +145,7 @@ export type VanityNestedRule<C extends string>
     & VanitySelectorRules<C>
     & VanityAtRules<C>
 
-/** What `css()` takes: a rule, optionally re-homed to another declared layer. */
+/** What `class()` takes: a rule, optionally re-homed to another declared layer. */
 export type VanityStyleRule<C extends string, _L extends string = string> = VanityNestedRule<C>
 
 /** Ordered style input. Arrays concatenate contributions; they never deep-merge. */
@@ -169,7 +168,7 @@ export type VanityTokenDeclarations<T> = {
 
 // Alias declarations layer onto the stable standard grammar. Keeping the
 // alias map shallow avoids cloning csstype's 870-property recursive graph for
-// every engine/plugin chain while preserving exact keys and target values.
+// every system/plugin chain while preserving exact keys and target values.
 type VanityAliasDeclarations<
   C extends string,
   Aliases extends VanityPropertyAliasMap,
@@ -345,26 +344,12 @@ export type VanityFontFaceRule
 
 // ─── The bound authoring functions ───────────────────────────────────────────
 
-export type VanityRawValue = string | number | VanityVarReference | VanityTokenInput | VanityColor<any> | VanityAuthoredColor | VanityCssValue
+export type VanityRawValue = string | number | VanityVarReference | VanityTokenInput | VanityAuthoredColor | VanityCssValue
 
 export interface VanityRawEmitter<L extends string> {
   (css: string): void
   (strings: TemplateStringsArray, ...values: VanityRawValue[]): void
   readonly layer: <Layer extends L>(name: Layer) => VanityRawEmitter<Layer>
-}
-
-interface VanityCssMembers<C extends string, L extends string> {
-  /** Full platform-property form, even when the primary alias policy is aliases-only. */
-  standard: VanityClassEmitter<C, L>
-  /** The escape hatch is CSS itself: parsed, validated, scoped under the class ([§8]). */
-  raw: (strings: TemplateStringsArray, ...values: VanityRawValue[]) => string
-  /** Bind this emitter to one declared layer. */
-  layer: <Layer extends L>(name: Layer) => VanityCssFunction<C, Layer>
-}
-
-export interface VanityCssFunction<C extends string, L extends string> extends VanityCssMembers<C, L> {
-  /** The style unit: a scoped class whose rules compile away ([spec-css.md §2]). */
-  (rule: VanityRuleInput<C>, debugId?: string): string
 }
 
 /** The target spelling for one generated class. */
@@ -387,19 +372,6 @@ export interface VanityFragmentFactory<C extends string> {
   <const Contributions extends readonly VanityRuleInput<C>[]>(
     contributions: Contributions,
   ): Contributions
-}
-
-/** Alias-aware authoring form installed only by the optional property-alias plugin. */
-export interface VanityPropertyAliasCssFunction<
-  C extends string,
-  L extends string,
-  Aliases extends VanityPropertyAliasMap,
-> extends VanityCssMembers<C, L> {
-  <const Rule extends VanityAliasedStyleRule<C, L, Aliases>>(
-    rule: Rule
-      & VanityAliasRuleKeyGuard<Rule, C, L, Aliases>,
-    debugId?: string,
-  ): string
 }
 
 export interface VanityPropertyAliasClassEmitter<
@@ -456,18 +428,6 @@ export interface VanityPropertyAliasFragmentFactory<
   ): Contributions
 }
 
-/** Strict primary vocabulary: aliased target spellings disappear from completion. */
-export interface VanityStrictPropertyAliasCssFunction<
-  C extends string,
-  L extends string,
-  Aliases extends VanityPropertyAliasMap,
-> extends VanityCssMembers<C, L> {
-  (
-    rule: VanityStrictAliasedStyleRule<C, L, Aliases>,
-    debugId?: string,
-  ): string
-}
-
 export interface VanityStrictPropertyAliasClassEmitter<
   C extends string,
   L extends string,
@@ -518,9 +478,6 @@ export interface VanityStrictPropertyAliasFragmentFactory<
       & VanityStrictPropertyAliasContributionsGuard<Contributions, C, L, Aliases>,
   ): Contributions
 }
-
-export type VanityGlobalCssFunction<C extends string, _L extends string>
-  = (selector: string, rule: VanityRuleInput<C>) => void
 
 export interface VanityKeyframesFunction<L extends string = string> {
   (steps: VanityKeyframesRule, debugId?: string): string

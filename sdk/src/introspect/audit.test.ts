@@ -4,17 +4,33 @@
  * escape inventory, scale strays. Advisory by default, promotable per system.
  */
 
-import { createSystem as createOpenSystem, propertyAliases as openPropertyAliases } from '@mszr/vanity'
+import {
+  axis,
+  createSystem,
+  defineCssValue,
+  definePlugin,
+  propertyAliases,
+  unsafe,
+} from '@mszr/vanity'
 import { emit } from '@test'
-import { createEngine, defineEnginePlugin, unsafe } from '@test/legacy'
 import { describe, expect, it } from 'vitest'
-import { collectInspection } from '../internal/inspect'
+import { substrate } from '../substrate'
+import { createAxisCondition } from '../system/axes'
 import { audit, formatAuditFindings } from './audit'
 import { buildManifest } from './manifest'
+import { collectInspection } from './records'
 
-const core = createEngine()
-const createSystem = core.createSystem
-const defineTokens = core.defineTokens
+function locked(open: { readonly consolidate: (options?: object) => object }, options: object = {}) {
+  return substrate.modules.runInFileScope({
+    filePath: 'src/introspect/audit.system.ts',
+    packageName: '@vanity/introspect-fixture',
+  }, () => open.consolidate(options)) as any
+}
+
+function system(tokens: object, options: object = {}) {
+  const open = createSystem()
+  return locked(open.addTokens(tokens as any), options)
+}
 
 /** Build a manifest + CSS from a style-module body, exactly as the plugin would. */
 function built(body: () => unknown) {
@@ -24,10 +40,8 @@ function built(body: () => unknown) {
 
 describe('unused tokens', () => {
   it('flags a token nothing references, with the delete-or-deprecate fix', () => {
-    const { manifest, css } = built(() => {
-      const { t, css: style } = createSystem({ tokens: { space: { sm: '8px', md: '16px' } } })
-      return style({ padding: t.space.sm }, 'card')
-    })
+    const ds = system({ space: { sm: '8px', md: '16px' } })
+    const { manifest, css } = built(() => ds.class({ padding: ds.t.space.sm }, 'card'))
 
     const findings = audit(manifest, css)
     const unused = findings.filter(finding => finding.kind === 'unusedTokens')
@@ -38,17 +52,15 @@ describe('unused tokens', () => {
   })
 
   it('a token feeding a used derivation is used; a deprecated token is already handled', () => {
-    const { manifest, css } = built(() => {
-      const { t, css: style } = createSystem({
-        tokens: defineTokens({
-          color: {
-            seed: core.token({ val: core.oklch(0.58, 0.2, 285), mutable: true }),
-            retired: core.token({ val: core.oklch(0.5, 0.1, 100), deprecated: { reason: 'use color.seed' } }),
-          },
-        }).derive(m => ({ color: { tint: core.alpha(m.color.seed, 0.12) } })),
-      })
-      return style({ background: t.color.tint }, 'card')
-    })
+    const open = createSystem()
+    const tokens = open.defineTokens({
+      color: {
+        seed: open.tdef({ val: open.oklch(0.58, 0.2, 285), mutable: true }),
+        retired: open.tdef({ val: open.oklch(0.5, 0.1, 100), deprecated: { reason: 'use color.seed' } }),
+      },
+    }).add(m => ({ color: { tint: open.alpha(m.color.seed, 0.12) } }))
+    const ds = locked(open.addTokens(tokens))
+    const { manifest, css } = built(() => ds.class({ background: ds.t.color.tint }, 'card'))
 
     const paths = audit(manifest, css)
       .filter(finding => finding.kind === 'unusedTokens')
@@ -61,10 +73,8 @@ describe('unused tokens', () => {
 
 describe('near-duplicate values', () => {
   it('flags a raw color that reads as an existing token, naming the token', () => {
-    const { manifest, css } = built(() => {
-      const { css: style } = createSystem({ tokens: { color: { brand: '#635bff' } } })
-      return style({ background: '#645cff' }, 'card') // one step off the token
-    })
+    const ds = system({ color: { brand: '#635bff' } })
+    const { manifest, css } = built(() => ds.class({ background: '#645cff' }, 'card')) // one step off the token
 
     const findings = audit(manifest, css).filter(finding => finding.kind === 'nearDuplicates')
 
@@ -74,10 +84,8 @@ describe('near-duplicate values', () => {
   })
 
   it('stays silent on genuinely different colors and var-borne values', () => {
-    const { manifest, css } = built(() => {
-      const { t, css: style } = createSystem({ tokens: { color: { brand: '#635bff' } } })
-      return style({ background: t.color.brand, color: '#11aa22' }, 'card')
-    })
+    const ds = system({ color: { brand: '#635bff' } })
+    const { manifest, css } = built(() => ds.class({ background: ds.t.color.brand, color: '#11aa22' }, 'card'))
 
     expect(audit(manifest, css).filter(finding => finding.kind === 'nearDuplicates')).toEqual([])
   })
@@ -85,13 +93,11 @@ describe('near-duplicate values', () => {
 
 describe('contrast acceptances', () => {
   it('surfaces a consciously-accepted threshold so it stays a decision', () => {
-    const { manifest, css } = built(() => {
-      const { t, css: style } = createSystem({
-        tokens: defineTokens({ color: { mid: core.oklch(0.6, 0.02, 285) } })
-          .derive(m => ({ color: { onMid: core.legibleOn(m.color.mid, { contrast: 40 }) } })),
-      })
-      return style({ color: t.color.onMid, background: t.color.mid }, 'chip')
-    })
+    const open = createSystem()
+    const tokens = open.defineTokens({ color: { mid: open.oklch(0.6, 0.02, 285) } })
+      .add(m => ({ color: { onMid: open.legibleOn(m.color.mid, { contrast: 40 }) } }))
+    const ds = locked(open.addTokens(tokens))
+    const { manifest, css } = built(() => ds.class({ color: ds.t.color.onMid, background: ds.t.color.mid }, 'chip'))
 
     const findings = audit(manifest, css).filter(finding => finding.kind === 'contrast')
 
@@ -102,14 +108,14 @@ describe('contrast acceptances', () => {
 })
 
 describe('the escape inventory', () => {
-  it('enumerates css.raw, unsafe values with reasons, foreign globalCss, overrides rules', () => {
+  it('enumerates raw CSS, unsafe values with reasons, foreign rules, and overrides', () => {
+    const ds = system({ space: { sm: '8px' } })
     const { manifest, css } = built(() => {
-      const { t, css: style, globalCss, atoms: makeAtoms } = createSystem({ tokens: { space: { sm: '8px' } } })
+      const { t, class: style, rules, raw, atoms: makeAtoms } = ds
 
       style.layer('overrides')({ padding: t.space.sm }, 'fix')
-      void style.raw`h2 { margin-block: 1rem; }`
-      globalCss('body', { margin: 0 })
-      globalCss('.cookie-banner', { display: 'none' })
+      void raw`h2 { margin-block: 1rem; }`
+      rules({ 'body': { margin: 0 }, '.cookie-banner': { display: 'none' } })
 
       const atoms = makeAtoms({ properties: { gap: { sm: t.space.sm } } }, 'atoms')
       return atoms({ gap: unsafe.value('37px', 'editorial measure') })
@@ -120,7 +126,7 @@ describe('the escape inventory', () => {
       .map(finding => finding.message)
 
     expect(messages).toHaveLength(4)
-    expect(messages.some(message => message.includes('css.raw'))).toBe(true)
+    expect(messages.some(message => message.includes('raw'))).toBe(true)
     expect(messages.some(message => message.includes('\'editorial measure\''))).toBe(true)
     expect(messages.some(message => message.includes('.cookie-banner'))).toBe(true)
     expect(messages.some(message => message.includes('overrides-layer'))).toBe(true)
@@ -129,9 +135,8 @@ describe('the escape inventory', () => {
   })
 
   it('separates typed raw assertions and aliases-only standard escapes into actionable categories', () => {
-    const ds = createOpenSystem()
-      .addPlugin(openPropertyAliases({ py: 'paddingBlock' }, { expose: 'aliases-only' }))
-      .consolidate()
+    const ds = locked(createSystem()
+      .addPlugin(propertyAliases({ py: 'paddingBlock' }, { expose: 'aliases-only' })))
     const { manifest, css } = built(() => {
       ds.raw`h2 { padding-block: 1rem; }`
       return ds.class.standard({ paddingBlock: '2rem' }, 'platform-spelling')
@@ -145,8 +150,9 @@ describe('the escape inventory', () => {
 
 describe('scale strays', () => {
   it('flags a literal on a property the tokens already own — z-index anarchy', () => {
+    const ds = system({ z: { nav: 10, dialog: 20 } })
     const { manifest, css } = built(() => {
-      const { t, css: style } = createSystem({ tokens: { z: { nav: 10, dialog: 20 } } })
+      const { t, class: style } = ds
 
       style({ zIndex: t.z.nav }, 'nav')
       style({ zIndex: t.z.dialog }, 'dialog')
@@ -161,10 +167,8 @@ describe('scale strays', () => {
   })
 
   it('never lectures a property the system did not tokenize', () => {
-    const { manifest, css } = built(() => {
-      const { css: style } = createSystem({ tokens: { space: { sm: '8px' } } })
-      return style({ zIndex: 9999, lineHeight: 1.5 }, 'toast')
-    })
+    const ds = system({ space: { sm: '8px' } })
+    const { manifest, css } = built(() => ds.class({ zIndex: 9999, lineHeight: 1.5 }, 'toast'))
 
     expect(audit(manifest, css).filter(finding => finding.kind === 'scaleStrays')).toEqual([])
   })
@@ -172,39 +176,32 @@ describe('scale strays', () => {
 
 describe('semantic provenance categories', () => {
   it('audits owning/condition specificity, ambiguous arms, mutable roots, and nonportable values', () => {
-    const specific = built(() => createEngine().createSystem({
-      root: '#application#widget',
-      tokens: { space: { sm: '8px' } },
-    }))
+    const specificDs = system({ space: { sm: '8px' } }, { root: '#application#widget' })
+    const specific = built(() => specificDs.class({ padding: specificDs.t.space.sm }))
     expect(audit(specific.manifest, specific.css)).toContainEqual(expect.objectContaining({
       kind: 'specificityContexts',
       message: expect.stringContaining('#application#widget'),
     }))
 
-    const ambiguousEngine = createEngine().axes(({ axis, condition }) => ({
-      state: axis({
-        modes: {
-          on: condition({ arms: [{ selector: '&[data-a]' }, { selector: '&[data-b]' }] }),
-        },
-      }),
+    const ambiguousOpen = createSystem().addAxis('state', axis({
+      modes: {
+        on: createAxisCondition({ arms: [{ selector: '&[data-a]' }, { selector: '&[data-b]' }] }),
+      },
     }))
-    const ambiguous = built(() => ambiguousEngine.createSystem({
-      tokens: { color: { brand: ambiguousEngine.token({ val: 'red', axes: { state: { on: 'blue' } } }) } },
+    const ambiguousDs = locked(ambiguousOpen.addTokens({
+      color: { brand: ambiguousOpen.tdef({ val: 'red', axes: { state: { on: 'blue' } } }) },
     }))
+    const ambiguous = built(() => ambiguousDs.class({ color: ambiguousDs.t.color.brand }))
     expect(audit(ambiguous.manifest, ambiguous.css)).toContainEqual(expect.objectContaining({
       kind: 'ambiguousAxes',
       message: expect.stringContaining('state.on'),
     }))
 
-    const mutableEngine = createEngine()
-    const mutable = built(() => mutableEngine.createSystem({
-      root: '#application',
-      tokens: {
-        color: {
-          brand: mutableEngine.token({ val: 'red', mutable: true }),
-        },
-      },
-    }))
+    const mutableOpen = createSystem()
+    const mutableDs = locked(mutableOpen.addTokens({
+      color: { brand: mutableOpen.tdef({ val: 'red', mutable: true }) },
+    }), { root: '#application' })
+    const mutable = built(() => mutableDs.class({ color: mutableDs.t.color.brand }))
     const mutableToken = mutable.manifest.system.tokens['color.brand']!
     const hazardousManifest = {
       ...mutable.manifest,
@@ -226,21 +223,21 @@ describe('semantic provenance categories', () => {
       message: expect.stringContaining('#portal[data-open]'),
     }))
 
-    const opaquePlugin = defineEnginePlugin({
+    const mystery = defineCssValue({
+      type: 'length',
+      extension: { id: 'org.example.audit-opaque', version: 1 },
+      create: (value: number) => ({ serialize: () => `${value}px` }),
+    })
+    const opaquePlugin = definePlugin({
       id: 'org.example.audit-opaque',
       version: 1,
-      setup: engine => ({
-        mystery: engine.defineCssValue({
-          type: 'length',
-          extension: { id: 'org.example.audit-opaque', version: 1 },
-          create: (value: number) => ({ serialize: () => `${value}px` }),
-        }),
-      }),
+      setup: ds => ds.addConstructor('mystery', { call: mystery }),
     })
-    const opaqueEngine = createEngine().use(opaquePlugin)
-    const opaque = built(() => opaqueEngine.createSystem({
-      tokens: { space: { mystery: opaqueEngine.token({ val: opaqueEngine.mystery(7) }) } },
+    const opaqueOpen = createSystem().addPlugin(opaquePlugin)
+    const opaqueDs = locked(opaqueOpen.addTokens({
+      space: { mystery: opaqueOpen.tdef({ val: opaqueOpen.mystery(7) }) },
     }))
+    const opaque = built(() => opaqueDs.class({ padding: opaqueDs.t.space.mystery }))
     expect(audit(opaque.manifest, opaque.css)).toContainEqual(expect.objectContaining({
       kind: 'nonportableValues',
       message: expect.stringContaining('space.mystery'),
@@ -250,10 +247,8 @@ describe('semantic provenance categories', () => {
 
 describe('focus visibility', () => {
   it('flags an erased outline and points to focusRing()', () => {
-    const { manifest, css } = built(() => {
-      const { css: style } = createSystem({ tokens: {} })
-      return style({ outline: 'none' }, 'button')
-    })
+    const ds = system({})
+    const { manifest, css } = built(() => ds.class({ outline: 'none' }, 'button'))
 
     const findings = audit(manifest, css).filter(finding => finding.kind === 'focusVisibility')
 
@@ -263,13 +258,11 @@ describe('focus visibility', () => {
   })
 
   it('stays silent when the same class supplies a visible focus ring', () => {
-    const { manifest, css } = built(() => {
-      const { css: style } = createSystem({ tokens: {} })
-      return style({
-        outline: 'none',
-        focusVisible: { outline: '2px solid currentColor', outlineOffset: '2px' },
-      }, 'button')
-    })
+    const ds = system({})
+    const { manifest, css } = built(() => ds.class({
+      outline: 'none',
+      focusVisible: { outline: '2px solid currentColor', outlineOffset: '2px' },
+    }, 'button'))
 
     expect(audit(manifest, css).filter(finding => finding.kind === 'focusVisibility')).toEqual([])
   })
@@ -277,13 +270,10 @@ describe('focus visibility', () => {
 
 describe('promotion and the report', () => {
   it('the system config promotes an audit category to error and can silence one', () => {
-    const { manifest, css } = built(() => {
-      const { css: style } = createSystem({
-        tokens: { space: { sm: '8px', md: '16px' } },
-        audit: { unusedTokens: 'error', escapes: 'off' },
-      })
-      return style.layer('overrides')({ padding: '4px' }, 'fix')
+    const ds = system({ space: { sm: '8px', md: '16px' } }, {
+      audit: { unusedTokens: 'error', escapes: 'off' },
     })
+    const { manifest, css } = built(() => ds.class.layer('overrides')({ padding: '4px' }, 'fix'))
 
     const findings = audit(manifest, css)
 

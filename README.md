@@ -13,7 +13,7 @@ Vanity gives design-system authors inferred, composable, refactorable, and inspe
 - **🎨 Use all of CSS without giving up TypeScript.** Author the platform’s names, grammar, selectors, at-rules, layers, custom properties, and future syntax with typed values and token handles. A raw standards escape remains available whenever CSS moves first.
 - **🧩 Grow a system without breaking its foundations.** Add tokens, axes, conditions, plugins, and utilities immutably; get loud, local conflicts instead of silent redefinition; then consolidate independent forks from the same base.
 - **✂️ Remove the work that should have been inferred.** Tokens flow from definition to use without copied paths, hand-built `var()` calls, mirrored registries, or framework-specific glue.
-- **⚡ Ship ordinary CSS, not a client styling engine.** Vanity compiles classes, custom properties, selectors, conditions, and code-split stylesheets that remain legible, portable, optimizable, and useful without Vanity at runtime.
+- **⚡ Ship ordinary CSS, not a client-side style graph.** Vanity compiles classes, custom properties, selectors, conditions, and code-split stylesheets that remain legible, portable, optimizable, and useful without Vanity at runtime.
 - **🔎 Understand and evolve every decision confidently.** Exact types, source-local diagnostics, editor DX, manifests, explanations, audits, and diffs retain one semantic identity from authoring through production.
 - **🌐 Keep your application architecture yours.** The core stays framework-independent; Vite, Vue, Nuxt, SSR, runtime controls, and the optional Hail policy layer are explicit integrations rather than a required stack.
 

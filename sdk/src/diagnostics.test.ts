@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 describe('structured diagnostics', () => {
   it('renders primary and related locations and exposes clickable author frames', () => {
     const diagnostic = {
-      code: 'VANITY_ENGINE_COLLISION' as const,
+      code: 'VANITY_SYSTEM_COLLISION' as const,
       severity: 'error' as const,
       message: 'color.brand is declared twice',
       file: 'system.ts',

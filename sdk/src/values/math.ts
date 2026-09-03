@@ -3,11 +3,11 @@
 import type { VanityExpressionNode, VanityOperationNode } from './protocol'
 import type { VanityCssDataType, VanityCssInput, VanityCssValue, VanityValue } from './types'
 import {
-  compositeNode,
+  createCompositeNode,
+  createFunctionNode,
+  createInputNode,
+  createOperationNode,
   ExpressionValue,
-  functionNode,
-  inputNode,
-  operationNode,
 } from './protocol'
 
 export type VanityMathDimension
@@ -122,8 +122,8 @@ class CalcValue<Dimension extends VanityMathDimension> extends ExpressionValue<D
     readonly expression: VanityExpressionNode,
     readonly dimension: Dimension,
   ) {
-    super(compositeNode({
-      type: dataType(dimension),
+    super(createCompositeNode({
+      type: getDataType(dimension),
       parts: ['calc(', expression, ')'],
       requirements: ['calc-basic'],
       source: { helper: 'calc' },
@@ -131,31 +131,31 @@ class CalcValue<Dimension extends VanityMathDimension> extends ExpressionValue<D
   }
 
   add<const Input extends VanityCssInput>(value: SumInput<Dimension, Input>): VanityCalc<VanitySumDimension<Dimension, VanityDimensionOf<Input>>> {
-    const other = dimensionOf(value)
-    return binary(this.expression, '+', mathNode(value), sumRuntime(this.dimension, other)) as never
+    const other = getDimension(value)
+    return createBinaryOperation(this.expression, '+', createMathNode(value), getSumRuntimeDimension(this.dimension, other)) as never
   }
 
   subtract<const Input extends VanityCssInput>(value: SumInput<Dimension, Input>): VanityCalc<VanitySumDimension<Dimension, VanityDimensionOf<Input>>> {
-    const other = dimensionOf(value)
-    return binary(this.expression, '-', mathNode(value), sumRuntime(this.dimension, other)) as never
+    const other = getDimension(value)
+    return createBinaryOperation(this.expression, '-', createMathNode(value), getSumRuntimeDimension(this.dimension, other)) as never
   }
 
   multiply<const Input extends VanityCssInput>(value: Input): VanityCalc<VanityProductDimension<Dimension, VanityDimensionOf<Input>>> {
-    finiteOperand('multiply', value)
-    const other = dimensionOf(value)
-    return binary(this.expression, '*', mathNode(value), productRuntime(this.dimension, other), typedArithmetic(this.dimension, other)) as never
+    validateFiniteOperand('multiply', value)
+    const other = getDimension(value)
+    return createBinaryOperation(this.expression, '*', createMathNode(value), getProductRuntimeDimension(this.dimension, other), requiresTypedArithmetic(this.dimension, other)) as never
   }
 
   divide<const Input extends VanityCssInput>(value: Input): VanityCalc<VanityQuotientDimension<Dimension, VanityDimensionOf<Input>>> {
-    finiteOperand('divide', value)
+    validateFiniteOperand('divide', value)
     if (typeof value === 'number' && value === 0)
       throw new RangeError('[vanity] calc().divide() cannot divide by zero')
-    const other = dimensionOf(value)
-    return binary(this.expression, '/', mathNode(value), quotientRuntime(this.dimension, other), typedArithmetic(this.dimension, other)) as never
+    const other = getDimension(value)
+    return createBinaryOperation(this.expression, '/', createMathNode(value), getQuotientRuntimeDimension(this.dimension, other), requiresTypedArithmetic(this.dimension, other)) as never
   }
 
   negate(): VanityCalc<Dimension> {
-    return binary(inputNode(-1, 'number'), '*', this.expression, this.dimension) as VanityCalc<Dimension>
+    return createBinaryOperation(createInputNode(-1, 'number'), '*', this.expression, this.dimension) as VanityCalc<Dimension>
   }
 }
 
@@ -165,34 +165,34 @@ class FunctionValue<Dimension extends VanityMathDimension> extends ExpressionVal
     values: readonly VanityCssInput[],
     readonly dimension: Dimension,
   ) {
-    super(functionNode({
-      type: dataType(dimension),
+    super(createFunctionNode({
+      type: getDataType(dimension),
       name,
-      values: values.map(value => inputNode(value)),
+      values: values.map(value => createInputNode(value)),
       separator: ', ',
       requirements: ['calc-basic'],
-      source: { helper: name, parents: values.map(sourceOf) },
+      source: { helper: name, parents: values.map(getValueSource) },
     }) as VanityExpressionNode<DataTypeOfDimension<Dimension>>)
   }
 }
 
 /** Start an immutable CSS calculation. Nested calculations preserve precedence. */
 export function calc<const Input extends VanityCssInput>(value: Input): VanityCalc<VanityDimensionOf<Input>> {
-  return new CalcValue(mathNode(value), dimensionOf(value) as VanityDimensionOf<Input>)
+  return new CalcValue(createMathNode(value), getDimension(value) as VanityDimensionOf<Input>)
 }
 
 /** The smallest of one or more compatible CSS numeric values. */
 export function min<const Inputs extends readonly [VanityCssInput, ...VanityCssInput[]]>(
   ...values: Inputs & CompatibleMathInputs<Inputs>
 ): VanityMathValue<JoinDimensions<Inputs>> {
-  return mathFunction('min', values) as VanityMathValue<JoinDimensions<Inputs>>
+  return createMathFunction('min', values) as VanityMathValue<JoinDimensions<Inputs>>
 }
 
 /** The largest of one or more compatible CSS numeric values. */
 export function max<const Inputs extends readonly [VanityCssInput, ...VanityCssInput[]]>(
   ...values: Inputs & CompatibleMathInputs<Inputs>
 ): VanityMathValue<JoinDimensions<Inputs>> {
-  return mathFunction('max', values) as VanityMathValue<JoinDimensions<Inputs>>
+  return createMathFunction('max', values) as VanityMathValue<JoinDimensions<Inputs>>
 }
 
 /** Clamp a preferred CSS numeric value between compatible minimum and maximum values. */
@@ -206,39 +206,39 @@ export function clamp<
   maximum: Maximum,
 ): VanityMathValue<JoinDimensions<[Minimum, Preferred, Maximum]>> {
   const values = [minimum, preferred, maximum] as const
-  return mathFunction('clamp', values) as VanityMathValue<JoinDimensions<[Minimum, Preferred, Maximum]>>
+  return createMathFunction('clamp', values) as VanityMathValue<JoinDimensions<[Minimum, Preferred, Maximum]>>
 }
 
-function mathFunction(name: 'min' | 'max' | 'clamp', values: readonly VanityCssInput[]): VanityMathValue {
-  const dimension = commonRuntime(values)
+function createMathFunction(name: 'min' | 'max' | 'clamp', values: readonly VanityCssInput[]): VanityMathValue {
+  const dimension = getCommonRuntimeDimension(values)
   return new FunctionValue(name, values, dimension)
 }
 
-function binary(
+function createBinaryOperation(
   left: VanityExpressionNode,
   operator: VanityOperationNode['operator'],
   right: VanityExpressionNode,
   dimension: VanityMathDimension,
   needsTypedArithmetic = false,
 ): CalcValue<any> {
-  const precedence = operationPrecedence(operator)
-  const leftNode = parenthesizeFor(left, precedence, false, operator)
-  const rightNode = parenthesizeFor(right, precedence, true, operator)
-  return new CalcValue(operationNode({
-    type: dataType(dimension),
+  const precedence = getOperationPrecedence(operator)
+  const leftNode = parenthesizeForOperation(left, precedence, false, operator)
+  const rightNode = parenthesizeForOperation(right, precedence, true, operator)
+  return new CalcValue(createOperationNode({
+    type: getDataType(dimension),
     operator,
     left: leftNode,
     right: rightNode,
     requirements: needsTypedArithmetic ? ['calc-basic', 'calc-typed-arithmetic'] : ['calc-basic'],
-    source: { helper: `calc.${operationName(operator)}`, parents: [left.source ?? {}, right.source ?? {}] },
+    source: { helper: `calc.${getOperationName(operator)}`, parents: [left.source ?? {}, right.source ?? {}] },
   }), dimension) as CalcValue<any>
 }
 
-function mathNode(value: VanityCssInput): VanityExpressionNode {
-  return value instanceof CalcValue ? value.expression : inputNode(value)
+function createMathNode(value: VanityCssInput): VanityExpressionNode {
+  return value instanceof CalcValue ? value.expression : createInputNode(value)
 }
 
-function parenthesizeFor(
+function parenthesizeForOperation(
   node: VanityExpressionNode,
   parentPrecedence: number,
   right: boolean,
@@ -246,28 +246,28 @@ function parenthesizeFor(
 ): VanityExpressionNode {
   if (node.kind !== 'operation')
     return node
-  const childPrecedence = operationPrecedence(node.operator)
+  const childPrecedence = getOperationPrecedence(node.operator)
   const required = childPrecedence < parentPrecedence
     || (right && childPrecedence === parentPrecedence && (operator === '-' || operator === '/'))
   return required ? { ...node, parenthesize: true } : node
 }
 
-function operationPrecedence(operator: VanityOperationNode['operator']): number {
+function getOperationPrecedence(operator: VanityOperationNode['operator']): number {
   return operator === '+' || operator === '-' ? 1 : 2
 }
 
-function operationName(operator: VanityOperationNode['operator']): string {
+function getOperationName(operator: VanityOperationNode['operator']): string {
   return operator === '+' ? 'add' : operator === '-' ? 'subtract' : operator === '*' ? 'multiply' : 'divide'
 }
 
-function dimensionOf(value: VanityCssInput): VanityMathDimension {
+function getDimension(value: VanityCssInput): VanityMathDimension {
   if ((typeof value === 'object' || typeof value === 'function') && value !== null) {
     if ('dimension' in value)
       return (value as VanityMathValue).dimension
     if ('type' in value)
-      return dimensionFromType((value as VanityValue).type)
+      return getDimensionFromType((value as VanityValue).type)
     if ('$type' in value && typeof value.$type === 'string')
-      return dimensionFromType(value.$type as VanityCssDataType)
+      return getDimensionFromType(value.$type as VanityCssDataType)
   }
 
   if (typeof value === 'number')
@@ -293,7 +293,7 @@ function dimensionOf(value: VanityCssInput): VanityMathDimension {
   return 'unknown'
 }
 
-function dimensionFromType(type: VanityCssDataType): VanityMathDimension {
+function getDimensionFromType(type: VanityCssDataType): VanityMathDimension {
   if (type === 'integer')
     return 'number'
   return ['number', 'length', 'percentage', 'length-percentage', 'angle', 'time', 'frequency', 'resolution', 'flex'].includes(type)
@@ -301,14 +301,14 @@ function dimensionFromType(type: VanityCssDataType): VanityMathDimension {
     : 'unknown'
 }
 
-function commonRuntime(values: readonly VanityCssInput[]): VanityMathDimension {
-  let dimension = dimensionOf(values[0]!)
+function getCommonRuntimeDimension(values: readonly VanityCssInput[]): VanityMathDimension {
+  let dimension = getDimension(values[0]!)
   for (const value of values.slice(1))
-    dimension = sumRuntime(dimension, dimensionOf(value))
+    dimension = getSumRuntimeDimension(dimension, getDimension(value))
   return dimension
 }
 
-function sumRuntime(a: VanityMathDimension, b: VanityMathDimension): VanityMathDimension {
+function getSumRuntimeDimension(a: VanityMathDimension, b: VanityMathDimension): VanityMathDimension {
   if (a === 'none')
     return b
   if (b === 'none')
@@ -322,7 +322,7 @@ function sumRuntime(a: VanityMathDimension, b: VanityMathDimension): VanityMathD
   throw new TypeError(`[vanity] CSS math cannot combine ${a} and ${b} in an additive comparison`)
 }
 
-function productRuntime(a: VanityMathDimension, b: VanityMathDimension): VanityMathDimension {
+function getProductRuntimeDimension(a: VanityMathDimension, b: VanityMathDimension): VanityMathDimension {
   if (a === 'unknown' || b === 'unknown')
     return 'unknown'
   if (a === 'number')
@@ -332,7 +332,7 @@ function productRuntime(a: VanityMathDimension, b: VanityMathDimension): VanityM
   return 'unknown'
 }
 
-function quotientRuntime(a: VanityMathDimension, b: VanityMathDimension): VanityMathDimension {
+function getQuotientRuntimeDimension(a: VanityMathDimension, b: VanityMathDimension): VanityMathDimension {
   if (a === 'unknown' || b === 'unknown')
     return 'unknown'
   if (b === 'number')
@@ -342,7 +342,7 @@ function quotientRuntime(a: VanityMathDimension, b: VanityMathDimension): Vanity
   return 'unknown'
 }
 
-function typedArithmetic(a: VanityMathDimension, b: VanityMathDimension): boolean {
+function requiresTypedArithmetic(a: VanityMathDimension, b: VanityMathDimension): boolean {
   return a !== 'unknown' && b !== 'unknown' && a !== 'none' && b !== 'none' && a !== 'number' && b !== 'number'
 }
 
@@ -350,18 +350,18 @@ function isLengthPercentage(value: VanityMathDimension): boolean {
   return value === 'length' || value === 'percentage' || value === 'length-percentage'
 }
 
-function dataType<Dimension extends VanityMathDimension>(dimension: Dimension): DataTypeOfDimension<Dimension> {
+function getDataType<Dimension extends VanityMathDimension>(dimension: Dimension): DataTypeOfDimension<Dimension> {
   return dimension as DataTypeOfDimension<Dimension>
 }
 
-function finiteOperand(operation: string, value: VanityCssInput): void {
+function validateFiniteOperand(operation: string, value: VanityCssInput): void {
   if (typeof value === 'number' && !Number.isFinite(value))
     throw new RangeError(`[vanity] calc().${operation}() needs a finite number; received ${value}`)
 }
 
-function sourceOf(value: VanityCssInput) {
+function getValueSource(value: VanityCssInput) {
   try {
-    return mathNode(value).source ?? {}
+    return createMathNode(value).source ?? {}
   }
   catch {
     return {}

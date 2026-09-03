@@ -5,13 +5,8 @@
 
 import type { DefineProjectConfig } from '@mszr/selenita'
 import { cursor, defineProject, group, snippet } from '@mszr/selenita'
-import { removeAdapter, setAdapter } from '@vanilla-extract/css/adapter'
-import { endFileScope, setFileScope } from '@vanilla-extract/css/fileScope'
-import { tokenFoldOf } from './internal/foldEvidence'
-import { transformVanityCss } from './internal/transformCss'
-
-type Adapter = Parameters<typeof setAdapter>[0]
-type CssObj = Parameters<Adapter['appendCss']>[0]
+import { substrate } from './substrate'
+import { tokenFoldOf } from './tokens/fold'
 
 /** Options for one isolated build-time emission capture. */
 export interface VanityEmissionOptions {
@@ -40,34 +35,33 @@ export function captureEmission<T>(
   if (typeof author !== 'function')
     throw new TypeError('[vanity] captureEmission() needs an author callback: () => ds.class({ ... })')
 
-  const cssObjs: CssObj[] = []
+  const cssObjs: unknown[] = []
   const localClassNames = new Set<string>()
-  const adapter: Adapter = {
+  substrate.modules.installCapture({
     appendCss: cssObj => void cssObjs.push(cssObj),
     registerClassName: className => void localClassNames.add(className),
     registerComposition: () => {},
     markCompositionUsed: () => {},
-    onEndFileScope: () => {},
     getIdentOption: () => 'debug',
-  }
+  })
 
-  setAdapter(adapter)
-  setFileScope(
-    options.file ?? 'vanity.testing.css.ts',
-    options.package ?? '@vanity/testing-fixture',
-  )
+  substrate.modules.setFileScope({
+    filePath: options.file ?? 'vanity.testing.css.ts',
+    packageName: options.package ?? '@vanity/testing-fixture',
+  })
 
   try {
     const value = author()
-    const css = transformVanityCss(cssObjs as any, {
+    const css = substrate.modules.transformStyleModule({
+      cssObjects: cssObjs,
       localClassNames: [...localClassNames],
       composedClassLists: [],
-    })
+    }).css
     return Object.freeze({ css, value })
   }
   finally {
-    endFileScope()
-    removeAdapter()
+    substrate.modules.endFileScope()
+    substrate.modules.removeCapture()
   }
 }
 

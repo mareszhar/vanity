@@ -12,8 +12,9 @@ export type VanityDiagnosticCode
     | 'VANITY_TOKENS_INVALID_DECLARATION_BUNDLE'
     | 'VANITY_TOKENS_INVALID_OVERRIDE'
     | 'VANITY_TOKENS_UNKNOWN_REF'
-    | 'VANITY_ENGINE_INCOMPATIBLE'
-    | 'VANITY_ENGINE_COLLISION'
+    | 'VANITY_TOKEN_MODULE_INCOMPATIBLE'
+    | 'VANITY_SYSTEM_INCOMPATIBLE'
+    | 'VANITY_SYSTEM_COLLISION'
     | 'VANITY_SYSTEM_CONDITION_COLLISION'
     | 'VANITY_SYSTEM_INVALID_CONDITION'
     | 'VANITY_SYSTEM_INVALID_PREFIX'
@@ -150,7 +151,7 @@ export class VanityError extends Error {
     const input = Array.isArray(diagnostics)
       ? diagnostics as readonly (VanityDiagnostic | VanityDiagnosticInput)[]
       : [diagnostics as VanityDiagnostic | VanityDiagnosticInput]
-    const all = input.map(enrichDiagnostic)
+    const all = input.map(normalizeDiagnostic)
     super(all.map(formatVanityDiagnostic).join('\n\n'))
     this.name = 'VanityError'
     this.diagnostics = all
@@ -159,7 +160,7 @@ export class VanityError extends Error {
     if ('cause' in options)
       Object.defineProperty(this, 'cause', { configurable: true, value: options.cause })
 
-    const authoredFrames = diagnosticFrames(all)
+    const authoredFrames = formatDiagnosticFrames(all)
     if (authoredFrames.length > 0) {
       const runtimeFrames = (this.stack ?? '')
         .split('\n')
@@ -169,7 +170,7 @@ export class VanityError extends Error {
   }
 }
 
-function diagnosticFrames(diagnostics: readonly VanityDiagnostic[]): string[] {
+function formatDiagnosticFrames(diagnostics: readonly VanityDiagnostic[]): string[] {
   const seen = new Set<string>()
   const frames: string[] = []
   const add = (label: string, file: string, line?: number, column?: number): void => {
@@ -179,7 +180,7 @@ function diagnosticFrames(diagnostics: readonly VanityDiagnostic[]): string[] {
     if (seen.has(location))
       return
     seen.add(location)
-    frames.push(`    at ${stackLabel(label)} (${location})`)
+    frames.push(`    at ${formatStackLabel(label)} (${location})`)
   }
 
   for (const diagnostic of diagnostics) {
@@ -192,7 +193,7 @@ function diagnosticFrames(diagnostics: readonly VanityDiagnostic[]): string[] {
   return frames
 }
 
-function stackLabel(label: string): string {
+function formatStackLabel(label: string): string {
   const normalized = label.replaceAll(/[^\w$.-]+/g, '_')
   return `vanity.${normalized || 'authored'}`
 }
@@ -217,7 +218,7 @@ const CURRENT_SOURCE = Symbol.for('vanity.currentSource')
 const WITH_SOURCE = Symbol.for('vanity.withSource')
 
 /** A style-module evaluation is one provenance universe; prior graphs cannot leak into it. */
-export function resetDiagnosticSources(): void {
+export function clearDiagnosticSources(): void {
   const state = globalThis as typeof globalThis & Record<symbol, unknown>
   state[SOURCE_MAPS] = new Map<string, VanitySourceContext>()
   state[CURRENT_SOURCE] = undefined
@@ -229,16 +230,6 @@ export function resetDiagnosticSources(): void {
   }
 }
 
-function enrichDiagnostic(input: VanityDiagnostic | VanityDiagnosticInput): VanityDiagnostic {
-  const diagnostic = normalizeDiagnostic(input)
-  if (diagnostic.line !== undefined)
-    return diagnostic
-
-  const source = diagnosticSource(diagnostic.path?.join('.'))
-
-  return source === undefined ? diagnostic : { ...diagnostic, ...source }
-}
-
 /**
  * Normalize one author-friendly diagnostic into the immutable public shape.
  *
@@ -246,6 +237,16 @@ function enrichDiagnostic(input: VanityDiagnostic | VanityDiagnosticInput): Vani
  * `normalizeDiagnostic({ code: 'VANITY_TEST', message: 'invalid value', path: 'color.brand' })`
  */
 export function normalizeDiagnostic(input: VanityDiagnostic | VanityDiagnosticInput): VanityDiagnostic {
+  const diagnostic = createDiagnostic(input)
+  if (diagnostic.line !== undefined)
+    return diagnostic
+
+  const source = getDiagnosticSource(diagnostic.path?.join('.'))
+
+  return source === undefined ? diagnostic : { ...diagnostic, ...source }
+}
+
+function createDiagnostic(input: VanityDiagnostic | VanityDiagnosticInput): VanityDiagnostic {
   const path = input.path === undefined
     ? undefined
     : typeof input.path === 'string' ? input.path.split('.') : [...input.path]
@@ -287,10 +288,10 @@ export function reportDiagnostics(
 }
 
 /** Exact compiler-owned provenance for manifests and diagnostics. */
-export function diagnosticSource(path?: string): VanitySourceLocation | undefined {
+export function getDiagnosticSource(path?: string): VanitySourceLocation | undefined {
   const state = globalThis as typeof globalThis & Record<symbol, unknown>
   const current = state[CURRENT_SOURCE] as VanitySourceContext | undefined
-  const direct = current && pointFor(current, path)
+  const direct = current && getSourcePoint(current, path)
 
   if (direct)
     return { file: current!.file, ...direct }
@@ -301,7 +302,7 @@ export function diagnosticSource(path?: string): VanitySourceLocation | undefine
     const matches: Array<{ context: VanitySourceContext, point: VanitySourcePoint }> = []
 
     for (const context of maps.values()) {
-      const point = pointFor(context as VanitySourceContext, path)
+      const point = getSourcePoint(context as VanitySourceContext, path)
       if (point)
         matches.push({ context: context as VanitySourceContext, point })
     }
@@ -318,7 +319,7 @@ export function diagnosticSource(path?: string): VanitySourceLocation | undefine
   return undefined
 }
 
-function pointFor(context: VanitySourceContext, path: string | undefined): VanitySourcePoint | undefined {
+function getSourcePoint(context: VanitySourceContext, path: string | undefined): VanitySourcePoint | undefined {
   if (path === undefined)
     return undefined
 
@@ -339,7 +340,7 @@ export function didYouMean(input: string, candidates: readonly string[]): string
   let best: { candidate: string, distance: number } | undefined
 
   for (const candidate of candidates) {
-    const distance = editDistance(input, candidate)
+    const distance = measureEditDistance(input, candidate)
 
     if (distance <= Math.max(2, Math.floor(candidate.length / 3)) && (!best || distance < best.distance))
       best = { candidate, distance }
@@ -348,7 +349,7 @@ export function didYouMean(input: string, candidates: readonly string[]): string
   return best?.candidate
 }
 
-function editDistance(a: string, b: string): number {
+function measureEditDistance(a: string, b: string): number {
   const rows = Array.from({ length: a.length + 1 }, (_, i) => {
     const row = Array.from<number>({ length: b.length + 1 }).fill(0)
     row[0] = i

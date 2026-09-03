@@ -11,10 +11,10 @@ import type { VanityConditionArm } from '../system/conditions'
 import type { VanityCssPropertyName, VanityPropertyAliasMap, VanityPropertyAliasMode } from './types'
 import type { VanityValueContext } from './values'
 import { didYouMean, VanityError } from '../diagnostics'
-import { checkDeclaration, checkPropertyName, checkQuery, checkSelector, isCssProperty } from '../internal/cssParser'
-import { kebab } from '../tokens/names'
+import { toKebab } from '../tokens/names'
 import { isOmit } from './fragment'
-import { deferredTokenDeclarationInput } from './tdec'
+import { resolveDeferredTokenDeclarationInput } from './tdec'
+import { checkDeclaration, checkPropertyName, checkQuery, checkSelector, isCssProperty } from './validation'
 import { serializeStyleValue } from './values'
 
 export interface VanityRuleContext extends VanityValueContext {
@@ -36,7 +36,7 @@ export interface VanityRuleContext extends VanityValueContext {
     aliases: VanityPropertyAliasMap
     expose: VanityPropertyAliasMode
   }
-  standardEmitterName?: 'class.standard' | 'css.standard'
+  standardEmitterName?: 'class.standard'
   resolveTokenDeclarations?: (input: object) => object
 }
 
@@ -73,7 +73,7 @@ export interface VanityCompiled {
 
 const BASE = 'base'
 
-export function compileRule(rule: unknown, ctx: VanityRuleContext): VanityCompiled {
+export function compileStyleRule(rule: unknown, ctx: VanityRuleContext): VanityCompiled {
   const walker = new RuleWalker(ctx)
   walker.walkInput(rule, {}, [...ctx.rootPath ?? []])
   walker.throwIfFailed()
@@ -118,12 +118,12 @@ class RuleWalker {
   }
 
   private walk(rule: object, arm: VanityArm, path: string[]): void {
-    const deferredDeclarations = deferredTokenDeclarationInput(rule)
+    const deferredDeclarations = resolveDeferredTokenDeclarationInput(rule)
     if (deferredDeclarations !== undefined) {
       if (this.ctx.resolveTokenDeclarations === undefined) {
         this.report({
           code: 'VANITY_TOKENS_INVALID_OVERRIDE',
-          message: 'this token declaration fragment is not bound to a locked token graph',
+          message: 'this token declaration fragment is not bound to a locked token module',
           path: path.join('.') || undefined,
           fix: 'use the fragment through the locked system produced by the same open-system chain',
         })
@@ -190,7 +190,7 @@ class RuleWalker {
           })
           continue
         }
-        this.property(alias, value, arm, path, key)
+        this.writeProperty(alias, value, arm, path, key)
         continue
       }
 
@@ -205,7 +205,7 @@ class RuleWalker {
         continue
       }
 
-      this.property(key, value, arm, path)
+      this.writeProperty(key, value, arm, path)
     }
   }
 
@@ -279,7 +279,7 @@ class RuleWalker {
 
     this.report({
       code: 'VANITY_CSS_INVALID_KEY',
-      message: `${this.at(path, key)} is not an at-rule css() nests`,
+      message: `${this.at(path, key)} is not an at-rule class() nests`,
       path: this.at(path, key),
       fix: redirect,
     })
@@ -314,12 +314,12 @@ class RuleWalker {
       this.walkInput(value, merged, [...path, key])
   }
 
-  private property(key: string, value: unknown, arm: VanityArm, path: string[], authoredKey = key): void {
+  private writeProperty(key: string, value: unknown, arm: VanityArm, path: string[], authoredKey = key): void {
     const authoredPath = [...path, authoredKey]
     if (isPlainObject(value)) {
       // A nested object under a non-property reads as a mistyped condition,
       // not as a property-first map — name the key itself.
-      if (!isCssProperty(kebab(key))) {
+      if (!isCssProperty(toKebab(key))) {
         const suggestion = didYouMean(key, [...this.ctx.conditions.keys()])
         this.report({
           code: 'VANITY_CSS_UNKNOWN_PROPERTY',
@@ -376,7 +376,7 @@ class RuleWalker {
         ? value.map(entry => serializeStyleValue(entry, at, this.ctx))
         : serializeStyleValue(value, at, this.ctx)
 
-      const cssProperty = kebab(property)
+      const cssProperty = toKebab(property)
 
       for (const entry of Array.isArray(serialized) ? serialized : [serialized]) {
         // Numbers take the substrate's unit rule downstream, so only their
@@ -389,9 +389,9 @@ class RuleWalker {
         if (issue?.kind === 'unknown-property') {
           this.report({
             code: 'VANITY_CSS_UNKNOWN_PROPERTY',
-            message: `${at} — ${issue.reason}${issue.suggestion ? ` — did you mean '${camel(issue.suggestion)}'?` : ''}`,
+            message: `${at} — ${issue.reason}${issue.suggestion ? ` — did you mean '${toCamel(issue.suggestion)}'?` : ''}`,
             path: at,
-            fix: issue.suggestion ? `use ${camel(issue.suggestion)}` : 'use a CSS property, a condition, or a selector containing \'&\'',
+            fix: issue.suggestion ? `use ${toCamel(issue.suggestion)}` : 'use a CSS property, a condition, or a selector containing \'&\'',
           })
           return
         }
@@ -420,10 +420,10 @@ class RuleWalker {
   }
 
   private unit(arm: VanityArm): VanityUnit {
-    const key = armKey(arm)
+    const key = getArmKey(arm)
     const existing = this.units.at(-1)
 
-    if (!this.forceNewUnit && existing && armKey(existing.arm) === key)
+    if (!this.forceNewUnit && existing && getArmKey(existing.arm) === key)
       return existing
 
     this.forceNewUnit = false
@@ -465,7 +465,7 @@ class RuleWalker {
 // ─── Arm algebra ─────────────────────────────────────────────────────────────
 
 /** The identity of an arm — units merge on it, recipes compare on it. */
-export function armKey(arm: VanityArm): string {
+export function getArmKey(arm: VanityArm): string {
   return JSON.stringify([arm.media, arm.supports, arm.container, arm.selector, arm.scopes, arm.startingStyle])
 }
 
@@ -558,6 +558,6 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 /** Kebab back to camel, for suggestions that read like the authoring surface. */
-function camel(property: string): string {
+function toCamel(property: string): string {
   return property.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase())
 }

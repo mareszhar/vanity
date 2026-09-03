@@ -21,9 +21,9 @@ import {
   styleExportNames,
   vanityPlugin,
 } from '@mszr/vanity/vite'
-import { VanityError } from '@test/legacy'
 import { build, createLogger, createServer } from 'vite'
 import { afterEach, describe, expect, it } from 'vitest'
+import { VanityError } from './index'
 import { planAutoImportDeclarations } from './prepare'
 
 function local(path: string) {
@@ -31,7 +31,6 @@ function local(path: string) {
 }
 
 const aliases = {
-  '@test/legacy': local('./test-support/legacy.ts'),
   '@mszr/vanity/runtime': local('./runtime.ts'),
   '@mszr/vanity': local('./index.ts'),
 }
@@ -208,7 +207,7 @@ describe('the vite build', () => {
   it('restores runtime services and semantic handles in app code', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-runtime-environment-')))
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-runtime-environment", "type": "module" }')
-    await writeFile(join(root, 'system.ts'), `import { colorSchemes, createSystem } from '@test/legacy'
+    await writeFile(join(root, 'system.ts'), `import { colorSchemes, createSystem } from '@mszr/vanity'
 const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
 const positive = { '~standard': { version: 1, vendor: 'fixture', validate: input => typeof input === 'number' && input > 0 ? { value: Math.round(input * 10) / 10 } : { issues: [{ message: 'positive only' }] } } }
 const tokens = open.defineTokens({
@@ -274,7 +273,7 @@ export function exercise() {
   it('serializes a whole system for explicit app-side imports', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-projection-')))
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-system-projection", "type": "module" }')
-    await writeFile(join(root, 'system.ts'), `import { createSystem } from '@test/legacy'
+    await writeFile(join(root, 'system.ts'), `import { createSystem } from '@mszr/vanity'
 const open = createSystem()
 export const ds = open
   .addTokens({ space: { sm: '8px' } })
@@ -343,7 +342,7 @@ export const runtime = ds.runtime
 
     const manifest = JSON.parse(await readFile(join(root, '.vanity', 'manifest.json'), 'utf-8'))
 
-    expect(manifest.version).toBe(3)
+    expect(manifest.version).toBe(4)
     expect(manifest.system.tokens['color.brand'].name).toBe('--vanity-color-brand')
     expect(manifest.system.tokens['color.brand']).toMatchObject({
       declaredAt: { file: 'system.ts', line: 7, column: 14 },
@@ -428,7 +427,7 @@ describe('source-local build diagnostics', () => {
     const reported: import('./diagnostics').VanityDiagnostic[] = []
     const error = await buildBrokenFixture({
       'entry.ts': 'export { broken } from \'./broken.css\'\n',
-      'system.ts': `import { createSystem } from '@test/legacy'
+      'system.ts': `import { createSystem } from '@mszr/vanity'
 const open = createSystem()
 export const ds = open
   .addTokens({ color: { brand: '#635bff' } })
@@ -464,7 +463,7 @@ export const broken = ds.class({
   it('traces an ambient style alias to its authored property', async () => {
     const error = await buildBrokenFixture({
       'entry.ts': 'export { broken } from \'./broken.css\'\n',
-      'system.ts': `import { createSystem } from '@test/legacy'
+      'system.ts': `import { createSystem } from '@mszr/vanity'
 export const ds = createSystem()
   .addTokens({ color: { brand: '#635bff' } })
   .consolidate()
@@ -496,7 +495,7 @@ export const { class: mk } = ds
   it('traces a composed token failure to the module that defines it', async () => {
     const error = await buildBrokenFixture({
       'entry.ts': 'export { marker } from \'./marker.css\'\n',
-      'palette.tokens.ts': `import { createSystem } from '@test/legacy'
+      'palette.tokens.ts': `import { createSystem } from '@mszr/vanity'
 
 const open = createSystem()
 export const palette = open.defineTokens({ color: { base: open.oklch(0.7, 0, 0) } })
@@ -506,7 +505,7 @@ export const palette = open.defineTokens({ color: { base: open.oklch(0.7, 0, 0) 
     },
   }))
 `,
-      'system.ts': `import { createSystem } from '@test/legacy'
+      'system.ts': `import { createSystem } from '@mszr/vanity'
 import { palette } from './palette.tokens'
 
 const open = createSystem()
@@ -534,7 +533,7 @@ export const marker = ds.class({ color: ds.t.color.base })
     const error = await buildBrokenFixture({
       'entry.ts': 'export { broken } from \'./broken.css\'\n',
       'broken-value.ts': 'export const color =\n',
-      'broken.css.ts': `import { createSystem } from '@test/legacy'
+      'broken.css.ts': `import { createSystem } from '@mszr/vanity'
 import { color } from './broken-value'
 
 const ds = createSystem().consolidate()
@@ -676,7 +675,7 @@ describe('hmr', () => {
       const { port } = httpServer.address() as AddressInfo
       const manifest = await (await fetch(`http://localhost:${port}/__vanity/manifest.json`)).json()
 
-      expect(manifest.version).toBe(3)
+      expect(manifest.version).toBe(4)
       expect(Object.values(manifest.modules as Record<string, any>)
         .flatMap(module => Object.keys(module.ports))).toContain('progress.fraction')
 
@@ -720,7 +719,7 @@ describe('hmr', () => {
     const virtualId = `${entry}.vanity.css`
 
     await writeFile(dependency, 'export const color = \'#635bff\'\n')
-    await writeFile(join(root, 'lifecycle-system.ts'), `import { createSystem } from '@test/legacy'
+    await writeFile(join(root, 'lifecycle-system.ts'), `import { createSystem } from '@mszr/vanity'
 export const ds = createSystem().consolidate({ prefix: 'lifecycle' })
 `)
     await writeFile(entry, `import { ds } from './lifecycle-system'
@@ -752,7 +751,7 @@ export const lifecycle = ds.class({ color })
     const entry = join(root, 'first.css.ts')
 
     await writeFile(dependency, 'export const color =\n')
-    await writeFile(join(root, 'first-system.ts'), `import { createSystem } from '@test/legacy'
+    await writeFile(join(root, 'first-system.ts'), `import { createSystem } from '@mszr/vanity'
 export const ds = createSystem().consolidate({ prefix: 'first' })
 `)
     await writeFile(entry, `import { ds } from './first-system'
@@ -776,30 +775,30 @@ export const first = ds.class({ color })
 describe('auto-imports', () => {
   it('styleExportNames reads every export form', () => {
     const source = `
-      import { createEngine } from '@test/legacy'
-      const de = createEngine()
-      export const { t, css, recipe: makeRecipe } = de.createSystem({ tokens: {} })
+      import { createSystem } from '@mszr/vanity'
+      const ds = createSystem().consolidate()
+      export const { t, class: style, recipe: makeRecipe } = ds
       export const brand = '#635bff'
       export function helper() {}
       const local = 1
       export { local, local as alias }
       export { external as refracted } from './external'
-      export type { VanityProps } from '@test/legacy'
+      export type { VanityProps } from '@mszr/vanity'
       // export const phantom = 1
       const text = 'export const alsoPhantom = 1'
     `
 
     expect(styleExportNames(source).sort())
-      .toEqual(['alias', 'brand', 'css', 'helper', 'local', 'makeRecipe', 'refracted', 't'])
+      .toEqual(['alias', 'brand', 'helper', 'local', 'makeRecipe', 'refracted', 'style', 't'])
   })
 
   it('export discovery follows syntax through multiline destructuring and defaults', () => {
     const source = `
       export const {
         t,
-        css: style,
+        class: style,
         recipe: makeRecipe = fallback,
-      } = de.createSystem({ tokens: {} })
+      } = ds
       export interface TypesOnly {}
       export type Alias = string
     `
@@ -1133,9 +1132,9 @@ describe('applyDebugNames', () => {
     expect(applyDebugNames(source)).toBe(source)
   })
 
-  it('appends debug ids to css, recipe, anatomy, and keyframes calls', () => {
-    expect(applyDebugNames('export const card = css({ padding: 8 })'))
-      .toBe('export const card = css({ padding: 8 }, \'card\')')
+  it('appends debug ids to class, recipe, anatomy, and keyframes calls', () => {
+    expect(applyDebugNames('const { class: style } = system\nexport const card = style({ padding: 8 })'))
+      .toBe('const { class: style } = system\nexport const card = style({ padding: 8 }, \'card\')')
     expect(applyDebugNames('const { class: cls } = ds\nexport const card = cls({ padding: 8 })'))
       .toBe('const { class: cls } = ds\nexport const card = cls({ padding: 8 }, \'card\')')
     expect(applyDebugNames('export const button = recipe({ base: {} })'))
@@ -1152,7 +1151,7 @@ describe('applyDebugNames', () => {
   })
 
   it('respects an explicit debug id', () => {
-    const source = 'export const card = css({ padding: 8 }, \'Card\')'
+    const source = 'const { class: style } = system\nexport const card = style({ padding: 8 }, \'Card\')'
     expect(applyDebugNames(source)).toBe(source)
   })
 
@@ -1165,25 +1164,25 @@ describe('applyDebugNames', () => {
     expect(applyDebugNames(template)).toBe(labeled)
     expect(applyDebugNames('export const s = port(\'a) b\')'))
       .toBe('export const s = port(\'a) b\', { label: \'s\' })')
-    expect(applyDebugNames('export const c = css({ content: \'","\' })'))
-      .toBe('export const c = css({ content: \'","\' }, \'c\')')
+    expect(applyDebugNames('const { class: style } = system\nexport const c = style({ content: \'","\' })'))
+      .toBe('const { class: style } = system\nexport const c = style({ content: \'","\' }, \'c\')')
   })
 
   it('names several declarations in one module', () => {
-    const source = 'export const a = port(0), c = recipe({})\nconst b = css({})\n'
+    const source = 'const { class: style } = system\nexport const a = port(0), c = recipe({})\nconst b = style({})\n'
     expect(applyDebugNames(source))
-      .toBe('export const a = port(0, { label: \'a\' }), c = recipe({}, \'c\')\nconst b = css({}, \'b\')\n')
+      .toBe('const { class: style } = system\nexport const a = port(0, { label: \'a\' }), c = recipe({}, \'c\')\nconst b = style({}, \'b\')\n')
   })
 
   it('tracks imported and destructured aliases without touching comments or strings', () => {
-    const source = `import { port as makePort, css as style } from './system'
+    const source = `import { port as makePort, class as style } from './system'
 const { recipe: makeRecipe } = system
 const gap = makePort(0)
 const card = style({ content: 'const fake = port(0)' })
 const button = makeRecipe({})
 // const phantom = port(0)
 `
-    const expected = `import { port as makePort, css as style } from './system'
+    const expected = `import { port as makePort, class as style } from './system'
 const { recipe: makeRecipe } = system
 const gap = makePort(0, { label: 'gap' })
 const card = style({ content: 'const fake = port(0)' }, 'card')

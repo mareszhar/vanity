@@ -5,7 +5,7 @@ import { ds } from './system'
 const contract = ds.introspect()
 const explanation = ds.explain(ds.t.color.brand)
 
-if (contract.format !== 'vanity.introspection/1' || contract.prefix !== 'canary')
+if (contract.format !== 'vanity.introspection/2' || contract.prefix !== 'canary')
   throw new Error('the canary tool import did not expose its semantic system map')
 if (
   explanation.path.join('.') !== 'color.brand'

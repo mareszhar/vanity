@@ -1,14 +1,4 @@
-/**
- * The public token types. Two rules govern everything here:
- *
- * - **Type the names** ([patterns.md §2]): token paths, emitted variable
- *   names, and modes are all literal types, so mistakes die at the cursor and
- *   hovers read as facts (`VanityColorToken<'live', 'vanity-color-brand'>`).
- * - **The types are honest about liveness** ([patterns.md §3]):
- *   `applyTheme` accepts only runtime inputs — tokens marked `.live()` —
- *   because those are the only writes that re-derive the world instead of
- *   half-clobbering it.
- */
+/** Public token values, authored definitions, and canonical `$*` handles. */
 
 import type * as CSS from 'csstype'
 import type { VanityAxisDefinitions, VanityAxisModeName } from '../system/axes'
@@ -22,62 +12,17 @@ import type {
   VanityValue,
 } from '../values/types'
 
-// ─── Modes ───────────────────────────────────────────────────────────────────
-
-/**
- * How a token behaves at runtime:
- * `static` folds at build · `scheme` pairs per scheme via `light-dark()` ·
- * `live` is a runtime input (`.live()`) · `derived` re-derives from its inputs.
- */
-export type VanityTokenMode = 'static' | 'scheme' | 'live' | 'derived'
-export type VanityColorMode = 'static' | 'scheme' | 'live'
 export type VanityContrastGuarantee = 'checked' | 'live'
-
-/** The runtime-value mode a token contributes when used inside a derivation. */
-type VanityValueMode<M extends VanityTokenMode> = M extends 'derived' ? 'live' : M
 
 // ─── Authoring color values ──────────────────────────────────────────────────
 
-/** Anything the color helpers accept: a color value/token, a contrast pick, or a CSS color literal. */
+/** Anything the color helpers accept: authored color data, token inputs, or a CSS color literal. */
 export type VanityColorish
-  = | VanityColor<any>
-    | VanityAuthoredColor
-    | VanityColorTokenAny
+  = | VanityAuthoredColor
+    | VanityAuthoredContrast
     | VanityColorTokenHandle
     | VanityTokenInput<'color'>
-    | VanityContrast<any>
     | string
-
-export type VanityModeOf<S extends VanityColorish>
-  = S extends VanityContrast<infer G> ? (G extends 'checked' ? 'scheme' : 'live')
-    : S extends VanityColor<infer M> ? M
-      : S extends VanityColorToken<infer M, any> ? VanityValueMode<M>
-        : S extends VanityTokenInput<'color'> ? 'live'
-          : 'static'
-
-/** Distributes over mode unions, so an uncertain target claims no guarantee it can't keep. */
-export type VanityGuaranteeOf<M extends VanityColorMode> = M extends 'live' ? 'live' : 'checked'
-
-/**
- * A color under construction: an expression tree the compiler either folds at
- * build time or serializes to live CSS, per liveness. The method set is finite
- * by design — each entry has a defined live-CSS serialization.
- */
-export interface VanityColor<out M extends VanityColorMode = VanityColorMode> extends VanitySelfValue<'color'> {
-  readonly mode: M
-  /** Marks the token as a runtime input: writable via `applyTheme`, emitted live. */
-  live: () => VanityColor<'live'>
-  /** Intent at the definition site — surfaced by the manifest and audits. */
-  describe: (text: string) => VanityColor<M>
-  deprecated: (reason: string) => VanityColor<M>
-  alpha: (amount: number) => VanityColor<M>
-  lighten: (amount: number) => VanityColor<M>
-  darken: (amount: number) => VanityColor<M>
-  saturate: (amount: number) => VanityColor<M>
-  desaturate: (amount: number) => VanityColor<M>
-  rotate: (degrees: number) => VanityColor<M>
-  mix: (other: VanityColorish, amount: number) => VanityInterpolatedColor<VanityColorMode>
-}
 
 export type VanityColorInterpolationSpace
   = | 'srgb' | 'srgb-linear' | 'display-p3' | 'display-p3-linear' | 'a98-rgb' | 'prophoto-rgb' | 'rec2020'
@@ -86,15 +31,7 @@ export type VanityColorInterpolationSpace
 export type VanityPolarColorSpace = 'hsl' | 'hwb' | 'lch' | 'oklch'
 export type VanityHueInterpolation = 'shorter' | 'longer' | 'increasing' | 'decreasing'
 
-/** Only interpolation-producing operations expose CSS's `in <color-space>` choice. */
-export interface VanityInterpolatedColor<out M extends VanityColorMode = VanityColorMode> extends VanityColor<M> {
-  in: {
-    (space: VanityColorInterpolationSpace): VanityColor<M>
-    (space: VanityPolarColorSpace, options: { hue: VanityHueInterpolation }): VanityColor<M>
-  }
-}
-
-/** Canonical engine color value: expression/data type only, with no token liveness mode. */
+/** Canonical authored color value: expression/data only, with no token mode. */
 export interface VanityAuthoredColor extends VanitySelfValue<'color'> {
   alpha: (amount: number) => VanityAuthoredColor
   lighten: (amount: number) => VanityAuthoredColor
@@ -112,69 +49,12 @@ export interface VanityAuthoredInterpolatedColor extends VanityAuthoredColor {
   }
 }
 
-/**
- * A guaranteed-legible pairing from `legibleOn`. `checked` is proven at build
- * (APCA); over a live target the guarantee degrades honestly to `live` and
- * retains the computed fallback from the authored defaults.
- */
-export interface VanityContrast<G extends VanityContrastGuarantee = VanityContrastGuarantee> {
+/** Authored contrast pairing; resolution determines its build guarantee. */
+export interface VanityAuthoredContrast<G extends VanityContrastGuarantee = VanityContrastGuarantee> {
   readonly guarantee: G
-  describe: (text: string) => VanityContrast<G>
-  deprecated: (reason: string) => VanityContrast<G>
 }
 
 // ─── Token handles ───────────────────────────────────────────────────────────
-
-export interface VanityTokenBase<Name extends string = string, Path extends string = string> {
-  /** The emitted custom-property name: `--vanity-color-brand`. */
-  readonly name: `--${Name}`
-  /** The reference form for interpolation: `var(--vanity-color-brand)`. */
-  readonly var: `var(--${Name})`
-  /** The dot path in the graph: `color.brand`. */
-  readonly path: Path
-  /** Intent from `.describe()` at the definition site. */
-  readonly description?: string
-  /** The replacement named by `.deprecated()`. */
-  readonly deprecated?: string
-  toString: () => `var(--${Name})`
-}
-
-export interface VanityColorToken<
-  M extends VanityTokenMode = VanityTokenMode,
-  Name extends string = string,
-  Path extends string = string,
-> extends VanityTokenBase<Name, Path> {
-  readonly mode: M
-  alpha: (amount: number) => VanityColor<VanityValueMode<M>>
-  lighten: (amount: number) => VanityColor<VanityValueMode<M>>
-  darken: (amount: number) => VanityColor<VanityValueMode<M>>
-  saturate: (amount: number) => VanityColor<VanityValueMode<M>>
-  desaturate: (amount: number) => VanityColor<VanityValueMode<M>>
-  rotate: (degrees: number) => VanityColor<VanityValueMode<M>>
-  mix: (other: VanityColorish, amount: number) => VanityInterpolatedColor<VanityColorMode>
-}
-
-type VanityColorTokenAny = VanityColorToken<any, string>
-
-export interface VanityContrastToken<
-  G extends VanityContrastGuarantee = VanityContrastGuarantee,
-  Name extends string = string,
-  Path extends string = string,
-> extends VanityTokenBase<Name, Path> {
-  readonly mode: 'derived'
-  readonly guarantee: G
-}
-
-export interface VanityValueToken<
-  V extends string | number = string | number,
-  Name extends string = string,
-  M extends 'static' | 'derived' = 'static' | 'derived',
-  Path extends string = string,
-> extends VanityTokenBase<Name, Path> {
-  readonly mode: M
-  /** The resolved value — hover a token, read its answer. */
-  readonly value: V
-}
 
 // ─── Canonical token traits ────────────────────────────────────────────────
 
@@ -321,7 +201,7 @@ type VanityTokenAxisInput<Axes extends VanityAxisDefinitions>
         }[]
       }
 
-type VanityTokenTraitDiagnostic<Config>
+export type VanityTokenTraitDiagnostic<Config>
   = Config extends { readonly mutable: true } | { readonly axes: object } | { readonly cases: readonly unknown[] }
     ? (Config extends { readonly reference: infer Reference }
       ? Reference extends 'var' ? unknown : { readonly 'mutable/axes/cases require reference: \'var\'': never }
@@ -580,24 +460,19 @@ export interface VanityTokenHandle<
 export type VanityTokenHandleAny = VanityTokenHandle<any, string, string, any, any, any, any, any, any, any>
 export type VanityColorTokenHandle = VanityTokenHandle<any, string, string, 'color', any, any, any, any, any, any>
 
-// ─── The graph: input shape and inferred output ──────────────────────────────
+// ─── Token module: input shape and inferred output ──────────────────────────
 
 export type VanityLeafInput
-  = | VanityColor<any>
-    | VanityAuthoredColor
-    | VanityContrast<any>
+  = | VanityAuthoredColor
+    | VanityAuthoredContrast
     | VanityCssValue
     | VanityConfiguredTokenShape
     | string
     | number
     | null
 export type VanityDerivedResult
-  = | VanityColor<any>
-    | VanityAuthoredColor
-    | VanityContrast<any>
-    | VanityColorTokenAny
-    | VanityContrastToken<any, any>
-    | VanityValueToken<any, any, any>
+  = | VanityAuthoredColor
+    | VanityAuthoredContrast
     | VanityTokenHandleAny
     | VanityCssValue
     | VanityConfiguredTokenShape
@@ -607,7 +482,7 @@ export type VanityDerivedResult
 
 /**
  * The dependency-free seed accepted by `defineTokens`. Derivations live in
- * explicit `.derive()` stages, where TypeScript has the whole prior graph and
+ * explicit derivation steps, where TypeScript has the whole prior module and
  * can therefore complete and validate every token path at the cursor.
  */
 export interface VanityGraphInput {
@@ -615,25 +490,19 @@ export interface VanityGraphInput {
 }
 
 /** A nested set of tokens produced by one topological derivation stage. */
-export interface VanityTokenDerivationStage {
-  [token: string]: VanityDerivedResult | VanityTokenDerivationStage
+export interface VanityTokenDerivationTree {
+  [token: string]: VanityDerivedResult | VanityTokenDerivationTree
 }
 
-/** Type-only marker: a stage-produced leaf is always a graph derivation. */
+/** Type-only marker: a derived leaf is always produced by a derivation step. */
 declare const VANITY_DERIVED_DEFINITION: unique symbol
 
-/** A type-level graph node produced by a `.derive()` stage. */
+/** A type-level node produced by a derivation step. */
 export interface VanityDerived<R> {
   readonly [VANITY_DERIVED_DEFINITION]: R
 }
 
 type VanityDefinitionLeaf = VanityLeafInput | VanityDerived<unknown>
-
-type VanityMarkDerived<S> = {
-  [K in keyof S]: S[K] extends VanityDerivedResult
-    ? VanityDerived<S[K]>
-    : S[K] extends object ? VanityMarkDerived<S[K]> : never
-}
 
 type VanityMergeNode<A, B>
   = A extends VanityDefinitionLeaf ? B
@@ -677,7 +546,7 @@ type VanityDuplicatePaths<A, B, Prefix extends string = ''> = {
 
 /**
  * A readable, cursor-local composition error. The impossible property makes
- * TypeScript print every colliding dot path at the `.compose(module)` call.
+ * TypeScript print every colliding dot path at the `.add(module)` call.
  */
 export type VanityCompositionGuard<A, B>
   = [VanityDuplicatePaths<A, B>] extends [never]
@@ -686,28 +555,11 @@ export type VanityCompositionGuard<A, B>
         readonly [K in `Token module duplicates an existing token: ${VanityDuplicatePaths<A, B>}`]: never
       }
 
-/**
- * Let a stage reopen existing groups, but reject an existing leaf at the exact
- * returned key. The recursive intersection keeps TypeScript's diagnostic on
- * the typo/duplicate instead of collapsing into an overload wall.
- */
-type VanityAddition<G, S> = {
-  [K in keyof S]: K extends keyof G
-    ? G[K] extends VanityDefinitionLeaf
-      ? never
-      : S[K] extends VanityDerivedResult
-        ? never
-        : S[K] extends object
-          ? VanityAddition<G[K], S[K]>
-          : never
-    : S[K]
-}
-
-/** Semantic engine requirement carried by an unfinished module. */
-export interface VanityEngineRequirement {
+/** Semantic requirement carried by an unfinished token module. */
+export interface VanityTokenModuleRequirement {
   readonly protocol: number
-  readonly signature: string
-  readonly compatibleSignatures: readonly string[]
+  readonly capabilitySignature: string
+  readonly compatibleCapabilitySignatures: readonly string[]
 }
 
 /** Emission intent retained by a module until one system finalizes it. */
@@ -723,7 +575,7 @@ export interface VanityTokenModuleOptions {
 }
 
 /**
- * An unfinished, engine-bound token graph. It has structure and derivations,
+ * An unfinished, system-bound token module. It has structure and derivations,
  * but no prefix, custom-property names, or emitted CSS until `createSystem()`.
  */
 declare const VANITY_TOKEN_DEFINITION: unique symbol
@@ -734,43 +586,14 @@ export interface VanityTokenDefinition<
 > {
   /** Type-only graph carrier; runtime identity uses `Symbol.for`. */
   readonly [VANITY_TOKEN_DEFINITION]: G
-  /** Type-only engine token policy captured when this unfinished module was defined. */
+  /** Type-only system token policy captured when this unfinished module was defined. */
   readonly __vanityTokenPolicy?: Policy
 }
 
 export interface VanityTokenModule<
   G extends object,
   Policy extends VanityTokenPolicy = VanityDefaultTokenPolicy,
-> extends VanityTokenDefinition<G, Policy> {
-  /**
-   * Compose an independently authored token module into this definition.
-   * Modules retain their internal stage order; later derivations see the
-   * exact combined graph. Duplicate paths fail at this call.
-   */
-  compose: <const M extends object>(
-    module: VanityTokenDefinition<M, Policy> & VanityCompositionGuard<G, M>,
-  ) => VanityTokenModule<VanityMergeGraph<G, M>, Policy>
-  derive: <const S extends VanityTokenDerivationStage>(
-    stage: (m: VanityCanonicalTokens<G, string, Policy>) => S & VanityAddition<G, S>,
-  ) => VanityTokenModule<VanityMergeGraph<G, VanityMarkDerived<S>>, Policy>
-}
-
-/**
- * Standalone characterization builder. Engine-bound modules deliberately do
- * not expose `.build()` because the finalized system is the sole name owner.
- */
-export interface VanityTokenBuilder<G extends object> extends VanityTokenDefinition<G> {
-  compose: <const M extends object>(
-    module: VanityTokenDefinition<M> & VanityCompositionGuard<G, M>,
-  ) => VanityTokenBuilder<VanityMergeGraph<G, M>>
-  derive: <const S extends VanityTokenDerivationStage>(
-    stage: (m: VanityTokens<G, string>) => S & VanityAddition<G, S>,
-  ) => VanityTokenBuilder<VanityMergeGraph<G, VanityMarkDerived<S>>>
-  /** Finalize the standalone graph for characterization. */
-  build: <Prefix extends string = 'vanity'>(
-    options?: VanityTokensOptions<G, Prefix>,
-  ) => VanityTokens<G, Prefix>
-}
+> extends VanityTokenDefinition<G, Policy> {}
 
 /** Per-character kebab-case, in lockstep with the runtime rule in `names.ts`. */
 export type VanityKebab<S extends string> = S extends `${infer Head}${infer Rest}`
@@ -791,9 +614,16 @@ export interface VanityResolvedTokens {
   readonly [VANITY_RESOLVED_TOKENS]: true
 }
 
-export type VanityTokens<T, Name extends string = 'vanity'> = VanityResolvedTokens & VanityTokenGroup<T, Name, ''>
+export type VanityTokens<T, Name extends string = 'vanity'> = VanityResolvedTokens & VanityCanonicalTokenGroup<
+  T,
+  Name,
+  '',
+  VanityDefaultTokenPolicy,
+  string,
+  string
+>
 
-/** The canonical token graph: independent traits and `$`-prefixed handle members. */
+/** The canonical token module: independent traits and `$`-prefixed handle members. */
 export type VanityCanonicalTokens<
   T,
   Name extends string = 'vanity',
@@ -801,18 +631,6 @@ export type VanityCanonicalTokens<
   Conditions extends string = string,
   Aliases extends string = string,
 > = VanityResolvedTokens & VanityCanonicalTokenGroup<T, Name, '', Policy, Conditions, Aliases>
-
-type VanityTokenGroup<T, Name extends string, Path extends string> = {
-  readonly [K in keyof T & string]: VanityTokenOf<T[K], `${Name}-${VanityKebab<K>}`, Path extends '' ? K : `${Path}.${K}`>
-}
-
-type VanityTokenOf<N, Name extends string, Path extends string>
-  = N extends VanityDerived<infer R> ? VanityDerivedTokenOf<R, Name, Path>
-    : N extends VanityContrast<infer G> ? VanityContrastToken<G, Name, Path>
-      : N extends VanityColor<infer M> ? VanityColorToken<M, Name, Path>
-        : N extends VanityCssValue<infer Css> ? VanityValueToken<Css, Name, 'static', Path>
-          : N extends string | number ? VanityValueToken<N, Name, 'static', Path>
-            : VanityTokenGroup<N, Name, Path>
 
 type VanityCanonicalTokenGroup<
   T,
@@ -979,15 +797,6 @@ export type VanityVarsOf<Selection> = Selection extends { readonly $name: infer 
     readonly [K in keyof Selection as K extends `$${string}` ? never : K]: VanityVarsOf<Selection[K]>
   } : never
 
-type VanityDerivedTokenOf<R, Name extends string, Path extends string>
-  = R extends VanityContrast<infer G> ? VanityContrastToken<G, Name, Path>
-    : R extends VanityContrastToken<infer G, any, any> ? VanityContrastToken<G, Name, Path>
-      : R extends VanityColor<any> | VanityColorTokenAny ? VanityColorToken<'derived', Name, Path>
-        : R extends VanityValueToken<infer V, any, any, any> ? VanityValueToken<V, Name, 'derived', Path>
-          : R extends VanityCssValue<infer Css> ? VanityValueToken<Css, Name, 'derived', Path>
-            : R extends string | number ? VanityValueToken<R, Name, 'derived', Path>
-              : never
-
 // ─── Options ─────────────────────────────────────────────────────────────────
 
 export interface VanityTokensOptions<T = unknown, Prefix extends string = string> {
@@ -1004,40 +813,4 @@ export interface VanityCheck {
   aaa: () => VanityCheck
   /** An explicit APCA threshold. */
   lc: (min: number) => VanityCheck
-}
-
-// ─── Build-time token override shapes ────────────────────────────────────────
-
-/** Canonical `ds.tokenOverride()` accepts typed leaves from the bound graph. */
-export type VanityTokenOverrides<T> = {
-  [K in keyof T as K extends `$${string}` ? never : K]?: T[K] extends VanityTokenHandleAny
-    ? VanityTokenFallback<T[K]['$type']>
-    : T[K] extends object
-      ? VanityTokenOverrides<T[K]>
-      : never
-}
-
-/** Override shape used by the standalone characterization adapter. */
-export type VanityThemeOverrides<T> = {
-  [K in keyof T as K extends `$${string}` ? never : K]?: T[K] extends VanityColorToken<any, any> | VanityContrastToken<any, any>
-    ? VanityColor<any> | string
-    : T[K] extends VanityValueToken<any, any>
-      ? string | number
-      : VanityThemeOverrides<T[K]>
-}
-
-type VanityHasLive<N>
-  = N extends VanityColorToken<infer M, any> ? (M extends 'live' ? true : false)
-    : N extends VanityContrastToken<any, any> | VanityValueToken<any, any> ? false
-      : N extends object ? (true extends VanityHasLive<N[Exclude<keyof N, `$${string}`>]> ? true : false)
-        : false
-
-/**
- * Runtime `applyTheme` accepts **live tokens only** — the graph's declared
- * runtime inputs. A static, scheme, or derived key is a type error at that
- * key, because writing it could not honestly work ([patterns.md §3]).
- */
-export type VanityLiveOverrides<T> = {
-  [K in keyof T as K extends `$${string}` ? never : VanityHasLive<T[K]> extends true ? K : never]?:
-  T[K] extends VanityColorToken<'live', any> ? string : VanityLiveOverrides<T[K]>
 }

@@ -1,4 +1,4 @@
-/** Manifest v3: the canonical system map plus build-module provenance. */
+/** Manifest v4: the canonical system map plus build-module provenance. */
 
 import type {
   VanityEscapeForm,
@@ -7,7 +7,7 @@ import type {
   VanityRecipeRecord,
   VanitySourceRecord,
   VanityStyleRecord,
-} from '../internal/inspect'
+} from './records'
 import type {
   VanityDeclaredAt,
   VanityIntrospectedToken,
@@ -15,16 +15,16 @@ import type {
   VanityIntrospectionDependency,
   VanityIntrospectionExpression,
   VanitySemanticEntry,
-  VanitySystemMapV1,
+  VanitySystemMapV2,
 } from './system'
 import { introspectSystem, normalizeSourceId } from './system'
 
 /** Stable manifest format discriminator: `manifest.format === VANITY_MANIFEST_FORMAT`. */
-export const VANITY_MANIFEST_FORMAT = 'vanity.manifest/3' as const
+export const VANITY_MANIFEST_FORMAT = 'vanity.manifest/4' as const
 /** Current manifest schema version: `manifest.version === VANITY_MANIFEST_VERSION`. */
-export const VANITY_MANIFEST_VERSION = 3 as const
+export const VANITY_MANIFEST_VERSION = 4 as const
 /** Published JSON Schema identifier: `manifest.$schema === VANITY_MANIFEST_SCHEMA`. */
-export const VANITY_MANIFEST_SCHEMA = 'https://schemas.mszr.dev/vanity/manifest-3.schema.json' as const
+export const VANITY_MANIFEST_SCHEMA = 'https://schemas.mszr.dev/vanity/manifest-4.schema.json' as const
 
 export type VanityManifestSource = VanityDeclaredAt
 export type VanityManifestDeclaration = VanityIntrospectionDeclaration
@@ -93,9 +93,9 @@ export interface VanityManifest {
   readonly format: typeof VANITY_MANIFEST_FORMAT
   readonly version: typeof VANITY_MANIFEST_VERSION
   /** Byte-for-byte semantic equality with `ds.introspect()`. */
-  readonly system: VanitySystemMapV1
+  readonly system: VanitySystemMapV2
   /** Additional system maps, keyed by compatibility identity. */
-  readonly systems: Readonly<Record<string, VanitySystemMapV1>>
+  readonly systems: Readonly<Record<string, VanitySystemMapV2>>
   /** Style/build records grouped under package-relative source IDs. */
   readonly modules: Readonly<Record<string, VanityManifestModule>>
 }
@@ -116,7 +116,7 @@ export interface VanityManifestBuildOptions {
 }
 
 /**
- * Build one stable Manifest v3 from collected semantic records and emitted CSS.
+ * Build one stable Manifest v4 from collected semantic records and emitted CSS.
  *
  * @example
  * `const manifest = buildManifest(records, css, { root: process.cwd() })`
@@ -137,12 +137,12 @@ export function buildManifest(
 
   const primary = portableSystems[0]
   if (!primary)
-    throw new TypeError('[vanity] Manifest v3 requires a consolidated system record')
+    throw new TypeError('[vanity] Manifest v4 requires a consolidated system record')
 
   const system = introspectSystem(primary)
   const modules = new Map<string, MutableModule>()
-  const module = (rawFile: string | undefined): MutableModule => {
-    const source = sourceId(rawFile, options.root)
+  const getModule = (rawFile: string | undefined): MutableModule => {
+    const source = getSourceId(rawFile, options.root)
     let found = modules.get(source)
     if (!found) {
       found = {
@@ -165,29 +165,29 @@ export function buildManifest(
       case 'recipe':
       case 'anatomy': {
         if (record.name !== undefined) {
-          const target = module(record.file)
-          target.recipes[record.name] = recipeEntry(record, target.source)
+          const target = getModule(record.file)
+          target.recipes[record.name] = createRecipeEntry(record, target.source)
         }
         break
       }
       case 'port': {
-        const target = module(record.file)
-        const name = portKey(record)
-        target.ports[name] = portEntry(record, name, target.source, system.id)
+        const target = getModule(record.file)
+        const name = getPortKey(record)
+        target.ports[name] = createPortEntry(record, name, target.source, system.id)
         break
       }
       case 'style': {
-        const target = module(record.file)
-        target.styles[record.class] = styleEntry(record, target.source, system.id, pathsByVar)
+        const target = getModule(record.file)
+        target.styles[record.class] = createStyleEntry(record, target.source, system.id, pathsByVar)
         break
       }
       case 'escape': {
-        const target = module(record.file)
+        const target = getModule(record.file)
         target.escapes.push({
           id: `escape:${target.source}:${record.form}:${record.line ?? 0}:${record.column ?? 0}:${record.detail}`,
           kind: 'escape',
           owner: { kind: 'module', id: `module:${target.source}` },
-          ...source(record, options.root),
+          ...getSource(record, options.root),
           form: record.form,
           detail: record.detail,
           ...(record.reason === undefined ? {} : { reason: record.reason }),
@@ -196,12 +196,12 @@ export function buildManifest(
         break
       }
       case 'contrast': {
-        const target = module(record.file)
+        const target = getModule(record.file)
         target.contrast.push({
           id: `contrast:${target.source}:${record.pairing}:${record.scheme}:${record.algorithm}:${record.line ?? 0}:${record.column ?? 0}`,
           kind: 'contrast',
           owner: { kind: 'module', id: `module:${target.source}` },
-          ...source(record, options.root),
+          ...getSource(record, options.root),
           pairing: record.pairing,
           scheme: record.scheme,
           algorithm: record.algorithm,
@@ -214,10 +214,10 @@ export function buildManifest(
     }
   }
 
-  // v2's global usage count is preserved semantically in the synthetic
+  // The global usage count is preserved semantically in the synthetic
   // project module: CSS has been concatenated by this point, so attributing it
   // to a source file would invent provenance.
-  const project = module('$project')
+  const project = getModule('$project')
   const internal = new Map<string, number>()
   const cssReferences = countAllVarRefs(css)
   for (const token of primary.tokenRecords) {
@@ -234,7 +234,7 @@ export function buildManifest(
     )
   }
 
-  return deepNormalize({
+  return normalizeDeep({
     $schema: VANITY_MANIFEST_SCHEMA,
     format: VANITY_MANIFEST_FORMAT,
     version: VANITY_MANIFEST_VERSION,
@@ -266,25 +266,25 @@ export function buildManifest(
   }) as VanityManifest
 }
 
-export function manifestModules(manifest: VanityManifest): readonly VanityManifestModule[] {
+export function createManifestModules(manifest: VanityManifest): readonly VanityManifestModule[] {
   return Object.values(manifest.modules)
 }
 
-export function manifestTokenUsage(manifest: VanityManifest): Readonly<Record<string, number>> {
+export function getManifestTokenUsage(manifest: VanityManifest): Readonly<Record<string, number>> {
   const usage: Record<string, number> = {}
-  for (const module of manifestModules(manifest)) {
+  for (const module of createManifestModules(manifest)) {
     for (const [path, count] of Object.entries(module.tokenUsage))
       usage[path] = (usage[path] ?? 0) + count
   }
   return usage
 }
 
-function recipeEntry(record: VanityRecipeRecord, moduleId: string): VanityManifestRecipe {
+function createRecipeEntry(record: VanityRecipeRecord, moduleId: string): VanityManifestRecipe {
   return {
     id: `${record.kind}:${moduleId}:${record.name}`,
     kind: record.kind,
     owner: { kind: 'module', id: `module:${moduleId}` },
-    ...source(record),
+    ...getSource(record),
     name: record.name!,
     ...(record.parts === undefined ? {} : { parts: record.parts }),
     variants: record.variants,
@@ -294,7 +294,7 @@ function recipeEntry(record: VanityRecipeRecord, moduleId: string): VanityManife
   }
 }
 
-function portEntry(
+function createPortEntry(
   record: VanityPortRecord,
   name: string,
   moduleId: string,
@@ -305,7 +305,7 @@ function portEntry(
     id: `port:${moduleId}:${name}`,
     kind: 'port',
     owner: { kind: 'module', id: `module:${moduleId}` },
-    ...source(record),
+    ...getSource(record),
     name,
     var: meta.name,
     type: meta.type,
@@ -316,7 +316,7 @@ function portEntry(
   }
 }
 
-function styleEntry(
+function createStyleEntry(
   record: VanityStyleRecord,
   moduleId: string,
   _systemId: string,
@@ -326,32 +326,32 @@ function styleEntry(
     id: `style:${record.class}`,
     kind: 'style',
     owner: { kind: 'module', id: `module:${moduleId}` },
-    ...source(record),
+    ...getSource(record),
     class: record.class,
     ...(record.name === undefined ? {} : { name: record.name }),
     tokens: record.vars.flatMap(variable => pathsByVar.get(variable) ?? []),
   }
 }
 
-function portKey(record: VanityPortRecord): string {
+function getPortKey(record: VanityPortRecord): string {
   const base = record.file?.split('/').pop()?.replace(/\.css\.\w+$/, '')
   const label = record.label ?? record.meta.name
   return base === undefined ? label : `${base}.${label}`
 }
 
-function source(record: VanitySourceRecord, root?: string): { declaredAt?: VanityDeclaredAt } {
+function getSource(record: VanitySourceRecord, root?: string): { declaredAt?: VanityDeclaredAt } {
   if (record.file === undefined)
     return {}
   return {
     declaredAt: {
-      file: sourceId(record.file, root),
+      file: getSourceId(record.file, root),
       ...(record.line === undefined ? {} : { line: record.line }),
       ...(record.column === undefined ? {} : { column: record.column }),
     },
   }
 }
 
-function sourceId(file: string | undefined, root?: string): string {
+function getSourceId(file: string | undefined, root?: string): string {
   if (file === undefined)
     return '$project'
   const normalizedFile = file.replaceAll('\\', '/')
@@ -362,7 +362,7 @@ function sourceId(file: string | undefined, root?: string): string {
 }
 
 /** Occurrences of `var(--name)` / `var(--name,` — the parenthesis keeps prefixes apart. */
-export function countVarRefs(text: string, name: string): number {
+export function countVariableReferences(text: string, name: string): number {
   return countAllVarRefs(text).get(name) ?? 0
 }
 
@@ -375,13 +375,13 @@ function countAllVarRefs(text: string): Map<string, number> {
   return counts
 }
 
-function deepNormalize(value: unknown): unknown {
+function normalizeDeep(value: unknown): unknown {
   if (Array.isArray(value))
-    return Object.freeze(value.map(deepNormalize))
+    return Object.freeze(value.map(normalizeDeep))
   if (!value || typeof value !== 'object')
     return value
   return Object.freeze(Object.fromEntries(Object.entries(value as Record<string, unknown>)
     .filter(([, child]) => child !== undefined)
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, child]) => [key, deepNormalize(child)])))
+    .map(([key, child]) => [key, normalizeDeep(child)])))
 }

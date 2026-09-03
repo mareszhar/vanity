@@ -75,7 +75,7 @@ A **host** supplies context or capability to a mounted guest:
 - a **build host** supplies the module graph and build lifecycle to Vanity's compiler;
 - a **host adapter** is Vanity-owned code that mounts the compiler and registers bindings with one build host.
 
-The **engine** is the immutable capability kernel behind `createSystem()`. It is architecture and maintainer vocabulary, not a second public construction layer; users do not need a `createEngine()` workflow.
+The value kernel is the immutable bundle of portable value capabilities behind `createSystem()`. It is an implementation boundary, not a second public construction layer; users create an open system directly.
 
 ## 3. Four identities
 
@@ -198,3 +198,75 @@ Required recovery sequences:
 - DTCG plugin codecs cross by stable identity/version and JSON-safe payload.
 - Source maps and structured diagnostics carry authored locality through compiler layers.
 - No public feature relies on process-global mutable registries.
+
+## 10. Source ownership and boundaries
+
+A file boundary exists to separate concerns a reader holds separately, not to satisfy a line-count
+target. Split when a file mixes mental models, when one concern's types would make unrelated code
+depend on another concern, or when two concerns change for unrelated reasons. Do not split a
+cohesive object merely because it is long: following one stateful thing through several files is
+harder to maintain than reading it in one place.
+
+Three boundaries are intentionally shaped by that rule:
+
+- `system/open.ts` is large because it materializes the complete chainable authoring surface. Its
+  many method signatures and implementations are one public mental model; separating them by
+  size would make the surface harder to navigate.
+- `tokens/module.ts` keeps the inert graph and its closely related authoring, build, runtime,
+  emission, and introspection projections together. Those operations share one private graph
+  representation and splitting them would leak that representation across files.
+- `values/kernel.ts` keeps the kernel, constructor binding, and value serialization together while
+  they remain one small value-semantics model. `substrate/vanilla-extract/adapter.ts` likewise
+  keeps the backend adapter's authoring, file-scope, serialization, and transformation lifecycle
+  together. Its boundary is enforced by the backend-import guard, not by fragmenting the adapter.
+
+### Current domain ownership
+
+The source tree follows the mental model of the system:
+
+| Domain | Canonical ownership |
+| --- | --- |
+| values | `kernel.ts` for immutable value capabilities and compatibility; `defaults.ts` for package bindings; `protocol.ts`, `extensions.ts`, and `codecs.ts` for portable value, extension, and DTCG codec contracts |
+| tokens | `builder.ts` for the one `.add()` authoring grammar; `module.ts` for inert graph assembly and graph projections; `requirements.ts`, `derive.ts`, `resolve.ts`, `expressions.ts`, `fold.ts`, and `handle.ts` for their named semantic operations |
+| system | `createSystem.ts`, `state.ts`, `open.ts`, `consolidate.ts`, and `locked.ts` for lifecycle and surfaces; `policies.ts`, `plugins.ts`, `axes.ts`, `definitions.ts`, `rules.ts`, `conditions.ts`, and `surface.ts` for their respective registries and models |
+| CSS | `context.ts`, `class.ts`, `rules.ts`, `raw.ts`, `tokens.ts`, `compile.ts`, `emit.ts`, `validation.ts`, and the focused value/rule modules for neutral styling semantics and emission |
+| runtime | `contract.ts` for serializable runtime data; `controller.ts` for roots, axes, snapshots, hydration, reconciliation, HMR, and inspection |
+| introspection | `system.ts` for the canonical semantic map; `manifest.ts` and `manifestValidation.ts` for manifest production and reading; `dtcg.ts` and `interchange.ts` for DTCG orchestration and codec contracts |
+| compiler | `core/` for host-neutral system/source transforms, `modules/` for style-source bundling and evaluation, `projection/` for system-to-artifact source, `hmr/` for invalidation, `auto-imports/` for routing, and `hosts/` for host integration |
+| substrate | `types.ts` and `index.ts` for the neutral port and selection; `vanilla-extract/adapter.ts` for all backend-specific integration |
+| styling domains | `recipes/`, `atoms/`, and `ports/` remain separate because their authoring and projection semantics differ; `plugins/` and `presets/` likewise retain their domain boundaries |
+
+Package entrypoints expose capabilities or select adapters. They do not become alternate homes for
+domain implementations.
+
+### Compiler and Vite boundaries
+
+The compiler owns Vanity's pipeline, while a host adapter owns how that pipeline is mounted. In
+particular, `compiler/modules/` answers the complete question “how does this style source become a
+live system?”: bundling and evaluation stay together. `compiler/projection/` answers “how does
+this resolved system become browser or SSR artifact source?”: runtime module generation is
+projection and is not Vite-specific.
+
+`vite.ts` owns only the Vite lifecycle: the plugin factory and hooks, auto-import plugin
+composition, Vite/Rollup id and path normalization, and Vite-shaped diagnostics and build errors.
+Its hooks delegate style bundling, source transforms, evaluation, HMR, and runtime artifact
+generation to `compiler/`. A helper belongs in the host adapter only when its answer would change
+for a different bundler; otherwise it belongs with the Vanity operation it serves.
+
+### External format boundaries
+
+Every external artifact format has a producer and a strict reader placed at the same architectural
+boundary. The producer defines the current representation; the reader validates the complete known
+schema recursively and rejects missing required material, unknown fields, stale keys from removed
+formats, and superseded versions before downstream code sees the data.
+
+| Format | Producer | Strict reader |
+| --- | --- | --- |
+| portable system v2 | `system/contract.ts` | `system/contractValidation.ts` |
+| manifest v4 | `introspect/manifest.ts` | `introspect/manifestValidation.ts` |
+
+Vanity is pre-1.0, so rejecting data outside the current known schema is not backward-compatibility
+handling; it is the absence of it. Closing a schema to what the reader actually understands keeps
+the boundary honest and turns a confusing downstream failure into a clear diagnostic at the door.
+When a new external format is introduced, add its producer/reader pair before wiring it into a
+consumer, rather than growing loose checks at call sites.

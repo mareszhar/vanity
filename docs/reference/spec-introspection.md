@@ -1,6 +1,6 @@
 # vanity — spec: introspection, diagnostics, and agent surfaces
 
-Introspection is a primary product surface. A human, editor, CI job, or agent can ask the system what exists, why it exists, where it came from, and what a change affects without evaluating style modules or reverse-engineering CSS.
+Introspection is a primary product surface. A human, editor, CI job, or agent can ask the system what exists, why it exists, where it came from, and what a change affects without evaluating style modules or reconstructing CSS.
 
 ## 1. One semantic record
 
@@ -17,7 +17,7 @@ System construction records authored facts once. These projections read that rec
 - source/debug names;
 - bounded agent context.
 
-Parallel provenance registries are prohibited. The portable `vanity.system/1` compiler artifact remains a private interchange form because it carries restoration data; tools see the normalized semantic map instead.
+Parallel provenance registries are prohibited. The portable `vanity.system/2` compiler artifact remains a private interchange form because it carries restoration data; tools see the normalized semantic map instead.
 
 ## 2. Contract introspection
 
@@ -25,7 +25,7 @@ Parallel provenance registries are prohibited. The portable `vanity.system/1` co
 const map = ds.introspect()
 ```
 
-The result is immutable, deterministic `vanity.introspection/1` data. Its top-level `version` is `1`, and it carries the independent compatibility, CSS, runtime-schema, and documentation identities.
+The result is immutable, deterministic `vanity.introspection/2` data. Its top-level `version` is `2`, and it carries the independent compatibility, CSS, runtime-schema, and documentation identities.
 
 The map contains:
 
@@ -34,9 +34,9 @@ The map contains:
 - conditions with their readable form, exact lowered arms, and immutable AST;
 - declared roots and ownership;
 - ordered cascade layers;
-- installed plugins and all engine extensions;
+- installed plugins and all value extensions;
 - constants;
-- engine policies and support target;
+- system policies and support target;
 - built-in, plugin, and user-defined constructors;
 - registered utility paths;
 - the portable runtime schema;
@@ -64,7 +64,7 @@ The semantic map is query data. Calling `introspect()` does not emit CSS.
 
 `ds.introspect()` knows the consolidated system synchronously. It cannot know style modules the compiler has not evaluated.
 
-Manifest v3 therefore has two scopes:
+Manifest v4 therefore has two scopes:
 
 ```text
 system     exact ds.introspect() projection
@@ -87,7 +87,7 @@ Tokens, axes, conditions, recipes, anatomies, and ports return structured semant
 
 `formatExplanation()` renders stable human output. Formatted prose is a view of the structured result, never the API of record. A semantic path such as `color.brand` can be resolved by the CLI without loading TypeScript.
 
-## 5. Manifest v3
+## 5. Manifest v4
 
 On each successful build/update the compiler writes `.vanity/manifest.json`, serves the same snapshot at `/__vanity/manifest.json`, and renders its DevTools view at `/__vanity/`.
 
@@ -95,11 +95,11 @@ The manifest contract is:
 
 ```TS
 interface VanityManifest {
-  $schema: 'https://schemas.mszr.dev/vanity/manifest-3.schema.json'
-  format: 'vanity.manifest/3'
-  version: 3
-  system: VanitySystemMapV1
-  systems: Readonly<Record<string, VanitySystemMapV1>>
+  $schema: 'https://schemas.mszr.dev/vanity/manifest-4.schema.json'
+  format: 'vanity.manifest/4'
+  version: 4
+  system: VanitySystemMapV2
+  systems: Readonly<Record<string, VanitySystemMapV2>>
   modules: Readonly<Record<string, VanityManifestModule>>
 }
 ```
@@ -208,7 +208,7 @@ The latter four consume explicit integration/runtime evidence rather than guessi
 - recipe/anatomy/port module surface;
 - escapes, nonportable values, and overwrite cautions.
 
-`generateAgentContext()` renders those facts as Markdown. DevTools reads the same Manifest v3 modules and system map for tokens, usage, declarations, recipes/anatomies, ports, class provenance, conditions, layers, escapes, and contrast. Neither maintains a second source of truth.
+`generateAgentContext()` renders those facts as Markdown. DevTools reads the same Manifest v4 modules and system map for tokens, usage, declarations, recipes/anatomies, ports, class provenance, conditions, layers, escapes, and contrast. Neither maintains a second source of truth.
 
 ## 12. Evidence
 
@@ -220,7 +220,7 @@ Permanent evidence covers:
 - plugin contribution ownership and overwrite/augment history;
 - all audit categories and evidence adapters;
 - normalized diagnostic sinks, related sites, and clickable author frames;
-- Manifest v3 Vite/DevTools/agent projections;
+- Manifest v4 Vite/DevTools/agent projections;
 - CLI formatted/JSON behavior;
 - published schema and CLI from a freshly packed consumer;
 - repository benchmark and package-size baselines.

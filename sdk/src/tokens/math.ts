@@ -41,17 +41,17 @@ export function formatOklch({ l, c, h, alpha }: VanityOklch): string {
 
 export function mixOklch(a: VanityOklch, b: VanityOklch, amount: number): VanityOklch {
   // `color-mix(in oklab, …)` — the same interpolation space the emitted CSS names.
-  const mixed = toOklch(interpolate([oklchOf(a), oklchOf(b)], 'oklab')(amount))
+  const mixed = toOklch(interpolate([getOklch(a), getOklch(b)], 'oklab')(amount))
   const { l, c, h = 0, alpha } = mixed
   return { l, c, h, ...(alpha === undefined || alpha === 1 ? {} : { alpha }) }
 }
 
-function oklchOf({ l, c, h, alpha }: VanityOklch) {
+function getOklch({ l, c, h, alpha }: VanityOklch) {
   return { mode: 'oklch' as const, l, c, h, alpha }
 }
 
-function srgbChannels(color: VanityOklch): [number, number, number] {
-  const { r, g, b } = toRgb(oklchOf(color))
+function getSrgbChannels(color: VanityOklch): [number, number, number] {
+  const { r, g, b } = toRgb(getOklch(color))
   const clamp = (channel: number) => Math.min(1, Math.max(0, channel))
   return [clamp(r), clamp(g), clamp(b)]
 }
@@ -67,7 +67,7 @@ const APCA = {
   minDeltaY: 0.0005,
 }
 
-function apcaScreenLuminance([r, g, b]: [number, number, number]): number {
+function getApcaScreenLuminance([r, g, b]: [number, number, number]): number {
   const y = 0.2126729 * r ** 2.4 + 0.7151522 * g ** 2.4 + 0.072175 * b ** 2.4
   const { threshold, exponent } = APCA.blackSoftClamp
   return y < threshold ? y + (threshold - y) ** exponent : y
@@ -77,9 +77,9 @@ function apcaScreenLuminance([r, g, b]: [number, number, number]): number {
  * The signed APCA lightness contrast Lc of `text` over `background`.
  * Positive for dark-on-light, negative for light-on-dark; legibility compares |Lc|.
  */
-export function apcaContrast(text: VanityOklch, background: VanityOklch): number {
-  const textY = apcaScreenLuminance(srgbChannels(text))
-  const backgroundY = apcaScreenLuminance(srgbChannels(background))
+export function measureApcaContrast(text: VanityOklch, background: VanityOklch): number {
+  const textY = getApcaScreenLuminance(getSrgbChannels(text))
+  const backgroundY = getApcaScreenLuminance(getSrgbChannels(background))
 
   if (Math.abs(backgroundY - textY) < APCA.minDeltaY)
     return 0
@@ -97,15 +97,15 @@ export function apcaContrast(text: VanityOklch, background: VanityOklch): number
 
 // ─── WCAG 2 contrast ratio ───────────────────────────────────────────────────
 
-function wcagLuminance([r, g, b]: [number, number, number]): number {
-  const linear = (channel: number) =>
+function getWcagLuminance([r, g, b]: [number, number, number]): number {
+  const convertToLinear = (channel: number) =>
     channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
-  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+  return 0.2126 * convertToLinear(r) + 0.7152 * convertToLinear(g) + 0.0722 * convertToLinear(b)
 }
 
-export function wcagContrast(a: VanityOklch, b: VanityOklch): number {
-  const first = wcagLuminance(srgbChannels(a))
-  const second = wcagLuminance(srgbChannels(b))
+export function measureWcagContrast(a: VanityOklch, b: VanityOklch): number {
+  const first = getWcagLuminance(getSrgbChannels(a))
+  const second = getWcagLuminance(getSrgbChannels(b))
   const [darker, lighter] = first < second ? [first, second] : [second, first]
   return (lighter + 0.05) / (darker + 0.05)
 }
@@ -123,8 +123,8 @@ export interface VanityContrastPick {
 
 /** The better of white/black text over `target`, by |Lc| — what `contrast-color()` computes live. */
 export function pickLegible(target: VanityOklch): VanityContrastPick {
-  const whiteLc = apcaContrast(white, target)
-  const blackLc = apcaContrast(black, target)
+  const whiteLc = measureApcaContrast(white, target)
+  const blackLc = measureApcaContrast(black, target)
 
   return Math.abs(whiteLc) >= Math.abs(blackLc)
     ? { keyword: 'white', color: white, lc: whiteLc }

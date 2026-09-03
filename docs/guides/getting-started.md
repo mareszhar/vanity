@@ -65,7 +65,7 @@ export const card = ds.class({
 })
 ```
 
-The result is ordinary CSS with recognizable classes and custom properties. No client styling engine rebuilds the design graph.
+The result is ordinary CSS with recognizable classes and custom properties. No client-side style graph rebuilds the design graph.
 
 ## Next
 

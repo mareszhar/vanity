@@ -1,14 +1,30 @@
-import type { VanityEngine } from '../engine/createEngine'
-import type { VanityTokenRecord } from '../internal/inspect'
-import type { VanityDtcgCodec, VanityInterchangeSystem, VanityJsonValue } from '../internal/interchange'
-import type { VanityGraphInput, VanityTokenModule, VanityTokenPolicy } from '../tokens/types'
+import type { VanityResolvedPolicies } from '../system/policies'
+import type { OpenSystemState } from '../system/state'
+import type { VanityGraphInput, VanityTokenFactory, VanityTokenModule, VanityTokenModuleOptions, VanityTokenPolicy } from '../tokens/types'
+import type { DtcgCodecRegistry } from '../values/codecs'
+import type { VanityValueOperationContext } from '../values/kernel'
 import type { VanityCssDataType } from '../values/types'
-import { createEngine, enginePrivate } from '../engine/createEngine'
-import { VANITY_SYSTEM_INTERCHANGE } from '../internal/interchange'
-import { engineOfOpenSystem } from '../system/openSystem'
-import { finalizeTokenModule, graphOf, isTokenBuilder, tokenInspectionsOf } from '../tokens/graph'
+import type {
+  VanityDtcgCodec,
+  VanityDtcgDecodeContext,
+  VanityInterchangeSystem,
+  VanityJsonValue,
+} from './interchange'
+import type { VanityTokenRecord } from './records'
+import { createPolicyState, resolvePolicies } from '../system/policies'
+import { getSystemTokenModuleRequirement } from '../system/shape'
+import { getOpenSystemState } from '../system/state'
+import { getTokenModule } from '../tokens/builder'
+import { createTokenFactory } from '../tokens/config'
+import { composeTokenModules, deriveTokenModule } from '../tokens/derive'
 import { parseColor } from '../tokens/math'
-import { compositeNode, ExpressionValue, inputNode, rawNode } from '../values/protocol'
+import { defineTokenModule, getTokenGraph, getTokenInspections, isTokenModule } from '../tokens/module'
+import { getTokenModuleRequirement } from '../tokens/requirements'
+import { resolveTokenModule } from '../tokens/resolve'
+import { defaultValueKernel } from '../values/defaults'
+import { serializeValueWithContext } from '../values/kernel'
+import { createCompositeNode, createInputNode, createRawNode, ExpressionValue } from '../values/protocol'
+import { VANITY_SYSTEM_INTERCHANGE } from './interchange'
 
 /** Vanity's authored DTCG extension key: `document.$extensions?.[VANITY_DTCG_EXTENSION]`. */
 export const VANITY_DTCG_EXTENSION = 'com.mszr.vanity' as const
@@ -83,8 +99,73 @@ export interface VanityDtcgEncodedValue {
 }
 
 interface ExportSource {
-  readonly graph: NonNullable<ReturnType<typeof graphOf>>
-  readonly codecs: readonly VanityDtcgCodec[]
+  readonly graph: NonNullable<ReturnType<typeof getTokenGraph>>
+  readonly codecs: DtcgCodecRegistry
+}
+
+interface DtcgAuthoringContext {
+  readonly axes: OpenSystemState['axes']
+  readonly codecs: DtcgCodecRegistry
+  readonly valueContext: VanityValueOperationContext
+  readonly policies: VanityResolvedPolicies
+  readonly token: VanityTokenFactory<any>
+  readonly defineTokens: (
+    seed?: VanityGraphInput,
+    options?: VanityTokenModuleOptions,
+  ) => VanityTokenModule<VanityGraphInput, VanityTokenPolicy>
+}
+
+function createDtcgAuthoringContext(state: OpenSystemState): DtcgAuthoringContext {
+  const policies = resolvePolicies(state.policies)
+  const valueContext = {
+    values: state.values,
+    support: policies.support,
+    policies,
+  } satisfies VanityValueOperationContext
+  const tokenPolicy = Object.freeze({
+    reference: policies.tokens.reference,
+    emit: policies.tokens.emit,
+  }) satisfies VanityTokenPolicy
+  const prior = getTokenModuleRequirement(state.tokens)
+  const requirement = getSystemTokenModuleRequirement(
+    state.values,
+    valueContext,
+    state.axes,
+    prior?.compatibleCapabilitySignatures,
+  )
+  return {
+    axes: state.axes,
+    codecs: state.codecs,
+    valueContext,
+    policies,
+    token: createTokenFactory(state.axes),
+    defineTokens: (seed = {}, options = {}) => defineTokenModule(requirement, tokenPolicy, seed, options),
+  }
+}
+
+function createDtcgDefaultContext(): DtcgAuthoringContext {
+  return createDtcgAuthoringContext({
+    values: defaultValueKernel,
+    tokens: {} as never,
+    axes: { definitions: Object.freeze({}), order: Object.freeze([]) },
+    policies: createPolicyState(),
+    conditions: Object.freeze({}),
+    consts: Object.freeze({}),
+    utils: Object.freeze({}),
+    rules: Object.freeze({}),
+    plugins: {} as never,
+    codecs: Object.freeze([]),
+    provenance: {} as never,
+    sequence: 0,
+    revisions: {} as never,
+  })
+}
+
+function getDtcgAuthoringContext(system: VanityDtcgSystemContext): DtcgAuthoringContext {
+  const state = getOpenSystemState(system)
+  if (!state)
+    throw new TypeError('[vanity] DTCG operations need an open system created by createSystem()')
+  return createDtcgAuthoringContext(state)
 }
 
 /** Export either a standard environment snapshot or a Vanity-authored round-trip document. */
@@ -92,8 +173,8 @@ export function exportDesignTokens(
   source: object,
   options: VanityDtcgExportOptions = {},
 ): VanityDtcgDocument {
-  const resolved = exportSource(source, options)
-  const records = tokenInspectionsOf(resolved.graph)
+  const resolved = resolveExportSource(source, options)
+  const records = getTokenInspections(resolved.graph)
   const mode = options.mode ?? 'resolved'
   const strict = options.strict ?? true
   const environment = {
@@ -114,17 +195,17 @@ export function exportDesignTokens(
   for (const token of records) {
     try {
       const css = selectedCss(token, resolved.graph.axes?.order ?? [], environment)
-      const carrier = standardCarrier(token.semantic.type, css, token, records)
+      const carrier = createStandardCarrier(token.semantic.type, css, token, records)
       setToken(document, token.path.split('.'), {
         ...(carrier.type === undefined ? {} : { $type: carrier.type }),
         $value: carrier.value,
         ...(token.description === undefined ? {} : { $description: token.description }),
-        ...unknownExtensions(token.semantic.metadata),
+        ...getUnknownExtensions(token.semantic.metadata),
       })
     }
     catch (error) {
       if (mode === 'resolved')
-        throw exportError(token.path, error)
+        throw createExportError(token.path, error)
       let css: string | number
       try {
         css = selectedCss(token, resolved.graph.axes?.order ?? [], environment)
@@ -137,7 +218,7 @@ export function exportDesignTokens(
       setToken(document, token.path.split('.'), {
         $value: css,
         ...(token.description === undefined ? {} : { $description: token.description }),
-        ...unknownExtensions(token.semantic.metadata),
+        ...getUnknownExtensions(token.semantic.metadata),
       })
     }
   }
@@ -189,7 +270,7 @@ export function exportDesignTokens(
   }
 
   assertJson(document, `${mode} DTCG document`)
-  return deepFreeze(document)
+  return freezeDeep(document)
 }
 
 /** Import a standard DTCG document, or restore the richer authored Vanity extension. */
@@ -199,39 +280,39 @@ export function importDesignTokens(
 ): VanityTokenModule<VanityGraphInput, VanityTokenPolicy> {
   if (!isPlainObject(document))
     throw new TypeError('[vanity] importDesignTokens() needs one DTCG document object')
-  const engine = options.system === undefined
-    ? createEngine()
-    : engineOfOpenSystem(options.system) ?? options.system as VanityEngine<any, any, any>
-  const extension = authoredExtension(document)
+  const authoring = options.system === undefined
+    ? createDtcgDefaultContext()
+    : getDtcgAuthoringContext(options.system)
+  const extension = getAuthoredExtension(document)
   return extension
-    ? importAuthored(extension, document, engine, options)
-    : importStandard(document, engine, options)
+    ? importAuthoredDocument(extension, document, authoring, options)
+    : importStandardDocument(document, authoring, options)
 }
 
-function exportSource(source: object, options: VanityDtcgExportOptions): ExportSource {
+function resolveExportSource(source: object, options: VanityDtcgExportOptions): ExportSource {
   if (VANITY_SYSTEM_INTERCHANGE in source) {
     const interchange = (source as VanityInterchangeSystem)[VANITY_SYSTEM_INTERCHANGE]
     return { graph: interchange.graph, codecs: interchange.codecs }
   }
-  if (!isTokenBuilder(source))
+  const module = isTokenModule(source) ? source : getTokenModule(source)
+  if (!module)
     throw new TypeError('[vanity] exportDesignTokens() needs a bound system or unfinished token module')
   if (!options.system)
     throw new TypeError('[vanity] exporting an unfinished token module needs options.system')
-  const engine = engineOfOpenSystem(options.system) ?? options.system as VanityEngine<any, any, any>
-  const privateEngine = enginePrivate(engine as any)
-  const tokens = finalizeTokenModule(source, {
+  const authoring = getDtcgAuthoringContext(options.system)
+  const tokens = resolveTokenModule(module, {
     prefix: options.prefix ?? 'vanity',
     root: options.root ?? ':root',
-    serializeValue: value => privateEngine.kernel.serializeValue(value),
-    support: privateEngine.kernel.support,
-    axes: privateEngine.axes,
+    serializeValue: value => serializeValueWithContext(authoring.valueContext, value),
+    support: authoring.valueContext.support,
+    axes: authoring.axes,
     emitCss: false,
-    dtcgCodecIds: new Set(privateEngine.dtcg.map(codec => codec.extension)),
+    dtcgCodecIds: new Set(authoring.codecs.map(codec => codec.extension)),
   })
-  return { graph: graphOf(tokens)!, codecs: privateEngine.dtcg }
+  return { graph: getTokenGraph(tokens)!, codecs: authoring.codecs }
 }
 
-function authoredExtension(document: Record<string, unknown>): VanityDtcgAuthoredExtension | undefined {
+function getAuthoredExtension(document: Record<string, unknown>): VanityDtcgAuthoredExtension | undefined {
   const extensions = document.$extensions
   if (!isPlainObject(extensions))
     return undefined
@@ -243,16 +324,16 @@ function authoredExtension(document: Record<string, unknown>): VanityDtcgAuthore
   return extension as unknown as VanityDtcgAuthoredExtension
 }
 
-function importAuthored(
+function importAuthoredDocument(
   extension: VanityDtcgAuthoredExtension,
   document: Record<string, unknown>,
-  engine: VanityEngine<any, any, any>,
+  authoring: DtcgAuthoringContext,
   options: VanityDtcgImportOptions,
 ): VanityTokenModule<VanityGraphInput, VanityTokenPolicy> {
-  const actualAxisOrder = enginePrivate(engine as any).axes.order
+  const actualAxisOrder = authoring.axes.order
   if (actualAxisOrder.join('\0') !== extension.system.axisOrder.join('\0')) {
     throw new TypeError(
-      `[vanity] authored DTCG axis order (${extension.system.axisOrder.join(', ') || 'none'}) does not match the import engine (${actualAxisOrder.join(', ') || 'none'})`,
+      `[vanity] authored DTCG axis order (${extension.system.axisOrder.join(', ') || 'none'}) does not match the importing system (${actualAxisOrder.join(', ') || 'none'})`,
     )
   }
   const entries = Object.entries(extension.tokens)
@@ -261,22 +342,22 @@ function importAuthored(
     dependencies: [token.val, ...token.branches.map(branch => branch.val)]
       .flatMap(value => value.dependencies.map(edge => edge.path)),
   })))
-  let module = engine.defineTokens({}, {}) as any
+  let module = authoring.defineTokens({}, {}) as any
 
   for (const path of ordered) {
     const token = extension.tokens[path]!
     if (token.lossy && (options.strict ?? true))
       throw new TypeError(`[vanity] authored token '${path}' was exported lossily and cannot be imported in strict mode`)
-    const preserved = preservedExtensionsAt(document, path.split('.'))
-    const contribution = (engine.defineTokens({}, {
+    const preserved = getPreservedExtensionsAt(document, path.split('.'))
+    const contribution = deriveTokenModule(authoring.defineTokens({}, {
       ...(token.root === undefined ? {} : { root: token.root }),
       ...(token.layer === undefined ? {} : { layer: token.layer }),
-    }) as any).derive((t: object) => {
+    }) as any, (t: object) => {
       const config: Record<string, unknown> = {
         reference: token.reference,
         emit: token.emit,
         mutable: token.mutable,
-        ...(token.val.css === null ? {} : { val: decodeValue(token.val, token.type, t, engine) }),
+        ...(token.val.css === null ? {} : { val: decodeValue(token.val, token.type, t, getDtcgContext(authoring)) }),
         ...(token.register === undefined
           ? {}
           : {
@@ -301,7 +382,7 @@ function importAuthored(
       const axes: Record<string, Record<string, unknown | null>> = {}
       const cases: { when: Readonly<Record<string, string>>, val: unknown | null }[] = []
       for (const branch of token.branches) {
-        const val = branch.val.css === null ? null : decodeValue(branch.val, token.type, t, engine)
+        const val = branch.val.css === null ? null : decodeValue(branch.val, token.type, t, getDtcgContext(authoring))
         if (branch.address.kind === 'axis') {
           axes[branch.address.axis] ??= {}
           axes[branch.address.axis]![branch.address.mode] = val
@@ -314,32 +395,32 @@ function importAuthored(
         config.axes = axes
       if (cases.length > 0)
         config.cases = cases
-      return nested(path, configuredByType(engine, token.type, config))
+      return nested(path, configuredByType(authoring, token.type, config))
     })
-    module = module.compose(contribution)
+    module = composeTokenModules(module, contribution)
   }
   return module as VanityTokenModule<VanityGraphInput, VanityTokenPolicy>
 }
 
-function importStandard(
+function importStandardDocument(
   document: Record<string, unknown>,
-  engine: VanityEngine<any, any, any>,
+  authoring: DtcgAuthoringContext,
   options: VanityDtcgImportOptions,
 ): VanityTokenModule<VanityGraphInput, VanityTokenPolicy> {
   const tokens: StandardEntry[] = []
   collectStandard(document, [], undefined, [], tokens, document)
-  const blocked = tokens.find(token => typeof token.value === 'string' && externalReference(token.value))
+  const blocked = tokens.find(token => typeof token.value === 'string' && isExternalReference(token.value))
   if (blocked && !options.resolveExternal)
     throw new TypeError(`[vanity] external DTCG reference '${blocked.value}' is disabled; pass resolveExternal explicitly`)
   const ordered = topological(tokens.map(token => ({ path: token.path, dependencies: token.alias ? [token.alias] : [] })))
   const byPath = new Map(tokens.map(token => [token.path, token]))
-  let module = engine.defineTokens({}) as any
+  let module = authoring.defineTokens({}) as any
   for (const path of ordered) {
     const token = byPath.get(path)!
-    module = module.derive((t: object) => {
+    module = deriveTokenModule(module, (t: object) => {
       const value = token.alias
         ? tokenAt(t, token.alias)
-        : standardCss(token.type, token.value, options)
+        : parseStandardCss(token.type, token.value, options)
       const metadata: Record<string, VanityJsonValue> = {}
       if (token.extensions !== undefined)
         metadata.dtcgExtensions = token.extensions as VanityJsonValue
@@ -352,7 +433,7 @@ function importStandard(
         ...(token.description === undefined ? {} : { description: token.description }),
         ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
       }
-      return nested(path, configuredByType(engine, vanityType(token.type), config))
+      return nested(path, configuredByType(authoring, getVanityType(token.type), config))
     })
   }
   return module as VanityTokenModule<VanityGraphInput, VanityTokenPolicy>
@@ -390,7 +471,7 @@ function collectStandard(
       )
     }
     const authored = group.$root.$value
-    const alias = typeof authored === 'string' ? aliasPath(authored, root) : undefined
+    const alias = typeof authored === 'string' ? getAliasPath(authored, root) : undefined
     target.push({
       path: path.join('.'),
       type: typeof group.$root.$type === 'string' ? group.$root.$type : groupType,
@@ -409,7 +490,7 @@ function collectStandard(
     const next = [...path, key]
     if ('$value' in value || '$ref' in value) {
       const authored = '$value' in value ? value.$value : value.$ref
-      const alias = typeof authored === 'string' ? aliasPath(authored, root) : undefined
+      const alias = typeof authored === 'string' ? getAliasPath(authored, root) : undefined
       target.push({
         path: next.join('.'),
         type: typeof value.$type === 'string' ? value.$type : groupType,
@@ -450,17 +531,17 @@ function selectedCss(token: VanityTokenRecord, axisOrder: readonly string[], env
   return val
 }
 
-function standardCarrier(
+function createStandardCarrier(
   type: VanityCssDataType,
   css: string | number,
   token: VanityTokenRecord,
   records: readonly VanityTokenRecord[],
 ): { type?: string, value: unknown } {
   const text = String(css).trim()
-  const alias = exactTokenAlias(text, token, records)
+  const alias = getExactTokenAlias(text, token, records)
   if (alias)
-    return { type: dtcgType(type), value: `{${alias}}` }
-  switch (dtcgType(type)) {
+    return { type: getDtcgType(type), value: `{${alias}}` }
+  switch (getDtcgType(type)) {
     case 'number': {
       const value = typeof css === 'number' ? css : Number(text)
       if (!Number.isFinite(value))
@@ -497,7 +578,7 @@ function standardCarrier(
   }
 }
 
-function exactTokenAlias(text: string, token: VanityTokenRecord, records: readonly VanityTokenRecord[]): string | undefined {
+function getExactTokenAlias(text: string, token: VanityTokenRecord, records: readonly VanityTokenRecord[]): string | undefined {
   const match = text.match(/^var\((--[\w-]+)\)$/)
   if (!match)
     return undefined
@@ -505,7 +586,7 @@ function exactTokenAlias(text: string, token: VanityTokenRecord, records: readon
   return target?.path === token.path ? undefined : target?.path
 }
 
-function dtcgType(type: VanityCssDataType): string | undefined {
+function getDtcgType(type: VanityCssDataType): string | undefined {
   if (type === 'number' || type === 'integer')
     return 'number'
   if (type === 'length')
@@ -517,7 +598,7 @@ function dtcgType(type: VanityCssDataType): string | undefined {
   return undefined
 }
 
-function vanityType(type: string | undefined): VanityCssDataType {
+function getVanityType(type: string | undefined): VanityCssDataType {
   if (type === 'number')
     return 'number'
   if (type === 'dimension')
@@ -529,8 +610,8 @@ function vanityType(type: string | undefined): VanityCssDataType {
   return 'unknown'
 }
 
-function standardCss(type: string | undefined, value: unknown, options: VanityDtcgImportOptions): unknown {
-  if (typeof value === 'string' && externalReference(value)) {
+function parseStandardCss(type: string | undefined, value: unknown, options: VanityDtcgImportOptions): unknown {
+  if (typeof value === 'string' && isExternalReference(value)) {
     if (!options.resolveExternal)
       throw new TypeError(`[vanity] external DTCG reference '${value}' is disabled; pass resolveExternal explicitly`)
     const resolved = options.resolveExternal(value)
@@ -584,12 +665,12 @@ function decodeValue(
   encoded: VanityDtcgEncodedValue,
   type: VanityCssDataType,
   tree: object,
-  engine: VanityEngine<any, any, any>,
+  context: VanityDtcgDecodeContext,
 ): unknown {
   if (encoded.css === null)
     return undefined
   if (encoded.codec) {
-    const codec = enginePrivate(engine as any).dtcg.find(candidate => candidate.id === encoded.codec!.id
+    const codec = context.codecs.find(candidate => candidate.id === encoded.codec!.id
       && String(candidate.version) === String(encoded.codec!.version))
     if (!codec)
       throw new TypeError(`[vanity] authored value needs DTCG codec '${encoded.codec.id}@${encoded.codec.version}'`)
@@ -597,7 +678,7 @@ function decodeValue(
       payload: encoded.codec.payload,
       css: String(encoded.css),
       dependencies: encoded.dependencies.map(edge => tokenAt(tree, edge.path)),
-      engine,
+      context,
     })
   }
   if (typeof encoded.css === 'number')
@@ -606,8 +687,8 @@ function decodeValue(
     .filter(edge => edge.name !== undefined)
     .map(edge => ({ syntax: `var(${edge.name})`, value: tokenAt(tree, edge.path) }))
   if (replacements.length === 0)
-    return new ExpressionValue(rawNode(type, encoded.css))
-  const parts: Array<string | ReturnType<typeof inputNode>> = []
+    return new ExpressionValue(createRawNode(type, encoded.css))
+  const parts: Array<string | ReturnType<typeof createInputNode>> = []
   let remaining = encoded.css
   while (remaining.length > 0) {
     const next = replacements
@@ -620,21 +701,29 @@ function decodeValue(
     }
     if (next.index > 0)
       parts.push(remaining.slice(0, next.index))
-    parts.push(inputNode(next.value as any, type))
+    parts.push(createInputNode(next.value as any, type))
     remaining = remaining.slice(next.index + next.syntax.length)
   }
   return new ExpressionValue(parts.length === 1 && typeof parts[0] !== 'string'
     ? parts[0]
-    : compositeNode({ type, parts }))
+    : createCompositeNode({ type, parts }))
+}
+
+function getDtcgContext(authoring: DtcgAuthoringContext): VanityDtcgDecodeContext {
+  return Object.freeze({
+    values: authoring.valueContext.values,
+    policies: authoring.policies,
+    codecs: authoring.codecs,
+  })
 }
 
 function encodedValue(
   css: string | number | null,
   token: VanityTokenRecord,
   expression: VanityTokenRecord['semantic']['expression'] | undefined,
-  codecs: readonly VanityDtcgCodec[],
+  codecs: DtcgCodecRegistry,
 ): VanityDtcgEncodedValue {
-  const codec = expression === undefined ? undefined : codecForExpression(expression, codecs)
+  const codec = expression === undefined ? undefined : getCodecForExpression(expression, codecs)
   const payload = codec === undefined || css === null || expression === undefined
     ? undefined
     : codec.encode({ expression, css: String(css) })
@@ -651,9 +740,9 @@ function encodedValue(
   }
 }
 
-function configuredByType(engine: VanityEngine<any, any, any>, type: VanityCssDataType, config: Record<string, unknown>): unknown {
+function configuredByType(authoring: DtcgAuthoringContext, type: VanityCssDataType, config: Record<string, unknown>): unknown {
   if ('val' in config)
-    return (engine.token as any)(config)
+    return (authoring.token as any)(config)
   const method = ({
     'number-percentage': 'numberPercentage',
     'length-percentage': 'lengthPercentage',
@@ -663,25 +752,25 @@ function configuredByType(engine: VanityEngine<any, any, any>, type: VanityCssDa
     'custom-ident': 'customIdent',
     'dashed-ident': 'dashedIdent',
   } as Record<string, string>)[type] ?? type
-  return typeof (engine.token as any)[method] === 'function'
-    ? (engine.token as any)[method](config)
-    : (engine.token as any)(config)
+  return typeof (authoring.token as any)[method] === 'function'
+    ? (authoring.token as any)[method](config)
+    : (authoring.token as any)(config)
 }
 
-function codecForExpression(
+function getCodecForExpression(
   expression: VanityTokenRecord['semantic']['expression'],
-  codecs: readonly VanityDtcgCodec[],
+  codecs: DtcgCodecRegistry,
 ): VanityDtcgCodec | undefined {
   return expression.kind === 'plugin' && expression.extension !== undefined
     ? codecs.find(candidate => candidate.extension === expression.extension!.id)
     : undefined
 }
 
-function unknownExtensions(metadata: Readonly<Record<string, unknown>>): Record<string, unknown> {
+function getUnknownExtensions(metadata: Readonly<Record<string, unknown>>): Record<string, unknown> {
   return isPlainObject(metadata.dtcgExtensions) ? { $extensions: metadata.dtcgExtensions } : {}
 }
 
-function preservedExtensionsAt(
+function getPreservedExtensionsAt(
   document: Record<string, unknown>,
   path: readonly string[],
 ): { readonly token?: unknown, readonly groups: readonly { readonly path: readonly string[], readonly extensions: unknown }[] } | undefined {
@@ -730,7 +819,7 @@ function restoreGroupExtensions(document: Record<string, unknown>, records: read
   }
 }
 
-function aliasPath(value: string, document: Record<string, unknown>): string | undefined {
+function getAliasPath(value: string, document: Record<string, unknown>): string | undefined {
   const curly = value.match(/^\{([^}]+)\}$/)
   if (curly)
     return curly[1]
@@ -747,7 +836,7 @@ function aliasPath(value: string, document: Record<string, unknown>): string | u
   return undefined
 }
 
-function externalReference(value: string): boolean {
+function isExternalReference(value: string): boolean {
   return /^(?:https?:|file:|\.\.?\/)/.test(value)
 }
 
@@ -823,7 +912,7 @@ function setToken(document: Record<string, unknown>, path: readonly string[], to
   current[path.at(-1)!] = token
 }
 
-function exportError(path: string, error: unknown): TypeError {
+function createExportError(path: string, error: unknown): TypeError {
   return new TypeError(`[vanity] cannot export '${path}' as standard DTCG: ${error instanceof Error ? error.message : String(error)}`)
 }
 
@@ -858,11 +947,11 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   return prototype === Object.prototype || prototype === null
 }
 
-function deepFreeze<T>(value: T): T {
+function freezeDeep<T>(value: T): T {
   if ((typeof value !== 'object' && typeof value !== 'function') || value === null || Object.isFrozen(value))
     return value
   Object.freeze(value)
   for (const child of Object.values(value as Record<string, unknown>))
-    deepFreeze(child)
+    freezeDeep(child)
   return value
 }

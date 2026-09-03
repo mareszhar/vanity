@@ -25,6 +25,112 @@ Names carry no history. Vanity keeps one canonical spelling per concept and ship
 
 CSS owns CSS vocabulary. Vanity uses a CSS name only for the platform concept exactly. Vanity-specific behavior receives Vanity-specific language.
 
+### Verb-first implementation names
+
+Implementation functions, methods, and callable constants begin with a verb. These meanings are closed:
+
+| Prefix | Meaning |
+| --- | --- |
+| `create*` | Construct a fresh instance or factory. |
+| `define*` | Author portable, system-independent definition data. |
+| `add*` / `augment*` / `overwrite*` | Add absent data, refine existing identity, or replace definition data. |
+| `expect*` | Throw immediately unless a named structural element already exists; this is a stateless, order-sensitive existence guard that checks presence, not a particular value. |
+| `get*` / `read*` | Retrieve in-memory data / cross an I/O, process, filesystem, or evaluated-module boundary. |
+| `is*` / `has*` / `can*` / `should*` | Return a boolean predicate. |
+| `assert*` / `require*` / `validate*` | Assert an existing invariant / require a value / produce validation evidence. |
+| `normalize*` / `prepare*` / `apply*` / `update*` | Canonicalize / prepare a named next phase / apply a described transformation / update bookkeeping. |
+| `parse*` / `format*` / `encode*` / `decode*` | Convert textual or interchange representations. |
+| `serialize*` / `deserialize*` | Cross Vanity's portable value boundary. |
+| `compose*` / `merge*` / `derive*` / `resolve*` | Combine compatible definitions / combine by a named policy / compute authored definitions / produce a semantically complete result. |
+| `consolidate*` / `project*` / `restore*` | Resolve an open system / produce a consumer view / rehydrate portable data. |
+| `copy*` / `clone*` / `freeze*` / `hash*` / `fingerprint*` | Perform the exact structural or identity operation named. |
+| `visit*` / `walk*` / `compare*` / `sort*` / `order*` | Traverse / transform evidence / compare / deterministically order. |
+| `bind*` / `mount*` / `install*` / `register*` | Bind / attach / install / register a capability or lifecycle participant. |
+| `emit*` / `collect*` / `materialize*` / `build*` / `render*` | Produce CSS or another artifact / gather without resolving / construct an API surface / assemble a complete artifact / present output. |
+| `prefix*` / `omit*` / `pick*` / `use*` | Apply the exact structural operation / consume a capability through a framework or runtime binding. |
+| `$verb` | Runtime-controller mutation fenced beside user-defined names. |
+
+Direct action verbs such as `inspect*`, `run*`, `write*`, `load*`, `select*`, `plan*`,
+`transform*`, `invoke*`, `remove*`, `replace*`, `check*`, `describe*`, `explain*`,
+`diff*`, `setup*`, `ensure*`, `remember*`, `schedule*`, `configure*`, `handle*`,
+`start*`, `finish*`, `choose*`, `reconcile*`, `decorate*`, `switch*`, `set*`,
+`clear*`, `mark*`, `track*`, `send*`, `inject*`, `initialize*`, `append*`,
+`strip*`, `extract*`, `convert*`, `lower*`, `adapt*`, `fold*`, `evaluate*`,
+`consume*`, `join*`, `negate*`, `intersect*`, and `dedupe*` follow the same law when
+their narrower operation is clearer than one of the grouped verbs above.
+
+The same rule permits precise direct actions such as `compile*`, `split*`, `count*`,
+`extend*`, `seal*`, `measure*`, `mix*`, `wire*`, `attach*`, `identify*`, and `reorder*` when
+those names state the operation exactly. The diagnostic suggestion `didYouMean`,
+the axis authoring callables `axis`, `defaultMode`, `condition`, and `schemeIs`,
+the layer callable `inLayer`, and the color authoring operations `legibleOn`,
+`lighten`, `darken`, `desaturate`, and `mix` are established public language.
+
+The public DSL intentionally retains result-named callables such as `class`, `rules`, `raw`, `recipe`, `anatomy`, `atoms`, `fragment`, `port`, `keyframes`, `fontFace`, and `runtime`, plus CSS-standard constructors and the established relational family `propsOf`, `fromTokenGroup`, `tokensOf`, `namesOf`, `varsOf`, and `snapshotFrom`. These exceptions do not authorize new noun-shaped implementation helpers.
+
+The naming audit also records a small closed set of names whose spelling is owned by another
+contract: token-builder `root`, scale methods `linear` and `modular`, color-relative `from`,
+contrast-check thresholds `aa`, `aaa`, and `lc`, and the token declaration shorthand `tdec` are
+public authoring vocabulary. `invalidColor` is the resolver protocol callback, `transaction` is
+the runtime batching protocol, `forEach` is the standard `ReadonlySet` protocol method, `ownKeys`
+is the JavaScript `Proxy` trap, and `config` /
+`configResolved` are Vite lifecycle hooks. `value`, `VariableDeclarator`, `ImportSpecifier`,
+`CallExpression`, and `Declaration` retain their public escape or parser/transform visitor
+spellings. Every other production function, method, and callable constant is checked for a
+verb-first name by `scripts/audit.ts`.
+
+### Module names and load-bearing nouns
+
+Module filenames describe what the module owns. Use a plural when a module owns a collection or
+vocabulary of peer members: `system/axes.ts` owns `AxisRegistry`, `system/plugins.ts` owns
+`PluginRegistry`, `values/codecs.ts` owns `DtcgCodecRegistry`, and `system/definitions.ts`,
+`tokens/names.ts`, and `tokens/checks.ts` own related vocabularies. Use a singular when a module
+defines one thing and the operations over it: `values/kernel.ts`, `system/contract.ts`,
+`system/state.ts`, `runtime/controller.ts`, `tokens/builder.ts`, `tokens/module.ts`, and
+`substrate/vanilla-extract/adapter.ts` are singular for this reason.
+
+Apply the rule to the module's ownership, not to the number of instances created at runtime. A
+handle module defines what one handle is and how to create, read, and update it; handles live in
+the token graph and there is no handle registry. That is why the canonical filename is
+`tokens/handle.ts`, matching `atoms/handle.ts`, `ports/handle.ts`, and `recipes/handle.ts`.
+
+These nouns carry precise architectural meaning:
+
+| Term | Meaning |
+| --- | --- |
+| `module` | Portable authored definitions, or one of the documented source-module roles; not an arbitrary state facet. |
+| `registry` | Keyed, identity-aware storage with lookup and collision semantics. |
+| `kernel` | The smallest immutable bundle of semantic capabilities that must evolve as one compatible revision. |
+| `context` | A narrow set of inputs passed to an operation; not an owner or a state container. |
+| `environment` | Ambient execution surroundings; not a synonym for a value kernel or plugin setup context. |
+| `runtime` | Behavior in the declared runtime controller or consumer runtime; token authoring and build-time resolution are not runtime. |
+| `mode` | An axis case selected through the cascade; not a token trait, compiler branch, or generic variant. |
+| `host` | Something that installs or runs another capability, qualified by scope. |
+| `origin` | The declared owner of authored capability data. `provenance` is evidence of how a resolved result was produced. |
+
+Collections are plural, booleans use predicate names, singular identifiers end in `Id`, and
+ordered revisions use their domain nouns. Avoid generic names such as `data`, `info`, `item`,
+`thing`, `manager`, and `helper` when the domain supplies a precise term.
+
+### Validation has qualified meanings
+
+`validation` is not a global policy switch. Every validation mechanism has a qualified owner and
+an explicit execution point:
+
+| Sense | Owner | When it runs |
+| --- | --- | --- |
+| per-token `tdef({ validate })` | `tokens/` | while authoring a token value |
+| port/runtime value validation | `runtime/controller.ts` | on `$set` and hydration |
+| CSS grammar validation | `css/validation.ts` | while compiling authored CSS |
+| external format validation | `system/contractValidation.ts`, `introspect/manifestValidation.ts` | while reading untrusted artifacts |
+| constructor restrictions | `values/` | while constructing a value |
+| `expect*` structural requirements | `system/open.ts` | immediately at the `expect*` call |
+| `audit()` / diagnostics | `introspect/audit.ts` | on demand over a locked system |
+
+Keep the sense visible at the use site. Do not introduce a bare `validate` or `validation`
+identifier whose meaning is unclear from its module, and do not route these mechanisms through a
+new generic validation switch.
+
 ## 1. Behavioral spine
 
 > **Grow a system additively; consolidate it; style with it.**
@@ -85,7 +191,7 @@ No single lifecycle word classifies all of Vanity. Ask the exact question:
 | Question | Facet | Examples |
 | --- | --- | --- |
 | What kind of semantic thing is it? | semantic kind | token, condition, axis, recipe, port |
-| Who owns its meaning and lifetime? | ownership | engine, system, module, component, instance, build host, browser |
+| Who owns its meaning and lifetime? | ownership | Vanity, system, module, component, instance, build host, browser |
 | Can system shape still grow? | system state | open, locked |
 | How much context is attached? | binding state | portable, system-bound, resolved, restored, root-bound |
 | What does it do? | effect | describe data, register shape, register style output, materialize an artifact, write DOM, observe |
@@ -103,23 +209,23 @@ Use the facet name instead of a generic umbrella such as plane, lane, destinatio
 ## 3. Actors, hosts, and mounting
 
 ```text
-engine
-  supplies constructors · operations · policies · extension capabilities
-        │ powers
+Vanity package capabilities
+  define portable values and authored modules
+        │ add / augment / overwrite / expect
         ▼
-system
+open system
   owns one project's accumulated design decisions and styling contract
-        │ consumed by
+        │ consolidate
         ▼
-compiler
-  evaluates build-time authoring and materializes CSS/data outputs
-        │ projects
-        ▼
-runtime controller
-  changes declared token slots and mode controls
+locked system
+  resolves names, references, roots, layers, policies, and identities
+        ├──────────────┬───────────────┬───────────────┐
+        ▼              ▼               ▼
+CSS authoring     portable contracts  runtime controller
+and compiler     and introspection    changes declared token slots and modes
 ```
 
-The engine is Vanity's immutable capability kernel and an internal architectural boundary. `createSystem()` uses the default engine; users do not need a separate engine-construction step.
+Vanity is the design-system engine and TypeScript harness for CSS. Its internal value kernel keeps portable value semantics compatible; it is not a nested authoring object or a second construction workflow. Users create an open system directly with `createSystem()`.
 
 A host is a context into which a guest mounts and from which it receives policy, capability, or lifecycle participation:
 

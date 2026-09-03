@@ -37,8 +37,8 @@ export const scale = Object.freeze({
   linear<const Steps extends Readonly<Record<string, number>>>(
     options: VanityLinearScaleOptions<Steps>,
   ): VanityScale<Steps, LengthValue> {
-    finite(options.unit, 'linear unit')
-    return createScale(options.steps, step => length.px(round(options.unit * step)))
+    validateFinite(options.unit, 'linear unit')
+    return createScale(options.steps, step => length.px(roundNumber(options.unit * step)))
   },
 
   modular<const Steps extends Readonly<Record<string, number>>>(
@@ -46,11 +46,11 @@ export const scale = Object.freeze({
   ): VanityScale<Steps, LengthValue> {
     const base = options.base ?? 1
     const unit = options.unit ?? 'rem'
-    finite(base, 'modular base')
-    finite(options.ratio, 'modular ratio')
+    validateFinite(base, 'modular base')
+    validateFinite(options.ratio, 'modular ratio')
     if (options.ratio <= 0)
       throw new RangeError(`[vanity] modular scale ratio must be greater than zero; received ${options.ratio}`)
-    return createScale(options.steps, step => length[unit](round(base * options.ratio ** step)))
+    return createScale(options.steps, step => length[unit](roundNumber(base * options.ratio ** step)))
   },
 })
 
@@ -60,11 +60,11 @@ function createScale<Steps extends Readonly<Record<string, number>>, Value>(
 ): VanityScale<Steps, Value> {
   const steps = Object.freeze({ ...authoredSteps }) as Readonly<Steps>
   for (const [name, step] of Object.entries(steps))
-    finite(step, `step '${name}'`)
+    validateFinite(step, `step '${name}'`)
 
   const cache = new Map<number, Value>()
   const at = (step: number): Value => {
-    finite(step, 'step')
+    validateFinite(step, 'step')
     const prior = cache.get(step)
     if (prior !== undefined)
       return prior
@@ -90,11 +90,11 @@ function createScale<Steps extends Readonly<Record<string, number>>, Value>(
   }))
 }
 
-function finite(value: number, role: string): void {
+function validateFinite(value: number, role: string): void {
   if (!Number.isFinite(value))
     throw new RangeError(`[vanity] scale ${role} must be finite; received ${value}`)
 }
 
-function round(value: number): number {
+function roundNumber(value: number): number {
   return Math.round(value * 1e6) / 1e6
 }

@@ -13,11 +13,9 @@ import type {
   VanityPortValue,
   VanityPortWiden,
 } from './types'
-import { createVar } from '@vanilla-extract/css'
-import { addFunctionSerializer } from '@vanilla-extract/css/functionSerializer'
-import { diagnosticSource, VanityError } from '../diagnostics'
-import { record } from '../internal/inspect'
-import { requireStyleModule } from '../internal/styleModule'
+import { getDiagnosticSource, VanityError } from '../diagnostics'
+import { record } from '../introspect/records'
+import { substrate } from '../substrate'
 import { createPortHandle, isPort } from './handle'
 
 export { isPort } from './handle'
@@ -35,12 +33,11 @@ export function createPort<
   options: VanityPortOptions<Value, Output> | undefined,
   ctx: VanityPortContext,
 ): VanityPort<VanityPortWiden<Value>, VanityPortDataTypeOf<Value>> {
-  const file = requireStyleModule('port')
+  const file = substrate.modules.requireStyleModule('port')
   const definition = isDefinition(input) ? input : undefined
   const defaultValue = (definition?.val ?? input) as Value
   const config = definition ?? options
-  const rawRef = createVar(config?.label)
-  const bareIdent = rawRef.slice(4, -1).replace(/^--/, '')
+  const bareIdent = substrate.css.createCustomProperty(config?.label).slice(2)
   const name = `--${ctx.prefix}-${bareIdent}`
   let serializedDefault: VanityPortValue
   try {
@@ -55,14 +52,14 @@ export function createPort<
       fix: 'give it CSS text, a finite number, a typed vanity value, a token, or another port',
     })
   }
-  const type = dataTypeOf(defaultValue)
+  const type = getPortDataType(defaultValue)
   const validation = normalizeValidation(config?.validate as VanityPortValidation<any, any> | undefined, ctx)
 
   const meta: VanityPortMeta = {
     name,
     defaultValue: serializedDefault,
     type,
-    kind: portKind(type),
+    kind: getPortKind(type),
     ...(validation === undefined ? {} : { validation }),
   }
 
@@ -74,12 +71,12 @@ export function createPort<
   record({
     kind: 'port',
     file,
-    ...diagnosticSource(),
+    ...getDiagnosticSource(),
     ...(config?.label === undefined ? {} : { label: config.label }),
     meta,
   })
 
-  addFunctionSerializer(handle as unknown as (...args: unknown[]) => unknown, {
+  substrate.modules.registerFunctionSerialization(handle as unknown as (...args: unknown[]) => unknown, {
     importPath: '@mszr/vanity/runtime',
     importName: 'restorePort',
     args: [meta as unknown as Record<string, string>],
@@ -123,7 +120,7 @@ function normalizeValidation(
   })
 }
 
-function dataTypeOf(value: VanityPortInput): any {
+function getPortDataType(value: VanityPortInput): any {
   if (isPort(value))
     return value.type
   if ((typeof value === 'object' || typeof value === 'function') && value !== null) {
@@ -147,7 +144,7 @@ function dataTypeOf(value: VanityPortInput): any {
   return 'declaration'
 }
 
-function portKind(type: string): VanityPortKind {
+function getPortKind(type: string): VanityPortKind {
   if (type === 'number' || type === 'integer')
     return 'number'
   return type === 'color' ? 'color' : 'string'

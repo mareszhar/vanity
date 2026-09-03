@@ -2,7 +2,7 @@
  * The public CSS value contract shared across build and application contexts.
  *
  * `VanityValue` deliberately does not promise context-free serialization. A
- * self-contained value can be serialized by an engine; a system-bound value
+ * self-contained value can be serialized by the value protocol; a system-bound value
  * needs the finalized system that owns its references. `VanityCssValue` is the
  * concrete self-contained form exposed by serializable value constructors.
  */
@@ -45,7 +45,7 @@ interface VanityValueBase<Type extends VanityCssDataType = VanityCssDataType> {
   }
 }
 
-/** A value whose references can be resolved by an engine alone. */
+/** A value whose references can be resolved without a system. */
 export interface VanitySelfValue<Type extends VanityCssDataType = VanityCssDataType> extends VanityValueBase<Type> {
   readonly [VANITY_VALUE]: { readonly resolution: 'self' }
 }
@@ -156,7 +156,7 @@ export type VanityToken<Type extends VanityCssDataType = VanityCssDataType>
   = VanityCompatibleTokenInput<Type>
 
 /** Serialize a self-contained value without losing references. */
-export function cssText(value: VanityCssInput): string {
+export function serializeCssText(value: VanityCssInput): string {
   if (typeof value === 'number') {
     if (!Number.isFinite(value))
       throw new RangeError(`[vanity] a CSS number must be finite; received ${value}`)

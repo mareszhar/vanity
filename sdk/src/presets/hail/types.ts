@@ -533,7 +533,7 @@ type SelectedPresets<Options>
 type IfSelected<Options, Name extends HailPresetName, Contribution>
   = Name extends SelectedPresets<Options> ? Contribution : object
 
-/** Exact token graph contributed by the selected Hail presets. */
+/** Exact token module contributed by the selected Hail presets. */
 export type HailTokenGraph<Options>
   = HailControlTokenGraph<Options>
     & IfSelected<Options, 'palette', HailPaletteTokenGraph>

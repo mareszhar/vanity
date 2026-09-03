@@ -1,7 +1,7 @@
 /** Mechanical same-key variant/config tables derived from one resolved token group. */
 
 import type { VanityTokenHandleAny } from '../tokens/types'
-import { isHandle } from '../internal/handle'
+import { isHandle } from '../tokens/handle'
 
 export type VanityTokenGroup = Readonly<Record<string, VanityTokenHandleAny>>
 

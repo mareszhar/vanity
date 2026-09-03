@@ -27,7 +27,7 @@ Vite serves the app at `http://localhost:5173` by default. This demo uses Vite w
 - `src/lanes/tailwind` — theme variables and utility maps.
 - `panda.config.ts`, `src/lanes/panda` — config/codegen and generated `css()` calls.
 - `src/lanes/extract` — vanilla-extract tokens, recipes, and dynamic variables.
-- `src/lanes/vanity` — the canonical open → additive tokens → locked-system flow, a public elevation plugin, a CSS-reactive token graph, recipe, typed port, and bound runtime.
+- `src/lanes/vanity` — the canonical open → additive tokens → locked-system flow, a public elevation plugin, a CSS-reactive token module, recipe, typed port, and bound runtime.
 - `src/shell.css` — comparison chrome only; no lane depends on it for component styling.
 
 ## Reference sources

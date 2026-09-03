@@ -1,15 +1,15 @@
 /**
  * Emitted names are a public, consumer-facing API ([spec-tokens.md §9]):
- * path-derived kebab names under the system prefix, stable across builds.
+ * path-derived toKebab names under the system prefix, stable across builds.
  * The runtime rule here and the type-level `VanityKebab` must agree exactly —
  * both convert per character, so `brandSoft` → `brand-soft` everywhere.
  */
 
-export function kebab(segment: string): string {
+export function toKebab(segment: string): string {
   return segment.replace(/[A-Z]/g, upper => `-${upper.toLowerCase()}`)
 }
 
-export function tokenName(prefix: string, path: readonly string[]): string {
+export function getTokenName(prefix: string, path: readonly string[]): string {
   return `--${prefix}-${path.map(tokenSegment).join('-')}`
 }
 
@@ -20,11 +20,11 @@ export function tokenName(prefix: string, path: readonly string[]): string {
  */
 function tokenSegment(segment: string): string {
   if (!/[&\s>~+]/.test(segment) && !/^[.#:[*]/.test(segment))
-    return kebab(segment)
-  return `selector-${stableHash(segment)}`
+    return toKebab(segment)
+  return `selector-${hashStableValue(segment)}`
 }
 
-function stableHash(value: string): string {
+function hashStableValue(value: string): string {
   let hash = 0x811C9DC5
   for (let index = 0; index < value.length; index++) {
     hash ^= value.charCodeAt(index)

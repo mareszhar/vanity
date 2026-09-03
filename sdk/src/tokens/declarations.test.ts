@@ -50,7 +50,7 @@ describe('token $dec', () => {
   })
 
   it('honors value-only reference policy instead of inventing variables', () => {
-    const ds = createSystem({ reference: 'val' })
+    const ds = createSystem({ tokens: { reference: 'val' } })
       .addTokens({ body: { fontSize: '1rem', lineHeight: 1.5 } })
       .consolidate({ prefix: 'folded' })
 

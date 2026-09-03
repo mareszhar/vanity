@@ -4,11 +4,11 @@
  * not validate it as a property bundle until an author asks for `$dec`.
  */
 
-import type { VanityInternalTokenHandle } from '../internal/handle'
+import type { VanityInternalTokenHandle } from './handle'
 import { isSelectorKey } from '../css/rule'
+import { isCssProperty } from '../css/validation'
 import { VanityError } from '../diagnostics'
-import { isCssProperty } from '../internal/cssParser'
-import { isHandle } from '../internal/handle'
+import { isHandle } from './handle'
 
 export interface VanityTokenDeclarationGrammar {
   /** Public condition names accepted by the bound class grammar. */

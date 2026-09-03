@@ -46,9 +46,9 @@ export function normalizeHailOptions(options: HailOptions = {}): HailNormalizedO
   const base = options.size?.base ?? 8
   const remTarget = options.size?.remTarget ?? 16
   const contrastPivotL = options.color?.contrastPivotL ?? 0.65
-  finitePositive(base, 'size.base')
-  finitePositive(remTarget, 'size.remTarget')
-  finite(contrastPivotL, 'color.contrastPivotL')
+  validateFinitePositive(base, 'size.base')
+  validateFinitePositive(remTarget, 'size.remTarget')
+  validateFinite(contrastPivotL, 'color.contrastPivotL')
 
   const ranges = options.color?.ranges ?? {}
   for (const name of HAIL_RANGE_NAMES) {
@@ -108,8 +108,8 @@ function selectedPresets(options: HailOptions): ReadonlySet<HailPresetName> {
 
 function validateRange(name: HailRangeName, range: HailRange): void {
   const [minimum, maximum] = range
-  finite(minimum, `color.ranges.${name}[0]`)
-  finite(maximum, `color.ranges.${name}[1]`)
+  validateFinite(minimum, `color.ranges.${name}[0]`)
+  validateFinite(maximum, `color.ranges.${name}[1]`)
   if (name === 'h') {
     if (minimum < 0 || minimum > 360 || maximum < 0 || maximum > 360 || minimum === maximum) {
       throw new RangeError(
@@ -130,13 +130,13 @@ function validateMemberName(name: string, path: string): void {
     throw new TypeError(`[hail] ${path} must be a non-$ TypeScript identifier; received '${name}'`)
 }
 
-function finite(value: number, path: string): void {
+function validateFinite(value: number, path: string): void {
   if (!Number.isFinite(value))
     throw new RangeError(`[hail] ${path} must be finite; received ${value}`)
 }
 
-function finitePositive(value: number, path: string): void {
-  finite(value, path)
+function validateFinitePositive(value: number, path: string): void {
+  validateFinite(value, path)
   if (value <= 0)
     throw new RangeError(`[hail] ${path} must be greater than zero; received ${value}`)
 }

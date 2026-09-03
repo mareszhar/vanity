@@ -12,10 +12,10 @@ export interface VanityCssHelperCapability {
   readonly fold: 'proven' | 'preserve-native' | 'fallback-plus-enhancement'
   readonly maturity: VanityHelperMaturity
   readonly requirements: readonly VanityCssFeature[]
-  readonly rawLane: string
+  readonly rawForm: string
 }
 
-function capability(value: VanityCssHelperCapability): VanityCssHelperCapability {
+function createCapability(value: VanityCssHelperCapability): VanityCssHelperCapability {
   return Object.freeze({
     ...value,
     accepted: Object.freeze([...value.accepted]),
@@ -28,7 +28,7 @@ const numericChannels = ['number', 'percentage where CSS permits it', 'none', 'c
 
 /** Per-helper CSS grammar and lowering evidence: `VANITY_CSS_CAPABILITIES.oklch`. */
 export const VANITY_CSS_CAPABILITIES = Object.freeze({
-  calc: capability({
+  calc: createCapability({
     css: 'calc()',
     accepted: ['CSS numeric values and typed expressions'],
     shorthand: ['fluent add/subtract/multiply/divide/negate'],
@@ -36,9 +36,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'preserve-native',
     maturity: 'stable',
     requirements: ['calc-basic'],
-    rawLane: 'rawValue.<numeric-type>()',
+    rawForm: 'rawValue.<numeric-type>()',
   }),
-  min: capability({
+  min: createCapability({
     css: 'min()',
     accepted: ['one or more compatible <calc-sum> values'],
     shorthand: [],
@@ -46,9 +46,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'preserve-native',
     maturity: 'stable',
     requirements: ['calc-basic'],
-    rawLane: 'rawValue.<numeric-type>()',
+    rawForm: 'rawValue.<numeric-type>()',
   }),
-  max: capability({
+  max: createCapability({
     css: 'max()',
     accepted: ['one or more compatible <calc-sum> values'],
     shorthand: [],
@@ -56,9 +56,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'preserve-native',
     maturity: 'stable',
     requirements: ['calc-basic'],
-    rawLane: 'rawValue.<numeric-type>()',
+    rawForm: 'rawValue.<numeric-type>()',
   }),
-  clamp: capability({
+  clamp: createCapability({
     css: 'clamp()',
     accepted: ['three compatible <calc-sum> values'],
     shorthand: [],
@@ -66,9 +66,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'preserve-native',
     maturity: 'stable',
     requirements: ['calc-basic'],
-    rawLane: 'rawValue.<numeric-type>()',
+    rawForm: 'rawValue.<numeric-type>()',
   }),
-  rgb: capability({
+  rgb: createCapability({
     css: 'rgb()',
     accepted: numericChannels,
     shorthand: ['numeric channels retain 0–255 spelling'],
@@ -76,9 +76,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['color-level-4'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  hsl: capability({
+  hsl: createCapability({
     css: 'hsl()',
     accepted: numericChannels,
     shorthand: ['numeric saturation/lightness mean percent'],
@@ -86,9 +86,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['color-level-4'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  hwb: capability({
+  hwb: createCapability({
     css: 'hwb()',
     accepted: numericChannels,
     shorthand: ['numeric whiteness/blackness mean percent'],
@@ -96,9 +96,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['color-level-4'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  lab: capability({
+  lab: createCapability({
     css: 'lab()',
     accepted: numericChannels,
     shorthand: [],
@@ -106,9 +106,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['color-level-4'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  lch: capability({
+  lch: createCapability({
     css: 'lch()',
     accepted: numericChannels,
     shorthand: [],
@@ -116,9 +116,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['color-level-4'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  oklab: capability({
+  oklab: createCapability({
     css: 'oklab()',
     accepted: numericChannels,
     shorthand: [],
@@ -126,9 +126,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['color-level-4'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  oklch: capability({
+  oklch: createCapability({
     css: 'oklch()',
     accepted: numericChannels,
     shorthand: [],
@@ -136,9 +136,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['color-level-4'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  color: capability({
+  color: createCapability({
     css: 'color()',
     accepted: ['predefined color space and three full channel values'],
     shorthand: ['one string joins an existing CSS color literal'],
@@ -146,9 +146,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['color-level-4'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  colorMix: capability({
+  colorMix: createCapability({
     css: 'color-mix()',
     accepted: ['one or more colors', 'percentage', 'interpolation space', 'polar hue method'],
     shorthand: ['mix(a, b, 0..1).in(space)'],
@@ -156,9 +156,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['color-mix'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  relativeColor: capability({
+  relativeColor: createCapability({
     css: 'relative color syntax',
     accepted: ['base color', 'channel values and arithmetic'],
     shorthand: ['oklch.from()', 'alpha()', 'lighten()/darken()'],
@@ -166,9 +166,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'proven',
     maturity: 'stable',
     requirements: ['relative-color'],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  contrastColor: capability({
+  contrastColor: createCapability({
     css: 'contrast-color()',
     accepted: ['live color target'],
     shorthand: ['legibleOn()'],
@@ -176,9 +176,9 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'fallback-plus-enhancement',
     maturity: 'experimental',
     requirements: [],
-    rawLane: 'rawValue.color()',
+    rawForm: 'rawValue.color()',
   }),
-  lightDark: capability({
+  lightDark: createCapability({
     css: 'light-dark()',
     accepted: ['two colors', 'two typed images/none', 'compatible token handles in the color form'],
     shorthand: [],
@@ -186,7 +186,7 @@ export const VANITY_CSS_CAPABILITIES = Object.freeze({
     fold: 'preserve-native',
     maturity: 'experimental',
     requirements: ['light-dark'],
-    rawLane: 'rawValue.color() / rawValue.image()',
+    rawForm: 'rawValue.color() / rawValue.image()',
   }),
 } satisfies Record<string, VanityCssHelperCapability>)
 

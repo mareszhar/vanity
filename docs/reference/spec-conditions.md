@@ -294,6 +294,6 @@ Required matrices:
 - AST/algebra, range, anchor, direct/callback axis, order, and introspection fixtures live in `sdk/src/tokens/unified.*`.
 - Exact selector/root/scope and anchor lowering lives in `sdk/src/tokens/unified.out.test.ts`.
 - `sandbox/canary/tests/phase6.spec.ts` exercises the projected cross-kind condition and both opposing color-scheme preferences in Chromium.
-- Registration, axis/case ordering, native-scheme locality, overlap audit, and sparse runtime addresses remain covered by the preserved token graph, emission, audit, and runtime suites.
+- Registration, axis/case ordering, native-scheme locality, overlap audit, and sparse runtime addresses remain covered by the token-module, emission, audit, and runtime suites.
 
 The preset’s `open`, `closed`, `checked`, `selected`, `highlighted`, and `invalid` conditions are backed by `VANITY_HEADLESS_CONDITION_CONTRACTS`. Each record contains the exact emitted selector and per-library component, part, element, official source, and verification date. The 2026-07-24 evidence covers Reka UI, Ark UI, and Zag without pretending their selection contracts are interchangeable: `data-state="checked"` remains `checked`, while `selected` is reserved for the real `data-selected` contracts exposed by Reka range cells and Zag cascade-select items.

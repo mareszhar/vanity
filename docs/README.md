@@ -14,7 +14,7 @@ The reference defines Vanity’s public contracts.
 
 - [Typed CSS values](./reference/spec-values.md)
 - [System authoring](./reference/spec-system-authoring.md)
-- [Open and locked systems](./reference/spec-engine.md)
+- [Open and locked systems](./reference/spec-system.md)
 - [Tokens](./reference/spec-tokens.md)
 - [Conditions, roots, and axes](./reference/spec-conditions.md)
 - [Styling and output](./reference/spec-css.md)

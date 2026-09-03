@@ -1,22 +1,22 @@
+import type { VanityAutoImportPlan } from './compiler/auto-imports/autoImportPlan'
+import type { VanityAutoImportWriteResult } from './compiler/auto-imports/autoImportWriter'
 import type { VanityConfig } from './config'
-import type { VanityAutoImportPlan } from './internal/autoImportPlan'
-import type { VanityAutoImportWriteResult } from './internal/autoImportWriter'
 import { access } from 'node:fs/promises'
 import { cwd } from 'node:process'
 import { createJiti } from 'jiti'
-import { planAutoImportDeclarations as plan } from './internal/autoImportPlan'
-import { writeAutoImportDeclarations as write } from './internal/autoImportWriter'
-import { resolveConfiguredModuleSource } from './internal/exportNames'
+import { planAutoImportDeclarations as plan } from './compiler/auto-imports/autoImportPlan'
+import { writeAutoImportDeclarations as write } from './compiler/auto-imports/autoImportWriter'
+import { resolveConfiguredModuleSource } from './compiler/projection/exportNames'
 
-export type { AutoImportDeclarationSource } from './internal/autoImportDeclarations'
+export type { AutoImportDeclarationSource } from './compiler/auto-imports/autoImportDeclarations'
 export type {
   AutoImportDeclarationFile,
   AutoImportDeclarationPaths,
   VanityAppAutoImportPlan,
   VanityAutoImportPlan,
   VanityStyleAutoImportPlan,
-} from './internal/autoImportPlan'
-export type { VanityAutoImportWriteResult } from './internal/autoImportWriter'
+} from './compiler/auto-imports/autoImportPlan'
+export type { VanityAutoImportWriteResult } from './compiler/auto-imports/autoImportWriter'
 
 /** Project root used to resolve source paths and generated declaration files. */
 export interface VanityPrepareContext {

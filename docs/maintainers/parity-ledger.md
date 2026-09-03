@@ -34,6 +34,6 @@ Every applicable declaration form accepts `initial`, `inherit`, `unset`, `revert
 
 ## Evidence and maintenance
 
-Use pinned official specifications and Web Platform Tests when their license and harness fit. Keep serialization, browser-computed behavior, optimizer survival, type behavior, and editor diagnostics as separate fixtures.
+Use pinned official specifications and Web Platform Tests when their license and runner fit. Keep serialization, browser-computed behavior, optimizer survival, type behavior, and editor diagnostics as separate fixtures.
 
 CI fails when an exported CSS-named capability lacks a record, evidence contradicts its coverage state, a required keyword form is missing, a pinned spec changes without review, or a documented raw escape becomes unreachable. Release does not ship a planned gap as a typed claim.

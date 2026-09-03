@@ -5,11 +5,11 @@
  * grammar. Mounting decides how those entries are normalized and validated.
  */
 
-import type { VanityRuleInput } from '../css/types'
-import type { VanityValue } from '../values/types'
 import type { VanityAxisDefinition, VanityOpenAxisConfig } from './axes'
 import type { VanityConditionInput } from './conditions'
-import type { VanityPolicies } from './openSystem'
+import type { VanityConstructorDefinition, VanityUtilTree } from './definitions'
+import type { VanityPolicies } from './policies'
+import type { VanitySystemRule } from './rules'
 
 export const VANITY_DEFINITION_MODULE = Symbol.for('vanity.definitionModule')
 
@@ -21,33 +21,6 @@ export type VanityDefinitionKind
     | 'policies'
     | 'rules'
     | 'utils'
-
-export interface VanityUtilTree {
-  readonly [name: string]: ((...args: any[]) => unknown) | VanityUtilTree
-}
-
-export type VanityConstructorMembers
-  = Readonly<Record<string, (...args: any[]) => VanityValue>>
-
-export type VanityConstructorDefinition<
-  Call extends (...args: any[]) => VanityValue = (...args: any[]) => VanityValue,
-  Members extends VanityConstructorMembers = Record<never, never>,
-> = Readonly<{ readonly call: Call } & Members>
-
-export type VanityConstructorFamily<
-  Definition extends VanityConstructorDefinition,
-> = Definition['call'] & Omit<Definition, 'call'>
-
-export interface VanitySystemRule<
-  Condition extends string = never,
-  Layer extends string = string,
-> {
-  /** Explicit selector → rule map emitted once with the system. */
-  readonly css: Readonly<Record<string, VanityRuleInput<Condition>>>
-  readonly description?: string
-  readonly layer?: Layer
-  readonly order?: number
-}
 
 export type VanityAxisModuleInput
   = VanityAxisDefinition<any, any>
@@ -222,11 +195,11 @@ export function defineRecordModule<
         return materialize(mergeEntries(kind, entries, requireRecord(kind, first)))
       if (args.length !== 2 || typeof first !== 'string' || first.startsWith('$')) {
         throw new TypeError(
-          `[vanity] ${definitionName(kind)}.add() needs (name, value/callback), a tree/callback, or one or more matching modules`,
+          `[vanity] ${getDefinitionName(kind)}.add() needs (name, value/callback), a tree/callback, or one or more matching modules`,
         )
       }
       if (first in entries)
-        throw new TypeError(`[vanity] ${definitionName(kind)}.add() cannot replace existing '${first}'`)
+        throw new TypeError(`[vanity] ${getDefinitionName(kind)}.add() cannot replace existing '${first}'`)
       // Utility leaves are themselves functions, so `(name, fn)` must mean a
       // direct leaf. A utility that needs module context uses the unambiguous
       // plural callback form: `.add(m => ({ name: ... }))`.
@@ -260,55 +233,6 @@ export function defineConditions<const Seed extends Readonly<Record<string, Vani
   return defineRecordModule('conditions', seed)
 }
 
-/** Define immutable JSON convenience data; mount it with `addConsts()`. */
-export function defineConsts<const Seed extends object = Record<never, never>>(
-  seed?: Seed & DefinitionTreeGuard<'consts', Seed>,
-): VanityDefinitionModule<'consts', Seed> {
-  return defineRecordModule('consts', seed)
-}
-
-/**
- * Define a utility tree; matching namespaces merge recursively at definition
- * and mount time while duplicate leaves remain additive errors.
- */
-export function defineUtils<const Seed extends VanityUtilTree = Record<never, never>>(
-  seed?: Seed,
-): VanityDefinitionModule<'utils', Seed> {
-  return defineRecordModule('utils', seed)
-}
-
-/** Define named system CSS rules; mount them with `addRules()`. */
-export function defineRules<const Seed extends Readonly<Record<string, VanitySystemRule>> = Record<never, never>>(
-  seed?: Seed,
-): VanityDefinitionModule<'rules', Seed> {
-  return defineRecordModule('rules', seed)
-}
-
-/** Define one or more callable constructor families without mounting them. */
-export function defineConstructors<
-  const Seed extends Readonly<Record<string, VanityConstructorDefinition>> = Record<never, never>,
->(
-  seed?: Seed,
-): VanityDefinitionModule<'constructors', Seed> {
-  return defineRecordModule('constructors', seed)
-}
-
-/**
- * Define one detached callable constructor family.
- *
- * `call` supplies the function itself; every additional call-like member is
- * projected onto that function with its exact signature.
- */
-export function defineConstructor<
-  const Name extends string,
-  const Definition extends VanityConstructorDefinition,
->(
-  name: Name,
-  definition: Definition,
-): VanityDefinitionModule<'constructors', Record<Name, Definition>> {
-  return defineRecordModule('constructors', { [name]: definition } as Record<Name, Definition>)
-}
-
 /** Define a detached system policy-book contribution. */
 export function definePolicies<const Seed extends VanityPolicies = Record<never, never>>(
   seed?: Seed,
@@ -327,7 +251,7 @@ export function isDefinitionModule<
   return kind === undefined || (value as VanityDefinitionModule<any>)[VANITY_DEFINITION_MODULE] === kind
 }
 
-export function unwrapDefinitionInput(
+export function resolveDefinitionInput(
   kind: VanityDefinitionKind,
   input: unknown,
 ): object {
@@ -371,7 +295,7 @@ function mergeEntries(
       continue
     }
     throw new TypeError(
-      `[vanity] ${definitionName(kind)} cannot replace existing '${path.join('.')}'; use an overwrite method where that kind supports one`,
+      `[vanity] ${getDefinitionName(kind)} cannot replace existing '${path.join('.')}'; use an overwrite method where that kind supports one`,
     )
   }
   return result
@@ -383,11 +307,11 @@ function isNamespace(value: unknown): value is Record<string, unknown> {
 
 function requireRecord(kind: VanityDefinitionKind, value: unknown): object {
   if (!isNamespace(value))
-    throw new TypeError(`[vanity] ${definitionName(kind)} needs a plain entry tree`)
+    throw new TypeError(`[vanity] ${getDefinitionName(kind)} needs a plain entry tree`)
   return value
 }
 
-function definitionName(kind: VanityDefinitionKind): string {
+function getDefinitionName(kind: VanityDefinitionKind): string {
   return `define${kind.slice(0, 1).toUpperCase()}${kind.slice(1)}`
 }
 

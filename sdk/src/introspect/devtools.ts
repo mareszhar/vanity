@@ -235,6 +235,6 @@ setInterval(refresh, 1500)
 `
 
 /** The page, with the project root inlined so file links can open in the editor. */
-export function devtoolsPage(root: string): string {
+export function renderDevtoolsPage(root: string): string {
   return PAGE.replace('__VANITY_ROOT__', JSON.stringify(root))
 }

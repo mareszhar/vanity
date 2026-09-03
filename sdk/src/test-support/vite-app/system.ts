@@ -1,6 +1,6 @@
 /** The fixture system for the Vite-plugin build test — one plain system module. */
 
-import { createSystem } from '@test/legacy'
+import { createSystem } from '@mszr/vanity'
 
 export const ds = createSystem()
   .addTokens({

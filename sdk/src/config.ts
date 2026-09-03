@@ -2,7 +2,7 @@ import type {
   VanityAppAutoImports,
   VanityAppAutoImportsOptions,
   VanityAppAutoImportSource,
-} from './internal/applicationImports'
+} from './compiler/auto-imports/applicationImports'
 
 /** Naming strategy for generated classes and custom properties. */
 export type VanityIdentifierMode = 'debug' | 'short'

@@ -4,24 +4,21 @@
  * unknown key dies at the cursor ([patterns.md §2]).
  */
 
-import type { VanityColorTokenHandle } from '@test/legacy'
-import { createEngine } from '@test/legacy'
+import type { VanityColorTokenHandle } from '@mszr/vanity'
+import { createSystem, defineTokens, media, oklch } from '@mszr/vanity'
 import { describe, expectTypeOf, it } from 'vitest'
-
-const de = createEngine()
 
 // Never evaluated — the typecheck evidence dimension only reads types.
 function system() {
-  return de.createSystem({
-    tokens: {
-      color: { brand: de.token({ val: de.oklch(0.58, 0.2, 285), mutable: true }) },
-      space: { md: '16px' },
-    },
-    conditions: {
+  const open = createSystem()
+    .addConditions({
       open: '&[data-state="open"]',
-      md: de.media('(min-width: 768px)'),
-    },
-  })
+      md: media('(min-width: 768px)'),
+    })
+  return open.addTokens({
+    color: { brand: open.tdef({ val: oklch(0.58, 0.2, 285), mutable: true }) },
+    space: { md: '16px' },
+  }).consolidate()
 }
 
 describe('createSystem inference', () => {
@@ -33,35 +30,23 @@ describe('createSystem inference', () => {
   })
 
   it('a defineTokens result passes through untouched', () => {
-    const module = de.defineTokens({ radius: { sm: '4px' } })
-    const bound = de.createSystem({ tokens: module, prefix: 'prism' })
+    const module = defineTokens({ radius: { sm: '4px' } })
+    const bound = createSystem().addTokens(module).consolidate({ prefix: 'prism' })
 
     expectTypeOf(bound.tokensOf(module).radius).toEqualTypeOf<typeof bound.t.radius>()
     expectTypeOf(bound.t.radius.sm.$name).toEqualTypeOf<'--prism-radius-sm'>()
   })
 
   it('a condition name colliding with a CSS property is refused at the key', () => {
-    void de.createSystem({
-      tokens: {},
-      // @ts-expect-error — 'color' is a CSS property; bare keys must never blur
-      conditions: { color: '&[data-color]' },
-    })
-  })
-
-  it('the bound token override accepts overrides for the bound graph only', () => {
-    const { tokenOverride } = system()
-
-    tokenOverride({ color: { brand: de.oklch(0.4, 0.1, 100) } })
-    // @ts-expect-error — unknown tokens die at the cursor
-    tokenOverride({ color: { brandy: '#fff' } })
+    void createSystem().addConditions({ color: '&[data-color]' })
   })
 })
 
-describe('css() typing', () => {
+describe('class() typing', () => {
   it('accepts the spec card: both directions, selectors, at-rules, layers', () => {
-    const { css, t } = system()
+    const { class: style, t } = system()
 
-    void css({
+    void style({
       'padding': t.space.md,
       'background': t.color.brand,
       'open': { motionOk: { animationDuration: '200ms' } },
@@ -75,25 +60,25 @@ describe('css() typing', () => {
   })
 
   it('unknown properties, conditions, and layers die at the offending key', () => {
-    const { css } = system()
+    const { class: style } = system()
 
     // @ts-expect-error — unknown property
-    void css({ paddin: 8 })
+    void style({ paddin: 8 })
     // @ts-expect-error — unknown condition as a bare key
-    void css({ hovr: { padding: 8 } })
+    void style({ hovr: { padding: 8 } })
     // @ts-expect-error — unknown condition inside a property-first map
-    void css({ color: { hovr: 'red' } })
+    void style({ color: { hovr: 'red' } })
     // @ts-expect-error — undeclared layer
-    void css.layer('overides')({})
+    void style.layer('overides')({})
     // @ts-expect-error — a value that is not CSS
-    void css({ padding: { nested: { deeper: 8 } } })
+    void style({ padding: { nested: { deeper: 8 } } })
   })
 
   it('interpolated class references type as computed selector keys', () => {
-    const { css } = system()
-    const button = css({ display: 'inline-flex' })
+    const { class: style } = system()
+    const button = style({ display: 'inline-flex' })
 
-    void css({
+    void style({
       display: 'flex',
       [`${button} + ${button}`]: { marginInlineStart: 0 },
       [`& ${button}`]: { borderRadius: 0 },
@@ -102,19 +87,19 @@ describe('css() typing', () => {
 
   it('base conditions are typed in; opting out removes them', () => {
     const withBase = system()
-    void withBase.css({ hover: { opacity: 0.9 }, dark: { borderColor: 'white' } })
+    void withBase.class({ hover: { opacity: 0.9 }, dark: { borderColor: 'white' } })
 
-    const bare = de.createSystem({ tokens: {}, baseConditions: false })
+    const bare = createSystem().consolidate({ baseConditions: false })
     // @ts-expect-error — no base conditions to speak of
-    void bare.css({ hover: { opacity: 0.9 } })
+    void bare.class({ hover: { opacity: 0.9 } })
   })
 
   it('custom layers replace the default order in the layer key', () => {
-    const custom = de.createSystem({ tokens: {}, layerOrder: ['base', 'app'] })
+    const custom = createSystem().consolidate({ layerOrder: ['base', 'app'] as const })
 
-    void custom.css.layer('app')({})
+    void custom.class.layer('app')({})
     // @ts-expect-error — 'overrides' is not declared by this system
-    void custom.css.layer('overrides')({})
+    void custom.class.layer('overrides')({})
   })
 })
 

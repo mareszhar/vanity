@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import ts from 'typescript'
 import { afterEach, describe, expect, it } from 'vitest'
+import { styleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
 import { defineVanityConfig } from './config'
-import { styleAutoImportDeclarations } from './internal/autoImportDeclarations'
 import { loadVanityConfig, planAutoImportDeclarations, writeAutoImportDeclarations } from './prepare'
 
 const roots: string[] = []

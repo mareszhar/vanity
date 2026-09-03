@@ -12,7 +12,6 @@ export default defineConfig({
     alias: {
       // Tests import the package exactly the way userland does; the tsconfig
       // `paths` carry the same mapping for the type/editor-DX planes.
-      '@test/legacy': local('./src/test-support/legacy.ts'),
       '@test': local('./src/test-support/index.ts'),
       '@mszr/vanity/capabilities': local('./src/capabilities.ts'),
       '@mszr/vanity/runtime': local('./src/runtime.ts'),

@@ -6,12 +6,12 @@
  * convention exists to stray from.
  */
 
-import type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel } from '../internal/inspect'
 import type { VanityOklch } from '../tokens/math'
 import type { VanityManifest, VanityManifestContrast, VanityManifestEscape, VanityManifestStyle } from './manifest'
-import { parseBlocks, walkDeclarations } from '../internal/cssBlocks'
+import type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel } from './records'
+import { parseBlocks, walkDeclarations } from '../css/compile'
 import { parseColor } from '../tokens/math'
-import { manifestModules, manifestTokenUsage } from './manifest'
+import { createManifestModules, getManifestTokenUsage } from './manifest'
 
 export type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel }
 
@@ -80,18 +80,18 @@ export function audit(
   const declarations = collectDeclarations(css)
 
   const categories: Record<VanityAuditKind, () => VanityAuditFinding[]> = {
-    unusedTokens: () => unusedTokens(manifest),
-    nearDuplicates: () => nearDuplicates(manifest, declarations),
-    contrast: () => acceptedContrast(manifest),
-    escapes: () => escapes(manifest),
-    scaleStrays: () => scaleStrays(manifest, declarations),
-    focusVisibility: () => focusVisibility(manifest, declarations),
-    specificityContexts: () => specificityContexts(manifest),
-    rawAssertions: () => rawAssertions(manifest),
-    nonportableValues: () => nonportableValues(manifest),
-    ambiguousAxes: () => ambiguousAxes(manifest),
-    mutableRootHazards: () => mutableRootHazards(manifest),
-    aliasEscapes: () => aliasEscapes(manifest),
+    unusedTokens: () => findUnusedTokens(manifest),
+    nearDuplicates: () => findNearDuplicates(manifest, declarations),
+    contrast: () => findAcceptedContrast(manifest),
+    escapes: () => findEscapes(manifest),
+    scaleStrays: () => findScaleStrays(manifest, declarations),
+    focusVisibility: () => findFocusVisibility(manifest, declarations),
+    specificityContexts: () => findSpecificityContexts(manifest),
+    rawAssertions: () => findRawAssertions(manifest),
+    nonportableValues: () => findNonportableValues(manifest),
+    ambiguousAxes: () => findAmbiguousAxes(manifest),
+    mutableRootHazards: () => findMutableRootHazards(manifest),
+    aliasEscapes: () => findAliasEscapes(manifest),
     overwriteInventory: () => overwriteInventory(manifest),
     eagerStyleBarrels: () => (evidence.eagerStyleBarrels ?? []).map(entry => ({
       kind: 'eagerStyleBarrels' as const,
@@ -138,7 +138,7 @@ interface Declaration {
   value: string
 }
 
-/** Every emitted declaration outside `:root` — the token graph audits itself elsewhere. */
+/** Every emitted declaration outside `:root` — token emission audits itself elsewhere. */
 function collectDeclarations(css: string): Declaration[] {
   const declarations: Declaration[] = []
 
@@ -158,8 +158,8 @@ function collectDeclarations(css: string): Declaration[] {
  * Defined, never referenced — not in the CSS, and not (transitively) feeding
  * a token that is. Deprecated tokens are already on their way out.
  */
-function unusedTokens(manifest: VanityManifest): VanityAuditFinding[] {
-  const usage = manifestTokenUsage(manifest)
+function findUnusedTokens(manifest: VanityManifest): VanityAuditFinding[] {
+  const usage = getManifestTokenUsage(manifest)
   const used = new Set<string>()
   const queue = Object.entries(manifest.system.tokens)
     .filter(([path]) => (usage[path] ?? 0) > 0)
@@ -207,7 +207,7 @@ function parseColorish(value: string): VanityOklch | undefined {
 }
 
 /** A raw color within a perceptual epsilon of an existing token — suggest the token. */
-function nearDuplicates(manifest: VanityManifest, declarations: Declaration[]): VanityAuditFinding[] {
+function findNearDuplicates(manifest: VanityManifest, declarations: Declaration[]): VanityAuditFinding[] {
   const tokens = Object.entries(manifest.system.tokens)
     .map(([path, token]) => ({ path, color: parseColorish(token.preview.status === 'resolved' ? token.preview.val : '') }))
     .filter((entry): entry is { path: string, color: VanityOklch } => entry.color !== undefined)
@@ -234,7 +234,7 @@ function nearDuplicates(manifest: VanityManifest, declarations: Declaration[]): 
     if (color === undefined)
       continue
 
-    const twin = tokens.find(token => deltaOk(color, token.color) < NEAR_DUPLICATE_EPSILON)
+    const twin = tokens.find(token => calculateOklabDelta(color, token.color) < NEAR_DUPLICATE_EPSILON)
 
     if (twin === undefined)
       continue
@@ -251,16 +251,16 @@ function nearDuplicates(manifest: VanityManifest, declarations: Declaration[]): 
 }
 
 /** Perceptual distance in OKLab; alpha differences disqualify the match. */
-function deltaOk(a: VanityOklch, b: VanityOklch): number {
+function calculateOklabDelta(a: VanityOklch, b: VanityOklch): number {
   if (Math.abs((a.alpha ?? 1) - (b.alpha ?? 1)) > 0.01)
     return Number.POSITIVE_INFINITY
 
-  const [aa, ab] = labAxes(a)
-  const [ba, bb] = labAxes(b)
+  const [aa, ab] = getLabAxes(a)
+  const [ba, bb] = getLabAxes(b)
   return Math.hypot(a.l - b.l, aa - ba, ab - bb)
 }
 
-function labAxes({ c, h }: VanityOklch): [number, number] {
+function getLabAxes({ c, h }: VanityOklch): [number, number] {
   const radians = ((h ?? 0) * Math.PI) / 180
   return [c * Math.cos(radians), c * Math.sin(radians)]
 }
@@ -268,8 +268,8 @@ function labAxes({ c, h }: VanityOklch): [number, number] {
 // ─── Contrast acceptances ────────────────────────────────────────────────────
 
 /** The consciously-accepted thresholds, surfaced so acceptance stays a decision. */
-function acceptedContrast(manifest: VanityManifest): VanityAuditFinding[] {
-  return manifestContrast(manifest)
+function findAcceptedContrast(manifest: VanityManifest): VanityAuditFinding[] {
+  return getManifestContrast(manifest)
     .filter(entry => entry.accepted)
     .map(entry => ({
       kind: 'contrast' as const,
@@ -287,15 +287,14 @@ function describeLevel(entry: VanityManifestContrast): string {
 // ─── The escape inventory ────────────────────────────────────────────────────
 
 /** Exceptional CSS made findable, reviewable, removable ([patterns.md §8]). */
-function escapes(manifest: VanityManifest): VanityAuditFinding[] {
+function findEscapes(manifest: VanityManifest): VanityAuditFinding[] {
   const findings: VanityAuditFinding[] = []
 
-  for (const escape of manifestEscapes(manifest)) {
+  for (const escape of getManifestEscapes(manifest)) {
     const location = escape.declaredAt?.file === undefined ? {} : { file: escape.declaredAt.file }
 
     switch (escape.form) {
       case 'raw':
-      case 'css.raw':
         findings.push({
           kind: 'escapes',
           level: 'warn',
@@ -304,7 +303,6 @@ function escapes(manifest: VanityManifest): VanityAuditFinding[] {
         })
         break
       case 'class.standard':
-      case 'css.standard':
         break
       case 'unsafe':
         findings.push({
@@ -323,7 +321,6 @@ function escapes(manifest: VanityManifest): VanityAuditFinding[] {
         })
         break
       case 'rules':
-      case 'globalCss':
         if (escape.layer === 'overrides') {
           findings.push({
             kind: 'escapes',
@@ -332,7 +329,7 @@ function escapes(manifest: VanityManifest): VanityAuditFinding[] {
             ...location,
           })
         }
-        else if (targetsForeignDom(escape.detail)) {
+        else if (hasForeignDomTarget(escape.detail)) {
           findings.push({
             kind: 'escapes',
             level: 'warn',
@@ -352,7 +349,7 @@ function escapes(manifest: VanityManifest): VanityAuditFinding[] {
  * renders — third-party targeting. Element and `:root`-ish selectors are
  * ordinary global styling (resets, typography) and stay out of the inventory.
  */
-function targetsForeignDom(selector: string): boolean {
+function hasForeignDomTarget(selector: string): boolean {
   return /[.#][a-z_-]/i.test(selector)
 }
 
@@ -364,16 +361,16 @@ function targetsForeignDom(selector: string): boolean {
  * only speaks when tokenized declarations dominate it, so a system that never
  * tokenized a property is never lectured about it.
  */
-function scaleStrays(manifest: VanityManifest, declarations: Declaration[]): VanityAuditFinding[] {
+function findScaleStrays(manifest: VanityManifest, declarations: Declaration[]): VanityAuditFinding[] {
   const categories = new Map<string, { tokenized: number, strays: Declaration[] }>()
   const graphVars = new Set(Object.values(manifest.system.tokens).flatMap(token => token.name ?? []))
 
   for (const declaration of declarations) {
     const category = categories.get(declaration.property) ?? { tokenized: 0, strays: [] }
 
-    if (referencesGraph(declaration.value, graphVars))
+    if (isGraphReference(declaration.value, graphVars))
       category.tokenized++
-    else if (!universalValue(declaration.value) && parseColorish(declaration.value) === undefined)
+    else if (!isUniversalValue(declaration.value) && parseColorish(declaration.value) === undefined)
       category.strays.push(declaration) // colors belong to the duplicate-color category
 
     categories.set(declaration.property, category)
@@ -399,11 +396,11 @@ function scaleStrays(manifest: VanityManifest, declarations: Declaration[]): Van
 }
 
 /** Values no scale claims — flagging `padding: 0` would be moralizing, not auditing. */
-function universalValue(value: string): boolean {
+function isUniversalValue(value: string): boolean {
   return /^(?:0|inherit|initial|unset|revert|revert-layer|none|auto|normal|currentcolor|transparent)$/i.test(value)
 }
 
-function referencesGraph(value: string, graphVars: Set<string>): boolean {
+function isGraphReference(value: string, graphVars: Set<string>): boolean {
   for (const name of graphVars) {
     if (value.includes(`var(${name})`) || value.includes(`var(${name},`))
       return true
@@ -415,16 +412,16 @@ function referencesGraph(value: string, graphVars: Set<string>): boolean {
 // ─── Focus visibility ───────────────────────────────────────────────────────
 
 /** Removing the native ring is safe only when the same subject replaces it. */
-function focusVisibility(manifest: VanityManifest, declarations: Declaration[]): VanityAuditFinding[] {
+function findFocusVisibility(manifest: VanityManifest, declarations: Declaration[]): VanityAuditFinding[] {
   const removals = new Map<string, Declaration>()
   const replacements = new Set<string>()
 
   for (const declaration of declarations) {
-    for (const subject of focusSubjects(declaration.selector)) {
+    for (const subject of getFocusSubjects(declaration.selector)) {
       if (removesOutline(declaration))
         removals.set(subject, declaration)
 
-      if (declaration.selector.includes(':focus-visible') && suppliesOutline(declaration))
+      if (declaration.selector.includes(':focus-visible') && hasOutline(declaration))
         replacements.add(subject)
     }
   }
@@ -433,7 +430,7 @@ function focusVisibility(manifest: VanityManifest, declarations: Declaration[]):
     .filter(([subject]) => !replacements.has(subject))
     .map(([subject]) => {
       const className = subject.startsWith('.') ? subject.slice(1) : undefined
-      const source = className === undefined ? undefined : manifestStyles(manifest)[className]
+      const source = className === undefined ? undefined : getManifestStyles(manifest)[className]
 
       return {
         kind: 'focusVisibility' as const,
@@ -445,7 +442,7 @@ function focusVisibility(manifest: VanityManifest, declarations: Declaration[]):
     })
 }
 
-function focusSubjects(selector: string): string[] {
+function getFocusSubjects(selector: string): string[] {
   const classes = [...selector.matchAll(/\.([_a-z][\w-]*)/gi)].map(match => `.${match[1]}`)
 
   if (classes.length > 0)
@@ -461,14 +458,14 @@ function removesOutline({ property, value }: Declaration): boolean {
     || (property === 'outline-width' && /^0(?:px|rem|em)?$/i.test(value.trim()))
 }
 
-function suppliesOutline({ property, value }: Declaration): boolean {
+function hasOutline({ property, value }: Declaration): boolean {
   return (property === 'outline' && !/^(?:none|0(?:px|rem|em)?)$/i.test(value.trim()))
     || (property === 'outline-width' && !/^0(?:px|rem|em)?$/i.test(value.trim()))
 }
 
 // ─── Semantic/provenance categories ────────────────────────────────────────
 
-function specificityContexts(manifest: VanityManifest): VanityAuditFinding[] {
+function findSpecificityContexts(manifest: VanityManifest): VanityAuditFinding[] {
   const findings: VanityAuditFinding[] = []
   const seen = new Set<string>()
   for (const [path, token] of Object.entries(manifest.system.tokens)) {
@@ -495,9 +492,9 @@ function specificityContexts(manifest: VanityManifest): VanityAuditFinding[] {
   return findings
 }
 
-function rawAssertions(manifest: VanityManifest): VanityAuditFinding[] {
-  return manifestEscapes(manifest)
-    .filter(escape => escape.form === 'raw' || escape.form === 'css.raw' || escape.form === 'unsafe')
+function findRawAssertions(manifest: VanityManifest): VanityAuditFinding[] {
+  return getManifestEscapes(manifest)
+    .filter(escape => escape.form === 'raw' || escape.form === 'unsafe')
     .map(escape => ({
       kind: 'rawAssertions' as const,
       level: 'warn' as const,
@@ -507,7 +504,7 @@ function rawAssertions(manifest: VanityManifest): VanityAuditFinding[] {
     }))
 }
 
-function nonportableValues(manifest: VanityManifest): VanityAuditFinding[] {
+function findNonportableValues(manifest: VanityManifest): VanityAuditFinding[] {
   return Object.entries(manifest.system.tokens)
     .filter(([, token]) => token.portability.status === 'nonportable')
     .map(([path, token]) => ({
@@ -519,7 +516,7 @@ function nonportableValues(manifest: VanityManifest): VanityAuditFinding[] {
     }))
 }
 
-function ambiguousAxes(manifest: VanityManifest): VanityAuditFinding[] {
+function findAmbiguousAxes(manifest: VanityManifest): VanityAuditFinding[] {
   const findings: VanityAuditFinding[] = []
   for (const [axis, definition] of Object.entries(manifest.system.axes)) {
     for (const [mode, configured] of Object.entries(definition.modes)) {
@@ -542,7 +539,7 @@ function ambiguousAxes(manifest: VanityManifest): VanityAuditFinding[] {
   return findings
 }
 
-function mutableRootHazards(manifest: VanityManifest): VanityAuditFinding[] {
+function findMutableRootHazards(manifest: VanityManifest): VanityAuditFinding[] {
   const findings: VanityAuditFinding[] = []
   for (const [path, token] of Object.entries(manifest.system.tokens)) {
     if (!token.mutable || token.runtime === undefined)
@@ -566,9 +563,9 @@ function mutableRootHazards(manifest: VanityManifest): VanityAuditFinding[] {
   return findings
 }
 
-function aliasEscapes(manifest: VanityManifest): VanityAuditFinding[] {
-  return manifestEscapes(manifest)
-    .filter(escape => escape.form === 'class.standard' || escape.form === 'css.standard')
+function findAliasEscapes(manifest: VanityManifest): VanityAuditFinding[] {
+  return getManifestEscapes(manifest)
+    .filter(escape => escape.form === 'class.standard')
     .map(escape => ({
       kind: 'aliasEscapes' as const,
       level: 'warn' as const,
@@ -590,16 +587,16 @@ function overwriteInventory(manifest: VanityManifest): VanityAuditFinding[] {
   }))
 }
 
-function manifestEscapes(manifest: VanityManifest): readonly VanityManifestEscape[] {
-  return manifestModules(manifest).flatMap(module => module.escapes)
+function getManifestEscapes(manifest: VanityManifest): readonly VanityManifestEscape[] {
+  return createManifestModules(manifest).flatMap(module => module.escapes)
 }
 
-function manifestContrast(manifest: VanityManifest): readonly VanityManifestContrast[] {
-  return manifestModules(manifest).flatMap(module => module.contrast)
+function getManifestContrast(manifest: VanityManifest): readonly VanityManifestContrast[] {
+  return createManifestModules(manifest).flatMap(module => module.contrast)
 }
 
-function manifestStyles(manifest: VanityManifest): Readonly<Record<string, VanityManifestStyle>> {
-  return Object.assign({}, ...manifestModules(manifest).map(module => module.styles))
+function getManifestStyles(manifest: VanityManifest): Readonly<Record<string, VanityManifestStyle>> {
+  return Object.assign({}, ...createManifestModules(manifest).map(module => module.styles))
 }
 
 // ─── The report ──────────────────────────────────────────────────────────────

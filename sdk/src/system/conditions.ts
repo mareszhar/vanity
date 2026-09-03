@@ -10,9 +10,9 @@
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
 import type { VanityKebab } from '../tokens/types'
 import type { VanityCssValue, VanityTokenInput } from '../values/types'
+import { checkQuery, checkSelector, isCssProperty } from '../css/validation'
 import { VanityError } from '../diagnostics'
-import { checkQuery, checkSelector, isCssProperty } from '../internal/cssParser'
-import { kebab } from '../tokens/names'
+import { toKebab } from '../tokens/names'
 
 /** One compiled way a condition applies: at-rule wrappers and/or a `&` selector. */
 export interface VanityConditionArm {
@@ -177,7 +177,7 @@ function createCondition<const Compiled extends string>(
   })))
   const value = Object.freeze({
     arms: frozenArms,
-    ast: deepFreezeAst(ast),
+    ast: freezeConditionAst(ast),
     compiled,
     and: (other: VanityConditionInput) => combineConditions('and', value, normalizeConditionInput(other)),
     or: (other: VanityConditionInput) => combineConditions('or', value, normalizeConditionInput(other)),
@@ -272,7 +272,7 @@ export function container(
 export function schemeIs<const Scheme extends 'light' | 'dark'>(
   scheme: Scheme,
 ): VanityFluentCondition<`&:where([data-scheme='${Scheme}'], [data-scheme='${Scheme}'] *) | @media (prefers-color-scheme: ${Scheme})`, true> {
-  const arms = schemeConditionArms(scheme)
+  const arms = getSchemeConditionArms(scheme)
   return createCondition(
     `&:where([data-scheme='${scheme}'], [data-scheme='${scheme}'] *) | @media (prefers-color-scheme: ${scheme})`,
     {
@@ -298,7 +298,7 @@ export function schemeIs<const Scheme extends 'light' | 'dark'>(
  * projection. Adapters may add priority/runtime metadata, but must not fork
  * the selector or preference guards.
  */
-export function schemeConditionArms(scheme: 'light' | 'dark'): readonly [VanityConditionArm, VanityConditionArm] {
+export function getSchemeConditionArms(scheme: 'light' | 'dark'): readonly [VanityConditionArm, VanityConditionArm] {
   const opposite = scheme === 'light' ? 'dark' : 'light'
 
   return [
@@ -319,7 +319,7 @@ export function data<const Attribute extends string, const Value extends string>
   value: Value,
 ): VanityFluentCondition<`[data-${VanityKebab<Attribute>}='${Value}']`, true>
 export function data(attribute: string, value?: string): VanityFluentCondition<string, true> {
-  const name = `data-${kebab(attribute)}`
+  const name = `data-${toKebab(attribute)}`
   const compiled = value === undefined ? `[${name}]` : `[${name}='${value}']`
   return createCondition(
     compiled,
@@ -336,7 +336,7 @@ export function aria<const Attribute extends string, const Value extends string 
   attribute: Attribute,
   value: Value = true as Value,
 ): VanityFluentCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`> {
-  return selector(`[aria-${kebab(attribute)}='${value}']`) as VanityFluentCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`>
+  return selector(`[aria-${toKebab(attribute)}='${value}']`) as VanityFluentCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`>
 }
 
 export interface VanityScopeCondition extends VanityFluentCondition<string> {
@@ -383,7 +383,7 @@ export interface VanityBaseConditionInputs {
  * is. Breakpoints, container sizes, and headless states are opinions and live
  * in the preset.
  */
-export function baseConditions(): VanityBaseConditionInputs {
+export function createBaseConditions(): VanityBaseConditionInputs {
   return {
     hover: selector('&:hover'),
     hoverFocus: selector('&:hover, &:focus-visible'),
@@ -429,7 +429,7 @@ export function describeConditionArms(
   ]))
 }
 
-/** Preserve authored ASTs so tooling never has to reverse-engineer CSS text. */
+/** Preserve authored ASTs so tooling never has to reconstruct CSS text. */
 export function describeConditionAsts(
   conditions: Record<string, VanityConditionInput>,
 ): Record<string, VanityConditionAst> {
@@ -454,10 +454,10 @@ export function normalizeConditions(
   const diagnostics: VanityDiagnostic[] = []
 
   for (const [name, input] of Object.entries(conditions)) {
-    if (isCssProperty(kebab(name))) {
+    if (isCssProperty(toKebab(name))) {
       diagnostics.push({
         code: 'VANITY_SYSTEM_CONDITION_COLLISION' as const,
-        message: `the condition '${name}' collides with the CSS property '${kebab(name)}'`,
+        message: `the condition '${name}' collides with the CSS property '${toKebab(name)}'`,
         detail: ['conditions are bare keys beside properties; a shared name would make every rule ambiguous'],
         path: name,
         file,
@@ -518,7 +518,7 @@ function normalizeConditionInput(input: VanityConditionInput): VanityFluentCondi
   if (typeof input !== 'string') {
     if (input.ast !== undefined && 'and' in input)
       return input as VanityFluentCondition<string>
-    const ast = astOfArms(input.arms)
+    const ast = createAstFromArms(input.arms)
     return createCondition(input.compiled ?? describeAst(ast), ast, ...input.arms)
   }
   for (const [prefix, kind] of [
@@ -742,7 +742,7 @@ function dedupeArms(arms: readonly VanityConditionArm[]): VanityConditionArm[] {
 
 function compileStructuredQuery(input: VanityStructuredQuery): string {
   const features = Object.entries(input).map(([rawFeature, value]) => {
-    const feature = kebab(rawFeature)
+    const feature = toKebab(rawFeature)
     if (!isRangeQuery(value))
       return `(${feature}: ${String(value)})`
     if (!RANGE_CAPABLE_FEATURES.has(feature)) {
@@ -815,15 +815,15 @@ function anchorCondition<const Compiled extends string>(
   return createCondition(compiled, { kind: 'anchor', anchor }, { anchor, selector: '&' })
 }
 
-function deepFreezeAst(ast: VanityConditionAst): VanityConditionAst {
+function freezeConditionAst(ast: VanityConditionAst): VanityConditionAst {
   if (ast.kind === 'and' || ast.kind === 'or') {
     return Object.freeze({
       ...ast,
-      conditions: Object.freeze(ast.conditions.map(deepFreezeAst)),
+      conditions: Object.freeze(ast.conditions.map(freezeConditionAst)),
     })
   }
   if (ast.kind === 'not')
-    return Object.freeze({ ...ast, condition: deepFreezeAst(ast.condition) })
+    return Object.freeze({ ...ast, condition: freezeConditionAst(ast.condition) })
   return Object.freeze({ ...ast })
 }
 
@@ -843,7 +843,7 @@ function describeAst(ast: VanityConditionAst): string {
   return ast.conditions.map(describeAst).join(` ${ast.kind} `)
 }
 
-function astOfArms(arms: readonly VanityConditionArm[]): VanityConditionAst {
+function createAstFromArms(arms: readonly VanityConditionArm[]): VanityConditionAst {
   const conditions = arms.map<VanityConditionAst>((arm) => {
     const parts: VanityConditionAst[] = []
     for (const prelude of arm.scopes ?? [])

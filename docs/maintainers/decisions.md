@@ -60,7 +60,7 @@ This register records choices that cross more than one specification. Domain spe
 
 | Boundary | Re-entry condition |
 | --- | --- |
-| No runtime CSS-in-JS engine or component library. | Neither fits Vanity’s CSS-first product boundary. |
+| No runtime CSS-in-JS style graph or component library. | Neither fits Vanity’s CSS-first product boundary. |
 | No generic middleware/hooks. | Add one only when two real emission-transform consumers cannot use existing extension seams. |
 | No whole-system composition API. | Add one only when plugins and module handoff cannot express a real multi-package compatibility problem. |
 | No built-in SVG/Iconify product API. | Add one only for an external-content consumer with a clear ownership boundary. |

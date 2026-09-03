@@ -21,8 +21,7 @@ describe('policy editor DX', () => {
       'constructors',
       'support',
       'layerOrder',
-      'reference',
-      'validation',
+      'tokens',
       'plugins',
     ])
     expect(result.errors).toHaveErrorCount(1)

@@ -6,7 +6,7 @@ import type {
   VanityCssValue,
   VanityDataTypeOf,
 } from './types'
-import { ExpressionValue, inputNode, varNode } from './protocol'
+import { createInputNode, createVarNode, ExpressionValue } from './protocol'
 
 export interface VanityCustomPropertyOptions<Type extends VanityCssDataType> {
   readonly type: Type
@@ -36,16 +36,16 @@ export function customProperty(
   const declaredType = options?.type ?? 'unknown'
 
   const $var = (fallback?: VanityCssInput): VanityCssValue => {
-    const fallbackNode = fallback === undefined ? undefined : inputNode(fallback)
+    const fallbackNode = fallback === undefined ? undefined : createInputNode(fallback)
     const resultType = declaredType === 'unknown' && fallbackNode ? fallbackNode.type : declaredType
 
-    if (fallbackNode && !compatibleFallback(declaredType, fallbackNode.type)) {
+    if (fallbackNode && !isCompatibleFallback(declaredType, fallbackNode.type)) {
       throw new TypeError(
         `[vanity] fallback for ${name} is <${fallbackNode.type}> but the custom property is <${declaredType}>`,
       )
     }
 
-    return new ExpressionValue(varNode({
+    return new ExpressionValue(createVarNode({
       type: resultType,
       reference: {
         kind: 'custom-property',
@@ -113,7 +113,7 @@ function isDashedIdent(value: string): boolean {
   return true
 }
 
-function compatibleFallback(expected: VanityCssDataType, actual: VanityCssDataType): boolean {
+function isCompatibleFallback(expected: VanityCssDataType, actual: VanityCssDataType): boolean {
   if (expected === 'unknown' || actual === 'unknown' || expected === actual)
     return true
   if (expected === 'number' && actual === 'integer')

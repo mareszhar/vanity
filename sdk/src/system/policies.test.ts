@@ -10,6 +10,43 @@ import { emit } from '@test'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('policy as system law', () => {
+  it('uses one recursive add/overwrite law for known and custom policy groups', () => {
+    const open = createSystem({
+      tokens: { reference: 'var' },
+      custom: { nested: { first: 1 } },
+      list: [1, 2],
+    })
+
+    const added = open.addPolicies({
+      tokens: { emit: false },
+      custom: { other: 2 },
+    })
+    expect(added.policies).toMatchObject({
+      tokens: { reference: 'var', emit: false },
+      custom: { nested: { first: 1 }, other: 2 },
+    })
+    expect(() => open.addPolicies({ custom: { nested: { first: 2 } } })).toThrow(/custom\.nested\.first/)
+    expect(() => open.addPolicies({ list: [3] })).toThrow(/list/)
+
+    const overwritten = open.overwritePolicies({
+      tokens: { emit: false },
+      custom: { nested: { first: 2 } },
+      list: [3],
+    })
+    expect(overwritten.policies).toMatchObject({
+      tokens: { reference: 'var', emit: false },
+      custom: { nested: { first: 2 } },
+      list: [3],
+    })
+  })
+
+  it('rejects unknown keys inside closed policy groups', () => {
+    expect(() => createSystem({ tokens: { reference: 'var', typo: true } } as never)).toThrow(/unknown tokens policy/)
+    expect(() => createSystem({
+      constructors: { length: { restrict: { level: 'forbid', typo: true } } },
+    } as never)).toThrow(/unknown key 'typo'/)
+  })
+
   it('resolves portable adaptive lengths at the host border and preserves explicit units', () => {
     const portable = defineTokens({
       space: {

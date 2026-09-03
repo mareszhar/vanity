@@ -15,11 +15,11 @@ import type {
   VanityValue,
 } from './types'
 import {
+  createInputNode,
+  createPluginNode,
   ExpressionValue,
-  inputNode,
+  getNode,
   isNodeValue,
-  nodeOf,
-  pluginNode,
 } from './protocol'
 
 export type VanityExtensionInput<Type extends VanityCssDataType = VanityCssDataType>
@@ -59,9 +59,9 @@ export function defineCssValue<
     const result = definition.create(...args)
 
     if (isNodeValue(result)) {
-      const node = nodeOf(result)
-      if (!compatibleType(definition.type, node.type))
-        typeMismatch('value', definition.type, node.type)
+      const node = getNode(result)
+      if (!isCompatibleType(definition.type, node.type))
+        throwTypeMismatch('value', definition.type, node.type)
       return new ExpressionValue(node as never)
     }
 
@@ -75,21 +75,21 @@ export function defineCssValue<
       )
     }
 
-    const dependencies = (result.dependencies ?? []).map(value => inputNode(value as VanityCssInput))
-    const node = pluginNode({
+    const dependencies = (result.dependencies ?? []).map(value => createInputNode(value as VanityCssInput))
+    const node = createPluginNode({
       type: definition.type,
       extension: definition.extension,
       dependencies,
       requirements: result.requirements,
       source: result.source,
       serialize: result.serialize,
-      fallback: result.fallback ? nodeOf(result.fallback) : undefined,
+      fallback: result.fallback ? getNode(result.fallback) : undefined,
       fold: result.fold
         ? (context) => {
             const folded = result.fold!(context)
             return 'preserve' in folded
               ? { kind: 'preserve', reason: folded.preserve }
-              : { kind: 'folded', node: nodeOf(folded) }
+              : { kind: 'folded', node: getNode(folded) }
           }
         : undefined,
     })
@@ -122,27 +122,27 @@ export function defineCssOperation<
 >(definition: VanityCssOperationDefinition<Inputs, Output>): (...inputs: OperationInputs<Inputs>) => VanityCssValue<string, Output> {
   return (...inputs) => {
     const dependencies = inputs.map((input, index) => {
-      const node = inputNode(input as VanityCssInput, definition.inputs[index])
+      const node = createInputNode(input as VanityCssInput, definition.inputs[index])
       const expected = definition.inputs[index]!
-      if (!compatibleType(expected, node.type))
-        typeMismatch(`operation input ${index + 1}`, expected, node.type)
+      if (!isCompatibleType(expected, node.type))
+        throwTypeMismatch(`operation input ${index + 1}`, expected, node.type)
       return node
     })
 
-    return new ExpressionValue(pluginNode({
+    return new ExpressionValue(createPluginNode({
       type: definition.output,
       extension: definition.extension,
       dependencies,
       requirements: definition.requirements,
       source: definition.source,
       serialize: context => definition.serialize(context, ...inputs),
-      fallback: definition.fallback ? nodeOf(definition.fallback(...inputs)) : undefined,
+      fallback: definition.fallback ? getNode(definition.fallback(...inputs)) : undefined,
       fold: definition.fold
         ? (context) => {
             const folded = definition.fold!(context, ...inputs)
             return 'preserve' in folded
               ? { kind: 'preserve', reason: folded.preserve }
-              : { kind: 'folded', node: nodeOf(folded) }
+              : { kind: 'folded', node: getNode(folded) }
           }
         : undefined,
     }))
@@ -154,7 +154,7 @@ function isRecipe(value: unknown): value is VanityCssValueRecipe {
     && typeof (value as VanityCssValueRecipe).serialize === 'function'
 }
 
-function compatibleType(expected: VanityCssDataType, actual: VanityCssDataType): boolean {
+function isCompatibleType(expected: VanityCssDataType, actual: VanityCssDataType): boolean {
   if (expected === actual || expected === 'unknown' || actual === 'unknown')
     return true
   if (expected === 'number' && actual === 'integer')
@@ -166,6 +166,6 @@ function compatibleType(expected: VanityCssDataType, actual: VanityCssDataType):
   return false
 }
 
-function typeMismatch(where: string, expected: VanityCssDataType, actual: VanityCssDataType): never {
+function throwTypeMismatch(where: string, expected: VanityCssDataType, actual: VanityCssDataType): never {
   throw new TypeError(`[vanity] ${where} expected <${expected}> but received <${actual}>`)
 }

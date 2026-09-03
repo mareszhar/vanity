@@ -7,18 +7,18 @@
  */
 
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
-import type { VanityInternalTokenHandle } from '../internal/handle'
+import type { VanityInternalTokenHandle } from '../tokens/handle'
 import type { VanityResolver } from '../tokens/resolve'
 import { VanityError } from '../diagnostics'
-import { isHandle } from '../internal/handle'
 import { isPort } from '../ports/port'
 import { isColorValue, isContrastValue } from '../tokens/color'
-import { containsContrast, modeTraits, serializeExpr } from '../tokens/resolve'
+import { isHandle, readHandlePath } from '../tokens/handle'
+import { hasContrastExpression, serializeExpr } from '../tokens/resolve'
 import { isCssValue } from '../values/types'
 
 export interface VanityValueContext {
   file?: string
-  /** Resolve system-relative expression references through the locked token graph. */
+  /** Resolve system-relative expression references through the locked token module. */
   serializeValue?: (value: unknown) => string | number
 }
 
@@ -49,14 +49,14 @@ export function serializeStyleValue(value: unknown, path: string, ctx: VanityVal
   }
 
   if (isColorValue(value)) {
-    if (containsContrast(value.expr))
-      throw new VanityError(contrastDiagnostic(path, ctx))
+    if (hasContrastExpression(value.expr))
+      throw new VanityError(createContrastDiagnostic(path, ctx))
 
-    return serializeExpr(value.expr, valueResolver(path, ctx))
+    return serializeExpr(value.expr, resolveValue(path, ctx))
   }
 
   if (isContrastValue(value))
-    throw new VanityError(contrastDiagnostic(path, ctx))
+    throw new VanityError(createContrastDiagnostic(path, ctx))
 
   throw new VanityError({
     code: 'VANITY_CSS_INVALID_VALUE',
@@ -67,7 +67,7 @@ export function serializeStyleValue(value: unknown, path: string, ctx: VanityVal
   })
 }
 
-function contrastDiagnostic(path: string, ctx: VanityValueContext): VanityDiagnostic {
+function createContrastDiagnostic(path: string, ctx: VanityValueContext): VanityDiagnostic {
   return {
     code: 'VANITY_CSS_INVALID_VALUE',
     message: `${path} uses legibleOn, which is graph knowledge — the check needs both endpoints at build time`,
@@ -81,17 +81,21 @@ function contrastDiagnostic(path: string, ctx: VanityValueContext): VanityDiagno
  * The rule-position resolver. `serializeExpr` folds only ref-free subtrees, so
  * `foldRef` is unreachable; ref traits come from the handle's own mode.
  */
-function valueResolver(path: string, ctx: VanityValueContext): VanityResolver {
+function resolveValue(path: string, ctx: VanityValueContext): VanityResolver {
   return {
     ...(ctx.serializeValue === undefined
       ? {}
       : { serializeValue: value => String(ctx.serializeValue!(value)) }),
-    refTraits: handle => modeTraits(handle.mode),
+    refTraits: handle => ({
+      cssLive: handle.$reference === 'var',
+      volatile: handle.$mutable,
+      conditional: false,
+    }),
     serializeRef: handle => String(handle),
     foldRef: (handle: VanityInternalTokenHandle) => {
       throw new VanityError({
         code: 'VANITY_CSS_INVALID_VALUE',
-        message: `${path} cannot fold ${handle.path} at build time`,
+        message: `${path} cannot fold ${readHandlePath(handle)} at build time`,
         path,
         file: ctx.file,
       })

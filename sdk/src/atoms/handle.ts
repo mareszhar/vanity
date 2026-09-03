@@ -36,13 +36,13 @@ export type VanityUnsafeEmitter = (property: string, condition: string, escape: 
 export function createAtomsHandle(runtime: VanityAtomsRuntime, emitUnsafe?: VanityUnsafeEmitter): VanityAtoms<Record<string, unknown>> {
   const warned = new Set<string>()
 
-  const pushValue = (classes: string[], property: string, condition: string, value: unknown): void => {
+  const appendValue = (classes: string[], property: string, condition: string, value: unknown): void => {
     if (isUnsafeValue(value)) {
       if (emitUnsafe) {
         classes.push(emitUnsafe(property, condition, value))
       }
       else {
-        warn(warned, `${property}:${condition}:unsafe`, `${name(runtime)}: an unsafe value reached a runtime call — `
+        warn(warned, `${property}:${condition}:unsafe`, `${getRuntimeName(runtime)}: an unsafe value reached a runtime call — `
         + `runtime data crosses through a port, not a finite atom set ([patterns.md §4])`)
       }
 
@@ -61,7 +61,7 @@ export function createAtomsHandle(runtime: VanityAtomsRuntime, emitUnsafe?: Vani
       ? `the '${condition}' condition is not declared on these atoms`
       : `${JSON.stringify(value)} is not a declared ${property} value`
 
-    warn(warned, `${property}:${condition}:${String(value)}`, `${name(runtime)}: ${reason}`)
+    warn(warned, `${property}:${condition}:${String(value)}`, `${getRuntimeName(runtime)}: ${reason}`)
   }
 
   const resolve = (props?: Record<string, unknown>): string => {
@@ -80,19 +80,19 @@ export function createAtomsHandle(runtime: VanityAtomsRuntime, emitUnsafe?: Vani
       const property = runtime.shorthands[key] ?? key
 
       if (!(property in runtime.classes)) {
-        warn(warned, key, `${name(runtime)}: '${key}' is not a declared property, shorthand, or toggle`)
+        warn(warned, key, `${getRuntimeName(runtime)}: '${key}' is not a declared property, shorthand, or toggle`)
         continue
       }
 
       if (typeof raw === 'object' && !isUnsafeValue(raw)) {
         for (const [condition, value] of Object.entries(raw)) {
           if (value !== undefined)
-            pushValue(classes, property, condition, value)
+            appendValue(classes, property, condition, value)
         }
         continue
       }
 
-      pushValue(classes, property, 'base', raw)
+      appendValue(classes, property, 'base', raw)
     }
 
     return classes.join(' ')
@@ -101,7 +101,7 @@ export function createAtomsHandle(runtime: VanityAtomsRuntime, emitUnsafe?: Vani
   return resolve as VanityAtoms<Record<string, unknown>>
 }
 
-function name(runtime: VanityAtomsRuntime): string {
+function getRuntimeName(runtime: VanityAtomsRuntime): string {
   return runtime.name ?? 'atoms'
 }
 

@@ -8,7 +8,6 @@ import {
   clamp,
   color,
   createCssValueSerializer,
-  createSystem,
   number as cssNumber,
   customProperty,
   defineCssOperation,
@@ -23,9 +22,21 @@ import {
   oklch,
   percent,
   rawValue,
-} from '../test-support/characterization'
-import { defaultEngine } from './defaultEngine'
-import { nodeOf } from './protocol'
+} from '../index'
+import { createFixtureSystem } from '../test-support/current'
+import { getTokenModule } from '../tokens/builder'
+import { resolveTokenModule } from '../tokens/resolve'
+import { defaultValueKernel } from './defaults'
+import { serializeValueWithContext } from './kernel'
+import { getNode, VANITY_DEFAULT_CSS_SUPPORT } from './protocol'
+
+function serialize(value: import('./types').VanitySelfValue): string {
+  return serializeValueWithContext({
+    values: defaultValueKernel,
+    support: VANITY_DEFAULT_CSS_SUPPORT,
+    policies: {},
+  }, value)
+}
 
 describe('the shared CSS value IR', () => {
   it('constructs the minimum unit families without making raw CSS verbose', () => {
@@ -45,7 +56,7 @@ describe('the shared CSS value IR', () => {
     expect(() => rawValue.unknown('future(/*')).toThrow(/unterminated comment/)
     expect(() => rawValue.unknown('')).toThrow(/cannot be empty/)
 
-    const raw = nodeOf(rawValue.length('anchor-size(width)'))
+    const raw = getNode(rawValue.length('anchor-size(width)'))
     expect(raw).toMatchObject({ kind: 'raw', type: 'length', source: { helper: 'rawValue.length' } })
     expect(raw.fold?.({ serialize: {} as never })).toEqual({ kind: 'preserve', reason: 'raw-or-unknown' })
   })
@@ -56,7 +67,7 @@ describe('the shared CSS value IR', () => {
 
     expect(gap.$name).toBe('--library-gap')
     expect(reference.css).toBe('var(--library-gap, 1rem)')
-    expect(nodeOf(reference)).toMatchObject({
+    expect(getNode(reference)).toMatchObject({
       kind: 'var',
       type: 'length',
       dependencies: [{ kind: 'custom-property', name: '--library-gap', type: 'length' }],
@@ -72,21 +83,22 @@ describe('the shared CSS value IR', () => {
     const chroma = customProperty('--brand-chroma', { type: 'number' })
     const value = oklch(percent(58), chroma.$var(cssNumber(0.2)), angle.deg(285), 0.5)
 
-    expect(defaultEngine.serialize(value)).toBe('oklch(58% var(--brand-chroma, 0.2) 285deg / 0.5)')
-    expect(defaultEngine.serialize(hwb(45, 'none', percent(20)))).toBe('hwb(45 none 20%)')
+    expect(serialize(value)).toBe('oklch(58% var(--brand-chroma, 0.2) 285deg / 0.5)')
+    expect(serialize(hwb(45, 'none', percent(20)))).toBe('hwb(45 none 20%)')
     expect(() => (oklch as any)(length.px(10), 0.2, 285)).toThrow(/<length>.*numeric color component/)
     expect(() => (oklch as any)(0.5, 0.2, percent(50))).toThrow(/<percentage>.*hue color component/)
 
-    const { returned: tokens } = emit(() => defineTokens({
+    const { returned: tokens } = emit(() => resolveTokenModule(getTokenModule(defineTokens({
       channel: { lightness: 0.6, chroma: 0.18, hue: 285 },
-    }).build())
-    expect(defaultEngine.serialize(oklch(tokens.channel.lightness, tokens.channel.chroma, tokens.channel.hue)))
+    }))!))
+    const resolved = tokens as any
+    expect(serialize(oklch(resolved.channel.lightness, resolved.channel.chroma, resolved.channel.hue)))
       .toBe('oklch(var(--vanity-channel-lightness) var(--vanity-channel-chroma) var(--vanity-channel-hue))')
   })
 
   it('keeps interpolation space and hue policy only on interpolation results', () => {
     const mixed = mix('#f00', '#00f', 0.35).in('oklch', { hue: 'longer' })
-    expect(defaultEngine.serialize(mixed)).toMatch(/^color-mix\(in oklch longer hue, oklch\(.+\), oklch\(.+\) 35%\)$/)
+    expect(serialize(mixed)).toMatch(/^color-mix\(in oklch longer hue, oklch\(.+\), oklch\(.+\) 35%\)$/)
     expect('in' in oklch(0.5, 0.2, 30)).toBe(false)
     expect(() => (mix('#f00', '#00f', 0.5) as any).in('srgb', { hue: 'shorter' })).toThrow(/no hue interpolation path/)
   })
@@ -103,7 +115,7 @@ describe('the shared CSS value IR', () => {
   it('folds closed numeric subtrees without erasing a live reference', () => {
     const live = customProperty('--live-scale', { type: 'number' }).$var(cssNumber(0.5))
     const closed = calc(1).subtract(calc(0.3).add(0.4)).multiply(2)
-    const serialized = defaultEngine.serialize(calc(live).add(closed))
+    const serialized = serialize(calc(live).add(closed))
 
     expect(serialized).toBe('calc(var(--live-scale, 0.5) + 0.6)')
     expect(serialized).not.toContain('calc(0.3 + 0.4)')
@@ -161,9 +173,9 @@ describe('the shared CSS value IR', () => {
 
   it('uses one value protocol across tokens, rules, ports, atoms, and keyframes', () => {
     const { css, returned } = emit(() => {
-      const system = createSystem({ tokens: { space: { control: length.rem(2) } } })
+      const system = createFixtureSystem({ tokens: { space: { control: length.rem(2) } } })
       const runtimeGap = system.port(length.px(12))
-      const className = system.css(
+      const className = system.class(
         { padding: length.rem(2), margin: calc(length.px(8)).add(length.px(4)) },
         'valueRule',
       )

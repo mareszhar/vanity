@@ -1,25 +1,23 @@
-import { createEngine } from '@test/legacy'
+import { angle, createSystem, length, number, rawValue } from '@mszr/vanity'
 import { describe, expectTypeOf, it } from 'vitest'
 
 describe('the value law — compatible handles are values', () => {
   it('crosses constructors, operations, fallbacks, and property forms', () => {
-    const de = createEngine()
-    const ds = de.createSystem({
-      tokens: {
-        channel: {
-          lightness: de.token({ val: de.number(0.6), mutable: true }),
-          chroma: de.token({ val: de.number(0.18), mutable: true }),
-          hue: de.token({ val: de.angle.deg(285), mutable: true }),
-        },
-        space: {
-          sm: de.token({ val: de.length.rem(0.5), mutable: true }),
-          md: de.token({ val: de.length.rem(1), mutable: true }),
-        },
-        image: {
-          hero: de.token({ val: de.rawValue.image('url(hero.png)') }),
-        },
+    const open = createSystem()
+    const ds = open.addTokens({
+      channel: {
+        lightness: open.tdef({ val: number(0.6), mutable: true }),
+        chroma: open.tdef({ val: number(0.18), mutable: true }),
+        hue: open.tdef({ val: angle.deg(285), mutable: true }),
       },
-    })
+      space: {
+        sm: open.tdef({ val: length.rem(0.5), mutable: true }),
+        md: open.tdef({ val: length.rem(1), mutable: true }),
+      },
+      image: {
+        hero: open.tdef({ val: rawValue.image('url(hero.png)') }),
+      },
+    }).consolidate()
 
     const color = ds.oklch(ds.t.channel.lightness, ds.t.channel.chroma, ds.t.channel.hue)
     const negative = ds.calc(ds.t.space.md).negate()
@@ -30,7 +28,7 @@ describe('the value law — compatible handles are values', () => {
     const image = ds.lightDark(ds.rawValue.image('url(day.png)'), 'none')
     const tokenImage = ds.lightDark('none', ds.t.image.hero)
 
-    ds.css({
+    ds.class({
       'color': color,
       'marginInline': negative,
       'padding': ds.t.space.md,

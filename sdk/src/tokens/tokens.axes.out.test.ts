@@ -1,14 +1,36 @@
+import {
+  colorSchemes,
+  createSystem,
+  data,
+  media,
+  oklch,
+  time,
+} from '@mszr/vanity'
 import { emit } from '@test'
-import { createEngine } from '@test/legacy'
 import { describe, expect, it } from 'vitest'
+import { substrate } from '../substrate'
+import { createAbsoluteAxisCondition, createAxisCondition } from '../system/axes'
+
+function inSystemScope<T>(body: () => T): T {
+  return substrate.modules.runInFileScope({
+    filePath: 'src/tokens/tokens.axes.system.ts',
+    packageName: '@vanity/fixture',
+  }, body)
+}
+
+function emitSystem<T extends { readonly class: unknown }>(system: T): T {
+  void system.class
+  return system
+}
 
 describe('axis and registration output', () => {
   it('keeps scheme color-agnostic while reserving light-dark() for colors', () => {
-    const de = createEngine().axes(({ scheme }) => ({ scheme: scheme() }))
-    const { css } = emit(() => de.createSystem({
-      tokens: {
-        duration: de.token({ val: de.time.ms(100), axes: { scheme: { dark: de.time.ms(180) } } }),
-      },
+    const { css } = emit(() => inSystemScope(() => {
+      const open = createSystem().addAxis('scheme', colorSchemes())
+      const system = emitSystem(open.addTokens({
+        duration: open.tdef({ val: time.ms(100), axes: { scheme: { dark: time.ms(180) } } }),
+      }).consolidate())
+      return system
     }))
 
     expect(css).not.toContain('light-dark(100ms')
@@ -17,15 +39,14 @@ describe('axis and registration output', () => {
   })
 
   it('guards preference arms against the opposing explicit scheme for sparse non-color tokens', () => {
-    const de = createEngine().axes(({ scheme }) => ({ scheme: scheme({ locality: 'root' }) }))
-    const { css } = emit(() => de.createSystem({
-      root: '#fixture',
-      tokens: {
-        signal: de.token({
+    const { css } = emit(() => inSystemScope(() => {
+      const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
+      return emitSystem(open.addTokens({
+        signal: open.tdef({
           val: 'light-value',
           axes: { scheme: { dark: 'dark-value' } },
         }),
-      },
+      }).consolidate({ root: '#fixture' }))
     }))
 
     expect(css).toContain('@media (prefers-color-scheme: dark)')
@@ -35,14 +56,13 @@ describe('axis and registration output', () => {
   })
 
   it('gives explicit scheme choices enough specificity to override an id root', () => {
-    const de = createEngine().axes(({ scheme }) => ({ scheme: scheme() }))
-    const { css } = emit(() => de.createSystem({
-      root: '#prism-studio',
-      tokens: {
-        canvas: de.token.color({
-          axes: { scheme: { light: de.oklch(0.98, 0, 0), dark: de.oklch(0.16, 0, 0) } },
+    const { css } = emit(() => inSystemScope(() => {
+      const open = createSystem().addAxis('scheme', colorSchemes())
+      return emitSystem(open.addTokens({
+        canvas: open.tdef.color({
+          axes: { scheme: { light: oklch(0.98, 0, 0), dark: oklch(0.16, 0, 0) } },
         }),
-      },
+      }).consolidate({ root: '#prism-studio' }))
     }))
 
     expect(css).toContain(':is(#prism-studio)[data-scheme=\'light\']')
@@ -51,28 +71,25 @@ describe('axis and registration output', () => {
   })
 
   it('emits deterministic base, ordered axis, case, and registration layers', () => {
-    const de = createEngine()
-      .axes(({ axis, data, scheme }) => ({
-        scheme: scheme({ locality: 'root' }),
-        density: axis({
+    const { css } = emit(() => inSystemScope(() => {
+      const open = createSystem()
+        .addAxis('scheme', colorSchemes({ locality: 'root' }))
+        .addAxis('density', {
           modes: {
             cozy: data('density', 'cozy'),
             compact: data('density', 'compact'),
           },
           default: 'cozy',
-        }),
-      }))
-    const { css } = emit(() => de.createSystem({
-      prefix: 'app',
-      tokens: {
+        })
+      return emitSystem(open.addTokens({
         color: {
-          accent: de.token.color({
+          accent: open.tdef.color({
             axes: { scheme: { light: 'white', dark: 'black' } },
             register: { syntax: '*', inherits: true },
           }),
         },
         shadow: {
-          card: de.token({
+          card: open.tdef({
             val: '0 2px 8px rgb(0 0 0 / .16)',
             axes: {
               scheme: { dark: '0 2px 8px rgb(0 0 0 / .6)' },
@@ -84,7 +101,7 @@ describe('axis and registration output', () => {
             }],
           }),
         },
-      },
+      }).consolidate({ prefix: 'app' }))
     }))
 
     expect(css).toContain('@property --app-color-accent')
@@ -103,18 +120,17 @@ describe('axis and registration output', () => {
   })
 
   it('emits opaque mutable slots and null-branch fallback chains without cycles', () => {
-    const de = createEngine().axes(({ scheme }) => ({ scheme: scheme() }))
-    const { css } = emit(() => de.createSystem({
-      prefix: 'app',
-      tokens: {
+    const { css } = emit(() => inSystemScope(() => {
+      const open = createSystem().addAxis('scheme', colorSchemes())
+      return emitSystem(open.addTokens({
         color: {
-          accent: de.token({
-            val: de.oklch(1, 0, 0),
+          accent: open.tdef({
+            val: oklch(1, 0, 0),
             mutable: true,
-            axes: { scheme: { light: de.oklch(1, 0, 0), dark: null } },
+            axes: { scheme: { light: oklch(1, 0, 0), dark: null } },
           }),
         },
-      },
+      }).consolidate({ prefix: 'app' }))
     }))
 
     expect(css).toMatch(/--app-v-[a-z0-9]+: oklch\(1 0 0\);/)
@@ -123,17 +139,15 @@ describe('axis and registration output', () => {
   })
 
   it('emits every root placement and at-rule mechanism against the effective root', () => {
-    const de = createEngine().axes(({ absoluteCondition, axis, condition, media }) => ({
-      self: axis({ modes: { on: condition('[data-self=on]') } }),
-      ancestor: axis({ modes: { on: condition('[data-ancestor=on]', { on: 'ancestor' }) } }),
-      descendant: axis({ modes: { on: condition('[data-descendant=on]', { on: 'descendant' }) } }),
-      print: axis({ modes: { on: condition(media('print')) } }),
-      portal: axis({ modes: { on: absoluteCondition('#portal[data-on]') } }),
-    }))
-    const { css } = emit(() => de.createSystem({
-      root: '#widget',
-      tokens: {
-        signal: de.token({
+    const { css } = emit(() => inSystemScope(() => {
+      const open = createSystem()
+        .addAxis('self', { modes: { on: createAxisCondition('[data-self=on]') } })
+        .addAxis('ancestor', { modes: { on: createAxisCondition('[data-ancestor=on]', { on: 'ancestor' }) } })
+        .addAxis('descendant', { modes: { on: createAxisCondition('[data-descendant=on]', { on: 'descendant' }) } })
+        .addAxis('print', { modes: { on: media('print') } })
+        .addAxis('portal', { modes: { on: createAbsoluteAxisCondition('#portal[data-on]') } })
+      return emitSystem(open.addTokens({
+        signal: open.tdef({
           val: 'base',
           axes: {
             self: { on: 'self' },
@@ -143,7 +157,7 @@ describe('axis and registration output', () => {
             portal: { on: 'portal' },
           },
         }),
-      },
+      }).consolidate({ root: '#widget' }))
     }))
 
     expect(css).toContain(':is(#widget)[data-self=on]')
@@ -155,15 +169,14 @@ describe('axis and registration output', () => {
   })
 
   it('uses @property initial-value as the default of a mutable base reservation', () => {
-    const de = createEngine()
-    const { css } = emit(() => de.createSystem({
-      prefix: 'app',
-      tokens: {
-        fill: de.token.color({
+    const { css } = emit(() => inSystemScope(() => {
+      const open = createSystem()
+      return emitSystem(open.addTokens({
+        fill: open.tdef.color({
           mutable: true,
           register: { initialVal: 'rebeccapurple' },
         }),
-      },
+      }).consolidate({ prefix: 'app' }))
     }))
 
     expect(css).toContain('@property --app-fill')

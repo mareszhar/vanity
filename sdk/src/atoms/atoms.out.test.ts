@@ -6,12 +6,12 @@
 
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { createSystem } from '../test-support/characterization'
+import { createFixtureSystem } from '../test-support/current'
 
 describe('atoms, emitted', () => {
   it('pre-generates value × condition classes in the utilities layer', () => {
     const { css } = emit(() => {
-      const { atoms, t } = createSystem({
+      const { atoms, t } = createFixtureSystem({
         tokens: { space: { sm: '8px', md: '16px' } },
         conditions: { md: '@media (min-width: 768px)' },
       })
@@ -60,7 +60,7 @@ describe('atoms, emitted', () => {
 
   it('output scales with conditions, never with call sites', () => {
     const { css } = emit(() => {
-      const { atoms: makeAtoms, t } = createSystem({
+      const { atoms: makeAtoms, t } = createFixtureSystem({
         tokens: { space: { sm: '8px', md: '16px' } },
       })
       const atoms = makeAtoms({ properties: { padding: t.space } }, 'atoms')
@@ -77,7 +77,7 @@ describe('atoms, emitted', () => {
 
   it('toggles compile as full rules', () => {
     const { css } = emit(() => {
-      const { atoms } = createSystem({ tokens: {} })
+      const { atoms } = createFixtureSystem({ tokens: {} })
 
       return atoms({
         toggles: { stack: { display: 'flex', flexDirection: 'column', hover: { gap: 4 } } },

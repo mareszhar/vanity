@@ -20,27 +20,25 @@ function expectNoLeak(messages: Array<Diagnostic | string>): void {
 }
 
 const defineSystem = `
-import { createEngine } from '@test/legacy'
+import { createSystem, oklch } from '@mszr/vanity'
 
-const de = createEngine()
-const { t, css, port } = de.createSystem({
-  tokens: {
-    color: {
-      brand: de.token({ val: de.oklch(0.58, 0.2, 285), mutable: true }),
-      ink: de.oklch(0.2, 0, 0),
-    },
-    space: { sm: '8px', md: '16px' },
+const open = createSystem()
+const { t, class: style, port } = open.addTokens({
+  color: {
+    brand: open.tdef({ val: oklch(0.58, 0.2, 285), mutable: true }),
+    ink: oklch(0.2, 0, 0),
   },
-})
+  space: { sm: '8px', md: '16px' },
+}).consolidate()
 
-void t; void css; void port
+void t; void style; void port
 `
 
 describe('the authoring shape', () => {
   it('a port declaration with interpolation raises no diagnostics', () => {
     const { errors } = project.check`${defineSystem}
       export const fraction = port(0)
-      export const fill = css({
+      export const fill = style({
         inlineSize: \`calc(\${fraction} * 100%)\`,
         background: t.color.brand,
       })
@@ -51,7 +49,7 @@ describe('the authoring shape', () => {
   it('a color port defaulted to a token raises no diagnostics', () => {
     const { errors } = project.check`${defineSystem}
       export const tint = port(t.color.brand)
-      export const fill = css({ background: tint })
+      export const fill = style({ background: tint })
     `
     expect(errors).toBeClean()
   })
@@ -59,7 +57,7 @@ describe('the authoring shape', () => {
   it('value-token and color-expression defaults raise no diagnostics', () => {
     const { errors } = project.check`${defineSystem}
       export const gap = port(t.space.sm)
-      export const glow = port(de.oklch(0.7, 0.1, 200))
+      export const glow = port(oklch(0.7, 0.1, 200))
       void gap.dec(t.space.md); void glow.dec('rebeccapurple')
     `
     expect(errors).toBeClean()

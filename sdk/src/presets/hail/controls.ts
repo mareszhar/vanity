@@ -24,7 +24,7 @@ const NATIVE_RANGES = {
 
 export type HailControlDefinition = VanityConfiguredTokenShape<object, 'number'>
 
-export function hailControl(
+export function createHailControl(
   ds: VanityOpenSystemBase,
   name: HailControlName,
   value: number,
@@ -38,15 +38,15 @@ export function hailControl(
   )
 }
 
-export function hailRange(
+export function createHailRange(
   ds: VanityOpenSystemBase,
   name: HailRangeName,
   options: HailNormalizedOptions,
 ): readonly [minimum: HailControlDefinition, maximum: HailControlDefinition] {
   const [minimum, maximum] = options.ranges[name] ?? NATIVE_RANGES[name]
   return [
-    hailControl(ds, name, minimum, options),
-    hailControl(ds, name, maximum, options),
+    createHailControl(ds, name, minimum, options),
+    createHailControl(ds, name, maximum, options),
   ]
 }
 

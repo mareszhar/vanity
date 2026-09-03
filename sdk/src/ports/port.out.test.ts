@@ -6,11 +6,12 @@
 
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { angle, createSystem } from '../test-support/characterization'
+import { angle } from '../index'
+import { createFixtureSystem } from '../test-support/current'
 
 /** A tiny system: inline tokens, spec-shaped conditions, default layers. */
 function miniSystem() {
-  return createSystem({
+  return createFixtureSystem({
     tokens: {
       color: { brand: '#635bff', ink: '#1a1a2e' },
       space: { xs: '4px', sm: '8px', md: '16px' },
@@ -21,10 +22,10 @@ function miniSystem() {
 describe('port() in emitted CSS', () => {
   it('a port interpolates inside calc() with its default fallback', () => {
     const { css } = emit(() => {
-      const { css, port, t } = miniSystem()
+      const { class: style, port, t } = miniSystem()
       const fraction = port(0)
 
-      return css({
+      return style({
         inlineSize: `calc(${fraction} * 100%)`,
         background: t.color.brand,
       }, 'fill')
@@ -37,10 +38,10 @@ describe('port() in emitted CSS', () => {
 
   it('a color port used directly as a value nests the token var() as fallback', () => {
     const { css } = emit(() => {
-      const { css, port, t } = miniSystem()
+      const { class: style, port, t } = miniSystem()
       const tint = port(t.color.brand)
 
-      return css({
+      return style({
         background: tint,
       }, 'fill')
     })
@@ -50,10 +51,10 @@ describe('port() in emitted CSS', () => {
 
   it('a string port used directly as a value includes the string default', () => {
     const { css } = emit(() => {
-      const { css, port } = miniSystem()
+      const { class: style, port } = miniSystem()
       const width = port('100%')
 
-      return css({
+      return style({
         inlineSize: width,
       }, 'fill')
     })
@@ -63,10 +64,10 @@ describe('port() in emitted CSS', () => {
 
   it('a branded angle includes the unit in the default fallback', () => {
     const { css } = emit(() => {
-      const { css, port } = miniSystem()
+      const { class: style, port } = miniSystem()
       const rotate = port(angle.deg(0))
 
-      return css({
+      return style({
         rotate: `${rotate}`,
       }, 'rotate')
     })
@@ -75,13 +76,13 @@ describe('port() in emitted CSS', () => {
   })
 })
 
-describe('static set() in css() rules — parent→child theming', () => {
+describe('static set() in class() rules — parent→child theming', () => {
   it('a static set() with a token compiles into a custom-property declaration', () => {
     const { css } = emit(() => {
-      const { css, port, t } = miniSystem()
+      const { class: style, port, t } = miniSystem()
       const gap = port(t.space.xs)
 
-      return css({
+      return style({
         display: 'flex',
         ...gap.dec(t.space.sm),
       }, 'toolbar')
@@ -93,10 +94,10 @@ describe('static set() in css() rules — parent→child theming', () => {
 
   it('a static set() with a string compiles into a custom-property declaration', () => {
     const { css } = emit(() => {
-      const { css, port } = miniSystem()
+      const { class: style, port } = miniSystem()
       const label = port('default')
 
-      return css({
+      return style({
         ...label.dec('custom'),
       }, 'override')
     })
@@ -106,10 +107,10 @@ describe('static set() in css() rules — parent→child theming', () => {
 
   it('a static set() with a branded angle compiles with the unit', () => {
     const { css } = emit(() => {
-      const { css, port } = miniSystem()
+      const { class: style, port } = miniSystem()
       const rotate = port(angle.deg(0))
 
-      return css({
+      return style({
         ...rotate.dec(angle.deg(45)),
       }, 'rotate')
     })
@@ -119,11 +120,11 @@ describe('static set() in css() rules — parent→child theming', () => {
 
   it('multiple static sets merge into one rule', () => {
     const { css } = emit(() => {
-      const { css, port, t } = miniSystem()
+      const { class: style, port, t } = miniSystem()
       const gap = port(t.space.xs)
       const tint = port(t.color.brand)
 
-      return css({
+      return style({
         display: 'flex',
         ...gap.dec(t.space.md),
         ...tint.dec(t.color.ink),
@@ -139,10 +140,10 @@ describe('static set() in css() rules — parent→child theming', () => {
 describe('ports and conditions', () => {
   it('a port inside a conditioned rule serializes in each arm', () => {
     const { css } = emit(() => {
-      const { css, port } = miniSystem()
+      const { class: style, port } = miniSystem()
       const fraction = port(0)
 
-      return css({
+      return style({
         inlineSize: `calc(${fraction} * 100%)`,
         hover: { opacity: 0.8 },
       }, 'fill')

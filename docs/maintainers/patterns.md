@@ -95,7 +95,7 @@ Build and live forms of the same public operation must have equivalent semantics
 - a runtime-dependent derivation cannot pretend to be a build constant;
 - a compile-only definition used in a media query cannot depend on a runtime custom property.
 
-The zero-config token policy is `reference: 'var'` plus `emit: true`; this is a product default, not an inference from literal shape. Engines may configure another stable default. Optimizer/folding improvements must not silently change whether a shorthand token has a public custom property.
+The zero-config token policy is `reference: 'var'` plus `emit: true`; this is a product default, not an inference from literal shape. Systems may configure another stable default. Optimizer/folding improvements must not silently change whether a shorthand token has a public custom property.
 
 The compiler should explain the propagation path in diagnostics and `ds.explain()` output.
 
@@ -109,7 +109,7 @@ The final selector/context appears in the manifest.
 
 ## 7. Axis precedence is policy, not source accident
 
-The engine records axis declaration order and may override it explicitly after axes exist. The compiler emits:
+The system records axis declaration order and may overwrite it explicitly after axes exist. The compiler emits:
 
 ```text
 base
@@ -168,7 +168,7 @@ Runtime selector-rule injection, if implemented, lives behind an explicit sheet 
 
 ## 11. Capabilities and policies are separate
 
-An engine plugin may define preferred units, aliases, ranges, or allowed inputs. Those are policy on the primary authoring form.
+A system plugin may define preferred units, aliases, ranges, or allowed inputs. Those are policy on the primary authoring form.
 
 The raw standards form remains:
 
@@ -196,7 +196,7 @@ At minimum, extension authors need:
 
 No public recipe should instruct users to subclass private IR classes.
 
-Engine/plugin compatibility is structural and semantic. Stable protocol, policy, and plugin signatures survive HMR and duplicate package instances; JavaScript object equality is never a compatibility contract. Opaque extension semantics require an explicit stable identity, while nodes fully lowered to core IR are portable.
+Value-capability/plugin compatibility is structural and semantic. Stable protocol, policy, and plugin signatures survive HMR and duplicate package instances; JavaScript object equality is never a compatibility contract. Opaque extension semantics require an explicit stable identity, while nodes fully lowered to core IR are portable.
 
 The flattened system namespace is versioned. Extensions prefer a distinctive top-level namespace, and a future core member cannot silently replace one.
 
@@ -222,7 +222,7 @@ Every owned failure has:
 - trustworthy file/line/column when source is available;
 - one actionable message rather than an overload wall;
 - a correction or nearest valid alternatives where enumerable;
-- engine/plugin identity when incompatible values or modules are mixed.
+- capability/plugin identity when incompatible values or modules are mixed.
 
 Diagnostics for implicit behavior explain why it happened: reference propagation, axis precedence, root composition, folding refusal, runtime mutability, and export portability.
 

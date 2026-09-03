@@ -1,7 +1,7 @@
 /** Typed escape for future CSS syntax Vanity does not yet understand. */
 
 import type { VanityCssDataType, VanityCssValue } from './types'
-import { ExpressionValue, rawNode } from './protocol'
+import { createRawNode, ExpressionValue } from './protocol'
 
 export interface VanityRawValueConstructors {
   unknown: (syntax: string) => VanityCssValue<string, 'unknown'>
@@ -30,39 +30,39 @@ export interface VanityRawValueConstructors {
   plugin: <const Name extends string>(name: Name, syntax: string) => VanityCssValue<string, `plugin:${Name}`>
 }
 
-function typed<Type extends VanityCssDataType>(type: Type, syntax: string): VanityCssValue<string, Type> {
+function createTypedRawValue<Type extends VanityCssDataType>(type: Type, syntax: string): VanityCssValue<string, Type> {
   validateRawSyntax(syntax)
-  return new ExpressionValue(rawNode(type, syntax, { helper: `rawValue.${type}` }))
+  return new ExpressionValue(createRawNode(type, syntax, { helper: `rawValue.${type}` }))
 }
 
 export const rawValue: VanityRawValueConstructors = Object.freeze({
-  unknown: (syntax: string) => typed('unknown', syntax),
-  declaration: (syntax: string) => typed('declaration', syntax),
-  number: (syntax: string) => typed('number', syntax),
-  integer: (syntax: string) => typed('integer', syntax),
-  percentage: (syntax: string) => typed('percentage', syntax),
-  numberPercentage: (syntax: string) => typed('number-percentage', syntax),
-  length: (syntax: string) => typed('length', syntax),
-  lengthPercentage: (syntax: string) => typed('length-percentage', syntax),
-  angle: (syntax: string) => typed('angle', syntax),
-  time: (syntax: string) => typed('time', syntax),
-  frequency: (syntax: string) => typed('frequency', syntax),
-  resolution: (syntax: string) => typed('resolution', syntax),
-  flex: (syntax: string) => typed('flex', syntax),
-  color: (syntax: string) => typed('color', syntax),
-  image: (syntax: string) => typed('image', syntax),
-  position: (syntax: string) => typed('position', syntax),
-  easingFunction: (syntax: string) => typed('easing-function', syntax),
-  transformFunction: (syntax: string) => typed('transform-function', syntax),
-  transformList: (syntax: string) => typed('transform-list', syntax),
-  customIdent: (syntax: string) => typed('custom-ident', syntax),
-  dashedIdent: (syntax: string) => typed('dashed-ident', syntax),
-  string: (syntax: string) => typed('string', syntax),
-  url: (syntax: string) => typed('url', syntax),
+  unknown: (syntax: string) => createTypedRawValue('unknown', syntax),
+  declaration: (syntax: string) => createTypedRawValue('declaration', syntax),
+  number: (syntax: string) => createTypedRawValue('number', syntax),
+  integer: (syntax: string) => createTypedRawValue('integer', syntax),
+  percentage: (syntax: string) => createTypedRawValue('percentage', syntax),
+  numberPercentage: (syntax: string) => createTypedRawValue('number-percentage', syntax),
+  length: (syntax: string) => createTypedRawValue('length', syntax),
+  lengthPercentage: (syntax: string) => createTypedRawValue('length-percentage', syntax),
+  angle: (syntax: string) => createTypedRawValue('angle', syntax),
+  time: (syntax: string) => createTypedRawValue('time', syntax),
+  frequency: (syntax: string) => createTypedRawValue('frequency', syntax),
+  resolution: (syntax: string) => createTypedRawValue('resolution', syntax),
+  flex: (syntax: string) => createTypedRawValue('flex', syntax),
+  color: (syntax: string) => createTypedRawValue('color', syntax),
+  image: (syntax: string) => createTypedRawValue('image', syntax),
+  position: (syntax: string) => createTypedRawValue('position', syntax),
+  easingFunction: (syntax: string) => createTypedRawValue('easing-function', syntax),
+  transformFunction: (syntax: string) => createTypedRawValue('transform-function', syntax),
+  transformList: (syntax: string) => createTypedRawValue('transform-list', syntax),
+  customIdent: (syntax: string) => createTypedRawValue('custom-ident', syntax),
+  dashedIdent: (syntax: string) => createTypedRawValue('dashed-ident', syntax),
+  string: (syntax: string) => createTypedRawValue('string', syntax),
+  url: (syntax: string) => createTypedRawValue('url', syntax),
   plugin: <const Name extends string>(name: Name, syntax: string) => {
     if (name.trim().length === 0)
       throw new TypeError('[vanity] a raw plugin value needs a non-empty data-type name')
-    return typed(`plugin:${name}` as const, syntax)
+    return createTypedRawValue(`plugin:${name}` as const, syntax)
   },
 })
 

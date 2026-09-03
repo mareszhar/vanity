@@ -8,7 +8,7 @@ The guiding question is:
 
 Vanity aims to make styling with TypeScript feel unusually direct, capable, and enjoyable.
 
-Its design-system language uses TypeScript and CSS for what they are strongest, and a compiler to connect them without a runtime styling engine.
+Its design-system language uses TypeScript and CSS for what they are strongest, and a compiler to connect them without rebuilding styles at runtime.
 
 ## 1. The promise
 
@@ -102,7 +102,7 @@ Vanity keeps independent questions independent:
 | When does code execute? | authoring time, build time, runtime |
 | Where does it execute? | Node/build worker, SSR server, browser |
 | What representation is present? | in-process contract, portable contract, generated module, CSS, manifest |
-| Who owns the work? | engine, system, compiler, build host, runtime controller, browser |
+| Who owns the work? | Vanity, system, compiler, build host, runtime controller, browser |
 
 ```text
 host adapter ──mounts compiler into──> build host
@@ -124,7 +124,7 @@ These principles are the product hierarchy for Vanity. They apply to public API 
 5. **Separate independent concerns.** Data type, expression, reference, representation, execution environment, emission, variation, mutability, and runtime activation are composable dimensions. A value does not become mutable merely because it is emitted as a custom property; an axis does not gain color semantics because it is named `scheme`; portable data does not become browser code because an application system projection can be restored from it.
 6. **Boilerplate is active harm.** Inference and composition should remove repeated declarations, copied string paths, mirrored token registries, manual `var()` construction, framework glue, and hand-kept metadata. A requirement to repeat information Vanity already knows is a product defect, not harmless ceremony.
 7. **Errors arrive at the cursor or build.** TypeScript owns names, relationships, subject-specific states, and structural validity. Real CSS parsers own value grammar and selector syntax. Runtime validation is reserved for genuinely dynamic inputs, and every failure is structured, source-local, actionable, and free of leaked substrate jargon.
-8. **The browser is the runtime.** Cascade, inheritance, custom properties, media and container queries, layers, scopes, relative colors, and native functions perform live styling work. Runtime code writes declared slots, activates precompiled choices, and hydrates state; it does not reconstruct the design graph or become a hidden CSS-in-JS engine.
+8. **The browser is the runtime.** Cascade, inheritance, custom properties, media and container queries, layers, scopes, relative colors, and native functions perform live styling work. Runtime code writes declared slots, activates precompiled choices, and hydrates state; it does not reconstruct the design graph or become hidden CSS-in-JS infrastructure.
 9. **Boring CSS is the durable contract.** Output stays ordinary, inspectable, portable, optimizable, overrideable, and useful if Vanity disappears. Selectors, at-rules, layers, and custom properties remain recognizable in browser tools. Extraction and projection must not make the cascade mysterious.
 10. **Predictability beats magic.** Root ownership, composition order, axis precedence, condition expansion, folding, fallback selection, runtime targets, identities, and escape hatches are explicit and introspectable. Convenience may bundle policy, but it is opted into visibly and lowers through the same primitives available to users.
 11. **Power is opt-in; escape hatches degrade gracefully.** Raw CSS values stay light. Registration, mutability, activation, strict aliases, interchange, advanced algorithms, and policy plugins are deliberate choices. Leaving a typed form for a raw or experimental escape hatch may reduce guarantees, but it must not sever emission, provenance, or the rest of the system.
@@ -157,7 +157,7 @@ Opt-in or adapter territory:
 
 Out of scope:
 
-- a runtime CSS-in-JS engine;
+- a runtime CSS-in-JS style graph;
 - a component library;
 - implicit stylesheet patching;
 - reconstructing arbitrary TypeScript from interchange data;
@@ -172,7 +172,7 @@ Vanity ensures a serious design system can:
 - express the CSS it needs without capability cliffs;
 - discover its token, condition, axis, component, and runtime contracts at the cursor;
 - evolve through additive composition with loud, local conflicts;
-- render and code-split ordinary CSS without a client styling engine;
+- render and code-split ordinary CSS without rebuilding a client-side style graph;
 - tune declared runtime decisions without recomputing design logic in JavaScript;
 - explain any public handle and emit a stable project manifest;
 - survive Nuxt/Vite SSR, HMR, package boundaries, duplicate installs, and realistic scale;

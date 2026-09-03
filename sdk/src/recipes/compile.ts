@@ -6,12 +6,12 @@
  * grammar ([spec-recipes.md §3], principle 5).
  */
 
-import type { VanitySystemContext } from '../css/css'
+import type { VanitySystemContext } from '../css/context'
 import type { VanityCompiled, VanityRuleContext } from '../css/rule'
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
-import type { VanityRecipeRecord } from '../internal/inspect'
+import type { VanityRecipeRecord } from '../introspect/records'
 import type { VanityPort } from '../ports/types'
-import { armKey, compileRule } from '../css/rule'
+import { compileStyleRule, getArmKey } from '../css/rule'
 import { didYouMean, VanityError } from '../diagnostics'
 import { isPort } from '../ports/port'
 
@@ -52,14 +52,14 @@ export function startBuild(
  * mistake across every arm surfaces in one pass. A `layer` key inside an arm
  * is refused: a recipe lives in one layer, declared at its root.
  */
-export function compileArm(build: VanityRecipeBuild, arm: unknown, path: string[]): VanityCompiled {
+export function compileRecipeArm(build: VanityRecipeBuild, arm: unknown, path: string[]): VanityCompiled {
   const empty: VanityCompiled = { layer: build.layer, layerRoot: build.ctx.layerRoot, units: [] }
 
   if (arm === undefined || arm === null)
     return empty
 
   try {
-    const compiled = compileRule(arm, { ...build.ctx, rootPath: path })
+    const compiled = compileStyleRule(arm, { ...build.ctx, rootPath: path })
     return { layer: build.layer, layerRoot: build.ctx.layerRoot, units: compiled.units }
   }
   catch (error) {
@@ -188,8 +188,8 @@ export function finishBuild(build: VanityRecipeBuild): void {
  */
 export function covers(sibling: VanityCompiled, target: VanityCompiled): boolean {
   for (const unit of target.units) {
-    const key = armKey(unit.arm)
-    const matches = sibling.units.filter(candidate => armKey(candidate.arm) === key)
+    const key = getArmKey(unit.arm)
+    const matches = sibling.units.filter(candidate => getArmKey(candidate.arm) === key)
 
     if (matches.length === 0)
       return false
@@ -213,7 +213,7 @@ export function mergeCompiled(into: VanityCompiled, from: VanityCompiled): Vanit
 }
 
 /** Join a debug id with an arm suffix; without one, the suffix still names the arm. */
-export function debugName(debugId: string | undefined, ...suffix: string[]): string {
+export function getDebugName(debugId: string | undefined, ...suffix: string[]): string {
   return [debugId, ...suffix].filter(Boolean).join('_')
 }
 

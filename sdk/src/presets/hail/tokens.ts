@@ -24,7 +24,7 @@ interface HailPaletteHandles {
 }
 
 /** Detached primitive palette module. */
-export function hailPaletteTokens(ds: HailPresetSystem) {
+export function createHailPaletteTokens(ds: HailPresetSystem) {
   return ds.defineTokens({
     color: {
       palette: {
@@ -37,7 +37,7 @@ export function hailPaletteTokens(ds: HailPresetSystem) {
 }
 
 /** Detached semantic colors and `$dec`-ready typography bundles. */
-export function hailRoleTokens(ds: HailPresetSystem & { readonly t: HailPaletteHandles }, elevation: boolean) {
+export function createHailRoleTokens(ds: HailPresetSystem & { readonly t: HailPaletteHandles }, elevation: boolean) {
   const palette = ds.t.color.palette
   const canvas = elevation
     ? ds.oklchx.inE(hailExact(0.02), hailExact(0.012), hailExact(270))
@@ -82,7 +82,7 @@ export function hailRoleTokens(ds: HailPresetSystem & { readonly t: HailPaletteH
 }
 
 /** Detached base-step size token module. */
-export function hailSizeTokens(ds: HailPresetSystem) {
+export function createHailSizeTokens(ds: HailPresetSystem) {
   return ds.defineTokens({
     size: {
       '1p': ds.size(1, 'px'),
@@ -99,7 +99,7 @@ export function hailSizeTokens(ds: HailPresetSystem) {
 }
 
 /** Detached responsive breakpoint token module. */
-export function hailBreakpointTokens(ds: HailPresetSystem) {
+export function createHailBreakpointTokens(ds: HailPresetSystem) {
   return ds.defineTokens({
     breakpoint: {
       compact: '375px',
@@ -112,7 +112,7 @@ export function hailBreakpointTokens(ds: HailPresetSystem) {
 }
 
 /** Detached icon customization reservations. */
-export function hailIconTokens(ds: HailPresetSystem) {
+export function createHailIconTokens(ds: HailPresetSystem) {
   return ds.defineTokens({
     icon: {
       size: '1em',

@@ -6,7 +6,7 @@ function isVanityValue(value) {
 function isCssValue(value) {
 	return isVanityValue(value) && "css" in value;
 }
-function cssText(value) {
+function serializeCssText(value) {
 	if (typeof value === "number") {
 		if (!Number.isFinite(value)) throw new RangeError(`[vanity] a CSS number must be finite; received ${value}`);
 		return String(Object.is(value, -0) ? 0 : value);
@@ -18,16 +18,16 @@ function cssText(value) {
 	if (isCssValue(value)) return value.css;
 	return "var" in value ? value.var : String(value);
 }
-function vanityHandleSymbol() {
+function getVanityHandleSymbol() {
 	return Symbol.for("vanity.tokenHandle");
 }
-function vanityBranchHandleSymbol() {
+function getVanityBranchHandleSymbol() {
 	return Symbol.for("vanity.tokenBranchHandle");
 }
-function vanityRuntimeAddressSymbol() {
+function getVanityRuntimeAddressSymbol() {
 	return Symbol.for("vanity.runtimeAddress");
 }
-function caseBranchesSymbol() {
+function getCaseBranchesSymbol() {
 	return Symbol.for("vanity.caseBranches");
 }
 function createHandle(meta) {
@@ -35,7 +35,7 @@ function createHandle(meta) {
 		...meta,
 		reference: meta.reference ?? "var",
 		emit: meta.emit ?? true,
-		mutable: meta.mutable ?? meta.mode === "live",
+		mutable: meta.mutable ?? false,
 		type: meta.type ?? "unknown"
 	};
 	const variable = `var(${meta.name})`;
@@ -43,25 +43,12 @@ function createHandle(meta) {
 	const cases = /* @__PURE__ */ new Map();
 	const render = () => state.reference === "val" && state.value !== void 0 ? String(state.value) : variable;
 	const handle = (() => render());
-	Object.defineProperty(handle, "name", {
-		value: meta.name,
-		configurable: true
-	});
-	Object.defineProperty(handle, vanityHandleSymbol(), { value: true });
-	if (meta.runtime) Object.defineProperty(handle, vanityRuntimeAddressSymbol(), {
+	Object.defineProperty(handle, getVanityHandleSymbol(), { value: true });
+	Object.defineProperty(handle, handleMetadataSymbol(), { value: state });
+	if (meta.runtime) Object.defineProperty(handle, getVanityRuntimeAddressSymbol(), {
 		configurable: true,
 		value: meta.runtime
 	});
-	defineGetter(handle, "var", () => variable);
-	defineGetter(handle, "path", () => state.path);
-	defineMutable(handle, "mode", () => state.mode, (value) => state.mode = value);
-	defineMutable(handle, "value", () => state.value, (value) => state.value = value);
-	defineMutable(handle, "description", () => state.description, (value) => state.description = value);
-	defineMutable(handle, "deprecated", () => state.deprecated, (value) => state.deprecated = value);
-	defineGetter(handle, "reference", () => state.reference);
-	defineGetter(handle, "emit", () => state.emit);
-	defineGetter(handle, "mutable", () => state.mutable);
-	defineGetter(handle, "type", () => state.type);
 	defineGetter(handle, "$name", () => state.name);
 	defineMutable(handle, "$val", () => state.value, (value) => state.value = value);
 	defineGetter(handle, "$var", () => (fallback) => {
@@ -92,11 +79,22 @@ function createHandle(meta) {
 	});
 	defineGetter(handle, "toString", () => render);
 	if (meta.axes || meta.cases) {
-		wireCaseBranches(handle);
+		attachCaseBranches(handle);
 		for (const [axis, modes] of Object.entries(meta.axes ?? {})) for (const [mode, branch] of Object.entries(modes)) attachAxisBranch(handle, axis, mode, createBranchHandle(branch.value, branch));
 		for (const branch of meta.cases ?? []) attachCaseBranch(handle, branch.when, createBranchHandle(branch.value, branch));
 	}
 	return handle;
+}
+function readHandleMeta(handle) {
+	const meta = handle[handleMetadataSymbol()];
+	if (!meta) throw new TypeError("[vanity] value is not a canonical token handle");
+	return meta;
+}
+function readHandlePath(handle) {
+	return readHandleMeta(handle).path;
+}
+function handleMetadataSymbol() {
+	return Symbol.for("vanity.tokenHandle.meta");
 }
 function createBranchHandle(value, meta = {}) {
 	const state = {
@@ -105,8 +103,8 @@ function createBranchHandle(value, meta = {}) {
 	};
 	const render = () => state.value === void 0 ? "" : String(state.value);
 	const handle = (() => render());
-	Object.defineProperty(handle, vanityBranchHandleSymbol(), { value: true });
-	if (meta.runtime) Object.defineProperty(handle, vanityRuntimeAddressSymbol(), {
+	Object.defineProperty(handle, getVanityBranchHandleSymbol(), { value: true });
+	if (meta.runtime) Object.defineProperty(handle, getVanityRuntimeAddressSymbol(), {
 		configurable: true,
 		value: meta.runtime
 	});
@@ -122,7 +120,7 @@ function attachAxisBranch(handle, axis, mode, branch) {
 	axes[axis][mode] = branch;
 }
 function attachCaseBranch(handle, when, branch) {
-	const symbol = caseBranchesSymbol();
+	const symbol = getCaseBranchesSymbol();
 	const owner = handle;
 	let cases = owner[symbol];
 	if (!cases) {
@@ -131,8 +129,8 @@ function attachCaseBranch(handle, when, branch) {
 	}
 	cases.set(addressKey$1(when), branch);
 }
-function wireCaseBranches(handle) {
-	const symbol = caseBranchesSymbol();
+function attachCaseBranches(handle) {
+	const symbol = getCaseBranchesSymbol();
 	const owner = handle;
 	const cases = owner[symbol] ?? /* @__PURE__ */ new Map();
 	if (!owner[symbol]) Object.defineProperty(owner, symbol, { value: cases });
@@ -140,24 +138,24 @@ function wireCaseBranches(handle) {
 		configurable: true,
 		get: () => (when) => {
 			const branch = cases.get(addressKey$1(when));
-			if (!branch) throw new TypeError(`[vanity] ${handle.path} has no authored case for ${JSON.stringify(when)}`);
+			if (!branch) throw new TypeError(`[vanity] ${readHandlePath(handle)} has no authored case for ${JSON.stringify(when)}`);
 			return branch;
 		}
 	});
 }
 function isHandle(value) {
-	return typeof value === "function" && value[vanityHandleSymbol()] === true;
+	return typeof value === "function" && value[getVanityHandleSymbol()] === true;
 }
 function isBranchHandle(value) {
-	return typeof value === "function" && value[vanityBranchHandleSymbol()] === true;
+	return typeof value === "function" && value[getVanityBranchHandleSymbol()] === true;
 }
 function runtimeAddressOf(value) {
 	if (!isHandle(value) && !isBranchHandle(value)) return void 0;
-	return value[vanityRuntimeAddressSymbol()];
+	return value[getVanityRuntimeAddressSymbol()];
 }
 function serializeFallback(value) {
 	if (isHandle(value) || isBranchHandle(value)) return String(value);
-	return cssText(value);
+	return serializeCssText(value);
 }
 function addressKey$1(when) {
 	return Object.entries(when).sort(([left], [right]) => left.localeCompare(right)).map(([axis, mode]) => `${axis}\0${mode}`).join("");
@@ -235,19 +233,19 @@ function restoreRuntimeProps(contract) {
 }
 function bindRuntime(contract, options, schemas, memory = false) {
 	const family = `${contract.prefix}\0${contract.root}`;
-	const scope = memory ? void 0 : resolutionScope(options);
+	const scope = memory ? void 0 : getResolutionScope(options);
 	const bindings = scope === void 0 ? void 0 : BOUND_RUNTIMES.get(scope) ?? /* @__PURE__ */ new Map();
 	const prior = bindings?.get(family);
 	const effectiveOptions = options.initial === void 0 && prior ? {
 		...options,
-		initial: snapshotOf(prior.contract, prior)
+		initial: getRuntimeSnapshot(prior.contract, prior)
 	} : options;
 	if (prior) prior.active = false;
 	const state = {
 		contract,
 		roots: new Map(contract.roots.map((root) => [root.path, {
 			contract: root,
-			targets: memory ? [memoryRuntimeTarget()] : [],
+			targets: memory ? [createMemoryRuntimeTarget()] : [],
 			resolved: memory,
 			bound: memory
 		}])),
@@ -263,13 +261,13 @@ function bindRuntime(contract, options, schemas, memory = false) {
 		bindings.set(family, state);
 		BOUND_RUNTIMES.set(scope, bindings);
 	}
-	const initial = effectiveOptions.initial === void 0 ? emptySnapshot(contract) : reconcileSnapshot(contract, effectiveOptions.initial, schemas, effectiveOptions);
+	const initial = effectiveOptions.initial === void 0 ? createEmptySnapshot(contract) : reconcileSnapshot(contract, effectiveOptions.initial, schemas, effectiveOptions);
 	if ("diagnostics" in initial) state.diagnostics.push(...initial.diagnostics);
 	const snapshot = "snapshot" in initial ? initial.snapshot : initial;
-	if (effectiveOptions.initial !== void 0) hydrateState(contract, state, snapshot);
+	if (effectiveOptions.initial !== void 0) restoreRuntimeState(contract, state, snapshot);
 	return createRuntimeController(contract, state, schemas);
 }
-function memoryRuntimeTarget() {
+function createMemoryRuntimeTarget() {
 	const values = /* @__PURE__ */ new Map();
 	const attributes = /* @__PURE__ */ new Map();
 	return {
@@ -341,10 +339,10 @@ function createRuntimeController(contract, state, schemas, queued) {
 			assertActive(state);
 			const result = reconcileSnapshot(contract, input, schemas, state.options);
 			state.diagnostics.push(...result.diagnostics);
-			hydrateState(contract, state, result.snapshot);
+			restoreRuntimeState(contract, state, result.snapshot);
 			return result;
 		},
-		snapshot: () => snapshotOf(contract, state),
+		snapshot: () => getRuntimeSnapshot(contract, state),
 		inspect: () => inspectRuntime(contract, state)
 	};
 	return Object.freeze(controller);
@@ -356,11 +354,11 @@ function runtimeAxes(contract, state, emit) {
 		const switchTo = (mode) => emit(prepareMode(contract, state, axis, mode));
 		const actions = {
 			$switchTo: switchTo,
-			$current: () => currentMode(contract, state, axis),
+			$current: () => getCurrentMode(contract, state, axis),
 			$cycle: (options = {}) => {
 				const modes = definition.modes.filter((mode) => definition.control !== void 0 || definition.attribute?.values[mode] !== void 0).filter((mode) => !options.exclude?.includes(mode));
 				if (modes.length === 0) throw new TypeError(`[vanity] runtime axis '${axis}' has no activatable modes left to cycle`);
-				const current = currentMode(contract, state, axis);
+				const current = getCurrentMode(contract, state, axis);
 				const next = current === void 0 ? definition.defaultMode && modes.includes(definition.defaultMode) ? definition.defaultMode : modes[0] : modes[(modes.indexOf(current) + 1) % modes.length] ?? modes[0];
 				switchTo(next);
 			}
@@ -387,7 +385,7 @@ function prepareMode(contract, state, axis, mode) {
 		}
 	};
 }
-function currentMode(contract, state, axis) {
+function getCurrentMode(contract, state, axis) {
 	assertActive(state);
 	const definition = contract.axes[axis];
 	if (!definition) throw new TypeError(`[vanity] runtime has no axis '${axis}'`);
@@ -395,12 +393,12 @@ function currentMode(contract, state, axis) {
 	if (!definition.attribute && !control) return void 0;
 	if (state.memory) return state.modes.get(axis);
 	const readings = [];
-	for (const root of rootsForAxis(state, axis)) {
-		const targets = targetsForRoot(state, root, false);
+	for (const root of getRootsForAxis(state, axis)) {
+		const targets = getTargetsForRoot(state, root, false);
 		for (const [index, target] of targets.entries()) {
 			const mode = control ? control.read(target) : Object.entries(definition.attribute.values).find(([, expected]) => expected === (target.getAttribute?.(definition.attribute.name) ?? null))?.[0];
 			const knownMode = mode === void 0 || definition.modes.includes(mode) ? mode : void 0;
-			if (mode !== void 0 && knownMode === void 0 && (state.options.dev ?? inferDev())) pushDiagnostic(state, {
+			if (mode !== void 0 && knownMode === void 0 && (state.options.dev ?? inferDevelopmentMode())) appendRuntimeDiagnostic(state, {
 				code: "VANITY_RUNTIME_UNKNOWN_MODE",
 				message: `runtime control for axis '${axis}' read unknown mode '${mode}' at '${root.contract.path}'`,
 				axis,
@@ -416,14 +414,14 @@ function currentMode(contract, state, axis) {
 	if (readings.length === 0) return void 0;
 	const first = readings[0].mode;
 	if (readings.every((reading) => reading.mode === first)) return first;
-	if (state.options.dev ?? inferDev()) pushDiagnostic(state, {
+	if (state.options.dev ?? inferDevelopmentMode()) appendRuntimeDiagnostic(state, {
 		code: "VANITY_RUNTIME_MODE_DISAGREEMENT",
 		message: `runtime axis '${axis}' disagrees across roots: ${readings.map((reading) => `${reading.root}=${reading.mode ?? "unknown"}`).join(", ")}`,
 		axis
 	});
 }
 function inspectRuntime(contract, state) {
-	const snapshot = snapshotOf(contract, state);
+	const snapshot = getRuntimeSnapshot(contract, state);
 	return Object.freeze({
 		system: contract.system,
 		root: contract.root,
@@ -439,7 +437,7 @@ function inspectRuntime(contract, state) {
 		overrides: Object.freeze(snapshot.overrides.flatMap((override) => {
 			const token = tokenByPath(contract, override.token);
 			if (!token) return [];
-			const slot = slotFor(token, override.address);
+			const slot = getTokenSlot(token, override.address);
 			if (!slot) return [];
 			const owner = state.roots.get(token.rootPath);
 			const applied = owner?.targets.length === 1 ? owner.targets[0].style.getPropertyValue?.(slot) : void 0;
@@ -478,7 +476,6 @@ function runtimeTree(contract, state, schemas, emit) {
 		const handle = createHandle({
 			name: token.name,
 			path: token.token.join("."),
-			mode: token.mutable ? "live" : "static",
 			reference: token.reference,
 			emit: token.emit,
 			mutable: token.mutable,
@@ -495,9 +492,9 @@ function runtimeTree(contract, state, schemas, emit) {
 		decorateMutableHandle(handle, contract, state, schemas, emit);
 		for (const modes of Object.values(handle.$axes)) for (const branch of Object.values(modes)) decorateMutableBranch(branch, contract, state, schemas, emit);
 		for (const branch of token.branches) if (branch.address.kind === "case") decorateMutableBranch(handle.$case(branch.address.when), contract, state, schemas, emit);
-		putPath(tree, token.token, handle);
+		setPath(tree, token.token, handle);
 	}
-	return deepFreeze(tree);
+	return freezeDeep(tree);
 }
 function decorateMutableHandle(handle, contract, state, schemas, emit) {
 	const runtime = runtimeAddressOf(handle);
@@ -515,7 +512,7 @@ function prepareOverride(contract, state, schemas, runtime, input) {
 	assertActive(state);
 	const token = tokenByPath(contract, runtime.token);
 	if (!token || !token.mutable) throw new TypeError(`[vanity] ${runtime.token.join(".")} is not a mutable token in this runtime`);
-	if (!slotFor(token, runtime.address)) throw new TypeError(`[vanity] ${formatAddress(runtime.token, runtime.address)} is not an authored runtime address`);
+	if (!getTokenSlot(token, runtime.address)) throw new TypeError(`[vanity] ${formatAddress(runtime.token, runtime.address)} is not an authored runtime address`);
 	const value = validateAndSerialize(token, input, schemas, state.options);
 	if (value === void 0) return {
 		kind: "unset",
@@ -537,7 +534,7 @@ function prepareOverride(contract, state, schemas, runtime, input) {
 function prepareUnset(contract, state, runtime) {
 	assertActive(state);
 	const token = tokenByPath(contract, runtime.token);
-	if (!token || !token.mutable || !slotFor(token, runtime.address)) throw new TypeError(`[vanity] ${formatAddress(runtime.token, runtime.address)} is not an authored mutable runtime address`);
+	if (!token || !token.mutable || !getTokenSlot(token, runtime.address)) throw new TypeError(`[vanity] ${formatAddress(runtime.token, runtime.address)} is not an authored mutable runtime address`);
 	return {
 		kind: "unset",
 		token,
@@ -549,9 +546,9 @@ function applyMutations(state, mutations) {
 	const targets = /* @__PURE__ */ new Map();
 	for (const mutation of mutations) if (mutation.kind === "set" || mutation.kind === "unset") {
 		const root = runtimeRoot(state, mutation.token.rootPath);
-		targets.set(mutation, targetsForRoot(state, root, true));
+		targets.set(mutation, getTargetsForRoot(state, root, true));
 	} else {
-		const resolved = rootsForAxis(state, mutation.axis).flatMap((root) => [...targetsForRoot(state, root, false)]);
+		const resolved = getRootsForAxis(state, mutation.axis).flatMap((root) => [...getTargetsForRoot(state, root, false)]);
 		targets.set(mutation, resolved);
 	}
 	for (const mutation of mutations) {
@@ -580,9 +577,9 @@ function applyMutations(state, mutations) {
 	}
 }
 function applyStateToRoot(state, root) {
-	const snapshot = snapshotOf(state.contract, state);
+	const snapshot = getRuntimeSnapshot(state.contract, state);
 	const props = projectProps(state.contract, snapshot)[root.contract.path];
-	const targets = targetsForRoot(state, root, Object.keys(props.style).length > 0);
+	const targets = getTargetsForRoot(state, root, Object.keys(props.style).length > 0);
 	const [styleTarget] = targets;
 	if (styleTarget) for (const [name, value] of Object.entries(props.style)) writeStyle(styleTarget.style, name, value);
 	for (const [axis, mode] of Object.entries(snapshot.modes)) {
@@ -630,7 +627,7 @@ function reconcileSnapshot(contract, input, schemas, options) {
 			});
 			continue;
 		}
-		if (!slotFor(token, entry.address)) {
+		if (!getTokenSlot(token, entry.address)) {
 			diagnostics.push({
 				code: "VANITY_RUNTIME_UNKNOWN_ADDRESS",
 				message: `snapshot address '${formatAddress(entry.token, entry.address)}' is no longer authored`,
@@ -641,14 +638,14 @@ function reconcileSnapshot(contract, input, schemas, options) {
 		}
 		let val;
 		try {
-			val = validateAndSerialize(token, snapshotInput(token.type, entry.val), schemas, {
+			val = validateAndSerialize(token, parseSnapshotInput(token.type, entry.val), schemas, {
 				...options,
 				dev: options.dev ?? false
 			});
 		} catch (error) {
 			diagnostics.push({
 				code: "VANITY_RUNTIME_INVALID_VALUE",
-				message: `${formatAddress(entry.token, entry.address)} was skipped: ${errorMessage(error)}`,
+				message: `${formatAddress(entry.token, entry.address)} was skipped: ${getErrorMessage(error)}`,
 				token: entry.token,
 				address: entry.address
 			});
@@ -738,7 +735,7 @@ function validateAndSerialize(token, input, schemas, options) {
 	return serializeRuntimeValue(output);
 }
 function assertUniversalInput(type, input) {
-	if (isVanityValue(input) && type !== "unknown" && input.type !== "unknown" && !compatibleType(type, input.type)) throw new TypeError(`expected <${type}> but received a <${input.type}> vanity value`);
+	if (isVanityValue(input) && type !== "unknown" && input.type !== "unknown" && !isCompatibleType(type, input.type)) throw new TypeError(`expected <${type}> but received a <${input.type}> vanity value`);
 	if (typeof input === "number") {
 		if (!Number.isFinite(input)) throw new TypeError("a runtime CSS number must be finite");
 		if (type === "integer" && !Number.isInteger(input)) throw new TypeError(`expected <integer> but received ${input}`);
@@ -757,11 +754,11 @@ function assertUniversalInput(type, input) {
 	}
 	if (!isVanityValue(input) && !isHandle(input) && !isBranchHandle(input)) throw new TypeError("runtime CSS values must be strings, finite numbers, vanity values, or token handles");
 }
-function snapshotInput(type, val) {
+function parseSnapshotInput(type, val) {
 	if ((type === "number" || type === "integer" || type === "number-percentage") && /^[-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?$/i.test(val.trim())) return Number(val);
 	return val;
 }
-function compatibleType(expected, actual) {
+function isCompatibleType(expected, actual) {
 	return expected === actual || expected === "number-percentage" && (actual === "number" || actual === "integer" || actual === "percentage") || expected === "length-percentage" && (actual === "length" || actual === "percentage") || expected === "number" && actual === "integer";
 }
 function serializeRuntimeValue(input) {
@@ -779,9 +776,9 @@ function serializeRuntimeValue(input) {
 	throw new TypeError("[vanity] cannot serialize this runtime CSS value");
 }
 function shouldValidate(mode, options) {
-	return mode === "always" || mode === "dev" && (options.dev ?? inferDev());
+	return mode === "always" || mode === "dev" && (options.dev ?? inferDevelopmentMode());
 }
-function inferDev() {
+function inferDevelopmentMode() {
 	return Reflect.get(globalThis, "process")?.env?.NODE_ENV !== "production";
 }
 function isPromiseLike(value) {
@@ -791,7 +788,7 @@ function projectStyles(contract, snapshot) {
 	const styles = Object.fromEntries(contract.roots.map((root) => [root.path, {}]));
 	for (const entry of snapshot.overrides) {
 		const token = tokenByPath(contract, entry.token);
-		const slot = token && slotFor(token, entry.address);
+		const slot = token && getTokenSlot(token, entry.address);
 		if (token && slot) styles[token.rootPath][slot] = entry.val;
 	}
 	for (const [axis, mode] of Object.entries(snapshot.modes)) {
@@ -819,17 +816,17 @@ function projectProps(contract, snapshot) {
 		attributes: projectAttributesForRoot(contract, snapshot, root)
 	})])));
 }
-function hydrateState(contract, state, snapshot) {
+function restoreRuntimeState(contract, state, snapshot) {
 	const props = projectProps(contract, snapshot);
 	const targets = /* @__PURE__ */ new Map();
 	for (const root of contract.roots) {
 		const rootProps = props[root.path];
 		const needsUniqueOwner = Object.keys(rootProps.style).length > 0;
-		targets.set(root.path, targetsForRoot(state, runtimeRoot(state, root.path), needsUniqueOwner));
+		targets.set(root.path, getTargetsForRoot(state, runtimeRoot(state, root.path), needsUniqueOwner));
 	}
 	for (const previous of state.overrides.values()) {
 		const token = tokenByPath(contract, previous.token);
-		const slot = token && slotFor(token, previous.address);
+		const slot = token && getTokenSlot(token, previous.address);
 		if (token && slot && !snapshot.overrides.some((entry) => recordKey(entry.token, entry.address) === recordKey(previous.token, previous.address))) {
 			const [target] = targets.get(token.rootPath) ?? [];
 			if (target) removeStyle(target.style, slot);
@@ -837,14 +834,14 @@ function hydrateState(contract, state, snapshot) {
 	}
 	for (const entry of snapshot.overrides) {
 		const token = tokenByPath(contract, entry.token);
-		const slot = slotFor(token, entry.address);
+		const slot = getTokenSlot(token, entry.address);
 		writeStyle(targets.get(token.rootPath)[0].style, slot, entry.val);
 	}
 	for (const [axis] of state.modes) {
 		if (snapshot.modes[axis] !== void 0) continue;
 		const adapter = contract.axes[axis]?.attribute;
 		if (!adapter) continue;
-		for (const root of rootsForAxis(state, axis)) for (const target of targets.get(root.contract.path) ?? []) removeAttribute(target, adapter.name);
+		for (const root of getRootsForAxis(state, axis)) for (const target of targets.get(root.contract.path) ?? []) removeAttribute(target, adapter.name);
 	}
 	for (const [axis, mode] of Object.entries(snapshot.modes)) {
 		const definition = contract.axes[axis];
@@ -852,7 +849,7 @@ function hydrateState(contract, state, snapshot) {
 		const value = adapter?.values[mode];
 		const control = definition.control && state.options.controls?.[definition.control.id];
 		if (definition.control && !control) throw new TypeError(`[vanity] runtime axis '${axis}' needs control '${definition.control.id}' in runtime({ controls })`);
-		for (const root of rootsForAxis(state, axis)) for (const target of targets.get(root.contract.path) ?? []) if (control) control.activate(target, mode);
+		for (const root of getRootsForAxis(state, axis)) for (const target of targets.get(root.contract.path) ?? []) if (control) control.activate(target, mode);
 		else if (adapter && value === null) removeAttribute(target, adapter.name);
 		else if (adapter && value !== void 0) writeAttribute(target, adapter.name, value);
 	}
@@ -861,7 +858,7 @@ function hydrateState(contract, state, snapshot) {
 	state.modes.clear();
 	Object.entries(snapshot.modes).forEach(([axis, mode]) => state.modes.set(axis, mode));
 }
-function snapshotOf(contract, state) {
+function getRuntimeSnapshot(contract, state) {
 	return Object.freeze({
 		version: 1,
 		system: contract.system,
@@ -869,7 +866,7 @@ function snapshotOf(contract, state) {
 		modes: Object.freeze(sortRecord(Object.fromEntries(state.modes), contract.axisOrder))
 	});
 }
-function emptySnapshot(contract) {
+function createEmptySnapshot(contract) {
 	return Object.freeze({
 		version: 1,
 		system: contract.system,
@@ -878,22 +875,22 @@ function emptySnapshot(contract) {
 	});
 }
 function runtimeMeta(contract, token, address, slot) {
-	return deepFreeze({
+	return freezeDeep({
 		system: contract.system,
 		token: token.token,
 		address,
 		slot
 	});
 }
-function slotFor(token, address) {
+function getTokenSlot(token, address) {
 	if (address.kind === "base") return token.baseSlot;
-	return token.branches.find((branch) => sameAddress(branch.address, address))?.slot;
+	return token.branches.find((branch) => isSameTokenAddress(branch.address, address))?.slot;
 }
-function sameAddress(left, right) {
+function isSameTokenAddress(left, right) {
 	if (left.kind !== right.kind) return false;
 	if (left.kind === "base") return true;
 	if (left.kind === "axis" && right.kind === "axis") return left.axis === right.axis && left.mode === right.mode;
-	return left.kind === "case" && right.kind === "case" && stableStringify(sortRecord(left.when)) === stableStringify(sortRecord(right.when));
+	return left.kind === "case" && right.kind === "case" && serializeStableString(sortRecord(left.when)) === serializeStableString(sortRecord(right.when));
 }
 var tokenIndexes = /* @__PURE__ */ new WeakMap();
 function tokenByPath(contract, token) {
@@ -934,7 +931,7 @@ function formatAddress(token, address) {
 	if (address.kind === "axis") return `${token.join(".")}.$axes.${address.axis}.${address.mode}`;
 	return `${token.join(".")}.$case(${JSON.stringify(address.when)})`;
 }
-function resolutionScope(options) {
+function getResolutionScope(options) {
 	if (options.within !== void 0) {
 		if (typeof options.within !== "object" && typeof options.within !== "function" || options.within === null) throw new TypeError("[vanity] runtime({ within }) needs a document, shadow root, element, or query adapter");
 		return options.within;
@@ -946,10 +943,10 @@ function runtimeRoot(state, path) {
 	if (!root) throw new TypeError(`[vanity] runtime has no root '${path}'; expected '$system' or one of: ${[...state.roots.keys()].filter((key) => key !== "$system").join(", ") || "(none)"}`);
 	return root;
 }
-function rootsForAxis(state, axis) {
+function getRootsForAxis(state, axis) {
 	return [...state.roots.values()].filter((root) => root.contract.axes.includes(axis));
 }
-function targetsForRoot(state, root, unique) {
+function getTargetsForRoot(state, root, unique) {
 	resolveRuntimeRoot(state, root);
 	if (!unique) return root.targets;
 	if (root.targets.length === 1) return root.targets;
@@ -962,13 +959,13 @@ function targetsForRoot(state, root, unique) {
 		message: `runtime root '${root.contract.path}' (${root.contract.selector}) matched ${root.targets.length} elements; use runtime({ within }) or bindRoot('${root.contract.path}', element)`,
 		rootPath: root.contract.path
 	};
-	pushDiagnostic(state, diagnostic);
+	appendRuntimeDiagnostic(state, diagnostic);
 	throw new TypeError(`[vanity] ${diagnostic.message}`);
 }
 function resolveRuntimeRoot(state, root, force = false) {
 	if (root.bound || root.resolved && !force) return;
 	if (state.memory) return;
-	const scope = state.within ?? resolutionScope(state.options);
+	const scope = state.within ?? getResolutionScope(state.options);
 	if (!scope) {
 		root.targets = [];
 		root.resolved = true;
@@ -994,7 +991,7 @@ function assertRuntimeTarget(value) {
 function isRuntimeTarget(value) {
 	return (typeof value === "object" || typeof value === "function") && value !== null && isStyleDeclaration(value.style) && typeof value.setAttribute === "function" && typeof value.removeAttribute === "function";
 }
-function pushDiagnostic(state, diagnostic) {
+function appendRuntimeDiagnostic(state, diagnostic) {
 	if (!state.diagnostics.some((current) => current.code === diagnostic.code && current.message === diagnostic.message)) state.diagnostics.push(Object.freeze(diagnostic));
 }
 function writeStyle(style, name, value) {
@@ -1021,7 +1018,7 @@ function mergeSchemas(embedded, supplied) {
 		...supplied
 	};
 }
-function putPath(tree, path, value) {
+function setPath(tree, path, value) {
 	let target = tree;
 	for (let index = 0; index < path.length; index++) {
 		const key = path[index];
@@ -1044,19 +1041,19 @@ function isPlainObject(value) {
 	const prototype = Object.getPrototypeOf(value);
 	return prototype === Object.prototype || prototype === null;
 }
-function stableStringify(value) {
-	if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-	if (isPlainObject(value)) return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+function serializeStableString(value) {
+	if (Array.isArray(value)) return `[${value.map(serializeStableString).join(",")}]`;
+	if (isPlainObject(value)) return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${serializeStableString(value[key])}`).join(",")}}`;
 	return JSON.stringify(value);
 }
-function deepFreeze(value) {
+function freezeDeep(value) {
 	if ((Array.isArray(value) || isPlainObject(value)) && !Object.isFrozen(value)) {
 		Object.freeze(value);
-		for (const child of Object.values(value)) deepFreeze(child);
+		for (const child of Object.values(value)) freezeDeep(child);
 	}
 	return value;
 }
-function errorMessage(error) {
+function getErrorMessage(error) {
 	return error instanceof Error ? error.message : String(error);
 }
 function restoreToken(meta) {
@@ -1064,11 +1061,13 @@ function restoreToken(meta) {
 }
 function restoreStyleAuthoringStub(meta) {
 	return () => {
-		throw new Error(`[vanity] VANITY_STYLE_MODULE_MISUSE: ${meta.name} belongs in a *.css.ts style module. Use ds.runtime() in application modules, or consume serialized style exports.`);
+		const remedy = meta.name === "class" ? "Use the generated class export in application modules." : meta.name === "rules" ? "Import the style module for its emitted CSS in application modules." : meta.name === "introspect" ? "Use ds.introspect() in a system module, or consume the generated manifest." : "Use ds.runtime() in application modules, or consume serialized style exports.";
+		const location = meta.name === "introspect" ? "introspect belongs in a system module." : `${meta.name} belongs in a *.css.ts style module.`;
+		throw new Error(`[vanity] VANITY_STYLE_MODULE_MISUSE: ${location} ${remedy}`);
 	};
 }
 //#endregion
-//#region \0vanity:system-runtime:ssr:vanity-compatibility-1-kp4t6c:vanity-runtime-schema-1-786upr
+//#region \0vanity:system-runtime:ssr:vanity-compatibility-1-1ih7bmt:vanity-runtime-schema-1-yf3nmp
 var _runtimeContract = {
 	"axes": { "scheme": {
 		"attribute": {
@@ -1169,7 +1168,6 @@ var _tokenRecords = [
 	{
 		"name": "--canary-color-brand",
 		"path": "color.brand",
-		"mode": "static",
 		"reference": "var",
 		"emit": true,
 		"mutable": true,
@@ -1206,7 +1204,6 @@ var _tokenRecords = [
 	{
 		"name": "--canary-color-canvas",
 		"path": "color.canvas",
-		"mode": "static",
 		"reference": "var",
 		"emit": true,
 		"mutable": false,
@@ -1215,7 +1212,6 @@ var _tokenRecords = [
 	{
 		"name": "--canary-space-md",
 		"path": "space.md",
-		"mode": "static",
 		"reference": "var",
 		"emit": true,
 		"mutable": false,
@@ -1224,7 +1220,6 @@ var _tokenRecords = [
 	{
 		"name": "--canary-panel-accent",
 		"path": "panel.accent",
-		"mode": "static",
 		"reference": "var",
 		"emit": true,
 		"mutable": false,

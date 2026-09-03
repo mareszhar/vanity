@@ -11,14 +11,14 @@ import { describe, expect, it } from 'vitest'
 const project = vanityProject()
 
 const preamble = `
-import { createEngine } from '@test/legacy'
-const de = createEngine()
+import { createSystem } from '@mszr/vanity'
+const open = createSystem()
 `
 
 describe('the audit config', () => {
   it('completes the audit categories', () => {
     const result = project.query`${preamble}
-      void de.createSystem({ tokens: {}, audit: { ${cursor} } })
+      void open.consolidate({ audit: { ${cursor} } })
     `
     expect(result.completions).toContainCompletions([
       'unusedTokens',
@@ -31,14 +31,14 @@ describe('the audit config', () => {
 
   it('completes the levels on an audit category', () => {
     const result = project.query`${preamble}
-      void de.createSystem({ tokens: {}, audit: { escapes: ${cursor} } })
+      void open.consolidate({ audit: { escapes: ${cursor} } })
     `
     expect(result.completions).toContainCompletions(['off', 'warn', 'error'])
   })
 
   it('a typo\'d audit category dies at the offending key', () => {
     const { errors } = project.check`${preamble}
-      void de.createSystem({ tokens: {}, audit: { unusedToken: 'error' } })
+      void open.consolidate({ audit: { unusedToken: 'error' } })
     `
     expect(errors).toHaveError(/unusedToken/)
     expect(errors).toHaveErrorCount(1)

@@ -10,16 +10,15 @@
  * costs no extra class and no other case inherits a leak.
  */
 
-import type { VanitySystemContext } from '../css/css'
+import type { VanitySystemContext } from '../css/context'
 import type { VanityCompiled } from '../css/rule'
 import type { VanityRecipe, VanityRecipeRuntime } from './types'
-import { addFunctionSerializer } from '@vanilla-extract/css/functionSerializer'
-import { inDeclaredLayer } from '../css/css'
+import { createLayerContext } from '../css/context'
 import { emitStyle } from '../css/emit'
-import { diagnosticSource } from '../diagnostics'
-import { record } from '../internal/inspect'
-import { requireStyleModule } from '../internal/styleModule'
-import { checkPorts, checkSelection, compileArm, covers, debugName, finishBuild, mergeCompiled, recordVariantShape, startBuild } from './compile'
+import { getDiagnosticSource } from '../diagnostics'
+import { record } from '../introspect/records'
+import { substrate } from '../substrate'
+import { checkPorts, checkSelection, compileRecipeArm, covers, finishBuild, getDebugName, mergeCompiled, recordVariantShape, startBuild } from './compile'
 import { createRecipeHandle } from './handle'
 
 interface VanityRecipeOptionsLoose {
@@ -34,14 +33,14 @@ interface VanityRecipeOptionsLoose {
 
 export function bindRecipe(system: VanitySystemContext) {
   const recipe = (options: VanityRecipeOptionsLoose, debugId?: string): VanityRecipe<Record<string, unknown>> => {
-    const file = requireStyleModule('recipe')
+    const file = substrate.modules.requireStyleModule('recipe')
     const build = startBuild(options, system, file)
 
     const variants = options.variants ?? {}
     const toggles = options.toggles ?? {}
 
     // ── Compile every arm (diagnostics aggregate across all of them) ──
-    let base = compileArm(build, options.base ?? {}, ['base'])
+    let base = compileRecipeArm(build, options.base ?? {}, ['base'])
 
     const variantArms: Record<string, Record<string, VanityCompiled>> = {}
 
@@ -49,16 +48,16 @@ export function bindRecipe(system: VanitySystemContext) {
       variantArms[axis] = {}
 
       for (const [value, arm] of Object.entries(values))
-        variantArms[axis][value] = compileArm(build, arm, ['variants', axis, value])
+        variantArms[axis][value] = compileRecipeArm(build, arm, ['variants', axis, value])
     }
 
     const toggleArms = Object.fromEntries(
-      Object.entries(toggles).map(([name, arm]) => [name, compileArm(build, arm, ['toggles', name])]),
+      Object.entries(toggles).map(([name, arm]) => [name, compileRecipeArm(build, arm, ['toggles', name])]),
     )
 
     const compound = (options.compound ?? []).map((entry, index) => ({
       when: checkSelection(build, entry.when, variants, toggles, `compound.${index}.when`),
-      compiled: compileArm(build, entry.style ?? {}, ['compound', String(index), 'style']),
+      compiled: compileRecipeArm(build, entry.style ?? {}, ['compound', String(index), 'style']),
     }))
 
     const defaults = checkSelection(build, options.defaults, variants, toggles, 'defaults')
@@ -95,14 +94,14 @@ export function bindRecipe(system: VanitySystemContext) {
       for (const [value, compiled] of Object.entries(values)) {
         variantClasses[axis][value] = folded.has(`${axis}.${value}`) || compiled.units.length === 0
           ? ''
-          : emitStyle(compiled, debugName(debugId, axis, value))
+          : emitStyle(compiled, getDebugName(debugId, axis, value))
       }
     }
 
     const toggleClasses = Object.fromEntries(
       Object.entries(toggleArms).map(([name, compiled]) => [
         name,
-        compiled.units.length === 0 ? '' : emitStyle(compiled, debugName(debugId, name)),
+        compiled.units.length === 0 ? '' : emitStyle(compiled, getDebugName(debugId, name)),
       ]),
     )
 
@@ -110,7 +109,7 @@ export function bindRecipe(system: VanitySystemContext) {
       when: entry.when,
       class: entry.compiled.units.length === 0
         ? ''
-        : emitStyle(entry.compiled, debugName(debugId, 'compound', String(index))),
+        : emitStyle(entry.compiled, getDebugName(debugId, 'compound', String(index))),
     }))
 
     // ── The handle: a resolver over the table, serialized for app code ──
@@ -129,12 +128,12 @@ export function bindRecipe(system: VanitySystemContext) {
     record({
       kind: 'recipe',
       file,
-      ...diagnosticSource(),
+      ...getDiagnosticSource(),
       ...(debugId === undefined ? {} : { name: debugId }),
       ...recordVariantShape(variants, toggles, defaults, ports),
     })
 
-    addFunctionSerializer(handle as unknown as (...args: unknown[]) => unknown, {
+    substrate.modules.registerFunctionSerialization(handle as unknown as (...args: unknown[]) => unknown, {
       importPath: '@mszr/vanity/runtime',
       importName: 'restoreRecipe',
       args: [runtime as unknown as Record<string, string>],
@@ -142,6 +141,6 @@ export function bindRecipe(system: VanitySystemContext) {
 
     return handle
   }
-  recipe.layer = (name: string) => bindRecipe(inDeclaredLayer(system, name))
+  recipe.layer = (name: string) => bindRecipe(createLayerContext(system, name))
   return recipe
 }

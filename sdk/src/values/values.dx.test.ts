@@ -9,8 +9,8 @@ const project = vanityProject()
 describe('cSS value editor DX', () => {
   it('calculation operations complete as one small immutable surface', () => {
     const { completions } = project.query`
-      import { createEngine } from '@test/legacy'
-      void createEngine().calc('1rem').${cursor}
+      import { calc } from '@mszr/vanity'
+      void calc('1rem').${cursor}
     `
 
     expect(completions).toContainCompletions(['add', 'subtract', 'multiply', 'divide', 'negate', 'css'])
@@ -18,8 +18,8 @@ describe('cSS value editor DX', () => {
 
   it('a dimensional mistake is one diagnostic at its operand', () => {
     const { errors } = project.check`
-      import { createEngine } from '@test/legacy'
-      void createEngine().calc('1rem').add('20deg')
+      import { calc } from '@mszr/vanity'
+      void calc('1rem').add('20deg')
     `
 
     expect(errors).toHaveErrorCount(1)
@@ -28,8 +28,8 @@ describe('cSS value editor DX', () => {
 
   it('grid helpers complete as one focused namespace', () => {
     const { completions } = project.query`
-      import { createEngine } from '@test/legacy'
-      void createEngine().grid.${cursor}
+      import { grid } from '@mszr/vanity'
+      void grid.${cursor}
     `
 
     expect(completions).toContainCompletions(['minmax', 'repeat', 'template', 'areas'])
@@ -37,17 +37,16 @@ describe('cSS value editor DX', () => {
 
   it('relative color and channel operations are discoverable', () => {
     const result = project.query`
-      import { createEngine } from '@test/legacy'
-      const de = createEngine()
-      void de.oklch.${cursor('oklch')}
-      void de.rgb.${cursor('rgb')}
-      void de.hsl.${cursor('hsl')}
-      void de.hwb.${cursor('hwb')}
-      void de.lab.${cursor('lab')}
-      void de.lch.${cursor('lch')}
-      void de.oklab.${cursor('oklab')}
-      void de.color.${cursor('color')}
-      void de.channel.${cursor('channel')}
+      import { channel, color, hsl, hwb, lab, lch, oklab, oklch, rgb } from '@mszr/vanity'
+      void oklch.${cursor('oklch')}
+      void rgb.${cursor('rgb')}
+      void hsl.${cursor('hsl')}
+      void hwb.${cursor('hwb')}
+      void lab.${cursor('lab')}
+      void lch.${cursor('lch')}
+      void oklab.${cursor('oklab')}
+      void color.${cursor('color')}
+      void channel.${cursor('channel')}
     `
 
     expect(result.at('oklch').completions).toContainCompletion('from')

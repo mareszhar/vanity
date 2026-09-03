@@ -83,6 +83,18 @@ export default antfu(
     },
   },
   {
+    files: ['sdk/src/**/*.ts'],
+    ignores: [
+      'sdk/src/substrate/vanilla-extract/**/*.ts',
+      'sdk/src/test-support/vite-app/raw-extract.css.ts',
+    ],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: substrateImports,
+      }],
+    },
+  },
+  {
     files: ['sandbox/demo-comparisons/**/*.vue'],
     rules: {
       'ts/no-use-before-define': 'off',
@@ -98,7 +110,6 @@ export default antfu(
       'sdk/src/css/**',
       'sdk/src/ports/**',
       'sdk/src/recipes/**',
-      'sdk/src/internal/**',
     ],
     ignores: ['**/*.test.ts', '**/*.test-d.ts'],
     rules: {
@@ -106,8 +117,7 @@ export default antfu(
         patterns: [
           ...frameworkImports,
           ...buildImports,
-          './runtime',
-          '../runtime',
+          ...substrateImports,
           './vue',
           '../vue',
           './nuxt',
@@ -132,7 +142,7 @@ export default antfu(
     files: ['sdk/src/vite.ts'],
     rules: {
       'no-restricted-imports': ['error', {
-        patterns: frameworkImports,
+        patterns: [...frameworkImports, ...substrateImports],
       }],
     },
   },
@@ -165,8 +175,6 @@ export default antfu(
           '../vue',
           './nuxt',
           '../nuxt',
-          './internal/**',
-          '../internal/**',
           ...substrateImports,
         ],
       }],

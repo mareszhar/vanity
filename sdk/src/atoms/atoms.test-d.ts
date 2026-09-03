@@ -5,13 +5,14 @@
  */
 
 import { describe, it } from 'vitest'
-import { createSystem, unsafe } from '../test-support/characterization'
+import { createSystem, unsafe } from '../index'
 
 // The type evidence dimension never executes — these calls are shapes, not effects.
-const { atoms: makeAtoms, t } = createSystem({
-  tokens: { space: { sm: '8px', md: '16px' }, color: { brand: '#635bff' } },
-  conditions: { md: '@media (min-width: 768px)', lg: '@media (min-width: 1024px)' },
-})
+const ds = createSystem()
+  .addConditions({ md: '@media (min-width: 768px)', lg: '@media (min-width: 1024px)' })
+  .addTokens({ space: { sm: '8px', md: '16px' }, color: { brand: '#635bff' } })
+  .consolidate()
+const { atoms: makeAtoms, t } = ds
 
 const atoms = makeAtoms({
   properties: {

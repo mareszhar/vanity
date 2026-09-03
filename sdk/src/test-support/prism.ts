@@ -5,82 +5,77 @@
  * and composite text styles.
  */
 
-import { createEngine } from '../engine/createEngine'
+import {
+  alpha,
+  container,
+  createSystem,
+  darken,
+  legibleOn,
+  lightDark,
+  lighten,
+  media,
+  oklch,
+  scale,
+} from '../index'
+import { substrate } from '../substrate'
 
-const de = createEngine()
-
-/** Define the Prism tokens — call inside an emit harness or a style module. */
+/** Define the Prism tokens — call inside an emit runner or a style module. */
 export function definePrism() {
-  const tokens = de.defineTokens({
-    color: {
-      brand: de.token({
-        val: de.oklch(0.58, 0.2, 285),
-        mutable: true,
-        description: 'Primary brand hue. Marketing owns this.',
-      }),
-      canvas: de.lightDark(de.oklch(0.99, 0.005, 285), de.oklch(0.14, 0.006, 285)),
-    },
-    space: de.scale.linear({ unit: 4, steps: { xs: 1, sm: 2, md: 4, lg: 6, xl: 10 } }).tokens(),
-    radius: { sm: '4px', md: '8px', pill: '999px' },
-    duration: { fast: '120ms', normal: '200ms' },
-    text: {
-      body: { fontSize: '1rem', lineHeight: 1.5, fontWeight: 400 },
-      title: { fontSize: '1.375rem', lineHeight: 1.25, fontWeight: 600 },
-    },
-  })
-    .derive(m => ({
-      color: {
-        surface: de.lighten(m.color.brand, 0.24),
-        ink: de.darken(m.color.brand, 0.4),
-        brandSoft: de.alpha(m.color.brand, 0.12),
-        brandHover: de.lighten(m.color.brand, 0.06),
-        onBrand: de.legibleOn(m.color.brand),
-      },
-    }))
-
-  return de.createSystem({ tokens }).t
+  return consolidateFixture(prismOpen()).t
 }
 
 export type PrismTokens = ReturnType<typeof definePrism>
 
 /** The Prism system — the spec's `createSystem` example over the Prism graph. */
 export function definePrismSystem() {
-  const tokens = de.defineTokens({
+  return consolidateFixture(prismOpen()
+    .addConditions({
+      open: '&[data-state="open"]',
+      closed: '&[data-state="closed"]',
+      md: media('(min-width: 768px)'),
+      lg: media('(min-width: 1024px)'),
+      cardWide: container('card', '(min-width: 400px)'),
+    },
+    ))
+}
+
+function prismOpen() {
+  const open = createSystem()
+  const tokens = open.defineTokens({
     color: {
-      brand: de.token({
-        val: de.oklch(0.58, 0.2, 285),
+      brand: open.tdef({
+        val: oklch(0.58, 0.2, 285),
         mutable: true,
         description: 'Primary brand hue. Marketing owns this.',
       }),
-      canvas: de.lightDark(de.oklch(0.99, 0.005, 285), de.oklch(0.14, 0.006, 285)),
+      canvas: lightDark(oklch(0.99, 0.005, 285), oklch(0.14, 0.006, 285)),
     },
-    space: de.scale.linear({ unit: 4, steps: { xs: 1, sm: 2, md: 4, lg: 6, xl: 10 } }).tokens(),
+    space: scale.linear({ unit: 4, steps: { xs: 1, sm: 2, md: 4, lg: 6, xl: 10 } }).tokens(),
     radius: { sm: '4px', md: '8px', pill: '999px' },
     duration: { fast: '120ms', normal: '200ms' },
     text: {
       body: { fontSize: '1rem', lineHeight: 1.5, fontWeight: 400 },
       title: { fontSize: '1.375rem', lineHeight: 1.25, fontWeight: 600 },
     },
-  }).derive(m => ({
+  }).add(m => ({
     color: {
-      surface: de.lighten(m.color.brand, 0.24),
-      ink: de.darken(m.color.brand, 0.4),
-      brandSoft: de.alpha(m.color.brand, 0.12),
-      brandHover: de.lighten(m.color.brand, 0.06),
-      onBrand: de.legibleOn(m.color.brand),
+      surface: lighten(m.color.brand, 0.24),
+      ink: darken(m.color.brand, 0.4),
+      brandSoft: alpha(m.color.brand, 0.12),
+      brandHover: lighten(m.color.brand, 0.06),
+      onBrand: legibleOn(m.color.brand),
     },
   }))
 
-  return de.createSystem({
-    tokens,
-    conditions: {
-      open: '&[data-state="open"]',
-      closed: '&[data-state="closed"]',
-      md: de.media('(min-width: 768px)'),
-      lg: de.media('(min-width: 1024px)'),
-      cardWide: de.container('card', '(min-width: 400px)'),
-    },
-  })
+  return open.addTokens(tokens)
+}
+
+/** Test fixtures are often called from a CSS capture; system construction remains plain. */
+function consolidateFixture<Locked extends object>(open: { readonly consolidate: () => Locked }): Locked {
+  return substrate.modules.runInFileScope({
+    filePath: 'src/test-support/prism.system.ts',
+    packageName: '@prism/fixture',
+  }, () => open.consolidate())
 }
 
 export type PrismSystem = ReturnType<typeof definePrismSystem>

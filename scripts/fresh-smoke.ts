@@ -224,21 +224,21 @@ import { vanityPlugin } from '@mszr/vanity/vite'
 export default defineConfig({ plugins: [vanityPlugin(vanityConfig)] })
 `)
   write(join(plainDir, 'index.html'), '<main id="app"></main><script type="module" src="/src/main.ts"></script>\n')
-  write(join(plainDir, 'src/engine.ts'), `import { createSystem } from '@mszr/vanity'
+  write(join(plainDir, 'src/design-system.ts'), `import { createSystem } from '@mszr/vanity'
 import { hail } from '@mszr/vanity/presets'
 
 export const open = createSystem().addPlugin(hail({
   color: { ranges: { l: [0.08, 0.96], c: [0, 0.3] } },
 }))
 `)
-  write(join(plainDir, 'src/palette.tokens.ts'), `import { open } from './engine'
+  write(join(plainDir, 'src/palette.tokens.ts'), `import { open } from './design-system'
 
 export const palette = open.defineTokens({
   color: { brand: open.tdef.color({ val: open.oklchx(0.58, 0.66, 285), mutable: true }) },
 })
   .add(m => ({ color: { brandSoft: open.alpha(m.color.brand, 0.12) } }))
 `)
-  write(join(plainDir, 'src/system.ts'), `import { open } from './engine'
+  write(join(plainDir, 'src/system.ts'), `import { open } from './design-system'
 import { palette } from './palette.tokens'
 
 export const ds = open.addTokens(palette).consolidate()
@@ -285,18 +285,18 @@ export default defineNuxtConfig({
   vite: { server: { watch: { usePolling: true, interval: 100 } } },
 })
 `)
-  write(join(nuxtDir, 'app/design/engine.ts'), `import { createSystem } from '@mszr/vanity'
+  write(join(nuxtDir, 'app/design/design-system.ts'), `import { createSystem } from '@mszr/vanity'
 
 export const open = createSystem()
 `)
-  write(join(nuxtDir, 'app/design/palette.tokens.ts'), `import { open } from './engine'
+  write(join(nuxtDir, 'app/design/palette.tokens.ts'), `import { open } from './design-system'
 
 export const palette = open.defineTokens({
   color: { brand: open.tdef.color({ val: open.oklch(0.58, 0.2, 285), mutable: true }) },
 })
   .add(m => ({ color: { brandSoft: open.alpha(m.color.brand, 0.12) } }))
 `)
-  write(join(nuxtDir, 'app/design/system.ts'), `import { open } from './engine'
+  write(join(nuxtDir, 'app/design/system.ts'), `import { open } from './design-system'
 import { palette } from './palette.tokens'
 
 export const ds = open.addTokens(palette).consolidate()
@@ -417,7 +417,7 @@ describe('packed consumer testing kit', () => {
   run('pnpm', ['--dir', plainDir, 'exec', 'vanity', 'diff', '.vanity/manifest.json', '.vanity/manifest.json'])
   run('node', [
     '-e',
-    `const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('node_modules/@mszr/vanity/manifest.schema.json','utf8'));if(s.$id!=='https://schemas.mszr.dev/vanity/manifest-3.schema.json')process.exit(1)`,
+    `const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('node_modules/@mszr/vanity/manifest.schema.json','utf8'));if(s.$id!=='https://schemas.mszr.dev/vanity/manifest-4.schema.json')process.exit(1)`,
   ], plainDir)
   const vitePort = await openPort()
   await smokeDev(plainDir, ['vite', '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort'], vitePort, /src\/main\.ts/)

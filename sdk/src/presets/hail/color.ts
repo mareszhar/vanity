@@ -46,12 +46,12 @@ interface ChannelSpec {
   readonly percent?: boolean
 }
 
-export function hailColorConstructors(
+export function createHailColorConstructors(
   ds: VanityOpenSystemBase,
   options: HailNormalizedOptions,
   controls: HailColorControls,
 ) {
-  const absolute = (
+  const resolveAbsoluteChannel = (
     spec: ChannelSpec,
     input: HailNumericInput | HailHueInput,
   ): VanityNumericColorChannel | VanityHueChannel => {
@@ -75,13 +75,13 @@ export function hailColorConstructors(
       const span = name === 'h' && minimum > maximum
         ? maximum - minimum + 360
         : maximum - minimum
-      return round(minimum + span * input)
+      return roundNumber(minimum + span * input)
     }
     const { minimum } = controls.ranges[name]
-    return ds.calc(minimum).add(spanOf(name).multiply(input))
+    return ds.calc(minimum).add(getChannelSpan(name).multiply(input))
   }
 
-  function spanOf(name: HailRangeName) {
+  function getChannelSpan(name: HailRangeName) {
     if (options.ranges[name] !== undefined && options.resolution(name) === 'static') {
       const [minimum, maximum] = options.ranges[name]
       return ds.calc(name === 'h' && minimum > maximum
@@ -95,23 +95,23 @@ export function hailColorConstructors(
       : span
   }
 
-  const relative = (
+  const resolveRelativeChannel = (
     spec: ChannelSpec,
     input: HailRelativeNumericInput | HailRelativeHueInput | undefined,
   ): VanityNumericColorChannel | VanityHueChannel | VanityChannelOperation | undefined => {
     if (input === undefined || isChannelOperation(input))
       return input
     if (isHailSpan(input)) {
-      const delta = staticSpanDelta(spec.name, input.input)
+      const delta = getStaticSpanDelta(spec.name, input.input)
         ?? (options.ranges[spec.name] === undefined
           ? input.input
-          : spanOf(spec.name).multiply(input.input))
+          : getChannelSpan(spec.name).multiply(input.input))
       return ds.channel.add(delta as VanityNumericColorChannel)
     }
-    return absolute(spec, input)
+    return resolveAbsoluteChannel(spec, input)
   }
 
-  function staticSpanDelta(
+  function getStaticSpanDelta(
     name: HailRangeName,
     input: VanityCssInput,
   ): number | undefined {
@@ -122,11 +122,11 @@ export function hailColorConstructors(
     const span = name === 'h' && minimum > maximum
       ? maximum - minimum + 360
       : maximum - minimum
-    return round(span * input)
+    return roundNumber(span * input)
   }
 
-  const elevationCoordinate = (input: HailNumericInput): NumericCssInput => {
-    const coordinate = absolute({ name: 'e' }, input) as NumericCssInput
+  const getElevationCoordinate = (input: HailNumericInput): NumericCssInput => {
+    const coordinate = resolveAbsoluteChannel({ name: 'e' }, input) as NumericCssInput
     const mostElevated = controls.mostElevatedL
     if (mostElevated === undefined)
       throw new TypeError('[hail] elevation needs the scheme coordinate installed by color.elevation')
@@ -136,7 +136,7 @@ export function hailColorConstructors(
     return normalized('l', schemePosition)
   }
 
-  const relativeElevation = (
+  const resolveRelativeElevation = (
     input: HailRelativeNumericInput | undefined,
   ): VanityNumericColorChannel | VanityChannelOperation | undefined => {
     if (input === undefined)
@@ -145,73 +145,73 @@ export function hailColorConstructors(
       const mostElevated = controls.mostElevatedL
       if (mostElevated === undefined)
         throw new TypeError('[hail] elevation needs the scheme coordinate installed by color.elevation')
-      const elevationSpan = staticSpanDelta('e', input.input)
+      const elevationSpan = getStaticSpanDelta('e', input.input)
         ?? (options.ranges.e === undefined
           ? input.input
-          : spanOf('e').multiply(input.input))
+          : getChannelSpan('e').multiply(input.input))
       const lightnessSpan = typeof elevationSpan === 'number'
-        ? staticSpanDelta('l', elevationSpan)
-        ?? (options.ranges.l === undefined ? elevationSpan : spanOf('l').multiply(elevationSpan))
+        ? getStaticSpanDelta('l', elevationSpan)
+        ?? (options.ranges.l === undefined ? elevationSpan : getChannelSpan('l').multiply(elevationSpan))
         : options.ranges.l === undefined
           ? elevationSpan
-          : spanOf('l').multiply(elevationSpan)
+          : getChannelSpan('l').multiply(elevationSpan)
       const direction = ds.calc(mostElevated).multiply(2).subtract(1)
       return ds.channel.add(ds.calc(lightnessSpan).multiply(direction))
     }
     if (isChannelOperation(input))
       return input
-    return elevationCoordinate(input) as VanityNumericColorChannel
+    return getElevationCoordinate(input) as VanityNumericColorChannel
   }
 
-  const rgbxFrom = <Base extends VanityColorish>(base: Base, channels: HailRgbxChannels): VanityAuthoredColor =>
+  const createRgbxFrom = <Base extends VanityColorish>(base: Base, channels: HailRgbxChannels): VanityAuthoredColor =>
     ds.rgb.from(base, {
       r: channels.r,
       g: channels.g,
       b: channels.b,
-      alpha: relative({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      alpha: resolveRelativeChannel({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
     })
 
-  const hslxFrom = <Base extends VanityColorish>(base: Base, channels: HailHslxChannels): VanityAuthoredColor =>
+  const createHslxFrom = <Base extends VanityColorish>(base: Base, channels: HailHslxChannels): VanityAuthoredColor =>
     ds.hsl.from(base, {
-      h: relative({ name: 'h', hue: true }, channels.h) as VanityHueChannel | VanityChannelOperation<VanityHueChannel> | undefined,
-      s: relative({ name: 's' }, channels.s) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      l: relative({ name: 'l' }, channels.l) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      alpha: relative({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      h: resolveRelativeChannel({ name: 'h', hue: true }, channels.h) as VanityHueChannel | VanityChannelOperation<VanityHueChannel> | undefined,
+      s: resolveRelativeChannel({ name: 's' }, channels.s) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      l: resolveRelativeChannel({ name: 'l' }, channels.l) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      alpha: resolveRelativeChannel({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
     })
 
-  const hwbxFrom = <Base extends VanityColorish>(base: Base, channels: HailHwbxChannels): VanityAuthoredColor =>
+  const createHwbxFrom = <Base extends VanityColorish>(base: Base, channels: HailHwbxChannels): VanityAuthoredColor =>
     ds.hwb.from(base, {
-      h: relative({ name: 'h', hue: true }, channels.h) as VanityHueChannel | VanityChannelOperation<VanityHueChannel> | undefined,
-      w: relative({ name: 'w' }, channels.w) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      b: relative({ name: 'b' }, channels.b) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      alpha: relative({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      h: resolveRelativeChannel({ name: 'h', hue: true }, channels.h) as VanityHueChannel | VanityChannelOperation<VanityHueChannel> | undefined,
+      w: resolveRelativeChannel({ name: 'w' }, channels.w) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      b: resolveRelativeChannel({ name: 'b' }, channels.b) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      alpha: resolveRelativeChannel({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
     })
 
-  const labxFrom = <Base extends VanityColorish>(base: Base, channels: HailLabxChannels): VanityAuthoredColor =>
+  const createLabxFrom = <Base extends VanityColorish>(base: Base, channels: HailLabxChannels): VanityAuthoredColor =>
     ds.lab.from(base, {
-      l: relative({ name: 'l' }, channels.l) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      a: relative({ name: 'a' }, channels.a) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      b: relative({ name: 'b' }, channels.b) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      alpha: relative({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      l: resolveRelativeChannel({ name: 'l' }, channels.l) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      a: resolveRelativeChannel({ name: 'a' }, channels.a) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      b: resolveRelativeChannel({ name: 'b' }, channels.b) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      alpha: resolveRelativeChannel({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
     })
 
-  const lchxFrom = <Base extends VanityColorish>(base: Base, channels: HailLchxChannels): VanityAuthoredColor =>
+  const createLchxFrom = <Base extends VanityColorish>(base: Base, channels: HailLchxChannels): VanityAuthoredColor =>
     ds.lch.from(base, {
-      l: relative({ name: 'l' }, channels.l) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      c: relative({ name: 'c' }, channels.c) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      h: relative({ name: 'h', hue: true }, channels.h) as VanityHueChannel | VanityChannelOperation<VanityHueChannel> | undefined,
-      alpha: relative({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      l: resolveRelativeChannel({ name: 'l' }, channels.l) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      c: resolveRelativeChannel({ name: 'c' }, channels.c) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      h: resolveRelativeChannel({ name: 'h', hue: true }, channels.h) as VanityHueChannel | VanityChannelOperation<VanityHueChannel> | undefined,
+      alpha: resolveRelativeChannel({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
     })
 
-  const oklabxFrom = <Base extends VanityColorish>(base: Base, channels: HailLabxChannels): VanityAuthoredColor =>
+  const createOklabxFrom = <Base extends VanityColorish>(base: Base, channels: HailLabxChannels): VanityAuthoredColor =>
     ds.oklab.from(base, {
-      l: relative({ name: 'l' }, channels.l) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      a: relative({ name: 'a' }, channels.a) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      b: relative({ name: 'b' }, channels.b) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      alpha: relative({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      l: resolveRelativeChannel({ name: 'l' }, channels.l) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      a: resolveRelativeChannel({ name: 'a' }, channels.a) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      b: resolveRelativeChannel({ name: 'b' }, channels.b) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      alpha: resolveRelativeChannel({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
     })
 
-  const oklchxFrom = <Base extends VanityColorish>(
+  const createOklchxFrom = <Base extends VanityColorish>(
     base: Base,
     channels: HailOklchxChannels<boolean>,
   ): VanityAuthoredColor => {
@@ -219,21 +219,21 @@ export function hailColorConstructors(
       throw new TypeError('[hail] oklchx.from() accepts either l or e, never both')
     return ds.oklch.from(base, {
       l: ('e' in channels && channels.e !== undefined
-        ? relativeElevation(channels.e)
-        : relative({ name: 'l' }, channels.l)) as
+        ? resolveRelativeElevation(channels.e)
+        : resolveRelativeChannel({ name: 'l' }, channels.l)) as
         | VanityNumericColorChannel
         | VanityChannelOperation<VanityNumericColorChannel>
         | undefined,
-      c: relative({ name: 'c' }, channels.c) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
-      h: relative({ name: 'h', hue: true }, channels.h) as VanityHueChannel | VanityChannelOperation<VanityHueChannel> | undefined,
-      alpha: relative({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      c: resolveRelativeChannel({ name: 'c' }, channels.c) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      h: resolveRelativeChannel({ name: 'h', hue: true }, channels.h) as VanityHueChannel | VanityChannelOperation<VanityHueChannel> | undefined,
+      alpha: resolveRelativeChannel({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
     })
   }
 
-  const colorxFrom = <Base extends VanityColorish>(base: Base, channels: HailColorxChannels): VanityAuthoredColor =>
+  const createColorxFrom = <Base extends VanityColorish>(base: Base, channels: HailColorxChannels): VanityAuthoredColor =>
     ds.color.from(base, {
       ...channels,
-      alpha: relative({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
+      alpha: resolveRelativeChannel({ name: 'alpha' }, channels.alpha) as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
     } as VanityColorFunctionChannels)
 
   const colorxCall = ((...args: readonly unknown[]): VanityAuthoredColor => {
@@ -247,7 +247,7 @@ export function hailColorConstructors(
         first as [VanityNumericColorChannel, ...VanityNumericColorChannel[]],
         optionsInput?.alpha === undefined
           ? undefined
-          : { alpha: absolute({ name: 'alpha' }, optionsInput.alpha) as VanityNumericColorChannel },
+          : { alpha: resolveAbsoluteChannel({ name: 'alpha' }, optionsInput.alpha) as VanityNumericColorChannel },
       )
     }
     return ds.color(
@@ -257,7 +257,7 @@ export function hailColorConstructors(
       third as VanityNumericColorChannel,
       alpha === undefined
         ? undefined
-        : absolute({ name: 'alpha' }, alpha as HailNumericInput) as VanityNumericColorChannel,
+        : resolveAbsoluteChannel({ name: 'alpha' }, alpha as HailNumericInput) as VanityNumericColorChannel,
     )
   }) as HailColorx
 
@@ -268,83 +268,83 @@ export function hailColorConstructors(
         g: VanityNumericColorChannel,
         b: VanityNumericColorChannel,
         alpha?: HailNumericInput,
-      ) => ds.rgb(r, g, b, alpha === undefined ? undefined : absolute({ name: 'alpha' }, alpha) as VanityNumericColorChannel),
-      from: rgbxFrom,
+      ) => ds.rgb(r, g, b, alpha === undefined ? undefined : resolveAbsoluteChannel({ name: 'alpha' }, alpha) as VanityNumericColorChannel),
+      from: createRgbxFrom,
     },
     hslx: {
       call: (h: HailHueInput, s: HailNumericInput, l: HailNumericInput, alpha?: HailNumericInput) =>
         ds.hsl(
-          absolute({ name: 'h', hue: true }, h) as VanityHueChannel,
-          absolute({ name: 's', percent: true }, s) as VanityNumericColorChannel,
-          absolute({ name: 'l', percent: true }, l) as VanityNumericColorChannel,
-          alpha === undefined ? undefined : absolute({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'h', hue: true }, h) as VanityHueChannel,
+          resolveAbsoluteChannel({ name: 's', percent: true }, s) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'l', percent: true }, l) as VanityNumericColorChannel,
+          alpha === undefined ? undefined : resolveAbsoluteChannel({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
         ),
-      from: hslxFrom,
+      from: createHslxFrom,
     },
     hwbx: {
       call: (h: HailHueInput, w: HailNumericInput, b: HailNumericInput, alpha?: HailNumericInput) =>
         ds.hwb(
-          absolute({ name: 'h', hue: true }, h) as VanityHueChannel,
-          absolute({ name: 'w', percent: true }, w) as VanityNumericColorChannel,
-          absolute({ name: 'b', percent: true }, b) as VanityNumericColorChannel,
-          alpha === undefined ? undefined : absolute({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'h', hue: true }, h) as VanityHueChannel,
+          resolveAbsoluteChannel({ name: 'w', percent: true }, w) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'b', percent: true }, b) as VanityNumericColorChannel,
+          alpha === undefined ? undefined : resolveAbsoluteChannel({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
         ),
-      from: hwbxFrom,
+      from: createHwbxFrom,
     },
     labx: {
       call: (l: HailNumericInput, a: HailNumericInput, b: HailNumericInput, alpha?: HailNumericInput) =>
         ds.lab(
-          absolute({ name: 'l' }, l) as VanityNumericColorChannel,
-          absolute({ name: 'a' }, a) as VanityNumericColorChannel,
-          absolute({ name: 'b' }, b) as VanityNumericColorChannel,
-          alpha === undefined ? undefined : absolute({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'l' }, l) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'a' }, a) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'b' }, b) as VanityNumericColorChannel,
+          alpha === undefined ? undefined : resolveAbsoluteChannel({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
         ),
-      from: labxFrom,
+      from: createLabxFrom,
     },
     lchx: {
       call: (l: HailNumericInput, c: HailNumericInput, h: HailHueInput, alpha?: HailNumericInput) =>
         ds.lch(
-          absolute({ name: 'l' }, l) as VanityNumericColorChannel,
-          absolute({ name: 'c' }, c) as VanityNumericColorChannel,
-          absolute({ name: 'h', hue: true }, h) as VanityHueChannel,
-          alpha === undefined ? undefined : absolute({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'l' }, l) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'c' }, c) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'h', hue: true }, h) as VanityHueChannel,
+          alpha === undefined ? undefined : resolveAbsoluteChannel({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
         ),
-      from: lchxFrom,
+      from: createLchxFrom,
     },
     oklabx: {
       call: (l: HailNumericInput, a: HailNumericInput, b: HailNumericInput, alpha?: HailNumericInput) =>
         ds.oklab(
-          absolute({ name: 'l' }, l) as VanityNumericColorChannel,
-          absolute({ name: 'a' }, a) as VanityNumericColorChannel,
-          absolute({ name: 'b' }, b) as VanityNumericColorChannel,
-          alpha === undefined ? undefined : absolute({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'l' }, l) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'a' }, a) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'b' }, b) as VanityNumericColorChannel,
+          alpha === undefined ? undefined : resolveAbsoluteChannel({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
         ),
-      from: oklabxFrom,
+      from: createOklabxFrom,
     },
     oklchx: {
       call: (l: HailNumericInput, c: HailNumericInput, h: HailHueInput, alpha?: HailNumericInput) =>
         ds.oklch(
-          absolute({ name: 'l' }, l) as VanityNumericColorChannel,
-          absolute({ name: 'c' }, c) as VanityNumericColorChannel,
-          absolute({ name: 'h', hue: true }, h) as VanityHueChannel,
-          alpha === undefined ? undefined : absolute({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'l' }, l) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'c' }, c) as VanityNumericColorChannel,
+          resolveAbsoluteChannel({ name: 'h', hue: true }, h) as VanityHueChannel,
+          alpha === undefined ? undefined : resolveAbsoluteChannel({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
         ),
-      from: oklchxFrom,
+      from: createOklchxFrom,
       ...(options.elevation
         ? {
             inE: (e: HailNumericInput, c: HailNumericInput, h: HailHueInput, alpha?: HailNumericInput) =>
               ds.oklch(
-                elevationCoordinate(e) as VanityNumericColorChannel,
-                absolute({ name: 'c' }, c) as VanityNumericColorChannel,
-                absolute({ name: 'h', hue: true }, h) as VanityHueChannel,
-                alpha === undefined ? undefined : absolute({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
+                getElevationCoordinate(e) as VanityNumericColorChannel,
+                resolveAbsoluteChannel({ name: 'c' }, c) as VanityNumericColorChannel,
+                resolveAbsoluteChannel({ name: 'h', hue: true }, h) as VanityHueChannel,
+                alpha === undefined ? undefined : resolveAbsoluteChannel({ name: 'alpha' }, alpha) as VanityNumericColorChannel,
               ),
           }
         : {}),
     },
     colorx: {
       call: colorxCall,
-      from: colorxFrom,
+      from: createColorxFrom,
     },
   })
 }
@@ -356,6 +356,6 @@ function isChannelOperation(value: unknown): value is VanityChannelOperation {
     && value.kind === 'channel-expression'
 }
 
-function round(value: number): number {
+function roundNumber(value: number): number {
   return Math.round(value * 1e12) / 1e12
 }

@@ -1,33 +1,39 @@
-import { createSystem, data, media, selector, systemRoot, thisMode } from '@mszr/vanity'
-import { createEngine } from '@test/legacy'
+import {
+  colorSchemes,
+  createSystem,
+  data,
+  length,
+  media,
+  selector,
+  systemRoot,
+  thisMode,
+} from '@mszr/vanity'
 import { describe, expectTypeOf, it } from 'vitest'
 
-const de = createEngine().axes(({ axis, condition, data, scheme }) => ({
-  scheme: scheme({ locality: 'root' }),
-  density: axis({ modes: { compact: data('density', 'compact') } }),
-  ambient: axis({
+const open = createSystem()
+  .addAxis('scheme', colorSchemes({ locality: 'root' }))
+  .addAxis('density', { modes: { compact: data('density', 'compact') } })
+  .addAxis('ambient', {
     modes: {
-      automatic: condition('@media (prefers-contrast: more)'),
+      automatic: media('(prefers-contrast: more)'),
       pinned: data('ambient', 'pinned'),
     },
-  }),
-}))
-const ds = de.createSystem({
-  tokens: {
-    color: {
-      brand: de.token.color({
-        mutable: true,
-        axes: { scheme: { dark: null } },
-      }),
-      fixed: de.oklch(0.5, 0.1, 200),
-    },
-    shadow: de.token({
-      val: 'none',
-      mutable: true,
-      cases: [{ when: { scheme: 'dark', density: 'compact' }, val: null }],
-    }),
+  })
+const ds = open.addTokens({
+  color: {
+    brand: open.tdef.color({ mutable: true, axes: { scheme: { dark: null } } }),
+    fixed: open.oklch(0.5, 0.1, 200),
   },
-})
+  shadow: open.tdef({
+    val: 'none',
+    mutable: true,
+    axes: {
+      scheme: { dark: null },
+      density: { compact: null },
+    },
+    cases: [{ when: { scheme: 'dark', density: 'compact' }, val: null }],
+  }),
+}).consolidate()
 
 describe('runtime types', () => {
   it('adds effects only to mutable runtime handles and keeps mode names exact', () => {
@@ -44,7 +50,7 @@ describe('runtime types', () => {
     runtime.axes.ambient.$switchTo('automatic')
     // @ts-expect-error — non-activatable modes do not expose $activate
     runtime.axes.ambient.automatic.$activate()
-    // @ts-expect-error — axis names come from this engine
+    // @ts-expect-error — axis names come from this system
     runtime.axes.motion.$switchTo('none')
     // @ts-expect-error — mode names come from the chosen axis
     runtime.axes.density.$switchTo('cozy')
@@ -53,7 +59,7 @@ describe('runtime types', () => {
     // @ts-expect-error — nonmutable runtime handles stay read-only
     runtime.t.color.fixed.$set('red')
     // @ts-expect-error — color setters preserve the token's data type
-    runtime.t.color.brand.$set(de.length.rem(1))
+    runtime.t.color.brand.$set(length.rem(1))
     // @ts-expect-error — the superseded batch API is absent
     runtime.applyTokenOverrides({ color: { brand: 'red' } })
   })
@@ -71,9 +77,7 @@ describe('runtime types', () => {
       },
     })
     const controlled = open.addTokens({
-      value: open.tdef({
-        axes: { custom: { automatic: 'a', manual: 'b' } },
-      }),
+      value: open.tdef({ axes: { custom: { automatic: 'a', manual: 'b' } } }),
     }).consolidate()
     const runtime = controlled.runtime()
 
@@ -149,12 +153,6 @@ describe('runtime types', () => {
 
     expectTypeOf(snapshot).toEqualTypeOf<import('@mszr/vanity').VanityRuntimeSnapshotV1>()
     // @ts-expect-error — callback tokens retain their runtime data types
-    ds.snapshotFrom(runtime => runtime.t.color.brand.$set(de.length.rem(1)))
-  })
-
-  it('types the canonical build-time token override tree independently from runtime mutability', () => {
-    ds.tokenOverride({ color: { brand: 'red', fixed: 'black' } })
-    // @ts-expect-error — unknown paths fail where they are authored
-    ds.tokenOverride({ color: { brnad: 'red' } })
+    ds.snapshotFrom(runtime => runtime.t.color.brand.$set(length.rem(1)))
   })
 })

@@ -23,7 +23,7 @@ export function interpolate<
   progress: Progress & (VanityDimensionOf<Progress> extends 'number' ? unknown : never),
 ): VanityCalc<VanityInterpolationDimension<From, To> & VanityMathDimension> {
   if (typeof progress === 'number')
-    finite(progress, 'interpolate progress')
+    validateFinite(progress, 'interpolate progress')
   return calc(from).add(calc(to).subtract(from as any).multiply(progress) as any) as never
 }
 
@@ -41,10 +41,10 @@ export interface VanityFluidOptions {
 /** Utopia-style bounded viewport interpolation, emitted as ordinary clamp/calc CSS. */
 export function fluid(options: VanityFluidOptions): ReturnType<typeof clamp> {
   const { min, max, minVw = 320, maxVw = 1280 } = options
-  finite(min, 'fluid min')
-  finite(max, 'fluid max')
-  finite(minVw, 'fluid minVw')
-  finite(maxVw, 'fluid maxVw')
+  validateFinite(min, 'fluid min')
+  validateFinite(max, 'fluid max')
+  validateFinite(minVw, 'fluid minVw')
+  validateFinite(maxVw, 'fluid maxVw')
   if (max < min)
     throw new RangeError(`[vanity] fluid max must be greater than or equal to min; received ${min} → ${max}`)
   if (maxVw <= minVw)
@@ -52,15 +52,15 @@ export function fluid(options: VanityFluidOptions): ReturnType<typeof clamp> {
 
   const slope = (max - min) / (maxVw - minVw)
   const intercept = min - slope * minVw
-  const preferred = calc(length.px(round(intercept))).add(`${round(slope * 100)}vw`)
+  const preferred = calc(length.px(roundNumber(intercept))).add(`${roundNumber(slope * 100)}vw`)
   return clamp(length.px(min), preferred, length.px(max))
 }
 
-function finite(value: number, role: string): void {
+function validateFinite(value: number, role: string): void {
   if (!Number.isFinite(value))
     throw new RangeError(`[vanity] ${role} must be finite; received ${value}`)
 }
 
-function round(value: number): number {
+function roundNumber(value: number): number {
   return Math.round(value * 1e6) / 1e6
 }

@@ -2,7 +2,7 @@
 
 import type { VanityCssDataType, VanityCssValue } from './types'
 import { defineCssValue } from './extensions'
-import { ExpressionValue, literalNode, pluginNode } from './protocol'
+import { createLiteralNode, createPluginNode, ExpressionValue } from './protocol'
 
 export type VanityLengthUnit
   = | 'cap' | 'ch' | 'cm' | 'cqb' | 'cqh' | 'cqi' | 'cqmax' | 'cqmin' | 'cqw'
@@ -96,8 +96,8 @@ function unitFactory<Type extends VanityCssDataType, Unit extends string>(type: 
   return defineCssValue({
     type,
     create(value: number) {
-      finite(value, `${type}.${unit}`)
-      return new ExpressionValue(literalNode(type, `${format(value)}${unit}`, { helper: `${type}.${unit}` }))
+      validateFinite(value, `${type}.${unit}`)
+      return new ExpressionValue(createLiteralNode(type, `${format(value)}${unit}`, { helper: `${type}.${unit}` }))
     },
   }) as <const Value extends number>(value: Value) => VanityUnitValue<Type, Unit, Value>
 }
@@ -123,8 +123,8 @@ function adaptiveLength<const Unit extends VanityLengthUnit, const Value extends
   value: Value,
   fallbackUnit: Unit,
 ): VanityUnitValue<'length', Unit, Value> {
-  finite(value, 'length')
-  return new ExpressionValue(pluginNode({
+  validateFinite(value, 'length')
+  return new ExpressionValue(createPluginNode({
     type: 'length',
     extension: { id: 'org.vanity.core.adaptive-length', version: 1 },
     dependencies: [],
@@ -137,12 +137,12 @@ function adaptiveLength<const Unit extends VanityLengthUnit, const Value extends
       const configured = length && typeof length === 'object'
         ? (length as Record<string, unknown>).unitless
         : undefined
-      const legacy = context.policies.length && typeof context.policies.length === 'object'
+      const configuredLengthPolicy = context.policies.length && typeof context.policies.length === 'object'
         ? (context.policies.length as Record<string, unknown>).unitless
         : undefined
       const unit = typeof configured === 'string'
         ? configured
-        : typeof legacy === 'string' ? legacy : fallbackUnit
+        : typeof configuredLengthPolicy === 'string' ? configuredLengthPolicy : fallbackUnit
       return `${format(value)}${unit}`
     },
   })) as VanityUnitValue<'length', Unit, Value>
@@ -156,23 +156,23 @@ export const resolution: VanityResolutionConstructor = unitGroup('resolution', [
 export const flex: VanityFlexConstructor = unitGroup('flex', ['fr'])
 
 export function percent<const Value extends number>(value: Value): VanityUnitValue<'percentage', '%', Value> {
-  finite(value, 'percent')
-  return new ExpressionValue(literalNode('percentage', `${format(value)}%`, { helper: 'percent' })) as VanityUnitValue<'percentage', '%', Value>
+  validateFinite(value, 'percent')
+  return new ExpressionValue(createLiteralNode('percentage', `${format(value)}%`, { helper: 'percent' })) as VanityUnitValue<'percentage', '%', Value>
 }
 
 export function cssNumber<const Value extends number>(value: Value): VanityCssValue<`${Value}`, 'number'> {
-  finite(value, 'number')
-  return new ExpressionValue(literalNode('number', value, { helper: 'number' })) as VanityCssValue<`${Value}`, 'number'>
+  validateFinite(value, 'number')
+  return new ExpressionValue(createLiteralNode('number', value, { helper: 'number' })) as VanityCssValue<`${Value}`, 'number'>
 }
 
 export function integer<const Value extends number>(value: Value): VanityCssValue<`${Value}`, 'integer'> {
-  finite(value, 'integer')
+  validateFinite(value, 'integer')
   if (!Number.isInteger(value))
     throw new TypeError(`[vanity] integer() needs an integer; received ${value}`)
-  return new ExpressionValue(literalNode('integer', value, { helper: 'integer' })) as VanityCssValue<`${Value}`, 'integer'>
+  return new ExpressionValue(createLiteralNode('integer', value, { helper: 'integer' })) as VanityCssValue<`${Value}`, 'integer'>
 }
 
-function finite(value: number, helper: string): void {
+function validateFinite(value: number, helper: string): void {
   if (!Number.isFinite(value))
     throw new RangeError(`[vanity] ${helper}() needs a finite number; received ${value}`)
 }

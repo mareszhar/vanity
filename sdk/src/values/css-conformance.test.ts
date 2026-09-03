@@ -26,34 +26,44 @@ import {
   oklch,
   percent,
   rgb,
-} from '../test-support/characterization'
-import { defaultEngine } from './defaultEngine'
+} from '../index'
+import { defaultValueKernel } from './defaults'
+import { serializeValueWithContext } from './kernel'
+import { VANITY_DEFAULT_CSS_SUPPORT } from './protocol'
+
+function serialize(value: import('./types').VanitySelfValue): string {
+  return serializeValueWithContext({
+    values: defaultValueKernel,
+    support: VANITY_DEFAULT_CSS_SUPPORT,
+    policies: {},
+  }, value)
+}
 
 describe('cSSWG/WPT-derived value grammar', () => {
   it('covers modern color channels, missing components, alpha, and typed refs', () => {
     const channel = customProperty('--channel', { type: 'number' }).$var(cssNumber(0.2))
-    expect(defaultEngine.serialize(rgb(percent(10), channel, 'none', percent(50))))
+    expect(serialize(rgb(percent(10), channel, 'none', percent(50))))
       .toBe('rgb(10% var(--channel, 0.2) none / 50%)')
-    expect(defaultEngine.serialize(hsl(angle.deg(30), percent(40), percent(50), 'none')))
+    expect(serialize(hsl(angle.deg(30), percent(40), percent(50), 'none')))
       .toBe('hsl(30deg 40% 50% / none)')
-    expect(defaultEngine.serialize(hwb(30, 'none', percent(10))))
+    expect(serialize(hwb(30, 'none', percent(10))))
       .toBe('hwb(30 none 10%)')
-    expect(defaultEngine.serialize(oklch(percent(42.1), 0.192, angle.deg(328.6), 1)))
+    expect(serialize(oklch(percent(42.1), 0.192, angle.deg(328.6), 1)))
       .toBe('oklch(0.421 0.192 328.6)')
   })
 
   it('covers predefined and custom-profile color() channel counts', () => {
-    expect(defaultEngine.serialize(color('display-p3-linear', 0.1, 0.2, 0.3)))
+    expect(serialize(color('display-p3-linear', 0.1, 0.2, 0.3)))
       .toBe('color(display-p3-linear 0.1 0.2 0.3)')
-    expect(defaultEngine.serialize(color('--press-profile', [0.1, 0.2, 0.3, 0.4], { alpha: percent(80) })))
+    expect(serialize(color('--press-profile', [0.1, 0.2, 0.3, 0.4], { alpha: percent(80) })))
       .toBe('color(--press-profile 0.1 0.2 0.3 0.4 / 80%)')
   })
 
   it('covers multi-item color-mix(), custom spaces, and polar hue policy', () => {
-    expect(defaultEngine.serialize(colorMix(['red']))).toMatch(/^color-mix\(oklch\(.+\)\)$/)
-    expect(defaultEngine.serialize(colorMix(['red', ['green', 25], 'blue'], { in: 'oklch', hue: 'longer' })))
+    expect(serialize(colorMix(['red']))).toMatch(/^color-mix\(oklch\(.+\)\)$/)
+    expect(serialize(colorMix(['red', ['green', 25], 'blue'], { in: 'oklch', hue: 'longer' })))
       .toMatch(/^color-mix\(in oklch longer hue, oklch\(.+\), oklch\(.+\) 25%, oklch\(.+\)\)$/)
-    expect(defaultEngine.serialize(colorMix(['red', 'blue'], { in: '--brand-profile' })))
+    expect(serialize(colorMix(['red', 'blue'], { in: '--brand-profile' })))
       .toMatch(/^color-mix\(in --brand-profile, /)
     expect(() => colorMix(['red', 'blue'], { in: 'lab', hue: 'shorter' })).toThrow(/no hue interpolation path/)
   })

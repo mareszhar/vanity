@@ -1,9 +1,9 @@
-/** Engine-defined environmental axes and their root-anchored condition IR. */
+/** System-defined environmental axes and their root-anchored condition IR. */
 
 import type { VanityCondition, VanityConditionArm, VanityConditionInput } from './conditions'
-import { checkQuery, checkSelector } from '../internal/cssParser'
-import { kebab } from '../tokens/names'
-import { schemeConditionArms } from './conditions'
+import { checkQuery, checkSelector } from '../css/validation'
+import { toKebab } from '../tokens/names'
+import { getSchemeConditionArms } from './conditions'
 
 export type VanityAxisLocality = 'element' | 'root' | 'subtree' | 'document' | 'absolute'
 export type VanityAxisMechanism = 'selector' | 'media' | 'supports' | 'container' | 'scope' | 'native'
@@ -242,11 +242,11 @@ export const EMPTY_AXIS_REGISTRY: VanityAxisRegistry<Record<never, never>> = Obj
 export const axisAuthoringHelpers: VanityAxisAuthoringHelpers = Object.freeze({
   axis: defineAxis,
   defaultMode,
-  condition: axisCondition,
-  absoluteCondition,
-  data: axisData,
-  schemeIs: axisSchemeIs,
-  scheme: schemeAxis,
+  condition: createAxisCondition,
+  absoluteCondition: createAbsoluteAxisCondition,
+  data: createAxisData,
+  schemeIs: createAxisSchemeTrigger,
+  scheme: createSchemeAxis,
 })
 
 export function defineAxis<
@@ -349,7 +349,7 @@ export function defaultMode<Trigger extends VanityConditionInput | VanityAxisTri
 export function defaultMode(trigger?: VanityConditionInput | VanityAxisTrigger<boolean>): VanityDefaultAxisMode<boolean> {
   const normalized = trigger === undefined
     ? createTrigger([], true)
-    : isAxisTrigger(trigger) ? trigger : axisCondition(trigger)
+    : isAxisTrigger(trigger) ? trigger : createAxisCondition(trigger)
   return Object.freeze({
     [VANITY_AXIS_TRIGGER]: true as const,
     [VANITY_RUNTIME_ACTIVATABLE]: normalized[VANITY_RUNTIME_ACTIVATABLE],
@@ -358,7 +358,7 @@ export function defaultMode(trigger?: VanityConditionInput | VanityAxisTrigger<b
   })
 }
 
-export function axisCondition(
+export function createAxisCondition(
   input: VanityConditionInput,
   options: VanityAxisConditionOptions = {},
 ): VanityAxisTrigger {
@@ -396,12 +396,12 @@ export function axisCondition(
   }))
 }
 
-export function absoluteCondition(
+export function createAbsoluteAxisCondition(
   selector: string,
   options: VanityAbsoluteAxisConditionOptions = {},
 ): VanityAxisTrigger {
   if (selector.includes('&') || checkSelector(selector))
-    throw new TypeError(`[vanity] absoluteCondition('${selector}') needs a valid absolute selector without '&'`)
+    throw new TypeError(`[vanity] createAbsoluteAxisCondition('${selector}') needs a valid absolute selector without '&'`)
   return createTrigger([Object.freeze({
     selector,
     mechanism: 'selector' as const,
@@ -411,20 +411,20 @@ export function absoluteCondition(
   })])
 }
 
-export function axisData<const Options extends VanityAxisConditionOptions | undefined = undefined>(
+export function createAxisData<const Options extends VanityAxisConditionOptions | undefined = undefined>(
   attribute: string,
   value?: string,
   options?: Options,
 ): VanityAxisTrigger<Options extends { readonly on: 'ancestor' | 'descendant' } ? false : true>
-export function axisData(
+export function createAxisData(
   attribute: string,
   value?: string,
   options: VanityAxisConditionOptions = {},
 ): VanityAxisTrigger<boolean> {
-  const name = `data-${kebab(attribute)}`
+  const name = `data-${toKebab(attribute)}`
   const selector = value === undefined ? `[${name}]` : `[${name}='${value}']`
   const on = options.on ?? 'root'
-  const trigger = axisCondition(selector, { ...options, on })
+  const trigger = createAxisCondition(selector, { ...options, on })
   if (on !== 'root')
     return trigger
   return createTrigger(trigger.arms.map(arm => Object.freeze({
@@ -433,8 +433,8 @@ export function axisData(
   })), true)
 }
 
-export function axisSchemeIs(mode: 'light' | 'dark'): VanityAxisTrigger<true> {
-  const [explicit, preferred] = schemeConditionArms(mode)
+export function createAxisSchemeTrigger(mode: 'light' | 'dark'): VanityAxisTrigger<true> {
+  const [explicit, preferred] = getSchemeConditionArms(mode)
 
   return createTrigger([
     Object.freeze({
@@ -455,13 +455,13 @@ export function axisSchemeIs(mode: 'light' | 'dark'): VanityAxisTrigger<true> {
   ], true)
 }
 
-export function schemeAxis(options: VanitySchemeAxisOptions = {}): VanityAxisDefinition<{
+export function createSchemeAxis(options: VanitySchemeAxisOptions = {}): VanityAxisDefinition<{
   readonly light: VanityAxisTrigger<true>
   readonly dark: VanityAxisTrigger<true>
 }> {
   const locality = options.locality ?? 'element'
   return defineAxis({
-    modes: { light: axisSchemeIs('light'), dark: axisSchemeIs('dark') },
+    modes: { light: createAxisSchemeTrigger('light'), dark: createAxisSchemeTrigger('dark') },
     default: 'light',
     modeOrder: ['light', 'dark'],
     native: {
@@ -476,7 +476,7 @@ export function schemeAxis(options: VanitySchemeAxisOptions = {}): VanityAxisDef
 }
 
 /** Explicit guarded color-scheme axis; no behavior is inferred from its mount name. */
-export const colorSchemes = schemeAxis
+export const colorSchemes = createSchemeAxis
 
 /** Normalize the direct public `addAxis(name, config)` form against its mount identity. */
 export function defineOpenAxis<
@@ -520,7 +520,7 @@ export function normalizeAxisAdditions<const Axes extends VanityAxisDefinitions>
     if (isIntegerIndex(name))
       throw new TypeError(`[vanity] axis name '${name}' is integer-like; use a semantic non-integer name so declaration order stays stable`)
     if (name in merged)
-      throw new TypeError(`[vanity] axis '${name}' is already defined on this engine`)
+      throw new TypeError(`[vanity] axis '${name}' is already defined on this system`)
     if (!isAxisDefinition(definition))
       throw new TypeError(`[vanity] axis '${name}' must be created with axis() or scheme()`)
     merged[name] = definition
@@ -581,7 +581,7 @@ function describeArm(arm: VanityAxisTriggerArm): string {
   ].filter((part): part is string => part !== undefined).join(' ')
 }
 
-export function axisSemanticPolicy(registry: VanityAxisRegistry<any>): Readonly<Record<string, unknown>> {
+export function getAxisSemanticPolicy(registry: VanityAxisRegistry<any>): Readonly<Record<string, unknown>> {
   return Object.freeze({
     order: registry.order,
     definitions: Object.freeze(Object.fromEntries(registry.order.map((name) => {
@@ -656,9 +656,9 @@ function triggerForOpenCondition(
   const arms: VanityAxisTriggerArm[] = []
   for (const arm of input.arms) {
     if (arm.anchor !== 'this-mode') {
-      const normalized = axisCondition({ arms: [arm] }).arms
+      const normalized = createAxisCondition({ arms: [arm] }).arms
       if (arm.selector === '&') {
-        const name = `data-${kebab(axis)}`
+        const name = `data-${toKebab(axis)}`
         arms.push(...normalized.map(candidate => Object.freeze({
           ...candidate,
           runtime: Object.freeze({ kind: 'attribute' as const, name, value: null }),
@@ -669,7 +669,7 @@ function triggerForOpenCondition(
       }
       continue
     }
-    const bases = axisData(axis, mode).arms
+    const bases = createAxisData(axis, mode).arms
     for (const base of bases) {
       const { runtime: baseRuntime, ...baseWithoutRuntime } = base
       const pureThisMode = arm.media === undefined

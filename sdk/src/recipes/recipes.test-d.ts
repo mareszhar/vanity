@@ -4,16 +4,16 @@
  * `when` typing, part-scoped condition keys, and published-port typing.
  */
 
-import type { VanityPort, VanityProps } from '../test-support/characterization'
+import type { VanityPort, VanityProps } from '@mszr/vanity'
+import { createSystem } from '@mszr/vanity'
 import { describe, expectTypeOf, it } from 'vitest'
-import { createSystem } from '../test-support/characterization'
 
 // Never evaluated — the typecheck evidence dimension only reads types.
 function system() {
-  return createSystem({
-    tokens: { color: { brand: '#635bff' }, space: { sm: '8px', md: '16px' } },
-    conditions: { open: '&[data-state="open"]' },
-  })
+  return createSystem()
+    .addConditions({ open: '&[data-state="open"]' })
+    .addTokens({ color: { brand: '#635bff' }, space: { sm: '8px', md: '16px' } })
+    .consolidate()
 }
 
 function button() {

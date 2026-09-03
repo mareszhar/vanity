@@ -92,10 +92,10 @@ Mixed static/live expressions additionally prove recursive partial folding: cons
 Test each data type against:
 
 - zero-config raw shorthand (`reference: 'var'`, `emit: true`);
-- an engine-configured shorthand policy;
+- a system-configured shorthand policy;
 - configured `reference: 'val'`;
 - configured/inferred `reference: 'var'`;
-- downstream shorthand derivation remains CSS-reactive, while explicit/engine-default `reference: 'val'` produces the build-folded counterpart;
+- downstream shorthand derivation remains CSS-reactive, while explicit/policy-default `reference: 'val'` produces the build-folded counterpart;
 - null and typed no-default token;
 - known `emit: false` value;
 - registration;
@@ -163,10 +163,10 @@ For every new public API, lock:
 - readable hover free of internal conditional-type walls;
 - definition and references across token modules;
 - rename from definition and consumer;
-- unrelated graph/engine isolation;
+- unrelated graph/system isolation;
 - no `undefined` pollution in valid staged callbacks;
-- engine/axis/plugin literal preservation without `as const` ceremony;
-- semantically equivalent engine instances compose across HMR/package duplication while incompatible signatures fail locally;
+- system/axis/plugin literal preservation without `as const` ceremony;
+- semantically equivalent value-capability instances compose across HMR/package duplication while incompatible signatures fail locally;
 - resolved and restored `$axes`/`$case()` paths both return branch handles, with side effects present only on mutable runtime controls;
 - `transaction()` mirrors the exact runtime token/axis trees and validates every queued value/root before the first write;
 - narrow runtime setters for mutable base/mode/case handles;
@@ -266,8 +266,8 @@ The permanent matrix preserves the lessons of the July 2026 hardening review:
 - dependency CSS HMR replaces in place;
 - export-shape changes cause exactly the documented reload behavior;
 - runtime overrides survive compatible HMR or receive an explicit rebind diagnostic;
-- an equivalent re-evaluated engine/system retains compatibility without object-reference equality;
-- a semantically changed engine or runtime schema receives a precise invalidation/migration diagnostic;
+- an equivalent re-evaluated value-capability/system pair retains compatibility without object-reference equality;
+- a semantically changed capability set or runtime schema receives a precise invalidation/migration diagnostic;
 - server shutdown releases HTTP and HMR listeners;
 - repeated start/stop does not leak watchers or ports;
 - modern CSS emitted by values/axes survives every supported optimizer without invalid rewrites or unexplained warnings;
@@ -355,7 +355,7 @@ Permanent comparative questions:
 
 | # | Moment | Durable evidence |
 | --- | --- | --- |
-| 1 | Rename across modules and consumers | [`tokens.rename.test.ts`](../../sdk/src/tokens/tokens.rename.test.ts) and canonical module IntelliSense in [`tokens.graph.dx.test.ts`](../../sdk/src/tokens/tokens.graph.dx.test.ts). |
+| 1 | Rename across modules and consumers | [`tokens.rename.test.ts`](../../sdk/src/tokens/tokens.rename.test.ts) and canonical module IntelliSense in [`tokens.module.dx.test.ts`](../../sdk/src/tokens/tokens.module.dx.test.ts). |
 | 2 | Add a scheme axis without component edits | Axis type/output fixtures plus the computed light/dark probes in [`demos.spec.ts`](../../tests/demos.spec.ts). |
 | 3 | Live-tune brand and rederive in CSS | Prism hue and comparison Vanity-lane assertions in [`demos.spec.ts`](../../tests/demos.spec.ts); no JavaScript palette mirror exists in the studio. |
 | 4 | Live-tune a non-color value | Prism radius/font controls and compact density computed-style assertions in [`demos.spec.ts`](../../tests/demos.spec.ts). |
@@ -366,7 +366,7 @@ Permanent comparative questions:
 | 9 | Use CSS vanity does not yet model | [`css.out.test.ts`](../../sdk/src/css/css.out.test.ts), Prism's scoped `@starting-style`, and the optimizer-survival gate. |
 | 10 | Trace a rendered declaration | [`introspect.test.ts`](../../sdk/src/introspect/introspect.test.ts) and Prism's build-produced `ds.explain()` provenance cards. |
 | 11 | Export standard and authored DTCG | [`dtcg.test.ts`](../../sdk/src/introspect/dtcg.test.ts), including resolved projection and portable authored round trips. |
-| 12 | Extend values through public plugins | [`openSystem.test.ts`](../../sdk/src/system/openSystem.test.ts), property-alias fixtures, and [`hail.test.ts`](../../sdk/src/presets/hail/hail.test.ts) cover constructors, low-level operations, callable configuration, ownership, and Hail dogfood. |
+| 12 | Extend values through public plugins | [`open.test.ts`](../../sdk/src/system/open.test.ts), property-alias fixtures, and [`hail.test.ts`](../../sdk/src/presets/hail/hail.test.ts) cover constructors, low-level operations, callable configuration, ownership, and Hail dogfood. |
 | 13 | SSR persisted runtime state without flash | Prism response-HTML/first-paint/reload assertions in [`demos.spec.ts`](../../tests/demos.spec.ts) and snapshot reconciliation fixtures. |
 | 14 | Install the tarball in strict testing-kit, Vite, and Nuxt consumers | [`fresh-smoke.ts`](../../scripts/fresh-smoke.ts), which packs and installs without workspace aliases before testing-kit type/runtime/DX and app type/build/lifecycle checks. |
 | 15 | Let an agent self-correct | [`introspect.dx.test.ts`](../../sdk/src/introspect/introspect.dx.test.ts), [`audit.test.ts`](../../sdk/src/introspect/audit.test.ts), and generated agent context from the same manifest records. |

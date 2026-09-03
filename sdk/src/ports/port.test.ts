@@ -7,7 +7,8 @@
 import { restorePort } from '@mszr/vanity/runtime'
 import { definePrismSystem, emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { createSystem, angle as cssAngle, oklch, ports, VanityError } from '../test-support/characterization'
+import { angle as cssAngle, oklch, ports, VanityError } from '../index'
+import { createFixtureSystem } from '../test-support/current'
 
 describe('port() declaration', () => {
   it('creates a handle with a hashed name under the system prefix', () => {
@@ -54,7 +55,7 @@ describe('port() declaration', () => {
 
   it('a custom prefix flows into the port name', () => {
     const { returned: fraction } = emit(() => {
-      const system = createSystem({
+      const system = createFixtureSystem({
         tokens: { color: { brand: '#635bff' } },
         prefix: 'prism',
       })
@@ -371,10 +372,10 @@ describe('restorePort', () => {
 describe('the spec\'s progress bar', () => {
   it('a port interpolates inside calc() and serializes as var(--name, default)', () => {
     const { css } = emit(() => {
-      const { css, port, t } = definePrismSystem()
+      const { class: style, port, t } = definePrismSystem()
       const fraction = port(0)
 
-      css({
+      style({
         inlineSize: `calc(${fraction} * 100%)`,
         background: t.color.brand,
       }, 'fill')
@@ -385,10 +386,10 @@ describe('the spec\'s progress bar', () => {
 
   it('a port used directly as a value serializes with its default fallback', () => {
     const { css } = emit(() => {
-      const { css, port, t } = definePrismSystem()
+      const { class: style, port, t } = definePrismSystem()
       const tint = port(t.color.brand)
 
-      css({
+      style({
         background: tint,
       }, 'fill')
     })
@@ -396,12 +397,12 @@ describe('the spec\'s progress bar', () => {
     expect(css).toMatch(/background: var\(--vanity-[^,]+, var\(--vanity-color-brand\)\)/)
   })
 
-  it('a static set() inside a css() rule compiles into a custom-property declaration', () => {
+  it('a static set() inside a class() rule compiles into a custom-property declaration', () => {
     const { css } = emit(() => {
-      const { css, port, t } = definePrismSystem()
+      const { class: style, port, t } = definePrismSystem()
       const gap = port(t.space.xs)
 
-      css({
+      style({
         display: 'flex',
         ...gap.dec(t.space.sm),
       }, 'toolbar')

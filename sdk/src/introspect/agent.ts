@@ -1,5 +1,5 @@
 import type { VanityManifest } from './manifest'
-import { manifestModules } from './manifest'
+import { createManifestModules } from './manifest'
 
 export interface VanityAgentContext {
   readonly manifestVersion: VanityManifest['version']
@@ -39,9 +39,9 @@ export interface VanityAgentContext {
   }
 }
 
-/** Bounded machine context derived entirely from Manifest v3. */
+/** Bounded machine context derived entirely from Manifest v4. */
 export function buildAgentContext(manifest: VanityManifest): VanityAgentContext {
-  const modules = manifestModules(manifest)
+  const modules = createManifestModules(manifest)
   return Object.freeze({
     manifestVersion: manifest.version,
     identities: manifest.system.identities,
@@ -80,10 +80,10 @@ export function buildAgentContext(manifest: VanityManifest): VanityAgentContext 
     }))),
     policy: Object.freeze({
       rawAssertions: modules.flatMap(module => module.escapes)
-        .filter(escape => escape.form === 'css.raw' || escape.form === 'unsafe')
+        .filter(escape => escape.form === 'raw' || escape.form === 'unsafe')
         .length,
       aliasEscapes: modules.flatMap(module => module.escapes)
-        .filter(escape => escape.form === 'class.standard' || escape.form === 'css.standard')
+        .filter(escape => escape.form === 'class.standard')
         .length,
       nonportableTokens: Object.freeze(Object.entries(manifest.system.tokens)
         .filter(([, token]) => token.portability.status === 'nonportable')

@@ -7,19 +7,17 @@
  * over the declared parts × the system's conditions.
  */
 
-import type { VanitySystemContext } from '../css/css'
+import type { VanitySystemContext } from '../css/context'
 import type { VanityCompiled, VanityScopedConditionResult } from '../css/rule'
 import type { VanityConditionArm } from '../system/conditions'
 import type { VanityAnatomy, VanityAnatomyRuntime } from './types'
-import { style } from '@vanilla-extract/css'
-import { addFunctionSerializer } from '@vanilla-extract/css/functionSerializer'
-import { inDeclaredLayer } from '../css/css'
+import { createLayerContext } from '../css/context'
 import { emitOnto, emitStyle } from '../css/emit'
 import { isPlainObject, splitTopLevel } from '../css/rule'
-import { diagnosticSource, didYouMean, VanityError } from '../diagnostics'
-import { record } from '../internal/inspect'
-import { requireStyleModule } from '../internal/styleModule'
-import { checkPorts, checkSelection, compileArm, covers, debugName, finishBuild, mergeCompiled, recordVariantShape, startBuild } from './compile'
+import { didYouMean, getDiagnosticSource, VanityError } from '../diagnostics'
+import { record } from '../introspect/records'
+import { substrate } from '../substrate'
+import { checkPorts, checkSelection, compileRecipeArm, covers, finishBuild, getDebugName, mergeCompiled, recordVariantShape, startBuild } from './compile'
 import { createAnatomyHandle } from './handle'
 
 interface VanityAnatomyOptionsLoose {
@@ -37,16 +35,16 @@ type PartArms = Record<string, VanityCompiled>
 
 export function bindAnatomy(system: VanitySystemContext) {
   const anatomy = (options: VanityAnatomyOptionsLoose, debugId?: string): VanityAnatomy<string, Record<string, unknown>> => {
-    const file = requireStyleModule('anatomy')
+    const file = substrate.modules.requireStyleModule('anatomy')
     const parts = checkParts(options.parts, file)
 
     // ── Pass 1: every part gets its stable class before any rule compiles ──
     const partClasses: Record<string, string> = {}
 
     for (const part of parts)
-      partClasses[part] = style({}, debugName(debugId, part))
+      partClasses[part] = substrate.css.emitClassRule({ rule: {}, debugId: getDebugName(debugId, part) })
 
-    const build = startBuild(options, system, file, scopedConditionsOver(parts, partClasses, system))
+    const build = startBuild(options, system, file, getScopedConditionsOver(parts, partClasses, system))
 
     const variants = options.variants ?? {}
     const toggles = options.toggles ?? {}
@@ -81,7 +79,7 @@ export function bindAnatomy(system: VanitySystemContext) {
           continue
         }
 
-        compiled[part] = compileArm(build, rule, [...path, part])
+        compiled[part] = compileRecipeArm(build, rule, [...path, part])
       }
 
       return compiled
@@ -144,7 +142,7 @@ export function bindAnatomy(system: VanitySystemContext) {
 
       for (const [part, compiled] of Object.entries(arms)) {
         if (compiled.units.length > 0)
-          classes[part] = emitStyle(compiled, debugName(debugId, ...suffix, part))
+          classes[part] = emitStyle(compiled, getDebugName(debugId, ...suffix, part))
       }
 
       return classes
@@ -184,13 +182,13 @@ export function bindAnatomy(system: VanitySystemContext) {
     record({
       kind: 'anatomy',
       file,
-      ...diagnosticSource(),
+      ...getDiagnosticSource(),
       ...(debugId === undefined ? {} : { name: debugId }),
       parts,
       ...recordVariantShape(variants, toggles, defaults, ports),
     })
 
-    addFunctionSerializer(handle as unknown as (...args: unknown[]) => unknown, {
+    substrate.modules.registerFunctionSerialization(handle as unknown as (...args: unknown[]) => unknown, {
       importPath: '@mszr/vanity/runtime',
       importName: 'restoreAnatomy',
       args: [runtime as unknown as Record<string, string>],
@@ -198,7 +196,7 @@ export function bindAnatomy(system: VanitySystemContext) {
 
     return handle
   }
-  anatomy.layer = (name: string) => bindAnatomy(inDeclaredLayer(system, name))
+  anatomy.layer = (name: string) => bindAnatomy(createLayerContext(system, name))
   return anatomy
 }
 
@@ -240,7 +238,7 @@ const partScopedKey = /^([A-Z_][\w-]*):([A-Z_][\w-]*)$/i
  * under it as a descendant. Conditions with no element selector (a bare media
  * query) hold no part state and are refused with the reason.
  */
-function scopedConditionsOver(
+function getScopedConditionsOver(
   parts: readonly string[],
   partClasses: Record<string, string>,
   system: VanitySystemContext,

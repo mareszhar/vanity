@@ -11,11 +11,13 @@ import { describe, expect, it } from 'vitest'
 const project = vanityProject()
 
 const defineOverlay = `
-import { createEngine } from '@test/legacy'
+import { createSystem } from '@mszr/vanity'
 import { propsOf, useAnatomy, usePorts } from '@mszr/vanity/vue'
 
-const de = createEngine()
-const { anatomy, port } = de.createSystem({ tokens: { space: { sm: '8px' } } })
+const ds = createSystem()
+  .addTokens({ space: { sm: '8px' } })
+  .consolidate()
+const { anatomy, port } = ds
 
 const fraction = port(0)
 

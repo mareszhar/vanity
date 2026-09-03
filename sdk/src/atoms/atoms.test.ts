@@ -8,11 +8,12 @@
 import { restoreAtoms } from '@mszr/vanity/runtime'
 import { emit } from '@test'
 import { describe, expect, it, vi } from 'vitest'
-import { createSystem, unsafe, VanityError } from '../test-support/characterization'
+import { unsafe, VanityError } from '../index'
+import { createFixtureSystem } from '../test-support/current'
 
 function miniAtoms() {
   return emit(() => {
-    const { atoms, t } = createSystem({
+    const { atoms, t } = createFixtureSystem({
       tokens: { space: { sm: '8px', md: '16px' }, color: { brand: '#635bff' } },
       conditions: { md: '@media (min-width: 768px)' },
     })
@@ -86,7 +87,7 @@ describe('atoms resolution', () => {
 describe('the labeled escape', () => {
   it('emits at build time, memoized, with the label in the class', () => {
     const { returned, css } = emit(() => {
-      const { atoms: makeAtoms, t } = createSystem({
+      const { atoms: makeAtoms, t } = createFixtureSystem({
         tokens: { space: { sm: '8px' } },
       })
       const atoms = makeAtoms({ properties: { inlineSize: t.space } }, 'atoms')
@@ -122,7 +123,7 @@ describe('the labeled escape', () => {
 describe('definition diagnostics', () => {
   it('an unknown condition dies at definition with the fix', () => {
     expect(() => emit(() => {
-      const { atoms, t } = createSystem({
+      const { atoms, t } = createFixtureSystem({
         tokens: { space: { sm: '8px' } },
         conditions: { md: '@media (min-width: 768px)' },
       })
@@ -133,7 +134,7 @@ describe('definition diagnostics', () => {
 
   it('a toggle colliding with a property dies at definition', () => {
     expect(() => emit(() => {
-      const { atoms, t } = createSystem({ tokens: { space: { sm: '8px' } } })
+      const { atoms, t } = createFixtureSystem({ tokens: { space: { sm: '8px' } } })
 
       return atoms({
         properties: { padding: t.space },

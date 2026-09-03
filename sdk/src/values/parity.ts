@@ -145,7 +145,7 @@ const SYNTAX_3 = Object.freeze({
 
 const CSS_WIDE = Object.freeze(['initial', 'inherit', 'unset', 'revert', 'revert-layer'])
 
-function colorFunction(
+function createColorParityRecord(
   id: `CSS-${string}`,
   api: string,
   cssConcept: string,
@@ -166,12 +166,12 @@ function colorFunction(
     lowering: `${cssConcept} with native CSS channel syntax`,
     fallback: 'fold only when equivalence is proven; otherwise preserve native syntax',
     escape: 'rawValue.color(syntax)',
-    fixtures: [fixture, 'src/values/value-law.test-d.ts', 'src/tokens/tokens.graph.out.test.ts'],
+    fixtures: [fixture, 'src/values/value-law.test-d.ts', 'src/tokens/tokens.module.out.test.ts'],
     coverage: 'typed-subset+raw',
   })
 }
 
-function mathFunction(
+function createMathParityRecord(
   id: `CSS-${string}`,
   api: string,
   cssConcept: string,
@@ -198,14 +198,14 @@ function mathFunction(
 
 /** Standards-parity records keyed by stable CSS IDs: `VANITY_CSS_PARITY_LEDGER['CSS-COLOR-5']`. */
 export const VANITY_CSS_PARITY_LEDGER = Object.freeze({
-  'CSS-V001': colorFunction('CSS-V001', 'ds.oklch()', 'oklch()', 'src/tokens/tokens.graph.out.test.ts'),
-  'CSS-V002': colorFunction('CSS-V002', 'ds.rgb()', 'rgb()', 'src/tokens/tokens.graph.out.test.ts'),
-  'CSS-V003': colorFunction('CSS-V003', 'ds.hsl()', 'hsl()', 'src/tokens/tokens.graph.out.test.ts'),
-  'CSS-V004': colorFunction('CSS-V004', 'ds.hwb()', 'hwb()', 'src/tokens/tokens.graph.out.test.ts'),
-  'CSS-V005': colorFunction('CSS-V005', 'ds.lab()', 'lab()', 'src/tokens/tokens.graph.out.test.ts'),
-  'CSS-V006': colorFunction('CSS-V006', 'ds.lch()', 'lch()', 'src/tokens/tokens.graph.out.test.ts'),
-  'CSS-V007': colorFunction('CSS-V007', 'ds.oklab()', 'oklab()', 'src/tokens/tokens.graph.out.test.ts'),
-  'CSS-V008': colorFunction('CSS-V008', 'ds.color()', 'color()', 'src/tokens/tokens.graph.out.test.ts'),
+  'CSS-V001': createColorParityRecord('CSS-V001', 'ds.oklch()', 'oklch()', 'src/tokens/tokens.module.out.test.ts'),
+  'CSS-V002': createColorParityRecord('CSS-V002', 'ds.rgb()', 'rgb()', 'src/tokens/tokens.module.out.test.ts'),
+  'CSS-V003': createColorParityRecord('CSS-V003', 'ds.hsl()', 'hsl()', 'src/tokens/tokens.module.out.test.ts'),
+  'CSS-V004': createColorParityRecord('CSS-V004', 'ds.hwb()', 'hwb()', 'src/tokens/tokens.module.out.test.ts'),
+  'CSS-V005': createColorParityRecord('CSS-V005', 'ds.lab()', 'lab()', 'src/tokens/tokens.module.out.test.ts'),
+  'CSS-V006': createColorParityRecord('CSS-V006', 'ds.lch()', 'lch()', 'src/tokens/tokens.module.out.test.ts'),
+  'CSS-V007': createColorParityRecord('CSS-V007', 'ds.oklab()', 'oklab()', 'src/tokens/tokens.module.out.test.ts'),
+  'CSS-V008': createColorParityRecord('CSS-V008', 'ds.color()', 'color()', 'src/tokens/tokens.module.out.test.ts'),
   'CSS-V009': record({
     id: 'CSS-V009',
     api: 'ds.colorMix()',
@@ -221,7 +221,7 @@ export const VANITY_CSS_PARITY_LEDGER = Object.freeze({
     lowering: 'native color-mix()',
     fallback: 'preserve native syntax unless a fold is proven',
     escape: 'rawValue.color(syntax)',
-    fixtures: ['src/tokens/tokens.graph.out.test.ts', 'src/values/value-law.test-d.ts'],
+    fixtures: ['src/tokens/tokens.module.out.test.ts', 'src/values/value-law.test-d.ts'],
     coverage: 'typed-subset+raw',
   }),
   'CSS-V010': record({
@@ -242,10 +242,10 @@ export const VANITY_CSS_PARITY_LEDGER = Object.freeze({
     fixtures: ['src/values/value-law.test.ts', 'src/values/value-law.test-d.ts'],
     coverage: 'complete',
   }),
-  'CSS-V011': mathFunction('CSS-V011', 'ds.calc()', 'calc()'),
-  'CSS-V012': mathFunction('CSS-V012', 'ds.min()', 'min()'),
-  'CSS-V013': mathFunction('CSS-V013', 'ds.max()', 'max()'),
-  'CSS-V014': mathFunction('CSS-V014', 'ds.clamp()', 'clamp()'),
+  'CSS-V011': createMathParityRecord('CSS-V011', 'ds.calc()', 'calc()'),
+  'CSS-V012': createMathParityRecord('CSS-V012', 'ds.min()', 'min()'),
+  'CSS-V013': createMathParityRecord('CSS-V013', 'ds.max()', 'max()'),
+  'CSS-V014': createMathParityRecord('CSS-V014', 'ds.clamp()', 'clamp()'),
   'CSS-V015': record({
     id: 'CSS-V015',
     api: 'boxShadow property form',
@@ -321,7 +321,7 @@ export const VANITY_CSS_PARITY_LEDGER = Object.freeze({
     lowering: 'oklch(from … / amount)',
     fallback: 'preserve current behavior until the parity migration is designed',
     escape: 'rawValue.color("alpha(…)")',
-    fixtures: ['src/tokens/tokens.graph.out.test.ts'],
+    fixtures: ['src/tokens/tokens.module.out.test.ts'],
     coverage: 'planned',
     decision: 'Keep Vanity’s established alpha-replacement helper stable; add a separately named CSS alpha() surface only after its at-risk grammar settles.',
   }),

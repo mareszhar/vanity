@@ -25,25 +25,25 @@ export interface VanityManifestDiff {
 /** Categorized semantic diff over the four independent system identities. */
 export function diffManifests(before: VanityManifest, after: VanityManifest): VanityManifestDiff {
   const identities = {
-    compatibility: identityDiff(before, after, 'compatibility'),
-    css: identityDiff(before, after, 'css'),
-    runtime: identityDiff(before, after, 'runtime'),
-    docs: identityDiff(before, after, 'docs'),
+    compatibility: getIdentityDiff(before, after, 'compatibility'),
+    css: getIdentityDiff(before, after, 'css'),
+    runtime: getIdentityDiff(before, after, 'runtime'),
+    docs: getIdentityDiff(before, after, 'docs'),
   }
   const changes: VanityManifestChange[] = []
 
-  compareRecord(changes, ['system', 'layers'], indexById(before.system.layers), indexById(after.system.layers), systemCategories(identities, ['compatibility', 'css']))
-  compareRecord(changes, ['system', 'conditions'], before.system.conditions, after.system.conditions, systemCategories(identities, ['compatibility', 'css']))
-  compareRecord(changes, ['system', 'axes'], before.system.axes, after.system.axes, systemCategories(identities, ['compatibility', 'css', 'runtime']))
-  compareRecord(changes, ['system', 'roots'], before.system.roots, after.system.roots, systemCategories(identities, ['runtime']))
-  compareRecord(changes, ['system', 'tokens'], before.system.tokens, after.system.tokens, systemCategories(identities, ['compatibility', 'css', 'runtime', 'docs']))
-  compareRecord(changes, ['system', 'plugins'], before.system.plugins, after.system.plugins, systemCategories(identities, ['compatibility', 'docs']))
-  compareRecord(changes, ['system', 'extensions'], before.system.extensions, after.system.extensions, systemCategories(identities, ['compatibility', 'docs']))
-  compareRecord(changes, ['system', 'consts'], before.system.consts, after.system.consts, systemCategories(identities, ['runtime', 'docs']))
-  compareRecord(changes, ['system', 'constructors'], before.system.constructors, after.system.constructors, systemCategories(identities, ['compatibility']))
-  compareRecord(changes, ['system', 'utilities'], before.system.utilities, after.system.utilities, systemCategories(identities, ['compatibility', 'docs']))
+  compareRecord(changes, ['system', 'layers'], mapRecordsById(before.system.layers), mapRecordsById(after.system.layers), getChangedSystemCategories(identities, ['compatibility', 'css']))
+  compareRecord(changes, ['system', 'conditions'], before.system.conditions, after.system.conditions, getChangedSystemCategories(identities, ['compatibility', 'css']))
+  compareRecord(changes, ['system', 'axes'], before.system.axes, after.system.axes, getChangedSystemCategories(identities, ['compatibility', 'css', 'runtime']))
+  compareRecord(changes, ['system', 'roots'], before.system.roots, after.system.roots, getChangedSystemCategories(identities, ['runtime']))
+  compareRecord(changes, ['system', 'tokens'], before.system.tokens, after.system.tokens, getChangedSystemCategories(identities, ['compatibility', 'css', 'runtime', 'docs']))
+  compareRecord(changes, ['system', 'plugins'], before.system.plugins, after.system.plugins, getChangedSystemCategories(identities, ['compatibility', 'docs']))
+  compareRecord(changes, ['system', 'extensions'], before.system.extensions, after.system.extensions, getChangedSystemCategories(identities, ['compatibility', 'docs']))
+  compareRecord(changes, ['system', 'consts'], before.system.consts, after.system.consts, getChangedSystemCategories(identities, ['runtime', 'docs']))
+  compareRecord(changes, ['system', 'constructors'], before.system.constructors, after.system.constructors, getChangedSystemCategories(identities, ['compatibility']))
+  compareRecord(changes, ['system', 'utilities'], before.system.utilities, after.system.utilities, getChangedSystemCategories(identities, ['compatibility', 'docs']))
   compareRecord(changes, ['system', 'audits'], before.system.audits, after.system.audits, ['docs'])
-  compareList(changes, ['system', 'overwrites'], before.system.overwrites, after.system.overwrites, systemCategories(identities, ['compatibility', 'docs']))
+  compareList(changes, ['system', 'overwrites'], before.system.overwrites, after.system.overwrites, getChangedSystemCategories(identities, ['compatibility', 'docs']))
 
   const moduleIds = new Set([...Object.keys(before.modules), ...Object.keys(after.modules)])
   for (const moduleId of [...moduleIds].sort()) {
@@ -86,7 +86,7 @@ export function formatManifestDiff(diff: VanityManifestDiff): string {
   ].join('\n')
 }
 
-function identityDiff(
+function getIdentityDiff(
   before: VanityManifest,
   after: VanityManifest,
   category: VanityChangeCategory,
@@ -96,14 +96,14 @@ function identityDiff(
   return Object.freeze({ changed: left !== right, before: left, after: right })
 }
 
-function systemCategories(
+function getChangedSystemCategories(
   identities: VanityManifestDiff['identities'],
   candidates: readonly VanityChangeCategory[],
 ): VanityChangeCategory[] {
   return candidates.filter(category => identities[category].changed)
 }
 
-function indexById(values: readonly { id: string }[]): Record<string, unknown> {
+function mapRecordsById(values: readonly { id: string }[]): Record<string, unknown> {
   return Object.fromEntries(values.map(value => [value.id, value]))
 }
 
@@ -133,7 +133,7 @@ function compareRecord(
   for (const key of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
     const left = before[key]
     const right = after[key]
-    if (stable(left) === stable(right))
+    if (serializeStable(left) === serializeStable(right))
       continue
     const operation: VanityChangeOperation = left === undefined ? 'added' : right === undefined ? 'removed' : 'changed'
     for (const category of categories) {
@@ -148,6 +148,6 @@ function compareRecord(
   }
 }
 
-function stable(value: unknown): string {
+function serializeStable(value: unknown): string {
   return JSON.stringify(value)
 }

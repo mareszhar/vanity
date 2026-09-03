@@ -1,12 +1,12 @@
-/** Typed CSS-property aliases implemented as an ordinary engine plugin. */
+/** Typed CSS-property aliases implemented as an ordinary system plugin. */
 
 import type { VanityCssPropertyName } from '../css/types'
 import type {
   VanityPluginSetupSystem,
   VanitySystemPlugin,
-} from '../system/openSystem'
+} from '../system/open'
 import { all as knownCssProperties } from 'known-css-properties'
-import { definePlugin } from '../system/openSystem'
+import { definePlugin } from '../system/open'
 
 const KNOWN_CSS_PROPERTIES = new Set(knownCssProperties)
 
@@ -92,7 +92,7 @@ export function propertyAliases<
 
   const normalized = Object.freeze({ ...aliases }) as Aliases
   const config = Object.freeze({ aliases: normalized, expose })
-  const fingerprint = stableFingerprint(config)
+  const fingerprint = getStableFingerprint(config)
 
   return definePlugin({
     id: 'org.vanity.plugin.property-aliases',
@@ -113,7 +113,7 @@ type VanityAliasDefinitionGuard<Aliases extends Readonly<Record<string, VanityCs
   readonly [Alias in keyof Aliases]: Alias extends VanityCssPropertyName ? never : Aliases[Alias]
 }
 
-function stableFingerprint(config: VanityPropertyAliasConfig): string {
+function getStableFingerprint(config: VanityPropertyAliasConfig): string {
   return JSON.stringify({
     expose: config.expose,
     aliases: Object.fromEntries(Object.entries(config.aliases).sort(([a], [b]) => a.localeCompare(b))),

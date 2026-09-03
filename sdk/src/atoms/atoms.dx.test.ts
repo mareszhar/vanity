@@ -11,13 +11,12 @@ import { describe, expect, it } from 'vitest'
 const project = vanityProject()
 
 const defineFixture = `
-import { createEngine } from '@test/legacy'
+import { createSystem } from '@mszr/vanity'
 
-const de = createEngine()
-const { atoms: makeAtoms, t } = de.createSystem({
-  tokens: { space: { sm: '8px', md: '16px' }, color: { brand: '#635bff' } },
-  conditions: { md: '@media (min-width: 768px)' },
-})
+const open = createSystem()
+  .addConditions({ md: '@media (min-width: 768px)' })
+  .addTokens({ space: { sm: '8px', md: '16px' }, color: { brand: '#635bff' } })
+const { atoms: makeAtoms, t } = open.consolidate()
 
 const atoms = makeAtoms({
   properties: { display: ['none', 'flex'], gap: t.space, padding: t.space },

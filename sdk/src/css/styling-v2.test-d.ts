@@ -18,12 +18,10 @@ describe('target styling types', () => {
     ds.tdec({ color: { missing: 'red' } })
     // @ts-expect-error — layer names retain the consolidated order
     ds.class.layer('missing')({ color: 'red' })
-    // @ts-expect-error — pre-release target has no legacy class-emitter alias
+    // @ts-expect-error — the locked surface has no legacy class-emitter alias
     void ds.css
     // @ts-expect-error — selector maps use the output-named rules emitter
     void ds.globalCss
-    // @ts-expect-error — token subtree declarations use tdec
-    void ds.tokenOverride
     void ds.atoms
 
     const built = fromEntries([['sm', 4], ['md', 8]] as const)

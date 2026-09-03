@@ -135,7 +135,7 @@ describe('published ports', () => {
       const paddingX = system.port('16px', { label: 'paddingX' })
       const button = system.recipe({ ports: { paddingX }, base: { paddingInline: paddingX } }, 'button')
 
-      return system.css({ display: 'flex', ...button.ports.paddingX.dec(system.t.space.lg) }, 'toolbar')
+      return system.class({ display: 'flex', ...button.ports.paddingX.dec(system.t.space.lg) }, 'toolbar')
     })
 
     expect(typeof returned).toBe('string')

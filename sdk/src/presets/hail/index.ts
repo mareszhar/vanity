@@ -22,22 +22,22 @@ import {
   colorSchemes,
   definePlugin,
 } from '@mszr/vanity'
-import { hailColorConstructors } from './color'
+import { createHailColorConstructors } from './color'
 import { normalizeHailOptions } from './config'
-import { hailControl, hailRange } from './controls'
+import { createHailControl, createHailRange } from './controls'
 import {
   hailMotionRules,
   hailResetRules,
   hailThemingRules,
 } from './rules'
 import {
-  hailBreakpointTokens,
-  hailIconTokens,
-  hailPaletteTokens,
-  hailRoleTokens,
-  hailSizeTokens,
+  createHailBreakpointTokens,
+  createHailIconTokens,
+  createHailPaletteTokens,
+  createHailRoleTokens,
+  createHailSizeTokens,
 } from './tokens'
-import { hailUtils } from './utils'
+import { createHailUtils } from './utils'
 
 interface ResolvedHailControls {
   readonly hail: {
@@ -146,7 +146,7 @@ export function hail<const Options extends HailOptions = Record<never, never>>(
   const plugin = definePlugin<'org.vanity.hail', HailOptions, object>({
     id: 'org.vanity.hail',
     version: 1,
-    optionsIdentity: identityOptions,
+    optionsIdentity: getIdentityOptions,
     setup: (initial, rawOptions) => setupHail(initial, rawOptions),
   })
   return plugin(configured) as unknown as HailPlugin<Options>
@@ -174,18 +174,18 @@ function setupHail(initial: VanityPluginSetupSystem, rawOptions: HailOptions): o
 }
 
 function setupFlatHail(initial: VanityPluginSetupSystem, options: HailNormalizedOptions): object {
-  const withControls = initial.addTokens(controlTokenSeed(initial, options))
-  return installVocabularyAndPresets(asWorkingSystem(withControls), options)
+  const withControls = initial.addTokens(createControlTokenSeed(initial, options))
+  return installVocabularyAndPresets(toWorkingSystem(withControls), options)
 }
 
 function setupElevatedHail(initial: VanityPluginSetupSystem, options: HailNormalizedOptions): object {
-  const withScheme = asWorkingSystem(Object.hasOwn(initial.axes, 'scheme')
+  const withScheme = toWorkingSystem(Object.hasOwn(initial.axes, 'scheme')
     ? initial.expectAxis('scheme', ['light', 'dark'])
     : initial.addAxis('scheme', colorSchemes({ locality: 'root' })))
   const schemeTdef = withScheme.tdef as unknown as VanityTokenFactory<{
     readonly scheme: ReturnType<typeof colorSchemes>
   }>
-  const controls = controlTokenSeed(withScheme, options)
+  const controls = createControlTokenSeed(withScheme, options)
   const withControls = withScheme.addTokens({
     ...controls,
     hail: {
@@ -197,20 +197,20 @@ function setupElevatedHail(initial: VanityPluginSetupSystem, options: HailNormal
       }),
     },
   })
-  return installVocabularyAndPresets(asWorkingSystem(withControls), options)
+  return installVocabularyAndPresets(toWorkingSystem(withControls), options)
 }
 
-function controlTokenSeed(ds: VanityOpenSystemBase, options: HailNormalizedOptions) {
+function createControlTokenSeed(ds: VanityOpenSystemBase, options: HailNormalizedOptions) {
   const range = (name: HailRangeName) => {
-    const [min, max] = hailRange(ds, name, options)
+    const [min, max] = createHailRange(ds, name, options)
     return { min, max }
   }
   return {
     hail: {
       control: {
-        base: hailControl(ds, 'base', options.base, options),
-        remTarget: hailControl(ds, 'remTarget', options.remTarget, options),
-        contrastPivotL: hailControl(ds, 'contrastPivotL', options.contrastPivotL, options),
+        base: createHailControl(ds, 'base', options.base, options),
+        remTarget: createHailControl(ds, 'remTarget', options.remTarget, options),
+        contrastPivotL: createHailControl(ds, 'contrastPivotL', options.contrastPivotL, options),
         ranges: {
           l: range('l'),
           c: range('c'),
@@ -249,36 +249,36 @@ function installVocabularyAndPresets(
     mostElevatedL: resolved.hail.mostElevatedL,
   }
 
-  const withConstructors = system.addConstructors(hailColorConstructors(system, options, controls))
-  const withUtils = withConstructors.addUtils(hailUtils(withConstructors, options, controls))
-  let current = asWorkingSystem(withUtils)
+  const withConstructors = system.addConstructors(createHailColorConstructors(system, options, controls))
+  const withUtils = withConstructors.addUtils(createHailUtils(withConstructors, options, controls))
+  let current = toWorkingSystem(withUtils)
 
   if (options.presets.has('palette'))
-    current = asWorkingSystem(current.addTokens(hailPaletteTokens(current as Parameters<typeof hailPaletteTokens>[0])))
+    current = toWorkingSystem(current.addTokens(createHailPaletteTokens(current as Parameters<typeof createHailPaletteTokens>[0])))
   if (options.presets.has('roles'))
-    current = asWorkingSystem(current.addTokens(hailRoleTokens(current as Parameters<typeof hailRoleTokens>[0], options.elevation)))
+    current = toWorkingSystem(current.addTokens(createHailRoleTokens(current as Parameters<typeof createHailRoleTokens>[0], options.elevation)))
   if (options.presets.has('sizes'))
-    current = asWorkingSystem(current.addTokens(hailSizeTokens(current as Parameters<typeof hailSizeTokens>[0])))
+    current = toWorkingSystem(current.addTokens(createHailSizeTokens(current as Parameters<typeof createHailSizeTokens>[0])))
   if (options.presets.has('breakpoints'))
-    current = asWorkingSystem(current.addTokens(hailBreakpointTokens(current as Parameters<typeof hailBreakpointTokens>[0])))
+    current = toWorkingSystem(current.addTokens(createHailBreakpointTokens(current as Parameters<typeof createHailBreakpointTokens>[0])))
   if (options.presets.has('icons'))
-    current = asWorkingSystem(current.addTokens(hailIconTokens(current as Parameters<typeof hailIconTokens>[0])))
+    current = toWorkingSystem(current.addTokens(createHailIconTokens(current as Parameters<typeof createHailIconTokens>[0])))
 
   if (options.presets.has('reset'))
-    current = asWorkingSystem(current.addRules(hailResetRules))
+    current = toWorkingSystem(current.addRules(hailResetRules))
   if (options.presets.has('motion'))
-    current = asWorkingSystem(current.addRules(hailMotionRules))
+    current = toWorkingSystem(current.addRules(hailMotionRules))
   if (options.presets.has('theming'))
-    current = asWorkingSystem(current.addRules(hailThemingRules))
+    current = toWorkingSystem(current.addRules(hailThemingRules))
 
   return current
 }
 
-function asWorkingSystem(system: object): HailWorkingSystem {
+function toWorkingSystem(system: object): HailWorkingSystem {
   return system as unknown as HailWorkingSystem
 }
 
-function identityOptions(options: HailOptions): object {
+function getIdentityOptions(options: HailOptions): object {
   return {
     color: options.color ?? {},
     size: options.size ?? {},

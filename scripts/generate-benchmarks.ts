@@ -58,7 +58,7 @@ function tokenModuleSource(moduleIndex: number, start: number, count: number): s
     return `    ${renameMarker}${tokenName(index)}: ${val},`
   }).join('\n')
 
-  return `${header}import { open } from '../engine'
+  return `${header}import { open } from '../design-system'
 
 export const ${moduleName(moduleIndex)} = open.defineTokens({
   ${groupName(moduleIndex)}: {
@@ -74,7 +74,7 @@ function systemSource(scale: BenchmarkScale): string {
   const composition = Array.from({ length: scale.modules }, (_, index) =>
     `  .add(${moduleName(index)})`).join('\n')
 
-  return `${header}import { open } from './engine'
+  return `${header}import { open } from './design-system'
 ${imports}
 
 const tokens = open.defineTokens()
@@ -184,7 +184,7 @@ function filesForScale(scale: BenchmarkScale): Map<string, string> {
     scale.axes >= 3 ? '  contrast: { modes: { normal: \'&\', high: data(\'contrast\', \'high\') }, default: \'normal\' },' : undefined,
     scale.axes >= 4 ? '  motion: { modes: { full: \'&\', reduced: data(\'motion\', \'reduced\') }, default: \'full\' },' : undefined,
   ].filter(Boolean).join('\n')
-  files.set('src/engine.ts', `${header}import { colorSchemes, createSystem, data } from '@mszr/vanity'
+  files.set('src/design-system.ts', `${header}import { colorSchemes, createSystem, data } from '@mszr/vanity'
 
 export const open = createSystem().addAxes({
   scheme: colorSchemes({ locality: 'root' }),

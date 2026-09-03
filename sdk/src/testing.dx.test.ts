@@ -29,9 +29,9 @@ const autoImportProject = defineVanityProject({
       import { createSystem } from '@mszr/vanity'
       export const ds = createSystem().addTokens({ space: { md: '16px' } }).consolidate()
       export const t = ds.t
-      export const css = ds.class
+      export const style = ds.class
     `,
-    'vanity-style-auto-imports.d.ts': styleAutoImportDeclarations([{ from: './authoring.ts', imports: ['ds', 't', 'css'] }]),
+    'vanity-style-auto-imports.d.ts': styleAutoImportDeclarations([{ from: './authoring.ts', imports: ['ds', 't', 'style'] }]),
   },
 })
 
@@ -167,7 +167,7 @@ const CORE_CANONICAL_TYPES = [
   'VanityRuleInput',
   'VanityRuntimeControllerFactory',
   'VanityStyleValue',
-  'VanitySystemMapV1',
+  'VanitySystemMapV2',
   'VanitySystemPlugin',
   'VanityTokenHandle',
   'VanityTokenInput',
@@ -339,7 +339,7 @@ describe('public editor contract', () => {
 
   it('preserves exact generated auto-import types with no any wall', () => {
     const result = autoImportProject.query`
-      void css({ padding: t.space.md })
+      void style({ padding: t.space.md })
       void ds.${cursor}class({})
     `
 

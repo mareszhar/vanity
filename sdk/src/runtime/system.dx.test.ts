@@ -7,17 +7,16 @@ const project = vanityProject()
 describe('runtime editor DX', () => {
   it('discovers the system runtime surface and mutable handle actions', () => {
     const result = project.query`
-      import { createEngine } from '@test/legacy'
-      const de = createEngine().axes(({ axis, data, defaultMode, scheme }) => ({
-        scheme: scheme({ locality: 'root' }),
-        density: axis({ modes: { cozy: defaultMode(), compact: data('density', 'compact') } }),
-      }))
-      const ds = de.createSystem({ tokens: {
+      import { colorSchemes, createSystem, data, oklch } from '@mszr/vanity'
+      const open = createSystem()
+        .addAxis('scheme', colorSchemes({ locality: 'root' }))
+        .addAxis('density', { modes: { cozy: '&', compact: data('density', 'compact') } })
+      const ds = open.addTokens({
         color: {
-          brand: de.token.color({ mutable: true, axes: { scheme: { dark: null } } }),
-          fixed: de.oklch(0.5, 0.1, 200),
+          brand: open.tdef.color({ mutable: true, axes: { scheme: { dark: null } } }),
+          fixed: oklch(0.5, 0.1, 200),
         },
-      } })
+      }).consolidate()
       void ds.${cursor('system')}
       const runtime = ds.runtime()
       void runtime.t.color.brand.${cursor('mutable')}
@@ -40,15 +39,15 @@ describe('runtime editor DX', () => {
 
   it('keeps wrong modes and no-target setters local', () => {
     const { errors } = project.check`
-      import { createEngine } from '@test/legacy'
-      const de = createEngine().axes(({ axis, data }) => ({
-        density: axis({ modes: { compact: data('density', 'compact') } }),
-      }))
-      const ds = de.createSystem({ tokens: { space: de.token.length({ mutable: true }) } })
+      import { createSystem, data, oklch } from '@mszr/vanity'
+      const open = createSystem().addAxis('density', {
+        modes: { compact: data('density', 'compact') },
+      })
+      const ds = open.addTokens({ space: open.tdef.length({ mutable: true }) }).consolidate()
       ds.t.space.$set('1rem')
       const runtime = ds.runtime()
       runtime.axes.density.$switchTo('dense')
-      runtime.t.space.$set(de.oklch(0.5, 0.1, 200))
+      runtime.t.space.$set(oklch(0.5, 0.1, 200))
     `
 
     expect(errors).toHaveErrorCount(3)

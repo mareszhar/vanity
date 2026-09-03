@@ -2,7 +2,7 @@ import type {
   VanityRuntimeSnapshotV1,
   VanityRuntimeStyleDeclaration,
   VanityRuntimeTarget,
-} from '../test-support/characterization'
+} from '../index'
 import {
   colorSchemes,
   createSystem,
@@ -16,12 +16,10 @@ import {
 import { setCustomProperties, setCustomProperty } from '@mszr/vanity/runtime'
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { collectInspection } from '../internal/inspect'
+import { customProperty } from '../index'
 import { buildManifest } from '../introspect/manifest'
-import {
-  createEngine,
-  customProperty,
-} from '../test-support/characterization'
+import { collectInspection } from '../introspect/records'
+import { substrate } from '../substrate'
 
 class MemoryStyle implements VanityRuntimeStyleDeclaration {
   readonly values = new Map<string, string>()
@@ -102,71 +100,74 @@ function createFixture(extra = false) {
         : { issues: [{ message: 'expected a positive number' }] },
     },
   }
-  const de = createEngine().axes(({ axis, data, defaultMode, scheme }) => ({
-    scheme: scheme({ locality: 'root' }),
-    density: axis({
+  const open = createSystem()
+    .addAxis('scheme', colorSchemes({ locality: 'root' }))
+    .addAxis('density', {
       modes: {
-        cozy: defaultMode(),
+        cozy: '&',
         compact: data('density', 'compact'),
       },
       default: 'cozy',
-    }),
-  }))
-  const { returned: ds, css } = emit(() => de.createSystem({
-    prefix: 'app',
-    root: '#app',
-    tokens: {
-      color: {
-        brand: de.token.color({
-          val: de.oklch(0.62, 0.18, 285),
-          mutable: true,
-          axes: { scheme: { dark: null } },
-        }),
-        fixed: de.oklch(0.4, 0.1, 120),
-      },
-      space: {
-        control: de.token.length({ mutable: true, register: { initialVal: de.length.px(16) } }),
-      },
-      shadow: {
-        card: de.token({
-          val: '0 1px 2px #0002',
-          mutable: true,
-          axes: { density: { compact: '0 2px 4px #0003' } },
-          cases: [{ when: { scheme: 'dark', density: 'compact' }, val: null }],
-        }),
-      },
-      ratio: de.token.number({
+    })
+  const staged = open.addTokens({
+    color: {
+      brand: open.tdef.color({
+        val: open.oklch(0.62, 0.18, 285),
         mutable: true,
-        validate: {
-          id: 'positive-ratio',
-          schema: positive,
-          runtime: 'always',
-          onInvalid: 'throw',
-        },
+        axes: { scheme: { dark: null } },
       }),
-      fallbackRatio: de.token.number({
-        mutable: true,
-        validate: {
-          id: 'positive-ratio',
-          schema: positive,
-          runtime: 'always',
-          onInvalid: 'fallback',
-          fallback: 1,
-        },
-      }),
-      optionalRatio: de.token.number({
-        mutable: true,
-        validate: {
-          id: 'positive-ratio',
-          schema: positive,
-          runtime: 'always',
-          onInvalid: 'omit',
-        },
-      }),
-      ...(extra ? { added: de.token.length({ mutable: true }) } : {}),
+      fixed: open.oklch(0.4, 0.1, 120),
     },
+    space: {
+      control: open.tdef.length({ mutable: true, register: { initialVal: open.length.px(16) } }),
+    },
+    shadow: {
+      card: open.tdef({
+        val: '0 1px 2px #0002',
+        mutable: true,
+        axes: { density: { compact: '0 2px 4px #0003' } },
+        cases: [{ when: { scheme: 'dark', density: 'compact' }, val: null }],
+      }),
+    },
+    ratio: open.tdef.number({
+      mutable: true,
+      validate: {
+        id: 'positive-ratio',
+        schema: positive,
+        runtime: 'always',
+        onInvalid: 'throw',
+      },
+    }),
+    fallbackRatio: open.tdef.number({
+      mutable: true,
+      validate: {
+        id: 'positive-ratio',
+        schema: positive,
+        runtime: 'always',
+        onInvalid: 'fallback',
+        fallback: 1,
+      },
+    }),
+    optionalRatio: open.tdef.number({
+      mutable: true,
+      validate: {
+        id: 'positive-ratio',
+        schema: positive,
+        runtime: 'always',
+        onInvalid: 'omit',
+      },
+    }),
+    ...(extra ? { added: open.tdef.length({ mutable: true }) } : {}),
+  })
+  const { returned: ds, css } = emit(() => substrate.modules.runInFileScope({
+    filePath: 'src/runtime/system.fixture.ts',
+    packageName: '@vanity/fixture',
+  }, () => {
+    const system = staged.consolidate({ prefix: 'app', root: '#app' })
+    void system.class
+    return system
   }))
-  return { de, ds, css, positive }
+  return { ds, css, positive }
 }
 
 describe('mutable runtime', () => {

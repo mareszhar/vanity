@@ -4,24 +4,22 @@
  * at the type level.
  */
 
-import type { VanityColorTokenHandle, VanityPort, VanityPortDecValue, VanityPortKind, VanityPortMeta, VanityVarReference } from '@test/legacy'
-import { createEngine } from '@test/legacy'
+import type { VanityColorTokenHandle, VanityPort, VanityPortDecValue, VanityPortKind, VanityPortMeta, VanityVarReference } from '@mszr/vanity'
+import { angle, createSystem, oklch } from '@mszr/vanity'
 import { describe, expectTypeOf, it } from 'vitest'
 
-const de = createEngine()
+const open = createSystem()
 
 // Never evaluated — the typecheck evidence dimension only reads types.
 function system() {
-  return de.createSystem({
-    tokens: {
-      color: {
-        brand: de.token({ val: de.oklch(0.58, 0.2, 285), mutable: true }),
-        ink: de.oklch(0.2, 0, 0),
-      },
-      opacity: { disabled: 0.5 },
-      space: { sm: '8px', md: '16px' },
+  return open.addTokens(ds => ({
+    color: {
+      brand: ds.tdef({ val: oklch(0.58, 0.2, 285), mutable: true }),
+      ink: oklch(0.2, 0, 0),
     },
-  })
+    opacity: { disabled: 0.5 },
+    space: { sm: '8px', md: '16px' },
+  })).consolidate()
 }
 
 describe('port type inference', () => {
@@ -137,7 +135,7 @@ describe('token and expression defaults', () => {
 
   it('a color expression default is a color port', () => {
     const { port } = system()
-    const tint = port(de.oklch(0.5, 0.1, 200))
+    const tint = port(oklch(0.5, 0.1, 200))
 
     tint.dec('rebeccapurple')
     // @ts-expect-error — a color port takes a string or a reference, not a number
@@ -162,10 +160,10 @@ describe('token and expression defaults', () => {
 describe('options', () => {
   it('units come from branded values and `as` is retired', () => {
     const { port } = system()
-    const rotation = port(de.angle.deg(0))
+    const rotation = port(angle.deg(0))
 
     expectTypeOf(rotation.type).toEqualTypeOf<'angle'>()
-    rotation.dec(de.angle.deg(45))
+    rotation.dec(angle.deg(45))
     rotation.dec('0.5turn')
     // @ts-expect-error — a raw number has no angle unit
     rotation.dec(45)

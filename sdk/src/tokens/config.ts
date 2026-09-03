@@ -67,15 +67,15 @@ function configuredToken<const Config extends VanityTokenConfig, Type extends Va
   const lowered = lowerAxisDerivations(config, axes)
   return Object.freeze({
     [VANITY_CONFIGURED_TOKEN]: true as const,
-    config: deepFreeze(lowered) as Config,
+    config: freezeDeep(lowered) as Config,
     type,
   })
 }
 
 /**
- * Axis derivations are authoring sugar, not deferred engine semantics. Lower
- * them while the originating engine is present so unfinished modules carry
- * self-contained public value IR across HMR and compatible engine instances.
+ * Axis derivations are authoring sugar, not deferred system semantics. Lower
+ * them while the originating system is present so unfinished modules carry
+ * self-contained public value IR across HMR and compatible system instances.
  */
 function lowerAxisDerivations<Config extends VanityTokenConfig>(
   config: Config,
@@ -144,7 +144,7 @@ function validateTokenConfig(config: VanityTokenConfig, axes?: VanityAxisRegistr
   for (const [axis, modes] of Object.entries(config.axes ?? {})) {
     const definition = axes?.definitions[axis]
     if (!definition)
-      throw new TypeError(`[vanity] token axis '${axis}' is not declared by this engine`)
+      throw new TypeError(`[vanity] token axis '${axis}' is not declared by this system`)
     if (!isPlainObject(modes))
       throw new TypeError(`[vanity] token axis '${axis}' must be an object keyed by mode`)
     for (const mode of Object.keys(modes)) {
@@ -163,7 +163,7 @@ function validateTokenConfig(config: VanityTokenConfig, axes?: VanityAxisRegistr
     for (const [axis, mode] of Object.entries(entry.when)) {
       const definition = axes?.definitions[axis]
       if (!definition)
-        throw new TypeError(`[vanity] token case axis '${axis}' is not declared by this engine`)
+        throw new TypeError(`[vanity] token case axis '${axis}' is not declared by this system`)
       if (typeof mode !== 'string' || !(mode in definition.modes))
         throw new TypeError(`[vanity] token case axis '${axis}' has no mode '${String(mode)}'`)
     }
@@ -195,7 +195,7 @@ function validateRuntimePolicy(validate: VanityTokenConfig['validate']): void {
 function inferConfiguredType(config: VanityTokenConfig): VanityCssDataType {
   const val = Object.hasOwn(config, 'val')
     ? config.val
-    : firstConfiguredValue(config)
+    : getFirstConfiguredValue(config)
   if ((typeof val === 'object' || typeof val === 'function') && val !== null && 'type' in val && typeof val.type === 'string')
     return val.type as VanityCssDataType
   if (typeof val === 'number')
@@ -213,7 +213,7 @@ function inferConfiguredType(config: VanityTokenConfig): VanityCssDataType {
   return 'unknown'
 }
 
-function firstConfiguredValue(config: VanityTokenConfig): unknown {
+function getFirstConfiguredValue(config: VanityTokenConfig): unknown {
   for (const modes of Object.values(config.axes ?? {})) {
     for (const value of Object.values(modes)) {
       if (value !== null)
@@ -234,16 +234,16 @@ function isPlainObject(value: unknown): value is Record<string, any> {
   return prototype === Object.prototype || prototype === null
 }
 
-function deepFreeze<T>(value: T): T {
+function freezeDeep<T>(value: T): T {
   if (Array.isArray(value) && !Object.isFrozen(value)) {
     Object.freeze(value)
     for (const child of value)
-      deepFreeze(child)
+      freezeDeep(child)
   }
   else if (isPlainObject(value) && !Object.isFrozen(value)) {
     Object.freeze(value)
     for (const child of Object.values(value))
-      deepFreeze(child)
+      freezeDeep(child)
   }
   return value
 }

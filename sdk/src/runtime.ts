@@ -5,28 +5,18 @@
  */
 
 import type { VanityAtoms, VanityAtomsRuntime } from './atoms/types'
-import type { VanityInternalTokenHandle } from './internal/handle'
 import type { VanityPort, VanityPortBindingOptions, VanityPortMeta } from './ports/types'
 import type { VanityAnatomy, VanityAnatomyRuntime, VanityRecipe, VanityRecipeRuntime } from './recipes/types'
+import type { VanityInternalTokenHandle } from './tokens/handle'
 import { createAtomsHandle } from './atoms/handle'
-import { createHandle } from './internal/handle'
 import { createPortHandle } from './ports/handle'
 import { ports } from './ports/ports'
 import { createAnatomyHandle, createRecipeHandle } from './recipes/handle'
+import { createHandle } from './tokens/handle'
 
 export type { VanityAtomsRuntime } from './atoms/types'
 export type { VanityPort, VanityPortBindingOptions, VanityPortMeta, VanityPortStyle, VanityPortValue } from './ports/types'
 export type { VanityAnatomyRuntime, VanityRecipeRuntime } from './recipes/types'
-export type { VanityAxisControl, VanityAxisControlRoot } from './system/axes'
-export {
-  restoreRuntimeControllerFactory,
-  restoreRuntimeProps,
-  restoreRuntimeReconciler,
-  restoreRuntimeStyle,
-  restoreSnapshotFrom,
-  setCustomProperties,
-  setCustomProperty,
-} from './system/live'
 export type {
   VanityCustomPropertyEntries,
   VanityCustomPropertyReference,
@@ -51,7 +41,17 @@ export type {
   VanityRuntimeTarget,
   VanityRuntimeTokens,
   VanitySnapshotFrom,
-} from './system/live'
+} from './runtime/contract'
+export {
+  restoreRuntimeControllerFactory,
+  restoreRuntimeProps,
+  restoreRuntimeReconciler,
+  restoreRuntimeStyle,
+  restoreSnapshotFrom,
+  setCustomProperties,
+  setCustomProperty,
+} from './runtime/controller'
+export type { VanityAxisControl, VanityAxisControlRoot } from './system/axes'
 
 /** Merge port/style fragments, skipping falsy entries. Re-exported from core. */
 export { ports }
@@ -105,7 +105,7 @@ export function restoreAtoms(runtime: VanityAtomsRuntime): VanityAtoms<Record<st
 /**
  * Restores a build-only style-authoring function as a throwing stub, so importing a
  * system style module from app code stays legal (`t`, override classes) while
- * calling `css`/`recipe`/`port` there receives a module-role misuse
+ * calling `class`/`rules`/`raw`/`recipe`/`port` there receives a module-role misuse
  * diagnostic instead of silently doing nothing. Generated import target — not
  * for hand-written code.
  */

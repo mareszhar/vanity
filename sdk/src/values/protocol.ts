@@ -12,7 +12,7 @@ import type {
   VanitySelfValue,
   VanityValue,
 } from './types'
-import { cssText, CssValue, isVanityValue } from './types'
+import { CssValue, isVanityValue, serializeCssText } from './types'
 
 const CONSTRUCTOR_USAGES = new WeakMap<object, ReadonlySet<string>>()
 
@@ -32,7 +32,7 @@ export function markConstructorUsage<Value>(value: Value, name: string): Value {
 }
 
 /** @internal */
-export function constructorUsagesOfValue(value: unknown): ReadonlySet<string> {
+export function getConstructorUsagesOfValue(value: unknown): ReadonlySet<string> {
   return (typeof value === 'object' || typeof value === 'function') && value !== null
     ? CONSTRUCTOR_USAGES.get(value) ?? new Set()
     : new Set()
@@ -197,7 +197,7 @@ type VanityNodeValue<Type extends VanityCssDataType = VanityCssDataType> = Vanit
 /** The published, CI-locked zero-config target for this release. */
 export const VANITY_DEFAULT_CSS_SUPPORT: VanityCssSupportTarget = Object.freeze({
   id: 'vanity-2026-07',
-  features: immutableSet<VanityCssFeature>([
+  features: createImmutableSet<VanityCssFeature>([
     'calc-basic',
     'calc-typed-arithmetic',
     'color-level-4',
@@ -222,10 +222,10 @@ export function defineCssSupportTarget(input: {
   if (input.id.trim().length === 0)
     throw new TypeError('[vanity] a CSS support target needs a stable non-empty id')
 
-  return Object.freeze({ id: input.id, features: immutableSet(input.features) })
+  return Object.freeze({ id: input.id, features: createImmutableSet(input.features) })
 }
 
-/** Standalone serializer for tooling that does not need a complete engine. */
+/** Standalone serializer for tooling that does not need a complete system. */
 export function createCssValueSerializer(support: VanityCssSupportTarget): {
   readonly support: VanityCssSupportTarget
   serialize: <Type extends VanityCssDataType>(value: VanitySelfValue<Type>) => string
@@ -239,7 +239,7 @@ export function createCssValueSerializer(support: VanityCssSupportTarget): {
   })
 }
 
-export function nodeOf<Type extends VanityCssDataType>(value: VanityValue<Type>): VanityExpressionNode<Type> {
+export function getNode<Type extends VanityCssDataType>(value: VanityValue<Type>): VanityExpressionNode<Type> {
   const node = (value as Partial<VanityNodeValue<Type>>)[VANITY_NODE]
 
   if (!node)
@@ -267,7 +267,7 @@ export function serializeNode(node: VanityExpressionNode, context: VanitySeriali
 
   switch (node.kind) {
     case 'literal':
-      return typeof node.value === 'number' ? finiteNumber(node.value) : node.value
+      return typeof node.value === 'number' ? formatFiniteNumber(node.value) : node.value
     case 'function':
       return `${node.name}(${node.values.map(value => serializeNode(value, context)).join(node.separator)})`
     case 'operation': {
@@ -366,7 +366,7 @@ export function collectNodeRequirements(node: VanityExpressionNode): readonly Va
 
 export function createSerializeContext(
   support: VanityCssSupportTarget = VANITY_DEFAULT_CSS_SUPPORT,
-  resolveReference: VanitySerializeContext['resolveReference'] = selfReference,
+  resolveReference: VanitySerializeContext['resolveReference'] = getSelfReference,
   resolveReferenceValue?: VanitySerializeContext['resolveReferenceValue'],
   policies: Readonly<Record<string, unknown>> = {},
 ): VanitySerializeContext {
@@ -377,9 +377,9 @@ export function createSerializeContext(
     ...(resolveReferenceValue === undefined ? {} : { resolveReferenceValue }),
     serialize(value) {
       if (typeof value === 'number')
-        return finiteNumber(value)
+        return formatFiniteNumber(value)
       if (typeof value === 'string')
-        return nonEmpty(value)
+        return assertNonEmpty(value)
       if (!isNodeValue(value)) {
         if ((typeof value === 'object' || typeof value === 'function') && value !== null && 'var' in value)
           return value.var
@@ -413,28 +413,28 @@ export class ExpressionValue<Type extends VanityCssDataType = VanityCssDataType>
   }
 }
 
-export function literalNode<Type extends VanityCssDataType>(
+export function createLiteralNode<Type extends VanityCssDataType>(
   type: Type,
   value: string | number,
   source?: VanitySource,
 ): VanityLiteralNode<Type> {
   if (typeof value === 'number')
-    finiteNumber(value)
+    formatFiniteNumber(value)
   else
-    nonEmpty(value)
+    assertNonEmpty(value)
 
-  return base({ kind: 'literal', type, value, source })
+  return createBaseNode({ kind: 'literal', type, value, source })
 }
 
-export function rawNode<Type extends VanityCssDataType>(
+export function createRawNode<Type extends VanityCssDataType>(
   type: Type,
   syntax: string,
   source?: VanitySource,
 ): VanityRawNode<Type> {
-  return base({ kind: 'raw', type, syntax: nonEmpty(syntax), source, fold: () => ({ kind: 'preserve', reason: 'raw-or-unknown' }) })
+  return createBaseNode({ kind: 'raw', type, syntax: assertNonEmpty(syntax), source, fold: () => ({ kind: 'preserve', reason: 'raw-or-unknown' }) })
 }
 
-export function functionNode<Type extends VanityCssDataType>(input: {
+export function createFunctionNode<Type extends VanityCssDataType>(input: {
   type: Type
   name: string
   values: readonly VanityExpressionNode[]
@@ -445,7 +445,7 @@ export function functionNode<Type extends VanityCssDataType>(input: {
   fold?: VanityFunctionNode<Type>['fold']
 }): VanityFunctionNode<Type> {
   const possibleValues = input.fallback ? [...input.values, input.fallback] : input.values
-  return base({
+  return createBaseNode({
     kind: 'function',
     type: input.type,
     name: input.name,
@@ -460,7 +460,7 @@ export function functionNode<Type extends VanityCssDataType>(input: {
   })
 }
 
-export function operationNode<Type extends VanityCssDataType>(input: {
+export function createOperationNode<Type extends VanityCssDataType>(input: {
   type: Type
   operator: VanityOperationNode['operator']
   left: VanityExpressionNode
@@ -470,7 +470,7 @@ export function operationNode<Type extends VanityCssDataType>(input: {
   source?: VanitySource
 }): VanityOperationNode<Type> {
   const values = [input.left, input.right]
-  return base({
+  return createBaseNode({
     kind: 'operation',
     type: input.type,
     operator: input.operator,
@@ -484,13 +484,13 @@ export function operationNode<Type extends VanityCssDataType>(input: {
   })
 }
 
-export function varNode<Type extends VanityCssDataType>(input: {
+export function createVarNode<Type extends VanityCssDataType>(input: {
   type: Type
   reference: VanityReference
   fallback?: VanityExpressionNode
   source?: VanitySource
 }): VanityVarNode<Type> {
-  return base({
+  return createBaseNode({
     kind: 'var',
     type: input.type,
     reference: input.reference,
@@ -502,14 +502,14 @@ export function varNode<Type extends VanityCssDataType>(input: {
   })
 }
 
-export function compositeNode<Type extends VanityCssDataType>(input: {
+export function createCompositeNode<Type extends VanityCssDataType>(input: {
   type: Type
   parts: readonly (string | VanityExpressionNode)[]
   requirements?: readonly VanityCssFeature[]
   source?: VanitySource
 }): VanityCompositeNode<Type> {
   const nodes = input.parts.filter((part): part is VanityExpressionNode => typeof part !== 'string')
-  return base({
+  return createBaseNode({
     kind: 'composite',
     type: input.type,
     parts: input.parts,
@@ -520,7 +520,7 @@ export function compositeNode<Type extends VanityCssDataType>(input: {
   })
 }
 
-export function pluginNode<Type extends VanityCssDataType>(input: {
+export function createPluginNode<Type extends VanityCssDataType>(input: {
   type: Type
   extension: VanityExtensionIdentity
   dependencies?: readonly VanityExpressionNode[]
@@ -532,7 +532,7 @@ export function pluginNode<Type extends VanityCssDataType>(input: {
 }): VanityPluginNode<Type> {
   const dependencies = input.dependencies ?? []
   const possibleValues = input.fallback ? [...dependencies, input.fallback] : dependencies
-  return base({
+  return createBaseNode({
     kind: 'plugin',
     type: input.type,
     values: dependencies,
@@ -547,7 +547,7 @@ export function pluginNode<Type extends VanityCssDataType>(input: {
   })
 }
 
-export function inputNode(value: VanityCssInput, assertedType?: VanityCssDataType): VanityExpressionNode {
+export function createInputNode(value: VanityCssInput, assertedType?: VanityCssDataType): VanityExpressionNode {
   if (isNodeValue(value))
     return value[VANITY_NODE]
 
@@ -558,19 +558,19 @@ export function inputNode(value: VanityCssInput, assertedType?: VanityCssDataTyp
       ?? ('$type' in value && typeof value.$type === 'string' ? value.$type as VanityCssDataType : 'unknown')
     const reference: VanityReference = {
       kind: token ? 'token' : 'custom-property',
-      name: customPropertyName(value.var),
+      name: getCustomPropertyName(value.var),
       ...(tokenPath === undefined ? {} : { path: tokenPath }),
       type,
       resolution: 'self',
     }
-    return varNode({ type, reference })
+    return createVarNode({ type, reference })
   }
 
   if ((typeof value === 'object' || typeof value === 'function') && value !== null && '$var' in value) {
     // Prior stages are hydrated before a derivation runs. An explicit val
     // projection can therefore enter the portable IR as its resolved value.
     if ('$reference' in value && value.$reference === 'val')
-      return literalNode(assertedType ?? 'unknown', String(value))
+      return createLiteralNode(assertedType ?? 'unknown', String(value))
 
     const tokenPath = '$path' in value && typeof value.$path === 'string' ? value.$path : undefined
     const logical = '$phase' in value && value.$phase === 'logical'
@@ -578,15 +578,15 @@ export function inputNode(value: VanityCssInput, assertedType?: VanityCssDataTyp
       ?? ('$type' in value && typeof value.$type === 'string' ? value.$type as VanityCssDataType : 'unknown')
     const reference: VanityReference = {
       kind: tokenPath === undefined ? 'custom-property' : 'token',
-      ...(logical ? {} : { name: customPropertyName((value as { $var: () => string }).$var()) }),
+      ...(logical ? {} : { name: getCustomPropertyName((value as { $var: () => string }).$var()) }),
       ...(tokenPath === undefined ? {} : { path: tokenPath }),
       type,
       resolution: logical ? 'system' : 'self',
     }
-    return varNode({ type, reference })
+    return createVarNode({ type, reference })
   }
 
-  return literalNode(assertedType ?? inferLiteralType(value), cssText(value))
+  return createLiteralNode(assertedType ?? inferLiteralType(value), serializeCssText(value))
 }
 
 export function normalizeExtension(identity: VanityExtensionIdentity): VanityExtensionIdentity {
@@ -600,7 +600,7 @@ export function normalizeExtension(identity: VanityExtensionIdentity): VanityExt
   return Object.freeze({ id, version, ...(fingerprint ? { fingerprint } : {}) })
 }
 
-function base<T extends VanityExpressionNode>(
+function createBaseNode<T extends VanityExpressionNode>(
   node: Omit<T, 'dependencies' | 'requirements' | 'resolution'>
     & Partial<Pick<T, 'dependencies' | 'requirements' | 'resolution'>>,
 ): T {
@@ -612,7 +612,7 @@ function base<T extends VanityExpressionNode>(
   }) as T
 }
 
-function selfReference(reference: VanityReference): string {
+function getSelfReference(reference: VanityReference): string {
   if (reference.resolution === 'system')
     throw new TypeError('[vanity] this value needs a finalized system before it can be serialized')
   if (!reference.name)
@@ -639,7 +639,7 @@ function dedupeDependencies(dependencies: readonly VanityReference[]): readonly 
   })
 }
 
-function customPropertyName(reference: string): `--${string}` {
+function getCustomPropertyName(reference: string): `--${string}` {
   const match = reference.match(/^var\((--[^,\s)]+)/)
   if (!match)
     throw new TypeError(`[vanity] '${reference}' is not a custom-property var() reference`)
@@ -668,7 +668,7 @@ function inferLiteralType(value: VanityCssInput): VanityCssDataType {
   return 'unknown'
 }
 
-function finiteNumber(value: number): string {
+function formatFiniteNumber(value: number): string {
   if (!Number.isFinite(value))
     throw new RangeError(`[vanity] a CSS number must be finite; received ${value}`)
   return String(Object.is(value, -0) ? 0 : value)
@@ -676,16 +676,16 @@ function finiteNumber(value: number): string {
 
 /** Remove binary floating-point residue from build-folded decimal arithmetic. */
 function foldedNumber(value: number): string {
-  return finiteNumber(Number(value.toPrecision(15)))
+  return formatFiniteNumber(Number(value.toPrecision(15)))
 }
 
-function nonEmpty(value: string): string {
+function assertNonEmpty(value: string): string {
   if (value.trim().length === 0)
     throw new TypeError('[vanity] a CSS value cannot be empty')
   return value
 }
 
-function immutableSet<T>(values: Iterable<T>): ReadonlySet<T> {
+function createImmutableSet<T>(values: Iterable<T>): ReadonlySet<T> {
   const set = new Set(values)
   const view: ReadonlySet<T> = {
     get size() {

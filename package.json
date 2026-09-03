@@ -20,7 +20,7 @@
     "typecheck:validation": "pnpm run workspace:typecheck && turbo run typecheck --force",
     "workspace:typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "turbo run test --filter=@mszr/vanity",
-    "test:maintainer": "node --import tsx --test scripts/update-dependencies.test.ts scripts/package-contract.test.ts",
+    "test:maintainer": "node --import tsx --test scripts/update-dependencies.test.ts scripts/package-contract.test.ts scripts/naming-law.test.ts",
     "audit": "tsx scripts/audit.ts",
     "deps:check": "pnpm install --frozen-lockfile",
     "check:fast": "pnpm run lint && pnpm run workspace:typecheck && pnpm run sdk:typecheck && pnpm run sdk:test:fast",

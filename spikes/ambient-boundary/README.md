@@ -26,7 +26,7 @@ Real package boundaries via `node_modules` links and `exports` maps — not `pat
 ```text
 packages/design            publishes ./authoring (the barrel) and
                            ./vanity-style-auto-imports (the generated ambient module,
-                           byte-shaped like sdk/src/internal/autoImportDeclarations.ts)
+                           byte-shaped like sdk/src/compiler/auto-imports/autoImportDeclarations.ts)
 
 packages/author-unlocked   ships SOURCE; bare `cls`/`t` + one type-only unlock import
 packages/author-bare       ships SOURCE; bare `cls`/`t`, no unlock import   (control)
@@ -67,7 +67,7 @@ T9 adds that the choice is **per file, not per package**: one package holding an
 
 ### 2. `const` is the reason declarations cannot compose
 
-T3 is the coexistence failure, and it is not subtle: two `declare global` blocks declaring one name are a hard `TS2451`, because **block-scoped declarations cannot be redeclared even when their types are identical**. Vanity emits `const` ([autoImportDeclarations.ts:28](../../sdk/src/internal/autoImportDeclarations.ts:28)), so any two generated declarations covering one name are mutually exclusive by construction.
+T3 is the coexistence failure, and it is not subtle: two `declare global` blocks declaring one name are a hard `TS2451`, because **block-scoped declarations cannot be redeclared even when their types are identical**. Vanity emits `const` ([autoImportDeclarations.ts:28](../../sdk/src/compiler/auto-imports/autoImportDeclarations.ts:28)), so any two generated declarations covering one name are mutually exclusive by construction.
 
 `var` is the platform's own answer — it is why `lib.dom.d.ts` writes `declare var window: Window` rather than `const`. T5 and T7 show identical-type redeclaration becoming legal, and **T6 shows the safety is retained**: divergent types still fail, with an error naming both offending types.
 

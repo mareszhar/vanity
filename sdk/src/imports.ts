@@ -7,9 +7,9 @@
 export type {
   VanityAppAutoImportPreset,
   VanityAppAutoImportPresetName,
-} from './internal/applicationImports'
+} from './compiler/auto-imports/applicationImports'
 export {
   vanityAppAutoImportPresets,
   vanityCoreAutoImports,
   vanityVueAutoImports,
-} from './internal/applicationImports'
+} from './compiler/auto-imports/applicationImports'

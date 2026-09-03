@@ -1,8 +1,9 @@
-import { createEngine, fromTokenGroup } from '@test/legacy'
+import { createSystem, fromTokenGroup } from '@mszr/vanity'
 import { describe, expectTypeOf, it } from 'vitest'
 
-const de = createEngine()
-const ds = de.createSystem({ tokens: de.defineTokens({ tone: { brand: 'purple', danger: 'red' } }) })
+const ds = createSystem()
+  .addTokens({ tone: { brand: 'purple', danger: 'red' } })
+  .consolidate()
 const tones = fromTokenGroup(ds.t.tone, token => ({ background: token }))
 
 describe('fromTokenGroup typing', () => {

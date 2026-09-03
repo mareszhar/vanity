@@ -1,5 +1,4 @@
-import type { VanityCssValue, VanitySelfValue, VanityValue } from '../test-support/characterization'
-import { describe, expectTypeOf, it } from 'vitest'
+import type { VanityCssValue, VanitySelfValue, VanityValue } from '@mszr/vanity'
 import {
   angle,
   calc,
@@ -12,7 +11,10 @@ import {
   mix,
   oklch,
   percent,
-} from '../test-support/characterization'
+} from '@mszr/vanity'
+import { describe, expectTypeOf, it } from 'vitest'
+import { getTokenModule } from '../tokens/builder'
+import { resolveTokenModule } from '../tokens/resolve'
 
 describe('typed CSS value contracts', () => {
   it('keeps the common interface context-bound while compatibility helpers remain usable', () => {
@@ -43,8 +45,8 @@ describe('typed CSS value contracts', () => {
     const chroma = customProperty('--chroma', { type: 'number' }).$var()
     void oklch(percent(50), chroma, angle.deg(285), cssNumber(0.5))
     void hwb(angle.deg(20), 'none', percent(10))
-    const channels = defineTokens({ channel: { l: 0.5, c: 0.2, h: 285 } }).build()
-    void oklch(channels.channel.l, channels.channel.c, channels.channel.h)
+    const channels = resolveTokenModule(getTokenModule(defineTokens({ channel: { l: 0.5, c: 0.2, h: 285 } }))!)
+    void oklch((channels as any).channel.l, (channels as any).channel.c, (channels as any).channel.h)
     // @ts-expect-error — arbitrary strings are not typed channel values
     oklch('mystery', 0.2, 20)
     // @ts-expect-error — lengths are not numeric color components

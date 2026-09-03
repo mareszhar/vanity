@@ -1,18 +1,18 @@
-import type { VanityTokenRecord } from '../internal/inspect'
-import type { TokenGraph } from '../tokens/graph'
+import type { TokenGraph } from '../tokens/module'
 import type { VanityTokenHandleAny } from '../tokens/types'
+import type { VanityTokenRecord } from './records'
 import type {
   VanityIntrospectedToken,
   VanitySemanticEntry,
-  VanitySystemMapV1,
+  VanitySystemMapV2,
 } from './system'
-import { tokenInspectionOf } from '../tokens/graph'
+import { getTokenInspection } from '../tokens/module'
 import { VANITY_EXPLAINABLE } from './semantic'
 
 export { formatExplanation, VANITY_EXPLAINABLE } from './semantic'
 
 export type VanityExplanation
-  = VanitySystemMapV1
+  = VanitySystemMapV2
     | VanitySemanticEntry
     | Readonly<Record<string, unknown>>
 
@@ -26,7 +26,7 @@ export type VanityExplanationFor<Subject>
 
 /** Resolve any public semantic handle or semantic path against one system map. */
 export function explainFromSystem<Subject>(
-  map: VanitySystemMapV1,
+  map: VanitySystemMapV2,
   subject: Subject,
 ): VanityExplanationFor<Subject> {
   if (subject === map || subject === map.id)
@@ -41,7 +41,7 @@ export function explainFromSystem<Subject>(
       return map.tokens[path] as VanityExplanationFor<Subject>
     const id = (subject as { readonly id?: unknown }).id
     if (typeof id === 'string') {
-      const found = semanticEntries(map).find(entry => entry.id === id)
+      const found = getSemanticEntries(map).find(entry => entry.id === id)
       if (found)
         return found as VanityExplanationFor<Subject>
     }
@@ -51,7 +51,7 @@ export function explainFromSystem<Subject>(
     const path = subject.replace(/^tokens?\./, '')
     if (map.tokens[path])
       return map.tokens[path] as VanityExplanationFor<Subject>
-    const direct = semanticEntries(map).find(entry =>
+    const direct = getSemanticEntries(map).find(entry =>
       entry.id === subject
       || ('name' in entry && entry.name === subject)
       || (entry.kind === 'condition' && 'readable' in entry && entry.readable === subject))
@@ -62,9 +62,9 @@ export function explainFromSystem<Subject>(
   throw new TypeError('[vanity] explain() needs a public token, axis, condition, recipe, anatomy, port, or semantic path')
 }
 
-function semanticEntries(map: VanitySystemMapV1): VanitySemanticEntry[] {
+function getSemanticEntries(map: VanitySystemMapV2): VanitySemanticEntry[] {
   return [
-    map.engine,
+    map.capabilities,
     ...map.layers,
     ...Object.values(map.conditions),
     ...Object.values(map.axes),
@@ -109,7 +109,7 @@ export interface VanityTokenExplanation {
 
 /** One stable structured answer from authored decision to every CSS context. */
 export function explainToken(graph: TokenGraph, handle: VanityTokenHandleAny): VanityTokenExplanation {
-  const token = tokenInspectionOf(graph, handle as any)
+  const token = getTokenInspection(graph, handle as any)
   return Object.freeze({
     path: Object.freeze(token.path.split('.')),
     source: Object.freeze({
@@ -127,7 +127,7 @@ export function explainToken(graph: TokenGraph, handle: VanityTokenHandleAny): V
     hasDefault: token.semantic.hasDefault,
     inference: token.semantic.inference,
     fold: token.semantic.fold,
-    preview: explanationPreview(token, graph),
+    preview: getExplanationPreview(token, graph),
     support: token.semantic.support,
     declarations: token.semantic.declarations,
     branches: token.semantic.branches,
@@ -140,7 +140,7 @@ export function explainToken(graph: TokenGraph, handle: VanityTokenHandleAny): V
   })
 }
 
-function explanationPreview(token: VanityTokenRecord, graph: TokenGraph): VanityTokenExplanation['preview'] {
+function getExplanationPreview(token: VanityTokenRecord, graph: TokenGraph): VanityTokenExplanation['preview'] {
   const environment = Object.freeze(Object.fromEntries((graph.axes?.order ?? []).flatMap((axis) => {
     const mode = graph.axes!.definitions[axis]!.defaultMode
     return mode === undefined ? [] : [[axis, mode]]

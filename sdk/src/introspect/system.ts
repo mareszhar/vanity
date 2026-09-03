@@ -1,15 +1,19 @@
 /**
  * Canonical semantic map. Every outward projection starts here:
- * `ds.introspect()`, Manifest v3, CLI output, DevTools, agents, and diffs.
+ * `ds.introspect()`, Manifest v4, CLI output, DevTools, agents, and diffs.
  */
 
-import type { VanityTokenRecord } from '../internal/inspect'
-import type { VanityPortableSystemV1, VanitySystemIdentities } from '../system/contract'
+import type {
+  VanityCapabilityOrigin,
+  VanityPortableSystemV2,
+  VanitySystemIdentities,
+} from '../system/contract'
+import type { VanityTokenRecord } from './records'
 
 /** Stable introspection discriminator: `ds.introspect().format === VANITY_INTROSPECTION_FORMAT`. */
-export const VANITY_INTROSPECTION_FORMAT = 'vanity.introspection/1' as const
+export const VANITY_INTROSPECTION_FORMAT = 'vanity.introspection/2' as const
 /** Current introspection schema version: `ds.introspect().version === VANITY_INTROSPECTION_VERSION`. */
-export const VANITY_INTROSPECTION_VERSION = 1 as const
+export const VANITY_INTROSPECTION_VERSION = 2 as const
 
 export interface VanityDeclaredAt {
   readonly file: string
@@ -67,9 +71,9 @@ export interface VanityIntrospectedToken extends VanitySemanticEntry {
  * Stable JSON-safe semantic map returned by `ds.introspect()`.
  *
  * @example
- * `const map: VanitySystemMapV1 = ds.introspect()`
+ * `const map: VanitySystemMapV2 = ds.introspect()`
  */
-export interface VanitySystemMapV1 {
+export interface VanitySystemMapV2 {
   readonly format: typeof VANITY_INTROSPECTION_FORMAT
   readonly version: typeof VANITY_INTROSPECTION_VERSION
   readonly id: string
@@ -80,12 +84,12 @@ export interface VanitySystemMapV1 {
   readonly root: string
   readonly tokenLayer?: string
   readonly layerRoot: string
-  readonly engine: VanitySemanticEntry & {
-    readonly kind: 'engine'
+  readonly capabilities: VanitySemanticEntry & {
+    readonly kind: 'capabilities'
     readonly signature: string
     readonly supportTarget: string
-    readonly policies: Readonly<Record<string, unknown>>
   }
+  readonly policies: Readonly<Record<string, unknown>>
   readonly layers: readonly (VanitySemanticEntry & {
     readonly kind: 'layer'
     readonly name: string
@@ -95,17 +99,17 @@ export interface VanitySystemMapV1 {
     readonly kind: 'condition'
     readonly name: string
     readonly readable: string
-    readonly arms: VanityPortableSystemV1['conditionArms'][string]
-    readonly ast: VanityPortableSystemV1['conditionAsts'][string]
+    readonly arms: VanityPortableSystemV2['conditionArms'][string]
+    readonly ast: VanityPortableSystemV2['conditionAsts'][string]
   }>>
   readonly axes: Readonly<Record<string, VanitySemanticEntry & {
     readonly kind: 'axis'
     readonly name: string
     readonly defaultMode?: string
     readonly modeOrder: readonly string[]
-    readonly modes: NonNullable<VanityPortableSystemV1['axes']>['definitions'][string]['modes']
+    readonly modes: NonNullable<VanityPortableSystemV2['axes']>['definitions'][string]['modes']
     readonly control?: { readonly id: string }
-    readonly native?: NonNullable<VanityPortableSystemV1['axes']>['definitions'][string]['native']
+    readonly native?: NonNullable<VanityPortableSystemV2['axes']>['definitions'][string]['native']
   }>>
   readonly roots: Readonly<Record<string, VanitySemanticEntry & {
     readonly kind: 'root'
@@ -135,8 +139,7 @@ export interface VanitySystemMapV1 {
   readonly constructors: Readonly<Record<string, VanitySemanticEntry & {
     readonly kind: 'constructor'
     readonly name: string
-    readonly extension: string
-    readonly version: string
+    readonly origin: VanityCapabilityOrigin
   }>>
   readonly utilities: Readonly<Record<string, VanitySemanticEntry & {
     readonly kind: 'utility'
@@ -151,11 +154,11 @@ export interface VanitySystemMapV1 {
     readonly selectors: readonly string[]
     readonly fingerprint: string
   }>>
-  readonly runtime: VanityPortableSystemV1['runtime']
+  readonly runtime: VanityPortableSystemV2['runtime']
   readonly overwrites: readonly (VanitySemanticEntry & {
     readonly kind: 'overwrite'
     readonly operation: 'augment' | 'overwrite'
-    readonly target: VanityPortableSystemV1['overwrites'][number]['kind']
+    readonly target: VanityPortableSystemV2['overwrites'][number]['kind']
     readonly paths: readonly string[]
   })[]
   readonly audits: Readonly<Record<string, VanitySemanticEntry & {
@@ -166,23 +169,22 @@ export interface VanitySystemMapV1 {
 }
 
 /** Build the one deterministic, data-only semantic representation of a system. */
-export function introspectSystem(portable: VanityPortableSystemV1): VanitySystemMapV1 {
+export function introspectSystem(portable: VanityPortableSystemV2): VanitySystemMapV2 {
   const systemId = `system:${portable.identities.compatibility}`
   const systemSource = declaredAt(portable.source)
-  const systemOwner = owner('system', systemId)
-  const semanticOwner = (id: string, fallback: VanitySemanticOwner = systemOwner): VanitySemanticOwner =>
+  const systemOwner = getOwner('system', systemId)
+  const getSemanticOwner = (id: string, fallback: VanitySemanticOwner = systemOwner): VanitySemanticOwner =>
     portable.owners[id] ?? fallback
-  const extensions = [...portable.engine.extensions].sort((left, right) => left.id.localeCompare(right.id))
-  const constructorExtensions = extensions.filter(extension => extension.id.startsWith('org.vanity.constructor.'))
+  const extensions = [...portable.capabilities.extensions].sort((left, right) => left.id.localeCompare(right.id))
   const pluginExtensions = extensions.filter(extension => portable.plugins.includes(extension.id))
   const axes = portable.axes?.definitions ?? {}
   const tokens = Object.fromEntries(
     [...portable.tokenRecords]
       .sort((left, right) => left.path.localeCompare(right.path))
-      .map(token => [token.path, introspectedToken(
+      .map(token => [token.path, createIntrospectedToken(
         token,
         portable,
-        semanticOwner(`token:${token.path}`, systemOwner),
+        getSemanticOwner(`token:${token.path}`, systemOwner),
       )]),
   )
 
@@ -197,15 +199,15 @@ export function introspectSystem(portable: VanityPortableSystemV1): VanitySystem
     root: portable.root,
     ...(portable.tokenLayer === undefined ? {} : { tokenLayer: portable.tokenLayer }),
     layerRoot: portable.layerRoot,
-    engine: {
-      id: `engine:${portable.engine.signature}`,
-      kind: 'engine',
+    capabilities: {
+      id: `capabilities:${portable.capabilities.signature}`,
+      kind: 'capabilities',
       owner: systemOwner,
       ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
-      signature: portable.engine.signature,
-      supportTarget: portable.engine.supportTarget,
-      policies: portable.engine.policies,
+      signature: portable.capabilities.signature,
+      supportTarget: portable.capabilities.supportTarget,
     },
+    policies: portable.policies,
     layers: portable.layers.map((name, order) => ({
       id: `layer:${portable.layerRoot}.${name}`,
       kind: 'layer',
@@ -219,7 +221,7 @@ export function introspectSystem(portable: VanityPortableSystemV1): VanitySystem
       {
         id: `condition:${name}`,
         kind: 'condition',
-        owner: semanticOwner(`condition:${name}`),
+        owner: getSemanticOwner(`condition:${name}`),
         ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
         name,
         readable: portable.conditions[name],
@@ -232,7 +234,7 @@ export function introspectSystem(portable: VanityPortableSystemV1): VanitySystem
       return [name, {
         id: `axis:${name}`,
         kind: 'axis',
-        owner: semanticOwner(`axis:${name}`),
+        owner: getSemanticOwner(`axis:${name}`),
         ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
         ...(axis.description === undefined ? {} : { description: axis.description }),
         name,
@@ -248,7 +250,7 @@ export function introspectSystem(portable: VanityPortableSystemV1): VanitySystem
       {
         id: `root:${root.path}`,
         kind: 'root',
-        owner: root.path === '$system' ? systemOwner : owner('module', `module:${root.path}`),
+        owner: root.path === '$system' ? systemOwner : getOwner('module', `module:${root.path}`),
         ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
         path: root.path,
         selector: root.selector,
@@ -262,7 +264,7 @@ export function introspectSystem(portable: VanityPortableSystemV1): VanitySystem
       {
         id: `plugin:${extension.id}`,
         kind: 'plugin',
-        owner: owner('plugin', `plugin:${extension.id}`),
+        owner: getOwner('plugin', `plugin:${extension.id}`),
         ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
         name: extension.id,
         version: extension.version,
@@ -275,7 +277,7 @@ export function introspectSystem(portable: VanityPortableSystemV1): VanitySystem
         id: `extension:${extension.id}`,
         kind: 'extension',
         owner: portable.plugins.includes(extension.id)
-          ? owner('plugin', `plugin:${extension.id}`)
+          ? getOwner('plugin', `plugin:${extension.id}`)
           : systemOwner,
         ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
         name: extension.id,
@@ -288,34 +290,31 @@ export function introspectSystem(portable: VanityPortableSystemV1): VanitySystem
       {
         id: `const:${name}`,
         kind: 'const',
-        owner: semanticOwner(`const:${name}`),
+        owner: getSemanticOwner(`const:${name}`),
         ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
         name,
         value: portable.consts[name],
       },
     ])),
-    constructors: Object.fromEntries([...new Set([
-      ...portable.engine.constructors,
-      ...constructorExtensions.map(extension => extension.id.slice('org.vanity.constructor.'.length)),
-    ])].sort().map((name) => {
-      const extension = constructorExtensions.find(candidate =>
-        candidate.id === `org.vanity.constructor.${name}`)
-      return [name, {
-        id: `constructor:${name}`,
-        kind: 'constructor',
-        owner: semanticOwner(`constructor:${name}`),
-        ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
-        name,
-        extension: extension?.id ?? `engine:${portable.engine.signature}`,
-        version: extension?.version ?? 'builtin',
-      }]
-    })),
+    constructors: Object.fromEntries([...portable.capabilities.constructors]
+      .sort((left, right) => left.name.localeCompare(right.name)).map(({ name, origin }) => {
+        return [name, {
+          id: `constructor:${name}`,
+          kind: 'constructor',
+          owner: origin.kind === 'plugin'
+            ? getOwner('plugin', `plugin:${origin.id}`)
+            : getSemanticOwner(`constructor:${name}`),
+          ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
+          name,
+          origin,
+        }]
+      })),
     utilities: Object.fromEntries([...portable.utilities].sort().map(path => [
       path,
       {
         id: `utility:${path}`,
         kind: 'utility',
-        owner: semanticOwner(`utility:${path}`),
+        owner: getSemanticOwner(`utility:${path}`),
         ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
         path: path.split('.'),
       },
@@ -325,7 +324,7 @@ export function introspectSystem(portable: VanityPortableSystemV1): VanitySystem
       .map(group => [group.name, {
         id: `rule-group:${group.name}`,
         kind: 'rule-group' as const,
-        owner: semanticOwner(`rule:${group.name}`),
+        owner: getSemanticOwner(`rule:${group.name}`),
         ...(systemSource === undefined ? {} : { declaredAt: systemSource }),
         name: group.name,
         ...(group.description === undefined ? {} : { description: group.description }),
@@ -355,18 +354,18 @@ export function introspectSystem(portable: VanityPortableSystemV1): VanitySystem
         level: portable.audits[name],
       },
     ])),
-  }) as VanitySystemMapV1
+  }) as VanitySystemMapV2
 }
 
-function introspectedToken(
+function createIntrospectedToken(
   token: VanityTokenRecord,
-  portable: VanityPortableSystemV1,
+  portable: VanityPortableSystemV2,
   defaultOwner: VanitySemanticOwner,
 ): VanityIntrospectedToken {
   const semantic = token.semantic
   const tokenOwner = token.module === undefined || token.module.length === 0
     ? defaultOwner
-    : owner('module', `module:${token.module.join('.')}`)
+    : getOwner('module', `module:${token.module.join('.')}`)
   const source = declaredAt(token.file, token.line, token.column)
   return {
     id: `token:${token.path}`,
@@ -400,7 +399,7 @@ function introspectedToken(
   }
 }
 
-function tokenPreview(token: VanityTokenRecord, portable: VanityPortableSystemV1): VanityIntrospectedToken['preview'] {
+function tokenPreview(token: VanityTokenRecord, portable: VanityPortableSystemV2): VanityIntrospectedToken['preview'] {
   const environment = Object.freeze(Object.fromEntries(Object.entries(portable.axes?.definitions ?? {}).flatMap(([axis, definition]) =>
     definition.defaultMode === undefined ? [] : [[axis, definition.defaultMode]],
   )))
@@ -461,7 +460,7 @@ export function normalizeSourceId(file: string): string {
   return sourceMarker >= 0 ? normalized.slice(sourceMarker + 1) : normalized.split('/').pop()!
 }
 
-function owner<Kind extends VanitySemanticOwner['kind']>(
+function getOwner<Kind extends VanitySemanticOwner['kind']>(
   kind: Kind,
   id: string,
 ): Extract<VanitySemanticOwner, { kind: Kind }> {

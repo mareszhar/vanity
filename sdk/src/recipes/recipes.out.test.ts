@@ -7,10 +7,10 @@
 
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { createSystem } from '../test-support/characterization'
+import { createFixtureSystem } from '../test-support/current'
 
 function miniSystem() {
-  return createSystem({
+  return createFixtureSystem({
     tokens: {
       color: { brand: '#635bff' },
       space: { xs: '4px', sm: '8px', md: '16px' },
@@ -97,7 +97,7 @@ describe('recipe()', () => {
     `)
   })
 
-  it('arms take full vanity rules — conditions intersect exactly like css()', () => {
+  it('arms take full vanity rules — conditions intersect exactly like class()', () => {
     const { css: emitted } = emit(() => {
       const { recipe } = miniSystem()
 

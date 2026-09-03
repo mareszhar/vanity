@@ -31,18 +31,16 @@ describe('the value law in editor tooling', () => {
 
   it('accepts compatible handles without a var() detour and keeps exact results', () => {
     const result = project.query`
-      import { createEngine } from '@test/legacy'
-      const de = createEngine()
-      const ds = de.createSystem({
-        tokens: {
-          channel: { l: de.number(0.6), c: de.number(0.18), h: de.angle.deg(285) },
-          space: { sm: de.length.rem(0.5), md: de.length.rem(1) },
-        },
-      })
+      import { angle, createSystem, length, number } from '@mszr/vanity'
+      const open = createSystem()
+      const ds = open.addTokens({
+        channel: { l: number(0.6), c: number(0.18), h: angle.deg(285) },
+        space: { sm: length.rem(0.5), md: length.rem(1) },
+      }).consolidate()
       const color = ds.oklch(ds.t.channel.l, ds.t.channel.c, ds.t.channel.h)
       const negative = ds.calc(ds.t.space.md).negate()
       const bounded = ds.${cursor('clamp')}clamp(ds.t.space.sm, ds.t.space.md, ds.length.rem(4))
-      ds.css({ color, marginInline: negative, padding: ds.t.space.md })
+      ds.class({ color, marginInline: negative, padding: ds.t.space.md })
       void bounded
     `
 

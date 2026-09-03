@@ -1,25 +1,37 @@
+import {
+  colorSchemes,
+  createSystem,
+  data,
+  defineCssValue,
+  definePlugin,
+  exportDesignTokens,
+  importDesignTokens,
+} from '@mszr/vanity'
 import { emit } from '@test'
-import { createEngine, defineEnginePlugin, exportDesignTokens, importDesignTokens } from '@test/legacy'
 import { describe, expect, it } from 'vitest'
+import { substrate } from '../substrate'
+
+function locked(open: { readonly consolidate: (options?: object) => object }, options: object = {}) {
+  return substrate.modules.runInFileScope({
+    filePath: 'src/introspect/dtcg.system.ts',
+    packageName: '@vanity/introspect-fixture',
+  }, () => open.consolidate(options)) as any
+}
 
 describe('dTCG interchange', () => {
   it('exports an honest standard snapshot for one selected environment', () => {
-    const de = createEngine().axes(({ scheme }) => ({ scheme: scheme({ locality: 'root' }) }))
-    const document = emit(() => {
-      const ds = de.createSystem({
-        tokens: de.defineTokens({
-          color: {
-            brand: de.token({
-              val: de.oklch(0.58, 0.2, 285),
-              axes: { scheme: { dark: de.oklch(0.72, 0.14, 285) } },
-            }),
-          },
-          space: { md: de.token({ val: de.length.rem(1) }) },
-          motion: { quick: de.token({ val: de.time.ms(160) }) },
+    const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
+    const ds = locked(open.addTokens(open.defineTokens({
+      color: {
+        brand: open.tdef({
+          val: open.oklch(0.58, 0.2, 285),
+          axes: { scheme: { dark: open.oklch(0.72, 0.14, 285) } },
         }),
-      })
-      return exportDesignTokens(ds, { mode: 'resolved', environment: { scheme: 'dark' } })
-    }).returned as any
+      },
+      space: { md: open.tdef({ val: open.length.rem(1) }) },
+      motion: { quick: open.tdef({ val: open.time.ms(160) }) },
+    })))
+    const document = exportDesignTokens(ds, { mode: 'resolved', environment: { scheme: 'dark' } }) as any
 
     expect(document.color.brand).toEqual({
       $type: 'color',
@@ -34,48 +46,48 @@ describe('dTCG interchange', () => {
   })
 
   it('round-trips portable authored traits, aliases, axes, and reservations', () => {
-    const de = createEngine().axes(({ scheme }) => ({ scheme: scheme({ locality: 'root' }) }))
-    const document = emit(() => {
-      const module = de.defineTokens({
-        color: {
-          brand: de.token({
-            val: de.oklch(0.58, 0.2, 285),
-            mutable: true,
-            axes: { scheme: { dark: de.oklch(0.72, 0.14, 285) } },
-            description: 'brand seed',
-          }),
-          accent: de.token.color({
-            mutable: true,
-            axes: { scheme: { light: de.oklch(0.6, 0.1, 285), dark: null } },
-          }),
-        },
-      }).derive(m => ({ color: { brandAlias: m.color.brand } }))
-      const ds = de.createSystem({ tokens: module, prefix: 'first' })
-      return exportDesignTokens(ds, { mode: 'authored' })
-    }).returned as any
+    const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
+    const module = open.defineTokens({
+      color: {
+        brand: open.tdef({
+          val: open.oklch(0.58, 0.2, 285),
+          mutable: true,
+          axes: { scheme: { dark: open.oklch(0.72, 0.14, 285) } },
+          description: 'brand seed',
+        }),
+        accent: open.tdef.color({
+          mutable: true,
+          axes: { scheme: { light: open.oklch(0.6, 0.1, 285), dark: null } },
+        }),
+      },
+    }).add(m => ({ color: { brandAlias: m.color.brand } }))
+    const first = locked(open.addTokens(module), { prefix: 'first' })
+    const document = exportDesignTokens(first, { mode: 'authored' }) as any
 
     expect(document.$extensions['com.mszr.vanity']).toMatchObject({ version: 1, mode: 'authored' })
 
-    const imported = importDesignTokens(document, { system: de })
-    const result = emit(() => de.createSystem({ tokens: imported, prefix: 'second' }))
-
-    expect(result.css).toContain('--second-color-brand: light-dark(')
-    expect(result.css).toContain('--second-color-brand-alias: var(--second-color-brand)')
-    expect(result.css).toContain('--second-color-accent: light-dark(')
-    expect((result.returned.t as any).color.brand.$description).toBe('brand seed')
-    expect((result.returned.t as any).color.accent.$axes.scheme.dark.$val).toBeUndefined()
+    const imported = importDesignTokens(document, { system: open })
+    const second = locked(open.addTokens(imported), { prefix: 'second' })
+    expect(second.t.color.brand.$description).toBe('brand seed')
+    expect(second.t.color.accent.$axes.scheme.dark.$val).toBeUndefined()
+    const css = emit(() => second.class({
+      color: second.t.color.brand,
+      background: second.t.color.brandAlias,
+      borderColor: second.t.color.accent,
+    })).css
+    expect(css).toContain('--second-color-brand: light-dark(')
+    expect(css).toContain('--second-color-brand-alias: var(--second-color-brand)')
+    expect(css).toContain('--second-color-accent: light-dark(')
   })
 
   it('orders authored imports by dependencies that exist only inside branches', () => {
-    const de = createEngine().axes(({ scheme }) => ({ scheme: scheme({ locality: 'root' }) }))
-    const document = emit(() => {
-      const module = de.defineTokens({ color: { seed: 'red' } }).derive(m => ({
-        color: {
-          conditional: de.token({ val: 'white', axes: { scheme: { dark: m.color.seed } } }),
-        },
-      }))
-      return exportDesignTokens(de.createSystem({ tokens: module }), { mode: 'authored' })
-    }).returned as any
+    const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
+    const module = open.defineTokens({ color: { seed: 'red' } }).add(m => ({
+      color: {
+        conditional: open.tdef({ val: 'white', axes: { scheme: { dark: m.color.seed } } }),
+      },
+    }))
+    const document = exportDesignTokens(locked(open.addTokens(module)), { mode: 'authored' }) as any
     const extension = document.$extensions['com.mszr.vanity']
     const reordered = {
       ...document,
@@ -91,13 +103,13 @@ describe('dTCG interchange', () => {
       },
     }
 
-    const imported = importDesignTokens(reordered, { system: de })
-    const result = emit(() => de.createSystem({ tokens: imported, prefix: 'ordered' }))
-    expect(result.css).toContain('var(--ordered-color-seed)')
+    const imported = importDesignTokens(reordered, { system: open })
+    const ordered = locked(open.addTokens(imported), { prefix: 'ordered' })
+    const css = emit(() => ordered.class({ color: ordered.t.color.conditional })).css
+    expect(css).toContain('var(--ordered-color-seed)')
   })
 
   it('preserves unknown token extensions through import and re-export', () => {
-    const de = createEngine()
     const imported = importDesignTokens({
       $extensions: { 'org.example.root': { revision: 3 } },
       space: {
@@ -108,11 +120,9 @@ describe('dTCG interchange', () => {
           $extensions: { 'org.example.tool': { intent: 'layout' } },
         },
       },
-    }, { system: de })
-    const exported = emit(() => {
-      const ds = de.createSystem({ tokens: imported })
-      return exportDesignTokens(ds, { mode: 'resolved' })
-    }).returned as any
+    })
+    const open = createSystem()
+    const exported = exportDesignTokens(locked(open.addTokens(imported)), { mode: 'resolved' }) as any
 
     expect(exported.space.md.$extensions).toEqual({ 'org.example.tool': { intent: 'layout' } })
     expect(exported.$extensions).toEqual({ 'org.example.root': { revision: 3 } })
@@ -120,11 +130,8 @@ describe('dTCG interchange', () => {
 
     const invalid = importDesignTokens({
       token: { $type: 'number', $value: 1, $extensions: { 'org.example.invalid': { value: Number.NaN } } },
-    }, { system: de })
-    expect(() => emit(() => {
-      const ds = de.createSystem({ tokens: invalid })
-      return exportDesignTokens(ds)
-    })).toThrow('non-finite number')
+    })
+    expect(() => exportDesignTokens(locked(open.addTokens(invalid)))).toThrow('non-finite number')
   })
 
   it('keeps external resolution opt-in', () => {
@@ -132,12 +139,13 @@ describe('dTCG interchange', () => {
     expect(() => importDesignTokens(document)).toThrow('external DTCG reference')
 
     const module = importDesignTokens(document, { resolveExternal: () => 4 })
-    const result = emit(() => createEngine().createSystem({ tokens: module }))
-    expect(result.returned.t.remote.$val).toBe('4')
+    const open = createSystem()
+    const result = locked(open.addTokens(module))
+    expect(result.t.remote.$val).toBe('4')
 
     expect(() => {
       const asyncModule = importDesignTokens(document, { resolveExternal: async () => 4 })
-      emit(() => createEngine().createSystem({ tokens: asyncModule }))
+      locked(createSystem().addTokens(asyncModule))
     }).toThrow('must return synchronously')
   })
 
@@ -146,7 +154,7 @@ describe('dTCG interchange', () => {
       const module = importDesignTokens({
         color: { brand: { $type: 'color', $value: { colorSpace: 'oklch', components: [Number.NaN, 0.2, 285] } } },
       })
-      emit(() => createEngine().createSystem({ tokens: module }))
+      locked(createSystem().addTokens(module))
     }).toThrow('finite numbers')
 
     expect(() => importDesignTokens({ alias: { $type: 'number', $value: '{missing}' } })).toThrow('unknown token')
@@ -157,7 +165,6 @@ describe('dTCG interchange', () => {
   })
 
   it('imports inherited standard types, JSON Pointer aliases, and standard color spaces', () => {
-    const de = createEngine()
     const imported = importDesignTokens({
       space: {
         $type: 'dimension',
@@ -170,84 +177,79 @@ describe('dTCG interchange', () => {
           $value: { colorSpace: 'display-p3', components: [0.5, 0.2, 0.1], alpha: 0.8 },
         },
       },
-    }, { system: de })
-    const result = emit(() => de.createSystem({ tokens: imported, prefix: 'standard' }))
+    })
+    const open = createSystem()
+    const result = locked(open.addTokens(imported), { prefix: 'standard' })
+    const css = emit(() => result.class({})).css
 
-    expect(result.css).toContain('--standard-space-sm: 0.75rem')
-    expect(result.css).toContain('--standard-space-md: var(--standard-space-sm)')
-    expect(result.css).toContain('--standard-color-brand: color(display-p3 0.5 0.2 0.1 / 0.8)')
-    expect((result.returned.t as any).space.sm.$description).toBe('compact space')
+    expect(css).toContain('--standard-space-sm: 0.75rem')
+    expect(css).toContain('--standard-space-md: var(--standard-space-sm)')
+    expect(css).toContain('--standard-color-brand: color(display-p3 0.5 0.2 0.1 / 0.8)')
+    expect((result.t as any).space.sm.$description).toBe('compact space')
   })
 
-  it('exports an unfinished module only with its explicit engine context', () => {
-    const de = createEngine()
-    const module = de.defineTokens({ space: { md: de.token({ val: de.length.rem(1) }) } })
+  it('exports an unfinished module only with its explicit system context', () => {
+    const open = createSystem()
+    const module = open.defineTokens({ space: { md: open.tdef({ val: open.length.rem(1) }) } })
 
     expect(() => exportDesignTokens(module)).toThrow('needs options.system')
-    expect(exportDesignTokens(module, { system: de, prefix: 'portable', root: '#widget' })).toMatchObject({
+    expect(exportDesignTokens(module, { system: open, prefix: 'portable', root: '#widget' })).toMatchObject({
       space: { md: { $type: 'dimension', $value: { value: 1, unit: 'rem' } } },
     })
   })
 
   it('fails strict authored export for an opaque plugin without a codec', () => {
-    const de = createEngine().extend(
-      { id: 'org.example.opaque', version: 1 },
-      engine => ({
-        mystery: engine.defineCssValue({
-          type: 'length',
-          extension: { id: 'org.example.opaque', version: 1 },
-          create: (value: number) => ({ serialize: () => `${value}px` }),
-        }),
-      }),
-    )
-    const result = emit(() => de.createSystem({
-      tokens: de.defineTokens({ space: { mystery: de.token({ val: de.mystery(7) }) } }),
+    const mystery = defineCssValue({
+      type: 'length',
+      extension: { id: 'org.example.opaque', version: 1 },
+      create: (value: number) => ({ serialize: () => `${value}px` }),
+    })
+    const open = createSystem().addPlugin(definePlugin({
+      id: 'org.example.opaque',
+      version: 1,
+      setup: ds => ds.addConstructor('mystery', { call: mystery }),
+    }))
+    const result = locked(open.addTokens({
+      space: { mystery: open.tdef({ val: open.mystery(7) }) },
     }))
 
-    expect(() => exportDesignTokens(result.returned, { mode: 'authored' })).toThrow('not losslessly portable')
-    const lossy = exportDesignTokens(result.returned, { mode: 'authored', strict: false }) as any
+    expect(() => exportDesignTokens(result, { mode: 'authored' })).toThrow('not losslessly portable')
+    const lossy = exportDesignTokens(result, { mode: 'authored', strict: false }) as any
     expect(lossy.$extensions['com.mszr.vanity'].tokens['space.mystery'].lossy).toBe(true)
   })
 
   it('lets a public plugin codec make opaque semantics losslessly portable', () => {
-    const plugin = defineEnginePlugin({
+    const mystery = defineCssValue({
+      type: 'length',
+      extension: { id: 'org.example.codec-value', version: 1 },
+      create: (value: number) => ({ serialize: () => `${value}px` }),
+    })
+    const plugin = definePlugin({
       id: 'org.example.codec-value',
       version: 1,
-      setup: engine => ({
-        mystery: engine.defineCssValue({
-          type: 'length',
-          extension: { id: 'org.example.codec-value', version: 1 },
-          create: (value: number) => ({ serialize: () => `${value}px` }),
-        }),
-      }),
+      setup: ds => ds.addConstructor('mystery', { call: mystery }),
       dtcg: [{
         id: 'org.example.codec',
         version: 1,
         extension: 'org.example.codec-value',
         encode: ({ css }) => ({ css }),
-        decode: ({ payload, engine }) => (engine as any).length.px(Number((payload as any).css.replace('px', ''))),
+        decode: ({ payload, context }) => (context.values.constructors as any).length.px(Number((payload as any).css.replace('px', ''))),
       }],
     })
-    const de = createEngine()
-      .axes(({ axis, data }) => ({
-        density: axis({ modes: { compact: data('density', 'compact') } }),
-        state: axis({ modes: { active: data('state', 'active') } }),
-      }))
-      .use(plugin)
-    const document = emit(() => {
-      const ds = de.createSystem({
-        tokens: de.defineTokens({
-          space: {
-            mystery: de.token({
-              val: de.mystery(9),
-              axes: { density: { compact: de.mystery(11) } },
-              cases: [{ when: { density: 'compact', state: 'active' }, val: de.mystery(13) }],
-            }),
-          },
+    const open = createSystem()
+      .addAxis('density', { modes: { compact: data('density', 'compact') } })
+      .addAxis('state', { modes: { active: data('state', 'active') } })
+      .addPlugin(plugin)
+    const result = locked(open.addTokens({
+      space: {
+        mystery: open.tdef({
+          val: open.mystery(9),
+          axes: { density: { compact: open.mystery(11) } },
+          cases: [{ when: { density: 'compact', state: 'active' }, val: open.mystery(13) }],
         }),
-      })
-      return exportDesignTokens(ds, { mode: 'authored' })
-    }).returned as any
+      },
+    }))
+    const document = exportDesignTokens(result, { mode: 'authored' }) as any
     expect(document.$extensions['com.mszr.vanity'].tokens['space.mystery'].val.codec).toMatchObject({
       id: 'org.example.codec',
       version: 1,
@@ -261,17 +263,16 @@ describe('dTCG interchange', () => {
       version: 1,
     })
 
-    const imported = importDesignTokens(document, { system: de })
-    const result = emit(() => de.createSystem({ tokens: imported, prefix: 'restored' }))
-    expect(result.css).toContain('--restored-space-mystery: 9px')
-    expect(result.css).toContain('11px')
-    expect(result.css).toContain('13px')
+    const imported = importDesignTokens(document, { system: open })
+    const restored = locked(open.addTokens(imported), { prefix: 'restored' })
+    const css = emit(() => restored.class({})).css
+    expect(css).toContain('--restored-space-mystery: 9px')
+    expect(css).toContain('11px')
+    expect(css).toContain('13px')
 
-    const nested = emit(() => de.createSystem({
-      tokens: de.defineTokens({
-        space: { composite: de.token({ val: de.calc(de.mystery(4)).add(de.length.px(1)) }) },
-      }),
+    const nested = locked(open.addTokens({
+      space: { composite: open.tdef({ val: open.calc(open.mystery(4)).add(open.length.px(1)) }) },
     }))
-    expect(() => exportDesignTokens(nested.returned, { mode: 'authored' })).toThrow('nested in a core/mixed expression')
+    expect(() => exportDesignTokens(nested, { mode: 'authored' })).toThrow('nested in a core/mixed expression')
   })
 })

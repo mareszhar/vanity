@@ -188,7 +188,7 @@ Its input mirrors the token tree:
 - `val`, axis methods, and `$axes` bulk forms expose only legal unset target slots;
 - provenance records the augmenter.
 
-The real type harness must stress nested augmentation chains before integration.
+The real type suite must stress nested augmentation chains before integration.
 
 ## 8. Overwrite
 
@@ -334,7 +334,7 @@ Preserve:
 - exact diagnostics for cycles, aliases, unsupported units/spaces, roots, and nonportable expressions;
 - contrast, unused-token, scale, axis, portability, root, and registration checks.
 
-Manifest v3 contains one system map plus source-grouped module facts without duplicating the portable compiler artifact.
+Manifest v4 contains one system map plus source-grouped module facts without duplicating the portable compiler artifact.
 
 ### Emission and identity details
 

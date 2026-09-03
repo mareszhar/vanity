@@ -123,7 +123,7 @@ rt.transaction(tx => {
 })
 ```
 
-Use the same handle path inside and outside a transaction. This retains validation-before-write and semantic snapshots without maintaining a second mutation language.
+Use the same handle path inside and outside `transaction()`. This retains validation-before-write and semantic snapshots without maintaining a second mutation language.
 
 ## 6. Snapshots
 
@@ -253,7 +253,7 @@ It never claims to reproduce the browser's complete computed cascade.
 - set/unset for base and authored branch addresses;
 - mode switch/cycle/current/activate typing and DOM behavior;
 - broadcast and disagreement;
-- transaction zero-write validation failure;
+- `transaction()` zero-write validation failure;
 - DOM-free seed snapshots;
 - snapshot/SSR/hydration no-flash round trip;
 - additive reconciliation and unsupported protocol rejection;

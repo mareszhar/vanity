@@ -49,7 +49,7 @@ function choose(
 }
 
 /** Resolve the full selection: axis/toggle → chosen value, for classes and compound matching. */
-function selectionOf(
+function selectVariantValues(
   runtime: Pick<VanityRecipeRuntime, 'name' | 'defaults'> & { variants: Record<string, Record<string, unknown>>, toggles: Record<string, unknown> },
   props: Record<string, unknown> | undefined,
   warned: Set<string>,
@@ -96,7 +96,7 @@ export function createRecipeHandle(runtime: VanityRecipeRuntime): VanityRecipe<R
   const warned = new Set<string>()
 
   const resolve = (props?: Record<string, unknown>): string => {
-    const selected = selectionOf(runtime, props, warned)
+    const selected = selectVariantValues(runtime, props, warned)
     const classes = [runtime.base]
 
     for (const [axis, values] of Object.entries(runtime.variants)) {
@@ -138,7 +138,7 @@ export function createAnatomyHandle(runtime: VanityAnatomyRuntime): VanityAnatom
   const warned = new Set<string>()
 
   const resolve = (props?: Record<string, unknown>): Record<string, string> => {
-    const selected = selectionOf(runtime, props, warned)
+    const selected = selectVariantValues(runtime, props, warned)
     const out: Record<string, string[]> = {}
 
     for (const [part, className] of Object.entries(runtime.parts))

@@ -71,15 +71,6 @@ export type {
 
 // ─── Open system: the canonical authoring environment ────────────────────────
 
-export {
-  VANITY_BUILTIN_CONSTRUCTOR_NAMES,
-  VANITY_SYSTEM_MEMBERS,
-  VANITY_SYSTEM_SURFACE_VERSION,
-} from './engine/reservations'
-export type { VanityBuiltinConstructorName, VanitySystemMember } from './engine/reservations'
-
-export type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel } from './internal/inspect'
-export type { VanityDtcgCodec, VanityJsonValue } from './internal/interchange'
 export { exportDesignTokens, importDesignTokens, VANITY_DTCG_EXTENSION, VANITY_DTCG_EXTENSION_VERSION } from './introspect/dtcg'
 export type {
   VanityDtcgAuthoredExtension,
@@ -90,11 +81,14 @@ export type {
   VanityDtcgExportOptions,
   VanityDtcgImportOptions,
 } from './introspect/dtcg'
+
 export type {
   VanityExplanation,
   VanityExplanationFor,
   VanityTokenExplanation,
 } from './introspect/explain'
+export type { VanityDtcgCodec, VanityDtcgDecodeContext, VanityJsonValue } from './introspect/interchange'
+export type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel } from './introspect/records'
 export { formatExplanation } from './introspect/semantic'
 export {
   VANITY_INTROSPECTION_FORMAT,
@@ -105,19 +99,18 @@ export type {
   VanityIntrospectedToken,
   VanitySemanticEntry,
   VanitySemanticOwner,
-  VanitySystemMapV1,
+  VanitySystemMapV2,
 } from './introspect/system'
-
-// ─── Introspection and design-token interchange ─────────────────────────────
-
 export { propertyAliases } from './plugins/propertyAliases'
 export type {
   VanityPropertyAliasConfig,
   VanityPropertyAliasExposure,
   VanityPropertyAliasOptions,
 } from './plugins/propertyAliases'
-export { ports } from './ports/ports'
 
+// ─── Introspection and design-token interchange ─────────────────────────────
+
+export { ports } from './ports/ports'
 export type {
   VanityPort,
   VanityPortBindingOptions,
@@ -137,13 +130,11 @@ export type {
   VanityPortValue,
   VanityPortWiden,
 } from './ports/types'
-
-// ─── Ports: the typed runtime boundary ───────────────────────────────────────
-
 export { fromTokenGroup } from './recipes/fromTokenGroup'
+
 export type { VanityTokenGroup } from './recipes/fromTokenGroup'
 
-// ─── Recipes: variants, toggles, anatomy, published ports ────────────────────
+// ─── Ports: the typed runtime boundary ───────────────────────────────────────
 
 export type {
   VanityAnatomy,
@@ -162,78 +153,6 @@ export type {
   VanityRecipeProps,
   VanityRecipeSelection,
 } from './recipes/types'
-export type {
-  VanityAbsoluteAxisConditionOptions,
-  VanityAxisAuthoringHelpers,
-  VanityAxisConditionOptions,
-  VanityAxisConfig,
-  VanityAxisControl,
-  VanityAxisControlRoot,
-  VanityAxisDefinition,
-  VanityAxisDefinitions,
-  VanityAxisLocality,
-  VanityAxisMechanism,
-  VanityAxisModeInput,
-  VanityAxisName,
-  VanityAxisRegistry,
-  VanityAxisRegistryDescription,
-  VanityAxisTrigger,
-  VanityAxisTriggerArm,
-  VanityDefaultAxisMode,
-  VanityNativeSchemePolicy,
-  VanityOpenAxisConfig,
-  VanityOpenAxisModes,
-  VanitySchemeAxisOptions,
-} from './system/axes'
-export { axis, colorSchemes } from './system/axes'
-
-export {
-  aria,
-  condition,
-  container,
-  data,
-  media,
-  moduleRoot,
-  schemeIs,
-  scope,
-  selector,
-  supports,
-  systemRoot,
-  thisMode,
-} from './system/conditions'
-export type {
-  VanityBaseConditionInputs,
-  VanityBaseConditionName,
-  VanityCondition,
-  VanityConditionArm,
-  VanityConditionAst,
-  VanityConditionInput,
-  VanityConditionKey,
-  VanityConditionKeyFor,
-  VanityConditionKeyHover,
-  VanityConditionKeys,
-  VanityConditionScalar,
-  VanityFluentCondition,
-  VanityPartConditionKeyHover,
-  VanityRangeQuery,
-  VanityScopeCondition,
-  VanityStructuredQuery,
-} from './system/conditions'
-
-// ─── The system: createSystem, conditions, layers ────────────────────────────
-
-export type {
-  VanityInProcessSystemContract,
-  VanityOverwriteProvenance,
-  VanityPortableSystemV1,
-  VanitySystemIdentities,
-} from './system/contract'
-export { VANITY_DEFAULT_LAYERS } from './system/createSystem'
-export type {
-  VanityDefaultLayers,
-  VanitySystemConditionName,
-} from './system/createSystem'
-
 export type {
   VanityCustomPropertyEntries,
   VanityCustomPropertyReference,
@@ -259,31 +178,113 @@ export type {
   VanityRuntimeTarget,
   VanityRuntimeTokens,
   VanitySnapshotFrom,
-} from './system/live'
+} from './runtime/contract'
+
+// ─── Recipes: variants, toggles, anatomy, published ports ────────────────────
+
+export type {
+  VanityAbsoluteAxisConditionOptions,
+  VanityAxisAuthoringHelpers,
+  VanityAxisConditionOptions,
+  VanityAxisConfig,
+  VanityAxisControl,
+  VanityAxisControlRoot,
+  VanityAxisDefinition,
+  VanityAxisDefinitions,
+  VanityAxisLocality,
+  VanityAxisMechanism,
+  VanityAxisModeInput,
+  VanityAxisName,
+  VanityAxisRegistry,
+  VanityAxisRegistryDescription,
+  VanityAxisTrigger,
+  VanityAxisTriggerArm,
+  VanityDefaultAxisMode,
+  VanityNativeSchemePolicy,
+  VanityOpenAxisConfig,
+  VanityOpenAxisModes,
+  VanitySchemeAxisOptions,
+} from './system/axes'
+export { axis, colorSchemes } from './system/axes'
+export {
+  aria,
+  condition,
+  container,
+  data,
+  media,
+  moduleRoot,
+  schemeIs,
+  scope,
+  selector,
+  supports,
+  systemRoot,
+  thisMode,
+} from './system/conditions'
+
+export type {
+  VanityBaseConditionInputs,
+  VanityBaseConditionName,
+  VanityCondition,
+  VanityConditionArm,
+  VanityConditionAst,
+  VanityConditionInput,
+  VanityConditionKey,
+  VanityConditionKeyFor,
+  VanityConditionKeyHover,
+  VanityConditionKeys,
+  VanityConditionScalar,
+  VanityFluentCondition,
+  VanityPartConditionKeyHover,
+  VanityRangeQuery,
+  VanityScopeCondition,
+  VanityStructuredQuery,
+} from './system/conditions'
+export type {
+  VanityCapabilityOrigin,
+  VanityInProcessSystemContract,
+  VanityOverwriteProvenance,
+  VanityPortableCapabilitiesV2,
+  VanityPortableCapabilityOriginV2,
+  VanityPortableConstructorV2,
+  VanityPortableExtensionV2,
+  VanityPortablePoliciesV2,
+  VanityPortableSystemV2,
+  VanitySystemIdentities,
+} from './system/contract'
+
+// ─── The system: createSystem, conditions, layers ────────────────────────────
+
+export { createSystem, definePlugin } from './system/createSystem'
+
+export {
+  defineConstructor,
+  defineConstructors,
+  defineConsts,
+  defineRules,
+  defineUtils,
+} from './system/definitions'
+export type {
+  VanityConstructorDefinition,
+  VanityConstructorFamily,
+  VanityConstructorMembers,
+  VanityUtilTree,
+} from './system/definitions'
+export { VANITY_DEFAULT_LAYERS } from './system/locked'
+export type {
+  VanityDefaultLayers,
+  VanitySystemConditionName,
+} from './system/locked'
 
 export {
   defineAxes,
   defineConditions,
-  defineConstructor,
-  defineConstructors,
-  defineConsts,
   definePolicies,
-  defineRules,
-  defineUtils,
 } from './system/modules'
-
 export type {
   VanityAxisModuleInput,
-  VanityConstructorDefinition,
-  VanityConstructorFamily,
-  VanityConstructorMembers,
   VanityDefinitionKind,
   VanityDefinitionModule,
-  VanitySystemRule,
-  VanityUtilTree,
 } from './system/modules'
-
-export { createSystem, definePlugin } from './system/openSystem'
 export type {
   VanityAxisPatch,
   VanityConsolidateOptions,
@@ -301,21 +302,31 @@ export type {
   VanityPluginSetupSystem,
   VanityPolicies,
   VanitySystem,
-  VanitySystemEnvironment,
   VanitySystemPlugin,
-} from './system/openSystem'
+  VanitySystemShape,
+} from './system/open'
 
-// ─── Tokens: graph, liveness, axes, checks, and overrides ────────────────────
+export type { VanitySystemRule } from './system/rules'
+
+export {
+  VANITY_BUILTIN_CONSTRUCTOR_NAMES,
+  VANITY_SYSTEM_MEMBERS,
+  VANITY_SYSTEM_SURFACE_VERSION,
+} from './system/surface'
+export type { VanityBuiltinConstructorName, VanitySystemMember } from './system/surface'
+
+// ─── Tokens: modules, liveness, axes, and checks ─────────────────────────────
 
 export { defineTokens } from './tokens/builder'
 export type {
   VanityPortableTokenBuilder,
   VanityTdefFactory,
   VanityTokenAxisMethods,
-  VanityUnifiedTokenBuilder as VanityTokenBuilder,
+  VanityTokenBuilder,
   VanityTokenDefinitionValue,
   VanityTokenTreeGraph,
 } from './tokens/builder'
+export { check } from './tokens/checks'
 
 export type {
   VanityChannelOperation,
@@ -347,30 +358,25 @@ export type {
   VanityRgbChannels,
   VanityRgbFunction,
 } from './tokens/color'
+export { scale } from './tokens/scale'
 export type { VanityLinearScaleOptions, VanityModularScaleOptions, VanityScale } from './tokens/scale'
 export type {
   VanityAuthoredColor,
+  VanityAuthoredContrast,
   VanityAuthoredInterpolatedColor,
   VanityCanonicalTokens,
   VanityCheck,
-  VanityColor,
   VanityColorInterpolationSpace,
   VanityColorish,
-  VanityColorMode,
-  VanityColorToken,
   VanityColorTokenHandle,
   VanityConfiguredToken,
   VanityConfiguredTokenShape,
-  VanityContrast,
   VanityContrastGuarantee,
-  VanityContrastToken,
   VanityDefaultTokenPolicy,
   VanityDerived,
   VanityGraphInput,
   VanityHueInterpolation,
-  VanityInterpolatedColor,
   VanityInvalidRuntimeValuePolicy,
-  VanityModeOf,
   VanityNamesOf,
   VanityPolarColorSpace,
   VanityResolvedTokens,
@@ -382,7 +388,7 @@ export type {
   VanityTokenConfig,
   VanityTokenDeclarationError,
   VanityTokenDeprecation,
-  VanityTokenDerivationStage,
+  VanityTokenDerivationTree,
   VanityTokenFactory,
   VanityTokenFallback,
   VanityTokenHandle,
@@ -390,10 +396,8 @@ export type {
   VanityTokenHandleOf,
   VanityTokenMetadata,
   VanityTokenMetadataValue,
-  VanityTokenMode,
   VanityTokenModule,
   VanityTokenModuleOptions,
-  VanityTokenOverrides,
   VanityTokenPolicy,
   VanityTokenReference,
   VanityTokenRegistration,
@@ -401,7 +405,6 @@ export type {
   VanityTokensOptions,
   VanityTokenValidation,
   VanityTypedNoDefaultTokenFactory,
-  VanityValueToken,
   VanityVarsOf,
 } from './tokens/types'
 
@@ -446,8 +449,8 @@ export {
   rotate,
   saturate,
   defaultTime as time,
-} from './values/defaultEngine'
-export type { VanityCanonicalConstructors, VanityConstructors } from './values/defaultEngine'
+} from './values/defaults'
+export type { VanityCanonicalConstructors, VanityConstructors } from './values/defaults'
 export type {
   VanityCssOperationDefinition,
   VanityCssValueDefinition,

@@ -11,13 +11,13 @@
 
 import type { NuxtModule } from '@nuxt/schema'
 import type { Plugin, PluginOption } from 'vite'
+import type { VanityAutoImportPlan } from './compiler/auto-imports/autoImportPlan'
 import type {
   VanityAppAutoImports,
   VanityAppAutoImportSource,
   VanityAutoImports,
   VanityStyleAutoImports,
 } from './config'
-import type { VanityAutoImportPlan } from './internal/autoImportPlan'
 import type {
   VanityCompilerOptions,
   VanityViteOptions,
@@ -31,10 +31,10 @@ import {
   defineNuxtModule,
   updateTemplates,
 } from '@nuxt/kit'
-import { isPackageSpecifier } from './internal/applicationImports'
-import { styleAutoImportDeclarations } from './internal/autoImportDeclarations'
-import { planAutoImportDeclarations } from './internal/autoImportPlan'
-import { withVanityViteHost } from './internal/viteHost'
+import { isPackageSpecifier } from './compiler/auto-imports/applicationImports'
+import { styleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
+import { planAutoImportDeclarations } from './compiler/auto-imports/autoImportPlan'
+import { configureVanityViteHost } from './compiler/hosts/viteHost'
 import { renderVanityNuxtConfigTypes } from './nuxt/configTypes'
 import { protectRelativeColorSyntax } from './nuxt/postcss'
 import { vanityPlugin } from './vite'
@@ -125,8 +125,8 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
     // but preserve these standards-valid expressions byte-for-byte.
     protectRelativeColorSyntax(nuxt.options.postcss)
 
-    addVitePlugin(toVitePlugins(vanityPlugin(withVanityViteHost(
-      rootedViteOptions(options, nuxt.options.rootDir),
+    addVitePlugin(toVitePlugins(vanityPlugin(configureVanityViteHost(
+      resolveRootedViteOptions(options, nuxt.options.rootDir),
       'nuxt',
     ))))
 
@@ -169,15 +169,15 @@ function installTypescriptPlugin(tsconfig: VanityTsConfig): void {
 }
 
 /** Nuxt's Vite root may be `srcDir`; authored config paths are project-root relative. */
-function rootedViteOptions(options: VanityNuxtOptions, root: string): VanityViteOptions {
+function resolveRootedViteOptions(options: VanityNuxtOptions, root: string): VanityViteOptions {
   const compiler = options.compiler ?? {}
   return {
     ...options,
     compiler: {
       ...compiler,
-      ...(compiler.system === undefined ? {} : { system: rootedSource(compiler.system, root) }),
+      ...(compiler.system === undefined ? {} : { system: resolveRootedSource(compiler.system, root) }),
     },
-    ...(options.autoImports === undefined ? {} : { autoImports: rootedAutoImports(options.autoImports, root) }),
+    ...(options.autoImports === undefined ? {} : { autoImports: resolveRootedAutoImports(options.autoImports, root) }),
   }
 }
 
@@ -212,48 +212,48 @@ function renderNuxtStyleAutoImportDeclarations(
   })), { relativeTo: path })
 }
 
-function rootedAutoImports(value: VanityAutoImports, root: string): VanityAutoImports {
+function resolveRootedAutoImports(value: VanityAutoImports, root: string): VanityAutoImports {
   if (typeof value === 'string')
-    return rootedSource(value, root)
+    return resolveRootedSource(value, root)
 
   return {
     ...value,
-    ...(value.shared === undefined ? {} : { shared: rootedStyleSource(value.shared, root) }),
-    ...(value.style === undefined ? {} : { style: rootedStyleSource(value.style, root) }),
-    ...(value.app === undefined ? {} : { app: rootedApplicationSource(value.app, root) }),
+    ...(value.shared === undefined ? {} : { shared: resolveRootedStyleSource(value.shared, root) }),
+    ...(value.style === undefined ? {} : { style: resolveRootedStyleSource(value.style, root) }),
+    ...(value.app === undefined ? {} : { app: resolveRootedApplicationSource(value.app, root) }),
   }
 }
 
-function rootedStyleSource(value: VanityStyleAutoImports, root: string): VanityStyleAutoImports {
+function resolveRootedStyleSource(value: VanityStyleAutoImports, root: string): VanityStyleAutoImports {
   if (typeof value === 'string')
-    return rootedSource(value, root)
+    return resolveRootedSource(value, root)
   return {
     ...value,
-    ...(value.from === undefined ? {} : { from: rootedSource(value.from, root) }),
+    ...(value.from === undefined ? {} : { from: resolveRootedSource(value.from, root) }),
   }
 }
 
-function rootedApplicationSource(value: VanityAppAutoImports, root: string): VanityAppAutoImports {
+function resolveRootedApplicationSource(value: VanityAppAutoImports, root: string): VanityAppAutoImports {
   if (typeof value === 'string')
-    return rootedSource(value, root)
+    return resolveRootedSource(value, root)
   if (!('sources' in value) || value.sources === undefined)
     return value
   return {
     ...value,
-    sources: value.sources.map(source => rootedApplicationEntry(source, root)),
+    sources: value.sources.map(source => resolveRootedApplicationEntry(source, root)),
   }
 }
 
-function rootedApplicationEntry(
+function resolveRootedApplicationEntry(
   source: string | VanityAppAutoImportSource,
   root: string,
 ): string | VanityAppAutoImportSource {
   if (typeof source === 'string')
-    return rootedSource(source, root)
-  return { ...source, from: rootedSource(source.from, root) }
+    return resolveRootedSource(source, root)
+  return { ...source, from: resolveRootedSource(source.from, root) }
 }
 
-function rootedSource(source: string, root: string): string {
+function resolveRootedSource(source: string, root: string): string {
   if (source === '$system' || isPackageSpecifier(source))
     return source
   return resolve(root, source)

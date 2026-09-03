@@ -7,7 +7,7 @@ import type { VanityConfig } from './config'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { addViteConfig, defineWxtModule } from 'wxt/modules'
-import { appAutoImportDeclarations, styleAutoImportDeclarations } from './internal/autoImportDeclarations'
+import { appAutoImportDeclarations, styleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
 import { loadVanityConfig, planAutoImportDeclarations } from './prepare'
 import { vanityPlugin } from './vite'
 

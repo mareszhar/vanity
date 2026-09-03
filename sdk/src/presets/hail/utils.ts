@@ -15,7 +15,7 @@ import type {
 import { defineUtils } from '@mszr/vanity'
 import { hailExact, hailSpan } from './markers'
 
-export function hailUtils(
+export function createHailUtils(
   ds: VanityOpenSystemBase,
   options: HailNormalizedOptions,
   controls: HailColorControls & {
@@ -41,7 +41,7 @@ export function hailUtils(
     return scaled.divide(controls.remTarget as number).multiply(ds.length.rem(1))
   }) as HailSize
 
-  const bem: HailBem = step => size(step, 'bem')
+  const createBem: HailBem = step => size(step, 'bem')
 
   const mx: HailMixins = {
     square: dimension => fragment({
@@ -71,7 +71,7 @@ export function hailUtils(
     },
   }
 
-  const contrastOf = <Base extends Parameters<typeof ds.oklch.from>[0]>(base: Base) =>
+  const getContrastOf = <Base extends Parameters<typeof ds.oklch.from>[0]>(base: Base) =>
     ds.oklch.from(base, {
       l: ds.channel
         .subtract(controls.contrastPivotL as VanityNumericColorChannel)
@@ -83,8 +83,8 @@ export function hailUtils(
     [options.spanName]: hailSpan,
     [options.exactName]: hailExact,
     size,
-    bem,
-    contrastOf,
+    bem: createBem,
+    contrastOf: getContrastOf,
     mx: mx as unknown as VanityUtilTree,
   })
 }

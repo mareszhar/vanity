@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path'
 import { argv, cwd, exitCode } from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { diffManifests, formatManifestDiff } from './introspect/diff'
-import { VANITY_MANIFEST_FORMAT } from './introspect/manifest'
+import { assertManifestShape } from './introspect/manifestValidation'
 import { formatExplanation } from './introspect/semantic'
 
 /** Read and validate a manifest file: `await readManifest('.vanity/manifest.json')`. */
@@ -57,20 +57,9 @@ export function explainManifestPath(manifest: VanityManifest, rawPath: string, j
   return json ? JSON.stringify(value, null, 2) : formatExplanation(value as Readonly<Record<string, unknown>>)
 }
 
-/** Validate unknown JSON as Manifest v3: `assertManifest(JSON.parse(source))`. */
+/** Validate unknown JSON as Manifest v4: `assertManifest(JSON.parse(source))`. */
 export function assertManifest(value: unknown): asserts value is VanityManifest {
-  if (!value || typeof value !== 'object')
-    throw new TypeError('[vanity] manifest must be a JSON object')
-  const candidate = value as Partial<VanityManifest>
-  if (
-    candidate.format !== VANITY_MANIFEST_FORMAT
-    || candidate.version !== 3
-    || !candidate.system
-    || !candidate.modules
-    || !candidate.system.identities
-  ) {
-    throw new TypeError(`[vanity] expected ${VANITY_MANIFEST_FORMAT}`)
-  }
+  assertManifestShape(value)
 }
 
 /** Run the published CLI entrypoint from a launcher or directly. */

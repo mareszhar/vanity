@@ -27,7 +27,7 @@ Forbidden framings: product dashboards, fictional users or personas, region- or 
 
 ### 2.2 Color derivation standards
 
-- Colors are authored channel-first: the runtime-addressable hue is its **own** token/custom property, so a control writes one channel and the authored lightness/chroma keep flowing through HMR. A control must never re-serialize a whole color (`oklch(L C ${hue})` in app code is the anti-pattern that defeats the token graph).
+- Colors are authored channel-first: the runtime-addressable hue is its **own** token/custom property, so a control writes one channel and the authored lightness/chroma keep flowing through HMR. A control must never re-serialize a whole color (`oklch(L C ${hue})` in app code is the anti-pattern that defeats the token module).
 - Neutrals are the brand seed run through an elevation curve, so both schemes and every surface role fall out of one token set.
 - Foregrounds on any brand/status/colored surface use a checked legible pairing (`legibleOn()` or an equivalent) so text stays readable across the supported hue range. Where a live target cannot be build-checked, the design constrains the surface (e.g. a bounded lightness) so the checked foreground stays correct.
 

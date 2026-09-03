@@ -21,21 +21,20 @@ function expectNoLeak(messages: Array<Diagnostic | string>): void {
 }
 
 const defineSystem = `
-import { createEngine } from '@test/legacy'
+import { createSystem, media, oklch } from '@mszr/vanity'
 
-const de = createEngine()
-const { t, css, recipe, anatomy, port } = de.createSystem({
-  tokens: {
-    color: { brand: de.token({ val: de.oklch(0.58, 0.2, 285), mutable: true }) },
-    space: { xs: '4px', sm: '8px', md: '16px' },
-  },
-  conditions: {
+const open = createSystem()
+  .addConditions({
     open: '&[data-state="open"]',
-    md: de.media('(min-width: 768px)'),
-  },
+    md: media('(min-width: 768px)'),
+  })
+const withTokens = open.addTokens({
+  color: { brand: open.tdef({ val: oklch(0.58, 0.2, 285), mutable: true }) },
+  space: { xs: '4px', sm: '8px', md: '16px' },
 })
+const { t, class: style, recipe, anatomy, port } = withTokens.consolidate()
 
-void t; void css; void recipe; void anatomy; void port
+void t; void style; void recipe; void anatomy; void port
 `
 
 const defineButton = `${defineSystem}
@@ -145,7 +144,7 @@ describe('errors at the cursor', () => {
 describe('hovers', () => {
   it('vanityProps collapses to the plain optional object — no internals wall', () => {
     const result = project.query`${defineButton}
-      import type { VanityProps } from '@test/legacy'
+      import type { VanityProps } from '@mszr/vanity'
       type ButtonPro${cursor}ps = VanityProps<typeof button>
     `
     expect(result.hover).toMatch(/intent\?: "brand" \| "ghost"/)

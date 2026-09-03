@@ -81,7 +81,7 @@ const d = useAnatomy(s.dialog, props)
 - `propsOf.group({ button, card })` preserves multi-component projection through object-key namespaces (`button-intent`, `card-size`). The prefix comes from the key; already-projected option maps may be nested the same way.
 - Single-class recipes stay wrapper-free: `:class="button(props)"` inline is already reactive, and no `useRecipe` exists (principle 10 — a wrapper must carry something, and there it would carry nothing).
 - **`propsOf` is the component-props bridge.** It turns a recipe or anatomy into Vue runtime props: `defineProps({ ...propsOf(button), disabled: Boolean })`. Variants stay in one source of truth, and toggles receive Vue's native boolean casting. Runtime options are necessary because the SFC compiler cannot resolve the inferred result of a `recipe()` call inside `defineProps<T>()`. Plain TypeScript can still use `VanityProps<typeof button>` ([spec-recipes.md §4](./spec-recipes.md#4-the-call-site-props-in-classes-out)).
-- **`propsOf` belongs to `/vue`, not `de` or `ds`.** It creates Vue `PropType` declarations, consumes handles from any Vanity system, and needs no engine or system policy. Binding it to a system would add framework types and duplicate one stateless adapter per system without improving inference.
+- **`propsOf` belongs to `/vue`, not `de` or `ds`.** It creates Vue `PropType` declarations, consumes handles from any Vanity system, and needs no system policy. Binding it to a system would add framework types and duplicate one stateless adapter per system without improving inference.
 
 ---
 

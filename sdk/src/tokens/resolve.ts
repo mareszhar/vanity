@@ -1,512 +1,546 @@
-/**
- * The three passes over a color expression, all driven by one classification
- * ([patterns.md §3]):
- *
- * - `exprTraits` — is the expression live CSS (`cssLive`), and can a runtime
- *   write change it (`volatile`)?
- * - `foldExpr` — build-time math, computing exactly what the live serialization
- *    would ask the browser to compute (live inputs fold to their defaults).
- * - `serializeExpr` — the live CSS form: relative color syntax, `color-mix()`,
- *   `light-dark()`. Graph edges stay `var()` references; anonymous static
- *   subtrees fold, so the emitted CSS is as boring as it can be.
- *
- * Graph concerns (cycles, per-token memoization, overrides) stay in the
- * resolver callbacks, so token overrides can re-resolve with substitutions.
- */
+/** Semantic finalization and authored-value resolution for inert token modules. */
 
-import type { VanityInternalTokenHandle, VanityTokenMode } from '../internal/handle'
-import type { VanitySerializeContext } from '../values/protocol'
+import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
 import type { VanityCssValue } from '../values/types'
-import type { VanityChannelOperation, VanityColorChannel, VanityColorExpr } from './color'
+import type { VanityColorExpr } from './color'
+import type { VanityResolver, VanityScheme } from './expressions'
 import type { VanityOklch } from './math'
-import { ExpressionValue, inputNode, nodeOf, serializeSelf } from '../values/protocol'
-import { formatNumber, formatOklch, mixOklch, parseColor, pickLegible } from './math'
+import type { NodeResult, TokenGraph, TokenModule, TokenNode, TokenResolutionOptions, VanityLeafDefinition } from './module'
+import type { VanityTokens } from './types'
+import { VanityError } from '../diagnostics'
+import { record } from '../introspect/records'
+import {
+  createSerializeContext,
+  getNode as valueNodeOf,
+  VANITY_DEFAULT_CSS_SUPPORT,
+} from '../values/protocol'
+import { TextContrastCheck } from './checks'
+import { getColorRequirements, toExpr } from './color'
+import { foldExpr, getExpressionTraits, serializeContrastPick, serializeExpr } from './expressions'
+import { readHandleVar } from './handle'
+import { formatNumber, formatOklch, measureApcaContrast, measureWcagContrast, parseColor, pickLegible } from './math'
+import {
+  buildTokens,
+  getNode,
+  isTokenModule,
+  serializeTokenCss,
+  VANITY_MODULE_TOKEN_REF,
+} from './module'
 
-export type VanityScheme = 'light' | 'dark'
+export {
+  collectRefs,
+  foldExpr,
+  getExpressionTraits,
+  hasContrastExpression,
+  serializeContrastPick,
+  serializeExpr,
+} from './expressions'
+export type {
+  VanityExprTraits,
+  VanityResolver,
+  VanityScheme,
+} from './expressions'
+export type { TokenResolutionOptions } from './module'
 
-export interface VanityExprTraits {
-  /** Must be emitted as a live CSS expression (scheme pairs or live inputs). */
-  cssLive: boolean
-  /** A runtime write can change it — some `.live()` input sits upstream. */
-  volatile: boolean
-  /** The expression itself selects a light/dark branch. */
-  conditional: boolean
+/** Materialize an inert module at the owning system, interchange, or test boundary. */
+export function resolveTokenModule(
+  module: unknown,
+  options: TokenResolutionOptions = {},
+): VanityTokens<object, string> {
+  if (!isTokenModule(module))
+    throw new TypeError('[vanity] only an unfinished token module can be resolved')
+  const tokenModule = module as TokenModule
+  return buildTokens(tokenModule.contributions, tokenModule.tokenPolicy, options)
 }
 
-export interface VanityResolver {
-  /** Fold a graph edge to its per-scheme build value (cycle-guarded by the graph). */
-  foldRef: (handle: VanityInternalTokenHandle, scheme: VanityScheme) => VanityOklch
-  /** Classify a graph edge (cycle-guarded by the graph). */
-  refTraits: (handle: VanityInternalTokenHandle) => VanityExprTraits
-  /** Reject a non-color value with a diagnostic naming the offending token. */
-  invalidColor: (detail: string) => never
-  /** Choose a token's declared val/var projection at a graph edge. */
-  serializeRef?: (handle: VanityInternalTokenHandle) => string
-  /** Serialize a value expression with token refs replaced by authored defaults. */
-  foldValue?: (value: import('../values/types').VanityCssValue, scheme: VanityScheme) => string
-  /** Serialize a value expression with semantic token paths rebound to this graph. */
-  serializeValue?: (value: import('../values/types').VanitySelfValue) => string
-}
+export type VanityOverride = VanityLeafDefinition
 
-// ─── Classification ──────────────────────────────────────────────────────────
+/** Resolve every graph node, preserving cycles, live references, and diagnostics. */
+export function resolveGraph(
+  graph: TokenGraph,
+  overrides?: Map<string, VanityOverride>,
+  context?: string,
+): { results: Map<string, NodeResult>, diagnostics: VanityDiagnostic[] } {
+  const results = new Map<string, NodeResult>()
+  const stack: string[] = []
+  const diagnostics: VanityDiagnostic[] = []
+  let authoredValues: ReturnType<typeof createAuthoredValueFolder>
 
-export function exprTraits(expr: VanityColorExpr, resolver: VanityResolver): VanityExprTraits {
-  switch (expr.kind) {
-    case 'oklch':
-    case 'parse':
-      return { cssLive: false, volatile: false, conditional: false }
-    case 'value': {
-      const node = nodeOf(expr.value)
-      const dependency = node.dependencies.length > 0
+  const resolver: VanityResolver = {
+    foldRef: (handle, scheme) => foldNode(requireNode(handle), scheme),
+    foldValue: (value, scheme) => authoredValues.foldValue(value, scheme),
+    serializeValue: value => authoredValues.serializeValue(value),
+    refTraits: (handle) => {
+      const referenced = requireNode(handle)
+      const traits = resolveNode(referenced).traits
       return {
-        cssLive: dependency || preservesNative(node),
-        volatile: dependency,
-        conditional: false,
+        cssLive: traits.cssLive || (referenced.contract.canonical && referenced.contract.reference === 'var'),
+        volatile: traits.volatile || (referenced.contract.canonical && referenced.contract.mutable),
+        conditional: traits.conditional,
+      }
+    },
+    serializeRef: (handle) => {
+      const referenced = requireNode(handle)
+      return referenced.contract.reference === 'var'
+        ? readHandleVar(referenced.handle)
+        : resolveNode(referenced).emitted
+    },
+    invalidColor: (detail) => {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_INVALID_COLOR',
+        message: `${stack[stack.length - 1] ?? 'a token'} cannot resolve: ${detail}`,
+        path: stack[stack.length - 1],
+        file: graph.file,
+        fix: 'give it a color value, or reference a color token',
+      })
+    },
+  }
+
+  function requireNode(handle: import('./handle').VanityInternalTokenHandle): TokenNode {
+    const node = getNode(handle)
+
+    if (node && graph.nodes.get(node.key) === node)
+      return node
+
+    const moduleRef = (handle as unknown as {
+      readonly [VANITY_MODULE_TOKEN_REF]?: {
+        readonly module: symbol
+        readonly path: readonly string[]
+      }
+    })[VANITY_MODULE_TOKEN_REF]
+    const owner = graph.nodes.get(stack[stack.length - 1] ?? '')
+    if (moduleRef !== undefined && owner?.moduleId === moduleRef.module) {
+      const rebound = graph.nodes.get([
+        ...(owner.modulePath ?? []),
+        ...moduleRef.path,
+      ].join('.'))
+      if (rebound)
+        return rebound
+    }
+
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_OVERRIDE',
+      message: moduleRef === undefined
+        ? 'a referenced token does not belong to this token module'
+        : 'a module-relative token reference was used outside its owning mounted module',
+      file: graph.file,
+      fix: moduleRef === undefined
+        ? undefined
+        : 'use the mounted open-system handle for cross-module references',
+    })
+  }
+
+  function getDefinition(node: TokenNode): VanityOverride {
+    return overrides?.get(node.key) ?? node.definition
+  }
+
+  function enforceAcyclicResolution<Result>(node: TokenNode, compute: () => Result): Result {
+    if (stack.includes(node.key)) {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_CYCLE',
+        message: `token derivation cycle: ${[...stack.slice(stack.indexOf(node.key)), node.key].join(' → ')}`,
+        path: node.key,
+        file: graph.file,
+        fix: 'break the loop — one of these derivations must resolve to a value',
+      })
+    }
+
+    stack.push(node.key)
+
+    try {
+      return compute()
+    }
+    finally {
+      stack.pop()
+    }
+  }
+
+  authoredValues = createAuthoredValueFolder(
+    graph,
+    () => resolver,
+    getDefinition,
+    enforceAcyclicResolution,
+  )
+
+  function foldNode(node: TokenNode, scheme: VanityScheme): VanityOklch {
+    const css = authoredValues.foldDefault(node, scheme)
+    const parsed = parseColor(css)
+
+    if (!parsed)
+      return resolver.invalidColor(`${node.key} holds '${css}', which is not a color`)
+
+    return parsed
+  }
+
+  function resolveNode(node: TokenNode): NodeResult {
+    const memoized = results.get(node.key)
+
+    if (memoized)
+      return memoized
+
+    const result = enforceAcyclicResolution(node, () => computeNodeResult(node))
+    results.set(node.key, result)
+    return result
+  }
+
+  function computeNodeResult(node: TokenNode): NodeResult {
+    const definition = getDefinition(node)
+    if (definition.kind === 'none') {
+      return {
+        traits: { cssLive: false, volatile: node.contract.mutable, conditional: false },
+        emitted: '',
       }
     }
-    case 'scheme': {
-      const inner = join(exprTraits(expr.light, resolver), exprTraits(expr.dark, resolver))
-      return { cssLive: true, volatile: inner.volatile, conditional: true }
-    }
-    case 'ref':
-      return resolver.refTraits(expr.handle)
-    case 'alpha':
-    case 'adjust':
-      return exprTraits(expr.input, resolver)
-    case 'channels': {
-      const inner = exprTraits(expr.input, resolver)
-      const channelValues = Object.values(expr.channels).flatMap(value =>
-        isChannelExpression(value) ? value.operations.map(operation => operation.value) : value,
-      )
-      const dynamic = channelValues.some(value => value !== undefined && typeof value !== 'number')
-      const volatile = channelValues.some((value) => {
-        if (!value || (typeof value !== 'object' && typeof value !== 'function'))
-          return false
-        return inputNode(value as never).dependencies.length > 0
-      })
-      return { cssLive: inner.cssLive || dynamic, volatile: inner.volatile || volatile, conditional: inner.conditional }
-    }
-    case 'relative': {
-      const inner = exprTraits(expr.input, resolver)
-      const values = [...expr.channels, expr.alpha].flatMap(value =>
-        isChannelExpression(value) ? value.operations.map(operation => operation.value) : value,
-      )
-      const volatile = values.some((value) => {
-        if (!value || (typeof value !== 'object' && typeof value !== 'function'))
-          return false
-        return inputNode(value as never).dependencies.length > 0
-      })
-      return { cssLive: true, volatile: inner.volatile || volatile, conditional: inner.conditional }
-    }
-    case 'mix': {
-      const inner = join(exprTraits(expr.input, resolver), exprTraits(expr.other, resolver))
-      return { ...inner, cssLive: inner.cssLive || expr.space !== 'oklab' || expr.hue !== undefined }
-    }
-    case 'contrast':
-      return exprTraits(expr.target, resolver)
-  }
-}
 
-function preservesNative(node: import('../values/protocol').VanityExpressionNode): boolean {
-  switch (node.kind) {
-    case 'raw':
-      return true
-    case 'plugin':
-      return node.fold === undefined
-    case 'function':
-      return node.values.some(preservesNative)
-    case 'operation':
-      return preservesNative(node.left) || preservesNative(node.right)
-    case 'var':
-      return true
-    case 'composite':
-      return node.parts.some(part => typeof part !== 'string' && preservesNative(part))
-    case 'literal':
-      return false
-  }
-}
-
-function join(a: VanityExprTraits, b: VanityExprTraits): VanityExprTraits {
-  return {
-    cssLive: a.cssLive || b.cssLive,
-    volatile: a.volatile || b.volatile,
-    conditional: a.conditional || b.conditional,
-  }
-}
-
-/** The traits a token contributes at a reference site, read off its resolved mode. */
-export function modeTraits(mode: VanityTokenMode): VanityExprTraits {
-  switch (mode) {
-    case 'static':
-      return { cssLive: false, volatile: false, conditional: false }
-    case 'scheme':
-      return { cssLive: true, volatile: false, conditional: true }
-    case 'live':
-      return { cssLive: false, volatile: true, conditional: false }
-    case 'derived':
-      return { cssLive: true, volatile: true, conditional: false }
-  }
-}
-
-/**
- * Whether a legible pairing sits anywhere in the tree. `legibleOn` is graph
- * knowledge — the check needs both endpoints at build time — so positions
- * outside the graph (rule values, port defaults) reject it with a diagnostic.
- */
-export function containsContrast(expr: VanityColorExpr): boolean {
-  switch (expr.kind) {
-    case 'oklch':
-    case 'parse':
-    case 'value':
-    case 'ref':
-      return false
-    case 'contrast':
-      return true
-    case 'alpha':
-    case 'adjust':
-    case 'channels':
-    case 'relative':
-      return containsContrast(expr.input)
-    case 'mix':
-      return containsContrast(expr.input) || containsContrast(expr.other)
-    case 'scheme':
-      return containsContrast(expr.light) || containsContrast(expr.dark)
-  }
-}
-
-/** Collect the token paths an expression references — the graph edges, for introspection. */
-export function collectRefs(expr: VanityColorExpr, into: Set<string>): void {
-  switch (expr.kind) {
-    case 'oklch':
-    case 'parse':
-      return
-    case 'value':
-      for (const reference of nodeOf(expr.value).dependencies) {
-        if (reference.path)
-          into.add(reference.path)
+    if (definition.kind === 'literal') {
+      return {
+        traits: { cssLive: false, volatile: false, conditional: false },
+        emitted: String(definition.value),
       }
-      return
-    case 'ref':
-      into.add(expr.handle.path)
-      return
-    case 'alpha':
-    case 'adjust':
-    case 'channels':
-    case 'relative':
-      collectRefs(expr.input, into)
-      return
-    case 'mix':
-      collectRefs(expr.input, into)
-      collectRefs(expr.other, into)
-      return
-    case 'scheme':
-      collectRefs(expr.light, into)
-      collectRefs(expr.dark, into)
-      return
-    case 'contrast':
-      collectRefs(expr.target, into)
+    }
+
+    if (definition.kind === 'value') {
+      const valueNode = valueNodeOf(definition.value)
+      const reactive = valueNode.dependencies.length > 0
+      return {
+        traits: { cssLive: reactive, volatile: reactive, conditional: false },
+        emitted: serializeTokenCss(graph, definition.value),
+      }
+    }
+
+    if (definition.kind === 'contrast')
+      return calculateContrastResult(node, definition.expr)
+
+    const { expr } = definition
+    const inner = getExpressionTraits(expr, resolver)
+    const traits = inner
+
+    if (node.contract.canonical && graph.support) {
+      const missing = [...getColorRequirements(expr)].filter(feature => !graph.support!.features.has(feature))
+      if (missing.length > 0) {
+        throw new VanityError({
+          code: 'VANITY_TOKENS_INVALID_COLOR',
+          message: `${node.key} requires ${missing.join(', ')}, outside CSS support target "${graph.support.id}"`,
+          path: node.key,
+          file: graph.file,
+          fix: 'author the referenced inputs with reference: \'val\', or choose a support target with a proven equivalent',
+        })
+      }
+    }
+
+    // A pure alias keeps the graph edge visible: always the `var()` reference.
+    if (expr.kind === 'ref')
+      return { traits, emitted: resolver.serializeRef?.(expr.handle) ?? readHandleVar(expr.handle) }
+
+    const emitted = inner.cssLive || inner.volatile
+      ? serializeExpr(expr, resolver)
+      : formatOklch(foldExpr(expr, 'light', resolver))
+
+    return { traits, emitted }
+  }
+
+  function calculateContrastResult(node: TokenNode, expr: Extract<VanityColorExpr, { kind: 'contrast' }>): NodeResult {
+    const traits = getExpressionTraits(expr.target, resolver)
+    const emitted = serializeContrastPick(expr, resolver)
+
+    if (traits.volatile) {
+      // The guarantee cannot be total over a live target, so keep the checked
+      // authored-default pick. Chromium's experimental `contrast-color()`
+      // implementation has made that result follow `color-scheme` even when
+      // the target itself is scheme-invariant; that breaks an opaque
+      // background/foreground pairing. Revisit a native upgrade once that
+      // implementation is interoperable with the CSS Color 5 contract.
+      return { traits, emitted }
+    }
+
+    const schemes: VanityScheme[] = traits.cssLive ? ['light', 'dark'] : ['light']
+
+    for (const scheme of schemes) {
+      const target = foldExpr(expr.target, scheme, resolver)
+      const pick = pickLegible(target)
+
+      if (Math.abs(pick.lc) < expr.contrast) {
+        const where = traits.cssLive ? ` in scheme "${scheme}"` : ''
+        diagnostics.push({
+          code: 'VANITY_TOKENS_CONTRAST',
+          message: `${node.key} / ${describeTarget(expr.target)} fails APCA Lc ${expr.contrast}${where}${context ? ` (${context})` : ''}`,
+          detail: [`target (${scheme}) → ${formatOklch(target)}; best pairing ${pick.keyword} = Lc ${Math.abs(pick.lc).toFixed(1)}`],
+          path: node.key,
+          file: graph.file,
+          fix: expr.explicitContrast
+            ? 'adjust the target color — even the accepted threshold fails'
+            : `adjust the target color, or accept explicitly: legibleOn(…, { contrast: ${Math.floor(Math.abs(pick.lc))} })`,
+        })
+      }
+    }
+
+    return { traits, emitted }
+  }
+
+  for (const node of graph.nodes.values())
+    resolveNode(node)
+
+  return { results, diagnostics }
+}
+
+/** Build-time representative projection shared by derivation fallback and checks. */
+export function createAuthoredValueFolder(
+  graph: TokenGraph,
+  resolver: () => VanityResolver,
+  getDefinition: (node: TokenNode) => VanityOverride,
+  guard: <Result>(node: TokenNode, compute: () => Result) => Result = (_node, compute) => compute(),
+) {
+  function serializeValue(value: import('../values/types').VanitySelfValue): string {
+    const context = createSerializeContext(
+      graph.support ?? VANITY_DEFAULT_CSS_SUPPORT,
+      (reference) => {
+        if (reference.kind === 'token' && reference.path !== undefined) {
+          const referenced = graph.nodes.get(reference.path)
+          if (!referenced)
+            return resolver().invalidColor(`${reference.path} does not belong to this token module`)
+          return referenced.name
+        }
+        if (reference.name !== undefined)
+          return reference.name
+        return resolver().invalidColor('a reference has no final custom-property name')
+      },
+      undefined,
+      graph.policies,
+    )
+    return context.serialize(value)
+  }
+
+  function foldValue(value: VanityCssValue, scheme: VanityScheme): string {
+    const context = createSerializeContext(
+      graph.support ?? VANITY_DEFAULT_CSS_SUPPORT,
+      reference => reference.name ?? resolver().invalidColor('a reference has no custom-property name'),
+      (reference) => {
+        if (reference.kind !== 'token' || reference.path === undefined) {
+          return resolver().invalidColor(
+            `${reference.name ?? 'a custom property'} has no authored default value in this token module`,
+          )
+        }
+
+        const referenced = graph.nodes.get(reference.path)
+        if (!referenced)
+          return resolver().invalidColor(`${reference.path} does not belong to this token module`)
+
+        return foldDefault(referenced, scheme)
+      },
+      graph.policies,
+    )
+
+    return foldNumericCalculations(context.serialize(value))
+  }
+
+  function foldDefault(node: TokenNode, scheme: VanityScheme): string {
+    return guard(node, () => {
+      const definition = getDefinition(node)
+
+      if (definition.kind === 'none')
+        return resolver().invalidColor(`${node.key} has no authored default value`)
+      if (definition.kind === 'literal')
+        return String(definition.value)
+      if (definition.kind === 'value')
+        return foldValue(definition.value, scheme)
+
+      return formatOklch(foldExpr(definition.expr, scheme, resolver()))
+    })
+  }
+
+  return { foldDefault, foldValue, serializeValue }
+}
+
+/** Reduce only the closed, unitless arithmetic grammar inside build-time `calc()`. */
+function foldNumericCalculations(css: string): string {
+  let folded = css
+
+  while (true) {
+    const start = folded.lastIndexOf('calc(')
+    if (start < 0)
+      return folded
+
+    let depth = 1
+    let end = start + 5
+    for (; end < folded.length && depth > 0; end++) {
+      if (folded[end] === '(')
+        depth++
+      else if (folded[end] === ')')
+        depth--
+    }
+
+    if (depth !== 0)
+      return folded
+
+    const expression = folded.slice(start + 5, end - 1)
+    const value = evaluateNumericExpression(expression)
+    if (value === undefined)
+      return folded
+
+    folded = `${folded.slice(0, start)}${formatNumber(value)}${folded.slice(end)}`
   }
 }
 
-function containsRef(expr: VanityColorExpr): boolean {
-  switch (expr.kind) {
-    case 'oklch':
-    case 'parse':
+function evaluateNumericExpression(expression: string): number | undefined {
+  let cursor = 0
+  const consumeWhitespace = () => {
+    while (/\s/.test(expression[cursor] ?? ''))
+      cursor++
+  }
+  const consume = (character: string): boolean => {
+    consumeWhitespace()
+    if (expression[cursor] !== character)
       return false
-    case 'value':
-      return nodeOf(expr.value).dependencies.length > 0
-    case 'ref':
-      return true
-    case 'alpha':
-    case 'adjust':
-    case 'channels':
-    case 'relative':
-      return containsRef(expr.input)
-    case 'mix':
-      return containsRef(expr.input) || containsRef(expr.other)
-    case 'scheme':
-      return containsRef(expr.light) || containsRef(expr.dark)
-    case 'contrast':
-      return containsRef(expr.target)
+    cursor++
+    return true
   }
+  function parsePrimary(): number | undefined {
+    consumeWhitespace()
+    if (consume('+'))
+      return parsePrimary()
+    if (consume('-')) {
+      const value = parsePrimary()
+      return value === undefined ? undefined : -value
+    }
+    if (consume('(')) {
+      const value = parseSum()
+      return value === undefined || !consume(')') ? undefined : value
+    }
+    const match = /^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/i.exec(expression.slice(cursor))
+    if (!match)
+      return undefined
+    cursor += match[0].length
+    return Number(match[0])
+  }
+  function parseProduct(): number | undefined {
+    let value = parsePrimary()
+    if (value === undefined)
+      return undefined
+    while (true) {
+      if (consume('*')) {
+        const right = parsePrimary()
+        if (right === undefined)
+          return undefined
+        value *= right
+      }
+      else if (consume('/')) {
+        const right = parsePrimary()
+        if (right === undefined || right === 0)
+          return undefined
+        value /= right
+      }
+      else {
+        return value
+      }
+    }
+  }
+  function parseSum(): number | undefined {
+    let value = parseProduct()
+    if (value === undefined)
+      return undefined
+    while (true) {
+      if (consume('+')) {
+        const right = parseProduct()
+        if (right === undefined)
+          return undefined
+        value += right
+      }
+      else if (consume('-')) {
+        const right = parseProduct()
+        if (right === undefined)
+          return undefined
+        value -= right
+      }
+      else {
+        return value
+      }
+    }
+  }
+
+  const value = parseSum()
+  consumeWhitespace()
+  return value !== undefined && cursor === expression.length && Number.isFinite(value)
+    ? value
+    : undefined
 }
 
-// ─── Build-time folding ──────────────────────────────────────────────────────
+function describeTarget(target: VanityColorExpr): string {
+  return target.kind === 'ref' ? getNode(target.handle)?.key ?? 'its target' : 'its target'
+}
 
-export function foldExpr(expr: VanityColorExpr, scheme: VanityScheme, resolver: VanityResolver): VanityOklch {
-  switch (expr.kind) {
-    case 'oklch': {
-      const { l, c, h, alpha } = expr
-      return { l, c, h, ...(alpha === undefined ? {} : { alpha }) }
+/** Run authored contrast checks after graph resolution has established fold semantics. */
+export function runTokenChecks(checks: readonly unknown[], graph: TokenGraph): VanityDiagnostic[] {
+  const diagnostics: VanityDiagnostic[] = []
+
+  for (const entry of checks) {
+    if (!(entry instanceof TextContrastCheck))
+      continue
+
+    const text = toExpr(entry.text)
+    const background = toExpr(entry.background)
+
+    for (const scheme of ['light', 'dark'] as const) {
+      const resolver = createTokenCheckResolver(graph, scheme)
+      const textColor = foldExpr(text, scheme, resolver)
+      const backgroundColor = foldExpr(background, scheme, resolver)
+      const { algorithm, min } = entry.level
+      const measured = algorithm === 'apca'
+        ? Math.abs(measureApcaContrast(textColor, backgroundColor))
+        : measureWcagContrast(textColor, backgroundColor)
+
+      record({
+        kind: 'contrast',
+        file: graph.file,
+        pairing: `${describeTarget(text)} on ${describeTarget(background)}`,
+        scheme,
+        algorithm,
+        measured: Math.round(measured * 10) / 10,
+        min,
+        accepted: false,
+      })
+
+      if (measured < min) {
+        diagnostics.push({
+          code: 'VANITY_TOKENS_CONTRAST',
+          message: `${describeTarget(text)} / ${describeTarget(background)} fails ${algorithm === 'apca' ? `APCA Lc ${min}` : `WCAG 2 ${min}:1`} in scheme "${scheme}"`,
+          detail: [`text (${scheme}) → ${formatOklch(textColor)} on ${formatOklch(backgroundColor)} = ${algorithm === 'apca' ? `Lc ${measured.toFixed(1)}` : `${measured.toFixed(2)}:1`}`],
+          file: graph.file,
+          fix: 'adjust one endpoint of the pairing, or relax the check level deliberately',
+        })
+      }
     }
-    case 'parse': {
-      const parsed = parseColor(expr.css)
+  }
 
-      if (!parsed)
-        return resolver.invalidColor(`'${expr.css}' is not a color`)
+  return diagnostics
+}
 
-      return parsed
-    }
-    case 'value': {
-      const css = resolver.foldValue?.(expr.value, scheme) ?? serializeSelf(expr.value)
+/** Create the no-cycle resolver used by authored checks and introspection. */
+export function createTokenCheckResolver(graph: TokenGraph, scheme: VanityScheme): VanityResolver {
+  let resolver: VanityResolver
+  const authoredValues = createAuthoredValueFolder(graph, () => resolver, node => node.definition)
+
+  resolver = {
+    foldRef: (handle) => {
+      const node = getNode(handle)
+      if (!node)
+        return resolver.invalidColor('a referenced token does not belong to this token module')
+      const css = authoredValues.foldDefault(node, scheme)
       const parsed = parseColor(css)
       if (!parsed)
-        return resolver.invalidColor(`'${css}' cannot be folded as a color`)
+        return resolver.invalidColor(`${node.key} holds '${css}', which is not a color`)
       return parsed
-    }
-    case 'ref':
-      return resolver.foldRef(expr.handle, scheme)
-    case 'alpha':
-      return { ...foldExpr(expr.input, scheme, resolver), alpha: expr.amount }
-    case 'adjust': {
-      const input = foldExpr(expr.input, scheme, resolver)
-      // The formula is the serialization's `calc()`, verbatim — no clamping the
-      // browser wouldn't do, so folded and live ramps agree to the rounding digit.
-      return { ...input, [expr.channel]: input[expr.channel] + expr.delta }
-    }
-    case 'channels': {
-      const input = foldExpr(expr.input, scheme, resolver)
-      return {
-        l: applyChannel(input.l, expr.channels.l, scheme, resolver),
-        c: applyChannel(input.c, expr.channels.c, scheme, resolver),
-        h: applyChannel(input.h, expr.channels.h, scheme, resolver),
-        ...('alpha' in input || expr.channels.alpha !== undefined
-          ? { alpha: applyChannel(input.alpha ?? 1, expr.channels.alpha, scheme, resolver) }
-          : {}),
-      }
-    }
-    case 'relative':
-      return resolver.invalidColor(
-        `${expr.function}(from …) is a live relative color and cannot be folded to one build-time color`,
-      )
-    case 'mix':
-      return mixOklch(foldExpr(expr.input, scheme, resolver), foldExpr(expr.other, scheme, resolver), expr.amount)
-    case 'scheme':
-      return foldExpr(scheme === 'light' ? expr.light : expr.dark, scheme, resolver)
-    case 'contrast':
-      return pickLegible(foldExpr(expr.target, scheme, resolver)).color
-  }
-}
-
-// ─── Live serialization ──────────────────────────────────────────────────────
-
-export function serializeExpr(expr: VanityColorExpr, resolver: VanityResolver, context?: VanitySerializeContext): string {
-  const traits = exprTraits(expr, resolver)
-
-  // An anonymous static subtree folds — graph edges stay `var()` references.
-  if (!traits.cssLive && !traits.volatile && !containsRef(expr))
-    return formatOklch(foldExpr(expr, 'light', resolver))
-
-  switch (expr.kind) {
-    case 'oklch':
-    case 'parse':
-      return formatOklch(foldExpr(expr, 'light', resolver)) // unreachable via the fold above; kept total
-    case 'value':
-      return resolver.serializeValue?.(expr.value)
-        ?? (context ? context.serialize(expr.value) : serializeSelf(expr.value))
-    case 'ref':
-      return resolver.serializeRef?.(expr.handle) ?? expr.handle.var
-    case 'alpha':
-      return `oklch(from ${serializeExpr(expr.input, resolver, context)} l c h / ${formatNumber(expr.amount)})`
-    case 'adjust':
-      return serializeAdjust(expr, resolver, context)
-    case 'channels':
-      return serializeChannels(expr, resolver, context)
-    case 'relative':
-      return serializeRelative(expr, resolver, context)
-    case 'mix': {
-      const amount = formatNumber(expr.amount * 100)
-      const hue = expr.hue ? ` ${expr.hue} hue` : ''
-      return `color-mix(in ${expr.space}${hue}, ${serializeExpr(expr.input, resolver, context)}, ${serializeExpr(expr.other, resolver, context)} ${amount}%)`
-    }
-    case 'scheme':
-      return `light-dark(${serializeExpr(expr.light, resolver, context)}, ${serializeExpr(expr.dark, resolver, context)})`
-    case 'contrast':
-      // Mid-expression, a legible pairing contributes its computed pick. A
-      // token's own value follows the same fallback unless a future graph
-      // enhancement proves a native upgrade interoperable.
-      return serializeContrastPick(expr, resolver)
-  }
-}
-
-function applyChannel(
-  current: number,
-  operation: VanityColorChannel | VanityChannelOperation | undefined,
-  scheme: VanityScheme,
-  resolver: VanityResolver,
-): number {
-  if (operation === undefined)
-    return current
-  if (typeof operation === 'number')
-    return operation
-  if (operation === 'none')
-    return resolver.invalidColor('a missing relative-color channel has no numeric authored default')
-  if (!isChannelExpression(operation))
-    return foldChannelValue(operation, scheme, resolver)
-  let result = current
-  for (const step of operation.operations) {
-    const value = foldChannelValue(step.value, scheme, resolver)
-    switch (step.kind) {
-      case 'set':
-        result = value
-        break
-      case 'add':
-        result += value
-        break
-      case 'subtract':
-        result -= value
-        break
-      case 'multiply':
-        result *= value
-        break
-      case 'divide':
-        result /= value
-        break
-    }
-  }
-  return result
-}
-
-function foldChannelValue(
-  value: VanityColorChannel,
-  scheme: VanityScheme,
-  resolver: VanityResolver,
-): number {
-  if (typeof value === 'number')
-    return value
-  if (value === 'none')
-    return resolver.invalidColor('a missing relative-color channel has no numeric authored default')
-
-  const css = typeof value === 'string'
-    ? value
-    : resolver.foldValue?.(value as VanityCssValue, scheme) ?? serializeSelf(value)
-  const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(%|deg|grad|rad|turn)?$/i.exec(css.trim())
-
-  if (!match)
-    return resolver.invalidColor(`relative-color channel '${css}' has no numeric authored default`)
-
-  const number = Number(match[1])
-  switch (match[2]?.toLowerCase()) {
-    case '%': return number / 100
-    case 'grad': return number * 0.9
-    case 'rad': return number * 180 / Math.PI
-    case 'turn': return number * 360
-    default: return number
-  }
-}
-
-function serializeChannels(
-  expr: Extract<VanityColorExpr, { kind: 'channels' }>,
-  resolver: VanityResolver,
-  context?: VanitySerializeContext,
-): string {
-  const channelText = (input: VanityColorChannel): string => {
-    if (typeof input === 'number')
-      return formatNumber(input)
-    if (input === 'none')
-      return input
-    if ((typeof input === 'object' || typeof input === 'function') && input !== null) {
-      const value = new ExpressionValue(inputNode(input))
-      if (resolver.serializeValue)
-        return resolver.serializeValue(value)
-      return context ? context.serialize(value) : serializeSelf(value)
-    }
-    return context ? context.serialize(input) : serializeSelf(input)
-  }
-  const value = (name: 'l' | 'c' | 'h' | 'alpha', operation: VanityColorChannel | VanityChannelOperation | undefined): string => {
-    if (operation === undefined)
-      return name
-    if (typeof operation === 'number' || operation === 'none' || !isChannelExpression(operation))
-      return channelText(operation)
-    let expression: string = name
-    let calculates = false
-    operation.operations.forEach((step, index) => {
-      if (step.kind === 'set') {
-        expression = channelText(step.value)
-        return
-      }
-      const operator = step.kind === 'add' ? '+' : step.kind === 'subtract' ? '-' : step.kind === 'multiply' ? '*' : '/'
-      expression = `${index === 0 ? expression : `(${expression})`} ${operator} ${channelText(step.value)}`
-      calculates = true
-    })
-    return calculates ? `calc(${expression})` : expression
+    },
+    foldValue: value => authoredValues.foldValue(value, scheme),
+    serializeValue: value => authoredValues.serializeValue(value),
+    refTraits: (handle) => {
+      const node = getNode(handle)
+      const result = node === undefined ? undefined : graph.results.get(node.key)
+      return result?.traits ?? { cssLive: false, volatile: false, conditional: false }
+    },
+    invalidColor: (detail) => {
+      throw new VanityError({ code: 'VANITY_TOKENS_INVALID_COLOR', message: `a check cannot resolve: ${detail}`, file: graph.file })
+    },
   }
 
-  const { channels } = expr
-  const alpha = channels.alpha === undefined ? '' : ` / ${value('alpha', channels.alpha)}`
-  return `oklch(from ${serializeExpr(expr.input, resolver, context)} ${value('l', channels.l)} ${value('c', channels.c)} ${value('h', channels.h)}${alpha})`
-}
-
-function serializeRelative(
-  expr: Extract<VanityColorExpr, { kind: 'relative' }>,
-  resolver: VanityResolver,
-  context?: VanitySerializeContext,
-): string {
-  const channelText = (input: VanityColorChannel): string => {
-    if (typeof input === 'number')
-      return formatNumber(input)
-    if (input === 'none')
-      return input
-    if ((typeof input === 'object' || typeof input === 'function') && input !== null) {
-      const value = new ExpressionValue(inputNode(input))
-      if (resolver.serializeValue)
-        return resolver.serializeValue(value)
-      return context ? context.serialize(value) : serializeSelf(value)
-    }
-    return context ? context.serialize(input) : serializeSelf(input)
-  }
-  const value = (
-    name: string,
-    operation: VanityColorChannel | VanityChannelOperation | undefined,
-  ): string => {
-    if (operation === undefined)
-      return name
-    if (typeof operation === 'number' || operation === 'none' || !isChannelExpression(operation))
-      return channelText(operation)
-    let expression = name
-    let calculates = false
-    operation.operations.forEach((step, index) => {
-      if (step.kind === 'set') {
-        expression = channelText(step.value)
-        return
-      }
-      const operator = step.kind === 'add'
-        ? '+'
-        : step.kind === 'subtract'
-          ? '-'
-          : step.kind === 'multiply' ? '*' : '/'
-      expression = `${index === 0 ? expression : `(${expression})`} ${operator} ${channelText(step.value)}`
-      calculates = true
-    })
-    return calculates ? `calc(${expression})` : expression
-  }
-  const channels = expr.channelNames.map((name, index) => value(name, expr.channels[index]))
-  const alpha = expr.alpha === undefined ? '' : ` / ${value('alpha', expr.alpha)}`
-  const head = expr.function === 'color'
-    ? `color(from ${serializeExpr(expr.input, resolver, context)} ${expr.space}`
-    : `${expr.function}(from ${serializeExpr(expr.input, resolver, context)}`
-  return `${head} ${channels.join(' ')}${alpha})`
-}
-
-function isChannelExpression(value: unknown): value is VanityChannelOperation {
-  return typeof value === 'object' && value !== null
-    && (value as VanityChannelOperation).kind === 'channel-expression'
-    && Array.isArray((value as VanityChannelOperation).operations)
-}
-
-function serializeAdjust(expr: Extract<VanityColorExpr, { kind: 'adjust' }>, resolver: VanityResolver, context?: VanitySerializeContext): string {
-  const input = serializeExpr(expr.input, resolver, context)
-  const delta = expr.delta >= 0 ? `+ ${formatNumber(expr.delta)}` : `- ${formatNumber(-expr.delta)}`
-  const parts = ['l', 'c', 'h'].map(channel => channel === expr.channel ? `calc(${channel} ${delta})` : channel)
-  return `oklch(from ${input} ${parts.join(' ')})`
-}
-
-/** The build-computed white/black pick, `light-dark()`-paired when the schemes disagree. */
-export function serializeContrastPick(
-  expr: Extract<VanityColorExpr, { kind: 'contrast' }>,
-  resolver: VanityResolver,
-): string {
-  const light = pickLegible(foldExpr(expr.target, 'light', resolver))
-  const dark = pickLegible(foldExpr(expr.target, 'dark', resolver))
-  return light.keyword === dark.keyword ? light.keyword : `light-dark(${light.keyword}, ${dark.keyword})`
+  return resolver
 }

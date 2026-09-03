@@ -111,7 +111,9 @@ interface PluginModule {
 }
 
 const require = createRequire(import.meta.url)
-const workspaceDir = join(fileURLToPath(new URL('.', import.meta.url)), '..')
+const workspaceDir = process.env.VANITY_BENCHMARK_ROOT === undefined
+  ? join(fileURLToPath(new URL('.', import.meta.url)), '..')
+  : resolve(process.env.VANITY_BENCHMARK_ROOT)
 const fixturesRoot = join(workspaceDir, 'benchmarks/generated')
 const artifactsRoot = join(workspaceDir, '.vanity/benchmarks')
 const declarationsRoot = join(artifactsRoot, 'declarations')
@@ -343,10 +345,15 @@ function measureScale(scale: BenchmarkScale): ScaleMeasurement {
 mkdirSync(artifactsRoot, { recursive: true })
 mkdirSync(declarationsRoot, { recursive: true })
 
+const revision = spawnSync('git', ['rev-parse', '--short=8', 'HEAD'], {
+  cwd: workspaceDir,
+  encoding: 'utf8',
+})
+
 const result: BenchmarkResult = {
   environment: {
     architecture: arch(),
-    commit: command('git', ['rev-parse', '--short=8', 'HEAD']).output.trim(),
+    commit: revision.status === 0 ? revision.stdout.trim() : 'archive',
     node: process.version,
     os: `${platform()} ${release()}`,
     pnpm: command('pnpm', ['--version']).output.trim(),

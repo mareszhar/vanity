@@ -1,13 +1,13 @@
 import { emit } from '@test'
-import { createEngine, fromTokenGroup } from '@test/legacy'
 import { describe, expect, it } from 'vitest'
+import { fromTokenGroup } from '../index'
+import { createFixtureSystem } from '../test-support/current'
 
 describe('fromTokenGroup()', () => {
   it('proves the repeated recipe case: same-key tone variants from a palette group', () => {
     const { returned: badge } = emit(() => {
-      const de = createEngine()
-      const ds = de.createSystem({
-        tokens: de.defineTokens({ tone: { brand: 'rebeccapurple', danger: 'crimson', neutral: 'gray' } }),
+      const ds = createFixtureSystem({
+        tokens: { tone: { brand: 'rebeccapurple', danger: 'crimson', neutral: 'gray' } },
       })
 
       return ds.recipe({
