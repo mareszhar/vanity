@@ -1,6 +1,10 @@
 # vanity — decisions
 
-This register records choices that cross more than one specification. Domain specifications own behavior and examples; this page states the boundary each choice protects.
+This register records cross-specification choices and deliberate boundaries. Domain specifications own behavior and examples.
+
+## Recording durable decisions
+
+Record a choice here when it establishes a public contract, serialized format, or documented boundary. The task brief determines the collaboration flow: an agent may decide within its scope, surface a choice for maintainer input, or combine both. When the brief requires maintainer approval, obtain an explicit answer before treating the choice as settled. Never infer approval from a recommendation, silence, or a prior record. If implementation precedes an answer, leave the choice open until it is confirmed or reversed.
 
 ## Product and language
 
@@ -68,8 +72,12 @@ This register records choices that cross more than one specification. Domain spe
 | Boundary | Re-entry condition |
 | --- | --- |
 | No runtime CSS-in-JS style graph or component library. | Neither fits Vanity’s CSS-first product boundary. |
-| No generic middleware/hooks. | Add one only when two real emission-transform consumers cannot use existing extension seams. |
-| No whole-system composition API. | Add one only when plugins and module handoff cannot express a real multi-package compatibility problem. |
-| No built-in SVG/Iconify product API. | Add one only for an external-content consumer with a clear ownership boundary. |
+| No generic middleware/hooks or emission-transform API. | Re-enter when two real emission-transform consumers cannot use existing extension seams. |
+| No whole-system composition API. | Re-enter when plugins and module handoff cannot express a real multi-package compatibility problem. |
+| No built-in SVG/Iconify product API. | Re-enter for an external-content consumer with a clear ownership boundary. |
+| No explicit runtime stylesheet API beyond declared token slots and mode controls. | Re-enter when a real consumer needs Vanity to own stylesheet mutation outside those browser-native controls. |
+| Inline TypeScript style blocks are not part of the Vue contract. | Re-enter when a proposal preserves build-time TypeScript evaluation and justifies its editor/tooling cost without introducing a second styling model. |
+| `legibleOn()` is the current accessibility pairing contract; Vanity does not promise native `contrast-color()` behavior for token-backed targets. | Re-enter when `contrast-color()` is interoperable for token-backed targets and provides a strictly better contract. |
 | CSS-rule payloads crossing the substrate remain opaque `unknown` values, and the CSS backend remains an implementation detail rather than a selectable public surface. | Re-enter this decision if Vanity must inspect or transform a rule payload between authoring and registration, or if a backend replacement is actually underway. |
 | Style-module file-scope questions belong to Vanity's CSS authoring context; genuine backend lifecycle stays behind the substrate adapter. | Re-enter this boundary if a caller outside the CSS authoring/compiler boundary needs backend lifecycle behavior or if the adapter no longer provides the required file-scope operations. |
+| The manifest schema `$id` is a stable schema identifier, not a retrieval promise; consumers use the exact schema shipped at `@mszr/vanity/manifest.schema.json`. | Re-enter this boundary when the domain and hosting are available to serve the schema at the identifier, when the package schema path changes, or when a consumer requires network-based retrieval. |

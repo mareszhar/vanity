@@ -1,5 +1,5 @@
 /**
- * The runtime evidence dimension for atoms ([spec-integrations.md §5]): token keys resolve to
+ * The runtime evidence dimension for atoms ([spec-css.md §1]): token keys resolve to
  * precompiled classes, shorthands alias, toggles switch, condition maps pick
  * the pre-generated arms, and the labeled escape emits at build time while
  * runtime calls are redirected to the open-value port boundary.

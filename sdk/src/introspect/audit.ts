@@ -205,7 +205,7 @@ export function runSystemAudit(
 
   return {
     findings,
-    unevaluated: UNEVALUATED_AUDITS,
+    unevaluated: UNEVALUATED_AUDITS.filter(({ kind }) => levels[kind] !== 'off'),
   }
 }
 
@@ -213,10 +213,13 @@ function resolveAuditLevels(
   system: VanitySystemMap,
   config?: VanityAuditConfig,
 ): Record<VanityAuditKind, VanityAuditLevel> {
+  const configured = Object.fromEntries(
+    Object.entries(config ?? {}).filter(([, level]) => level !== undefined),
+  )
   return {
     ...DEFAULT_AUDIT_LEVELS,
     ...Object.fromEntries(Object.entries(system.audits).map(([name, entry]) => [name, entry.level])),
-    ...config,
+    ...configured,
   }
 }
 
@@ -224,7 +227,7 @@ function createSystemAuditCategories(system: VanitySystemMap): SystemAuditCatego
   return {
     ambiguousAxes: () => findAmbiguousAxes(system),
     mutableRootHazards: () => findMutableRootHazards(system),
-    overwriteInventory: () => overwriteInventory(system),
+    overwriteInventory: () => findOverwriteInventory(system),
     nonportableValues: () => findNonportableValues(system),
     specificityContexts: () => findSpecificityContexts(system),
   }
@@ -516,7 +519,7 @@ function findFocusVisibility(manifest: VanityManifest, declarations: Declaration
 
   for (const declaration of declarations) {
     for (const subject of getFocusSubjects(declaration.selector)) {
-      if (removeOutline(declaration))
+      if (hasOutlineRemoval(declaration))
         removals.set(subject, declaration)
 
       if (declaration.selector.includes(':focus-visible') && hasOutline(declaration))
@@ -551,7 +554,7 @@ function getFocusSubjects(selector: string): string[] {
     .filter((subject): subject is string => subject !== undefined)
 }
 
-function removeOutline({ property, value }: Declaration): boolean {
+function hasOutlineRemoval({ property, value }: Declaration): boolean {
   return (property === 'outline' && /^(?:none|0(?:px|rem|em)?)$/i.test(value.trim()))
     || (property === 'outline-width' && /^0(?:px|rem|em)?$/i.test(value.trim()))
 }
@@ -673,7 +676,7 @@ function findAliasEscapes(manifest: VanityManifest): VanityAuditFinding[] {
     }))
 }
 
-function overwriteInventory(system: VanitySystemMap): VanityAuditFinding[] {
+function findOverwriteInventory(system: VanitySystemMap): VanityAuditFinding[] {
   return system.overwrites.map(entry => ({
     kind: 'overwriteInventory',
     level: 'warn',

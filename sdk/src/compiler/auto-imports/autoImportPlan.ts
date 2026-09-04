@@ -3,7 +3,10 @@ import type {
   VanityConfig,
   VanityStyleAutoImports,
 } from '../../config'
-import type { AutoImportDeclarationFile, AutoImportDeclarationSource } from './autoImportDeclarations'
+import type {
+  VanityAutoImportDeclarationFile,
+  VanityAutoImportDeclarationSource,
+} from './autoImportDeclarations'
 import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { VanityError } from '../../diagnostics'
@@ -11,49 +14,53 @@ import { normalizePath } from '../core/path'
 import { getExportNamesFromFile, resolveConfiguredModuleSource } from '../projection/exportNames'
 import { resolveAppAutoImports } from './applicationImports'
 import {
-  appAutoImportDeclarations,
   createGeneratedAutoImportBridge,
   getModuleSpecifier,
-  styleAutoImportDeclarations,
+  renderAppAutoImportDeclarations,
+  renderStyleAutoImportDeclarations,
 } from './autoImportDeclarations'
 import { selectAutoImportNames } from './autoImportNames'
 
-export type { AutoImportDeclarationFile } from './autoImportDeclarations'
+export type { VanityAutoImportDeclarationFile } from './autoImportDeclarations'
 
 const styleFileName = 'vanity-style-auto-imports.d.ts'
 const appFileName = 'vanity-app-auto-imports.d.ts'
 
-export interface AutoImportDeclarationPaths {
+/** Filesystem paths for one module role's declaration and discovery bridge. */
+export interface VanityAutoImportDeclarationPaths {
   readonly declaration: string
   readonly bridge: string
 }
 
-export interface VanityStyleAutoImportSource extends AutoImportDeclarationSource {
+export interface VanityStyleAutoImportSource extends VanityAutoImportDeclarationSource {
   /** Absolute file used for static export discovery and compiler injection. */
   readonly file: string
 }
 
+/** Planned style-module declarations, sources, and discovery bridge. */
 export interface VanityStyleAutoImportPlan {
   readonly sources: readonly VanityStyleAutoImportSource[]
   readonly names: readonly string[]
-  readonly declaration: AutoImportDeclarationFile
-  readonly bridge: AutoImportDeclarationFile
+  readonly declaration: VanityAutoImportDeclarationFile
+  readonly bridge: VanityAutoImportDeclarationFile
 }
 
+/** Planned application-module declarations, sources, and Vue integration. */
 export interface VanityAppAutoImportPlan {
-  readonly sources: readonly AutoImportDeclarationSource[]
+  readonly sources: readonly VanityAutoImportDeclarationSource[]
   readonly names: readonly string[]
   readonly vueTemplates: boolean
-  readonly declaration: AutoImportDeclarationFile
-  readonly bridge: AutoImportDeclarationFile
+  readonly declaration: VanityAutoImportDeclarationFile
+  readonly bridge: VanityAutoImportDeclarationFile
 }
 
+/** Complete declaration plan for both module roles under one project root. */
 export interface VanityAutoImportPlan {
   readonly root: string
   readonly style?: VanityStyleAutoImportPlan
   readonly app?: VanityAppAutoImportPlan
-  readonly declarations: readonly AutoImportDeclarationFile[]
-  readonly bridges: readonly AutoImportDeclarationFile[]
+  readonly declarations: readonly VanityAutoImportDeclarationFile[]
+  readonly bridges: readonly VanityAutoImportDeclarationFile[]
 }
 
 export interface VanityAutoImportRoles {
@@ -61,7 +68,7 @@ export interface VanityAutoImportRoles {
   readonly app?: VanityAppAutoImports
 }
 
-export function getAutoImportDeclarationPaths(root: string, role: 'style' | 'app'): AutoImportDeclarationPaths {
+export function getAutoImportDeclarationPaths(root: string, role: 'style' | 'app'): VanityAutoImportDeclarationPaths {
   const name = role === 'style' ? styleFileName : appFileName
   return {
     declaration: join(root, '.vanity', 'types', name),
@@ -171,14 +178,14 @@ export async function planStyleAutoImports(
 
   assertSourceNamesAreUnambiguous(sources, 'style auto-import')
   const paths = getAutoImportDeclarationPaths(root, 'style')
-  const declaration: AutoImportDeclarationFile = {
+  const declaration: VanityAutoImportDeclarationFile = {
     role: 'style',
     kind: 'declaration',
     typeScriptReference: true,
     path: paths.declaration,
-    text: styleAutoImportDeclarations(sources, { relativeTo: paths.declaration }),
+    text: renderStyleAutoImportDeclarations(sources, { relativeTo: paths.declaration }),
   }
-  const bridge: AutoImportDeclarationFile = {
+  const bridge: VanityAutoImportDeclarationFile = {
     role: 'style',
     kind: 'bridge',
     typeScriptReference: false,
@@ -202,23 +209,23 @@ async function planAppAutoImports(
     return undefined
 
   const resolved = resolveAppAutoImports(getAppAutoImportsForSystem(value, system), root)
-  const sources: AutoImportDeclarationSource[] = resolved.sources.map(source => ({
+  const sources: VanityAutoImportDeclarationSource[] = resolved.sources.map(source => ({
     from: source.from,
     imports: [...source.imports],
   }))
   const paths = getAutoImportDeclarationPaths(root, 'app')
   const { names, vueTemplates } = resolved
-  const declaration: AutoImportDeclarationFile = {
+  const declaration: VanityAutoImportDeclarationFile = {
     role: 'app',
     kind: 'declaration',
     typeScriptReference: true,
     path: paths.declaration,
-    text: appAutoImportDeclarations(sources, {
+    text: renderAppAutoImportDeclarations(sources, {
       declarationFile: paths.declaration,
       vueTemplates,
     }),
   }
-  const bridge: AutoImportDeclarationFile = {
+  const bridge: VanityAutoImportDeclarationFile = {
     role: 'app',
     kind: 'bridge',
     typeScriptReference: false,
@@ -316,11 +323,11 @@ async function readSource(path: string, owner: string): Promise<void> {
   }
 }
 
-function getUniqueNames(sources: readonly AutoImportDeclarationSource[]): string[] {
+function getUniqueNames(sources: readonly VanityAutoImportDeclarationSource[]): string[] {
   return [...new Set(sources.flatMap(source => source.imports))].sort()
 }
 
-function groupSourcesByName(sources: readonly AutoImportDeclarationSource[]): Map<string, Set<string>> {
+function groupSourcesByName(sources: readonly VanityAutoImportDeclarationSource[]): Map<string, Set<string>> {
   const result = new Map<string, Set<string>>()
   for (const source of sources) {
     for (const name of source.imports) {
@@ -332,7 +339,7 @@ function groupSourcesByName(sources: readonly AutoImportDeclarationSource[]): Ma
   return result
 }
 
-function assertSourceNamesAreUnambiguous(sources: readonly AutoImportDeclarationSource[], kind: string): void {
+function assertSourceNamesAreUnambiguous(sources: readonly VanityAutoImportDeclarationSource[], kind: string): void {
   for (const [name, values] of groupSourcesByName(sources)) {
     if (values.size > 1) {
       throw new VanityError({

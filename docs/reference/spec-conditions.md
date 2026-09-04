@@ -289,7 +289,7 @@ Required matrices:
 - headless hover selectors and library DOM contracts;
 - browser selectors/cascade, not string snapshots alone.
 
-### Evidence
+### Test ownership
 
 - AST/algebra, range, anchor, direct/callback axis, order, and introspection fixtures live in `sdk/src/tokens/builder.*`.
 - Exact selector/root/scope and anchor lowering lives in `sdk/src/tokens/builder.out.test.ts`.

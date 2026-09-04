@@ -1,6 +1,7 @@
 import type { VanityManifest } from './manifest'
 import { createManifestModules } from './manifest'
 
+/** Compact manifest context supplied to human or automated tooling. */
 export interface VanityAgentContext {
   readonly manifestVersion: VanityManifest['version']
   readonly identities: VanityManifest['system']['identities']

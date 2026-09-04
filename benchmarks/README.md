@@ -14,6 +14,6 @@ pnpm run bench:fixtures:check  # fail when checked-in fixtures drift
 pnpm run bench:baseline        # build SDK and record all current metrics
 ```
 
-Machine-readable results go to the ignored `.vanity/benchmarks/current.json`. Accepted human baselines live in `docs/benchmarks.md`; transient machine and cache noise does not belong in version control.
+Machine-readable results go to the ignored `.vanity/benchmarks/current.json`. Accepted human baselines live in [the maintainer benchmark record](../docs/maintainers/benchmarks.md); transient machine and cache noise does not belong in version control.
 
 The corpus uses the canonical system and token-module APIs and scales from two to four environmental axes. It includes native color-scheme output, color-agnostic axis fixtures, sparse cross-axis cases at representative module intervals, token/style completion, runtime mutation, and snapshot overhead.

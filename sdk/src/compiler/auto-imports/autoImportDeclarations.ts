@@ -4,12 +4,16 @@ import { normalizePath } from '../core/path'
 
 const identifierPattern = /^[$a-z_][$\w]*$/i
 
-export interface AutoImportDeclarationSource {
+/** Source module and named exports used to render an ambient declaration. */
+export interface VanityAutoImportDeclarationSource {
+  /** Module specifier written into the generated `typeof import(...)` type. */
   readonly from: string
+  /** Named value exports exposed by the generated declaration. */
   readonly imports: readonly string[]
 }
 
-export interface AutoImportDeclarationFile {
+/** Generated declaration or type-discovery bridge owned by Vanity. */
+export interface VanityAutoImportDeclarationFile {
   /** The module role whose declarations this file supplies. */
   readonly role: 'style' | 'app'
   readonly kind: 'declaration' | 'bridge'
@@ -19,8 +23,8 @@ export interface AutoImportDeclarationFile {
   readonly text: string
 }
 
-export function styleAutoImportDeclarations(
-  sources: readonly AutoImportDeclarationSource[],
+export function renderStyleAutoImportDeclarations(
+  sources: readonly VanityAutoImportDeclarationSource[],
   options: { relativeTo?: string } = {},
 ): string {
   const entries = getEntriesFor(sources, 'style auto-import', options.relativeTo)
@@ -40,8 +44,8 @@ export function styleAutoImportDeclarations(
   ].join('\n')
 }
 
-export function appAutoImportDeclarations(
-  sources: readonly AutoImportDeclarationSource[],
+export function renderAppAutoImportDeclarations(
+  sources: readonly VanityAutoImportDeclarationSource[],
   options: { declarationFile?: string, vueTemplates?: boolean } = {},
 ): string {
   const entries = getEntriesFor(sources, 'app auto-import', options.declarationFile)
@@ -78,10 +82,10 @@ export function appAutoImportDeclarations(
 }
 
 function getEntriesFor(
-  sources: readonly AutoImportDeclarationSource[],
+  sources: readonly VanityAutoImportDeclarationSource[],
   kind: string,
   relativeTo: string | undefined,
-): Array<AutoImportDeclarationSource & { name: string }> {
+): Array<VanityAutoImportDeclarationSource & { name: string }> {
   const entries = sources.flatMap(source => source.imports.map(name => ({
     ...source,
     from: getModuleSpecifier(source.from, relativeTo),

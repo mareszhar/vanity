@@ -126,6 +126,23 @@ interface VanityManifest {
 
 The published schema ships as `@mszr/vanity/manifest.schema.json`. Objects use sorted keys, unordered record arrays use semantic-ID order, and semantic arrays such as layer/axis/overwrite order retain authored meaning. Documentation-only edits change the docs identity and manifest while leaving the CSS identity and CSS artifact stable.
 
+The schema is closed to the recursively recognized Manifest v4 records and required fields. The published-schema test checks representative missing-field and unknown-field cases against both the schema and the strict Manifest reader.
+
+For offline editor validation, associate `.vanity/manifest.json` with the schema shipped by the installed package:
+
+```json
+{
+  "json.schemas": [
+    {
+      "fileMatch": ["**/.vanity/manifest.json"],
+      "url": "./node_modules/@mszr/vanity/manifest.schema.json"
+    }
+  ]
+}
+```
+
+This keeps validation available without network access and selects the schema version installed by the project. The manifest identifier and retrieval policy are recorded in the [decision register](../maintainers/decisions.md#deliberate-boundaries).
+
 The normalized model carries the full manifest meaning; portable, system, and token projections are not duplicated.
 
 ## 6. CLI
@@ -197,26 +214,7 @@ Public-surface hover/TSDoc coverage and consumer testing helpers enforce this co
 
 ## 10. Audits
 
-The established audit categories remain:
-
-- unused tokens and near duplicates;
-- contrast acceptances;
-- escape inventory and raw assertions;
-- scale strays;
-- focus visibility and specificity contexts;
-- nonportable values;
-- ambiguous axes and mutable-root hazards;
-- property-alias escapes.
-
-The release audit includes:
-
-- overwrite/augment inventory from the canonical history;
-- eager style-barrel evidence;
-- CSS parity-gap evidence;
-- stale portable-artifact evidence;
-- root/mode disagreement evidence.
-
-The latter four consume explicit integration/runtime evidence rather than guessing from filenames or static selectors. Every audit category is advisory by default, respects consolidation-time `off`/`warn`/`error` policy, and includes a repair direction.
+The audit taxonomy and system/build scope split are defined in [§3](#3-two-truthful-scopes). Evidence-dependent categories consume explicit integration/runtime evidence rather than guessing from filenames or static selectors. Every audit category is advisory by default, respects consolidation-time `off`/`warn`/`error` policy, and includes a repair direction.
 
 ## 11. Agent and DevTools projections
 

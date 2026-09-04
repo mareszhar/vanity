@@ -16,21 +16,21 @@ Coverage states are `complete`, `typed-subset+raw`, `raw-only`, and `planned`. A
 
 ## Current coverage map
 
-| Area | Coverage | Contract |
-| --- | --- | --- |
-| Color constructors and relative colors | Typed common grammar + raw future grammar | `oklch`, `rgb`, `hsl`, `hwb`, `lab`, `lch`, `oklab`, `color`, `color-mix()`, `light-dark()`, and all typed `.from()` families preserve handle liveness. |
-| Numeric functions | Typed common grammar + raw future grammar | `calc()`, `min()`, `max()`, and `clamp()` are handle-aware. `round()`, `mod()`, `rem()`, trig, and exponential math remain planned. |
-| Values best expressed as platform strings | Raw-only by design | Gradients/images, transforms, filters, and paths/shapes use typed value carriers plus standards syntax instead of a lossy private DSL. |
-| Conditions and selectors | Structured common grammar + raw | Media, container, supports, and `@scope` have AST support; selectors retain platform syntax. |
-| At-rules | Typed where structure improves correctness + raw | Layers, `@property`, keyframes, and `@font-face` are structured; the lossless rule IR carries remaining at-rules through `raw`. |
-| Custom properties and keywords | Complete applicable grammar | Compatible handles, `var()`, and CSS-wide keywords work across every declaration form. |
-| `color-scheme` | Complete property semantics + explicit convenience | Scheme convenience preserves `light-dark()` locality and makes fallback locality visible. |
+The machine ledger owns individual records and coverage states; this table indexes its record families by the APIs they cover.
 
-`legibleOn()` is an algorithmic Vanity API, not CSS `contrast-color()`. It has its own contract in [values](../reference/spec-values.md).
+| Record family | Ledger records | Covers | Owning contract |
+| --- | --- | --- | --- |
+| Color constructors and relative colors | `CSS-V001`–`CSS-V010`, `CSS-V016` | `oklch`, `rgb`, `hsl`, `hwb`, `lab`, `lch`, `oklab`, `color`, `colorMix`, `lightDark`, and relative-color `.from()` | [typed CSS values §6 and §8](../reference/spec-values.md#6-same-named-css-parity) |
+| Numeric functions | `CSS-V011`–`CSS-V014` | `calc()`, `min()`, `max()`, `clamp()` | [typed CSS values §7 and §9](../reference/spec-values.md#7-calculations) |
+| Property grammar and keywords | `CSS-V015` | `boxShadow` property-form keywords | [typed CSS values §3](../reference/spec-values.md#3-input-law) |
+| Grid functions | `CSS-V017` | `grid.minmax()`, `grid.repeat()` | [typed CSS values §7](../reference/spec-values.md#7-calculations) |
+| Extended and raw CSS surfaces | `CSS-G001`–`CSS-G012` | alpha, device-cmyk, round/mod/rem and trig/exponential math, images, transforms, filters, shapes/paths, `attr()`, `env()`, anchor positioning, and font-face/keyframes/raw | [typed CSS values §6–12](../reference/spec-values.md#6-same-named-css-parity) · [styling and output §9](../reference/spec-css.md#9-at-rules-and-raw) |
+
+Conditions, at-rules, and `color-scheme` are owned by their reference specifications rather than this value-parity ledger. `legibleOn()` is an algorithmic Vanity API, not CSS `contrast-color()`; its contract lives in [typed CSS values](../reference/spec-values.md).
 
 ## Keyword rule
 
-Every applicable declaration form accepts `initial`, `inherit`, `unset`, `revert`, and `revert-layer`. The generated matrix covers classes, nested arms, recipes, anatomy, fragments, rules, atoms, raw escapes, and token/port declarations. A helper parser cannot erase a keyword accepted by its property grammar.
+The required keyword set and declaration-input rule are owned by [typed CSS values §3](../reference/spec-values.md#3-input-law). This ledger records whether each applicable capability preserves that rule across its typed, raw, and emitted forms.
 
 ## Evidence and maintenance
 

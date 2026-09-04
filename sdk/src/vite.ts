@@ -98,8 +98,8 @@ import {
 
 export {
   applyDebugNames,
-  styleAutoImportDeclarations,
-  styleExportNames,
+  readStyleExportNames,
+  renderStyleAutoImportDeclarations,
 } from './compiler/modules/source'
 
 export type {

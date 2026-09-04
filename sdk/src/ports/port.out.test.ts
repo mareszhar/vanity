@@ -1,7 +1,7 @@
 /**
  * The output evidence dimension: the emitted CSS with ports — interpolation, direct value
  * usage, static `set()` in rules, and the `var(--name, <default>)` reference —
- * locked as a public contract ([workspace.md §5]).
+ * locked as a public contract ([testing.md §1]).
  */
 
 import { emit } from '@test'

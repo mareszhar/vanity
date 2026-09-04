@@ -127,7 +127,7 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run publish:sdk:dry-run` | run the full gate and package rehearsal without changing versions |
 | `pnpm run publish:sdk:patch` / `:minor` / `:major` | release: preflight, gate, rehearse, bump, publish, await npm, commit, tag, and push |
 
-`pnpm run bench:baseline` is a manual release gate. Run it before release review and reconcile its raw, minified, and min+gzip package-entry measurements with [benchmarks.md](./benchmarks.md); it remains separate from `check` and `validate` because the measurement is intentionally reviewed as a baseline rather than run as a per-test assertion.
+`pnpm run bench:baseline` is a manual release gate. Run it before release review and reconcile its root raw-byte and runtime raw, minified, and min+gzip measurements with [benchmarks.md](./benchmarks.md); it remains separate from `check` and `validate` because the measurement is intentionally reviewed as a baseline rather than run as a per-test assertion.
 
 ## 5. Test organization
 
@@ -140,13 +140,13 @@ SDK tests live beside the code they exercise in `sdk/src/`:
 
 Repository browser tests live in `tests/`. They own cross-package evidence that cannot belong to the SDK: `demos.spec.ts` and `scheme-axis.spec.ts` exercise built Nuxt/Vite applications, while `dev/nuxt-dev.spec.ts` proves first paint and HMR against the development server. The root `tsconfig.json` typechecks these Node/Playwright files and root tooling without making those concerns part of the reusable `tsconfig.base.json`. Shared demo data lives in `sandbox/fixtures/`; package-consumer fixtures live in `sdk/src/test-support/`.
 
-The permanent evidence policy is [testing.md](./testing.md). A feature is complete only when the relevant runtime, type, editor, output, integration, packaging, and performance claims are independently proven.
+The permanent evidence policy is [testing.md](./testing.md); use it to choose the dimensions required by a change.
 
-Use `check:fast` while iterating and `check` before handing off non-browser work. `validate` remains the release-shaped gate: it deliberately pays for every canary, optimizer, browser, and development-lifecycle contract. The two levels differ in cadence, not standards; no release evidence was removed from the complete gate.
+Use `check:fast` while iterating, `check` before handing off non-browser work, and `validate` as the release-shaped gate. The two levels differ in cadence, not standards; [testing and evidence](./testing.md) defines the required dimensions.
 
 ### 5.1 Spikes
 
-A spike answers one question about what is *possible* before a design commits to it. It is not a test: tests defend behavior Vanity already has, while a spike measures the substrate — TypeScript, the bundler, the module system — to find out what a design may assume. `proven` in [docs/README.md](../README.md) means a pattern has isolated spike evidence behind it.
+A spike answers one question about what is *possible* before a design commits to it. It is not a test: tests defend behavior Vanity already has, while a spike measures the substrate — TypeScript, the bundler, the module system — to find out what a design may assume. A pattern is proven when isolated spike evidence supports it; that does not mean it is integrated.
 
 Four rules keep spikes durable:
 

@@ -7,7 +7,10 @@ import type { VanityConfig } from './config'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { addViteConfig, defineWxtModule } from 'wxt/modules'
-import { appAutoImportDeclarations, styleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
+import {
+  renderAppAutoImportDeclarations,
+  renderStyleAutoImportDeclarations,
+} from './compiler/auto-imports/autoImportDeclarations'
 import { loadVanityConfig, planAutoImportDeclarations } from './prepare'
 import { vanityPlugin } from './vite'
 
@@ -35,7 +38,7 @@ const vanityWxtModule = defineWxtModule<VanityConfig>({
         const path = join(wxt.config.wxtDir, 'types', 'vanity-style-auto-imports.d.ts')
         entries.push({
           path,
-          text: styleAutoImportDeclarations(plan.style.sources, { relativeTo: path }),
+          text: renderStyleAutoImportDeclarations(plan.style.sources, { relativeTo: path }),
           tsReference: true,
         })
       }
@@ -43,7 +46,7 @@ const vanityWxtModule = defineWxtModule<VanityConfig>({
         const path = join(wxt.config.wxtDir, 'types', 'vanity-app-auto-imports.d.ts')
         entries.push({
           path,
-          text: appAutoImportDeclarations(plan.app.sources, {
+          text: renderAppAutoImportDeclarations(plan.app.sources, {
             declarationFile: path,
             vueTemplates: plan.app.vueTemplates,
           }),

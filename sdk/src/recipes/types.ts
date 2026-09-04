@@ -252,7 +252,7 @@ export interface VanityAnatomy<
   readonly ports: TPorts
 }
 
-/** The system-bound `anatomy` — same grammar as `recipe`, one added dimension (principle 5). */
+/** The system-bound `anatomy` — same grammar as `recipe`, with one added dimension. */
 export interface VanityAnatomyFactory<C extends string, L extends string> {
   <
     const TParts extends readonly string[],

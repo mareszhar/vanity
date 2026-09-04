@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
@@ -307,8 +308,7 @@ const SELF_DESCRIBING_GROUPS: readonly AllowlistGroup[] = [
 ]
 
 function createProgram() {
-  const indexFile = fileURLToPath(new URL('../sdk/src/index.ts', import.meta.url))
-  return ts.createProgram([indexFile], {
+  return ts.createProgram(sourceEntrypoints().map(entrypoint => entrypoint.file), {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -318,33 +318,62 @@ function createProgram() {
   })
 }
 
+interface PublicEntrypoint {
+  readonly specifier: string
+  readonly file: string
+}
+
+function sourceEntrypoints(): readonly PublicEntrypoint[] {
+  const packageFile = fileURLToPath(new URL('../sdk/package.json', import.meta.url))
+  const packageJson = JSON.parse(readFileSync(packageFile, 'utf8')) as { exports: Record<string, unknown> }
+  return Object.entries(packageJson.exports).flatMap(([specifier, target]) => {
+    const types = getTypesTarget(target)
+    if (types === undefined || !types.startsWith('./dist/') || !types.endsWith('.d.mts'))
+      return []
+
+    const source = fileURLToPath(new URL(`../sdk/src/${types.slice('./dist/'.length).replace(/\.d\.mts$/, '.ts')}`, import.meta.url))
+    return existsSync(source) ? [{ specifier, file: source }] : []
+  })
+}
+
+function getTypesTarget(target: unknown): string | undefined {
+  if (typeof target === 'string')
+    return target
+  if (!target || typeof target !== 'object')
+    return undefined
+  const types = (target as { types?: unknown }).types
+  return typeof types === 'string' ? types : undefined
+}
+
 interface PublicExport {
   readonly name: string
   readonly symbol: ts.Symbol
+  readonly specifier: string
 }
 
-function publicExportSymbols(program: ts.Program): readonly PublicExport[] {
+function publicExportSymbols(program: ts.Program, entrypoint: PublicEntrypoint): readonly PublicExport[] {
   const checker = program.getTypeChecker()
-  const indexFile = fileURLToPath(new URL('../sdk/src/index.ts', import.meta.url))
-  const source = program.getSourceFile(indexFile)
-  assert.ok(source, `unable to load ${indexFile}`)
+  const source = program.getSourceFile(entrypoint.file)
+  assert.ok(source, `unable to load ${entrypoint.file}`)
   const module = checker.getSymbolAtLocation(source)
-  assert.ok(module, `unable to resolve ${indexFile} as a module`)
+  assert.ok(module, `unable to resolve ${entrypoint.file} as a module`)
 
-  const names = source.statements.flatMap((statement) => {
-    if (!ts.isExportDeclaration(statement) || !statement.exportClause || !ts.isNamedExports(statement.exportClause))
-      return []
-    return statement.exportClause.elements.map(element => element.name.text)
-  })
-  const exports = new Map(checker.getExportsOfModule(module).map(symbol => [symbol.name, symbol]))
-  return names.map((name) => {
-    const symbol = exports.get(name)
-    assert.ok(symbol, `index.ts export ${name} did not resolve through the checker`)
-    return {
-      name,
-      symbol: symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol,
-    }
-  })
+  return checker.getExportsOfModule(module).map(symbol => ({
+    name: symbol.name,
+    symbol: resolveAlias(checker, symbol),
+    specifier: entrypoint.specifier,
+  }))
+}
+
+function resolveAlias(checker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol {
+  let resolved = symbol
+  while (resolved.flags & ts.SymbolFlags.Alias) {
+    const next = checker.getAliasedSymbol(resolved)
+    if (next === resolved)
+      break
+    resolved = next
+  }
+  return resolved
 }
 
 function hasDocumentation(symbol: ts.Symbol): boolean {
@@ -368,7 +397,7 @@ function missingMemberDocumentation(symbol: ts.Symbol): readonly string[] {
     })
 }
 
-test('every package-root re-export is documented or explicitly self-describing', () => {
+test('every published entrypoint export is documented or explicitly self-describing', () => {
   const program = createProgram()
   const allowlist = new Map<string, string>()
   for (const group of SELF_DESCRIBING_GROUPS) {
@@ -386,12 +415,14 @@ test('every package-root re-export is documented or explicitly self-describing',
   for (const name of NEVER_ALLOWLISTED_NAMES)
     assert.equal(allowlist.has(name), false, `named authoring vocabulary cannot enter the self-describing allowlist: ${name}`)
 
-  const symbols = publicExportSymbols(program)
-  const undocumented = symbols
+  const symbols = sourceEntrypoints().flatMap(entrypoint => publicExportSymbols(program, entrypoint))
+  const undocumentedNames = symbols
     .filter(exported => !hasDocumentation(exported.symbol))
     .map(exported => exported.name)
-  const unexplained = undocumented.filter(name => !allowlist.has(name))
-  const stale = [...allowlist.keys()].filter(name => !undocumented.includes(name))
+  const unexplained = symbols
+    .filter(exported => !hasDocumentation(exported.symbol) && !allowlist.has(exported.name))
+    .map(exported => `${exported.specifier}:${exported.name}`)
+  const stale = [...allowlist.keys()].filter(name => !undocumentedNames.includes(name))
 
   assert.deepEqual(unexplained, [], `undocumented public exports without a justified allowlist entry: ${unexplained.join(', ')}`)
   assert.deepEqual(stale, [], `remove allowlist entries that now have documentation: ${stale.join(', ')}`)

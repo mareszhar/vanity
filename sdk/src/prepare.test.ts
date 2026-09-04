@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import ts from 'typescript'
 import { afterEach, describe, expect, it } from 'vitest'
-import { styleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
+import { renderStyleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
 import { defineVanityConfig } from './config'
 import { loadVanityConfig, planAutoImportDeclarations, writeAutoImportDeclarations } from './prepare'
 
@@ -171,7 +171,7 @@ export const minTarget = 'min-target'
 export const t = { color: { brand: '#635bff' } }
 export const cls = (value: string) => value
 `)
-    await writeFile(join(design, 'vanity-style-auto-imports.d.ts'), styleAutoImportDeclarations([
+    await writeFile(join(design, 'vanity-style-auto-imports.d.ts'), renderStyleAutoImportDeclarations([
       { from: '@acme/design/authoring', imports: ['cls', 't'] },
     ]))
     await writeFile(join(design, 'button.css.ts'), `
@@ -185,7 +185,7 @@ export const buttonClass = cls(t.color.brand)
     }))
     await writeFile(join(library, 'index.ts'), `export { buttonClass } from '@acme/design/button.css'\n`)
     await writeFile(join(root, 'app.ts'), `import { buttonClass } from '@acme/library'\nvoid buttonClass\n`)
-    await writeFile(join(root, 'host-auto-imports.d.ts'), styleAutoImportDeclarations([
+    await writeFile(join(root, 'host-auto-imports.d.ts'), renderStyleAutoImportDeclarations([
       { from: '@acme/design/authoring', imports: ['cls', 't'] },
     ]))
 

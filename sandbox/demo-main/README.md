@@ -1,6 +1,6 @@
 # Prism — the design-system studio
 
-The flagship Nuxt demo for `@mszr/vanity`. It is a live specimen of one TypeScript design system — palette, surfaces, type scale, components, and capability demos — not a product mockup. Every control on the left re-derives the whole system through ordinary, inspectable CSS.
+The flagship Nuxt demo for `@mszr/vanity`. The [maintainer demo contract](../../docs/maintainers/demo.md) defines its concept, capability coverage, and acceptance evidence; this README covers local operation and code layout.
 
 ## Run
 
@@ -23,9 +23,11 @@ Nuxt serves the app (`http://localhost:3000` by default).
 - The specimen card exercises **container queries**; the inspector traces provenance via `ds.explain()`.
 - Presets, "surprise me", and reset all round-trip through one cookie-persisted runtime snapshot.
 
-## Layout
+## Code map
 
 Component styles live apart from components; the design system lives under `assets/styles/design`.
+
+The source layout is:
 
 - `app/assets/styles/design/open.ts` — the open system: elevation/BEM plugins and the scheme/density/motion axes.
 - `app/assets/styles/design/palette.tokens.ts` — channel-first color, elevation surfaces, and shadows.

@@ -85,52 +85,2190 @@
           "minLength": 1
         },
         "owner": {
+          "$ref": "#/$defs/owner"
+        },
+        "declaredAt": {
+          "$ref": "#/$defs/declaredAt"
+        },
+        "description": {
+          "type": "string"
+        },
+        "deprecated": {
+          "type": "string"
+        }
+      }
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "system",
+            "module",
+            "plugin"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "declaredAt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "capabilities": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "signature",
+            "supportTarget"
+          ],
+          "properties": {
+            "kind": {
+              "const": "capabilities"
+            },
+            "signature": {
+              "type": "string"
+            },
+            "supportTarget": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "policies": {
+      "type": "object",
+      "properties": {
+        "support": false,
+        "tokens": {
           "type": "object",
           "additionalProperties": false,
+          "properties": {
+            "reference": {
+              "enum": [
+                "var",
+                "val"
+              ]
+            },
+            "emit": {
+              "type": "boolean"
+            }
+          }
+        },
+        "layerOrder": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "constructors": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "plugins": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": {}
+    },
+    "layer": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "order"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "order": {
+              "type": "integer"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "conditionArm": {
+      "type": "object",
+      "properties": {
+        "media": {
+          "type": "string"
+        },
+        "supports": {
+          "type": "string"
+        },
+        "container": {
+          "type": "string"
+        },
+        "selector": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "anchor": {
+          "enum": [
+            "system-root",
+            "module-root",
+            "this-mode"
+          ]
+        },
+        "runtime": {
+          "$ref": "#/$defs/runtimeAttribute"
+        }
+      },
+      "additionalProperties": false
+    },
+    "conditionAst": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "selector"
+          ],
+          "properties": {
+            "kind": {
+              "const": "selector"
+            },
+            "selector": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "query"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "media",
+                "supports"
+              ]
+            },
+            "query": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "query"
+          ],
+          "properties": {
+            "kind": {
+              "const": "container"
+            },
+            "query": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "start"
+          ],
+          "properties": {
+            "kind": {
+              "const": "scope"
+            },
+            "start": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "anchor"
+          ],
+          "properties": {
+            "kind": {
+              "const": "anchor"
+            },
+            "anchor": {
+              "enum": [
+                "system-root",
+                "module-root",
+                "this-mode"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "conditions"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "and",
+                "or"
+              ]
+            },
+            "conditions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/conditionAst"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "condition"
+          ],
+          "properties": {
+            "kind": {
+              "const": "not"
+            },
+            "condition": {
+              "$ref": "#/$defs/conditionAst"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "condition": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "readable",
+            "arms",
+            "ast"
+          ],
+          "properties": {
+            "kind": {
+              "const": "condition"
+            },
+            "name": {
+              "type": "string"
+            },
+            "readable": {
+              "type": "string"
+            },
+            "arms": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/conditionArm"
+              }
+            },
+            "ast": {
+              "$ref": "#/$defs/conditionAst"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "conditionRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/condition"
+      }
+    },
+    "axisArm": {
+      "type": "object",
+      "required": [
+        "when",
+        "mechanism",
+        "locality",
+        "placement",
+        "priority"
+      ],
+      "properties": {
+        "when": {
+          "type": "string"
+        },
+        "mechanism": {
+          "enum": [
+            "selector",
+            "media",
+            "supports",
+            "container",
+            "scope"
+          ]
+        },
+        "locality": {
+          "enum": [
+            "root",
+            "subtree",
+            "document",
+            "absolute"
+          ]
+        },
+        "placement": {
+          "enum": [
+            "root",
+            "ancestor",
+            "descendant",
+            "absolute",
+            "query"
+          ]
+        },
+        "priority": {
+          "type": "integer"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "degraded": {
+          "const": true
+        },
+        "runtime": {
+          "$ref": "#/$defs/runtimeAttribute"
+        }
+      },
+      "additionalProperties": false
+    },
+    "axisMode": {
+      "type": "object",
+      "required": [
+        "derived",
+        "arms"
+      ],
+      "properties": {
+        "derived": {
+          "type": "boolean"
+        },
+        "arms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/axisArm"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "axis": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "modeOrder",
+            "modes"
+          ],
+          "properties": {
+            "kind": {
+              "const": "axis"
+            },
+            "name": {
+              "type": "string"
+            },
+            "modeOrder": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "defaultMode": {
+              "type": "string"
+            },
+            "control": {
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": false
+            },
+            "native": {
+              "$ref": "#/$defs/nativePolicy"
+            },
+            "modes": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/axisMode"
+              }
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "axisRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/axis"
+      }
+    },
+    "nativePolicy": {
+      "type": "object",
+      "required": [
+        "kind",
+        "locality",
+        "fallback",
+        "light",
+        "dark"
+      ],
+      "properties": {
+        "kind": {
+          "const": "scheme"
+        },
+        "locality": {
+          "enum": [
+            "element",
+            "root"
+          ]
+        },
+        "fallback": {
+          "enum": [
+            "diagnose",
+            "document"
+          ]
+        },
+        "light": {
+          "type": "string"
+        },
+        "dark": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "root": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "selector",
+            "axes"
+          ],
+          "properties": {
+            "kind": {
+              "const": "root"
+            },
+            "path": {
+              "type": "string"
+            },
+            "selector": {
+              "type": "string"
+            },
+            "axes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "scopes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "rootRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/root"
+      }
+    },
+    "plugin": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "version"
+          ],
+          "properties": {
+            "kind": {
+              "const": "plugin"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string"
+            },
+            "fingerprint": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "pluginRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/plugin"
+      }
+    },
+    "extension": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "version"
+          ],
+          "properties": {
+            "kind": {
+              "const": "extension"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string"
+            },
+            "fingerprint": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "extensionRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/extension"
+      }
+    },
+    "constRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/const"
+      }
+    },
+    "const": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "const"
+            },
+            "name": {
+              "type": "string"
+            },
+            "value": {}
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "constructorRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/constructor"
+      }
+    },
+    "constructor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "origin"
+          ],
+          "properties": {
+            "kind": {
+              "const": "constructor"
+            },
+            "name": {
+              "type": "string"
+            },
+            "origin": {
+              "$ref": "#/$defs/origin"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "origin": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "builtin",
+                "system"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
           "required": [
             "kind",
             "id"
           ],
           "properties": {
             "kind": {
-              "enum": [
-                "system",
-                "module",
-                "plugin"
-              ]
+              "const": "plugin"
             },
             "id": {
-              "type": "string"
+              "type": "string",
+              "minLength": 1
             }
-          }
+          },
+          "additionalProperties": false
         },
-        "declaredAt": {
+        {
           "type": "object",
-          "additionalProperties": false,
           "required": [
-            "file"
+            "kind",
+            "id",
+            "version"
           ],
           "properties": {
-            "file": {
-              "type": "string"
+            "kind": {
+              "const": "extension"
             },
-            "line": {
-              "type": "integer",
-              "minimum": 1
+            "id": {
+              "type": "string",
+              "minLength": 1
             },
-            "column": {
-              "type": "integer",
-              "minimum": 1
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "utilityRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/utility"
+      }
+    },
+    "utility": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "kind": {
+              "const": "utility"
+            },
+            "path": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         }
-      }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
     },
-    "semanticRecord": {
+    "ruleGroupRecord": {
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/$defs/semanticEntry"
+        "$ref": "#/$defs/ruleGroup"
       }
+    },
+    "ruleGroup": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "selectors",
+            "fingerprint"
+          ],
+          "properties": {
+            "kind": {
+              "const": "rule-group"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selectors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "fingerprint": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": {
+              "type": "string"
+            },
+            "layer": {
+              "type": "string"
+            },
+            "order": {
+              "type": "integer"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "overwrite": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "operation",
+            "target",
+            "paths"
+          ],
+          "properties": {
+            "kind": {
+              "const": "overwrite"
+            },
+            "operation": {
+              "enum": [
+                "augment",
+                "overwrite"
+              ]
+            },
+            "target": {
+              "enum": [
+                "tokens",
+                "axis",
+                "conditions",
+                "consts",
+                "rules"
+              ]
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "auditRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/audit"
+      }
+    },
+    "audit": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "level"
+          ],
+          "properties": {
+            "kind": {
+              "const": "audit"
+            },
+            "name": {
+              "type": "string"
+            },
+            "level": {
+              "enum": [
+                "off",
+                "warn",
+                "error"
+              ]
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "cssType": {
+      "type": "string"
+    },
+    "tokenValue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "semanticAddress": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "base"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "axis",
+            "mode"
+          ],
+          "properties": {
+            "kind": {
+              "const": "axis"
+            },
+            "axis": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "when"
+          ],
+          "properties": {
+            "kind": {
+              "const": "case"
+            },
+            "when": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "helper": {
+          "type": "string"
+        },
+        "authored": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        },
+        "parents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensionValue": {
+      "type": "object",
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "fingerprint": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "expression": {
+      "type": "object",
+      "required": [
+        "kind",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/cssType"
+        },
+        "css": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "extension": {
+          "$ref": "#/$defs/extensionValue"
+        },
+        "detail": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/expression"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "inference": {
+      "type": "object",
+      "required": [
+        "reference",
+        "emit",
+        "reasons"
+      ],
+      "properties": {
+        "reference": {
+          "enum": [
+            "explicit",
+            "policy",
+            "capability"
+          ]
+        },
+        "emit": {
+          "enum": [
+            "explicit",
+            "policy",
+            "capability"
+          ]
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "fold": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "folded",
+            "preserved",
+            "unavailable"
+          ]
+        },
+        "val": {
+          "$ref": "#/$defs/tokenValue"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "support": {
+      "type": "object",
+      "required": [
+        "requirements"
+      ],
+      "properties": {
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "target": {
+          "type": "string"
+        },
+        "fallback": {
+          "type": "string"
+        },
+        "enhancement": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependency": {
+      "type": "object",
+      "required": [
+        "kind",
+        "type",
+        "resolution"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "token",
+            "custom-property",
+            "plugin"
+          ]
+        },
+        "type": {
+          "$ref": "#/$defs/cssType"
+        },
+        "resolution": {
+          "enum": [
+            "self",
+            "system"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^--"
+        },
+        "extension": {
+          "$ref": "#/$defs/extensionValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "declarationContext": {
+      "type": "object",
+      "required": [
+        "root",
+        "selectors",
+        "atRules"
+      ],
+      "properties": {
+        "root": {
+          "type": "string"
+        },
+        "selectors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "atRules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "layer": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "declaration": {
+      "type": "object",
+      "required": [
+        "kind",
+        "val",
+        "context"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "base",
+            "axis",
+            "case",
+            "override",
+            "slot"
+          ]
+        },
+        "val": {
+          "$ref": "#/$defs/tokenValue"
+        },
+        "context": {
+          "$ref": "#/$defs/declarationContext"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^--"
+        },
+        "axis": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "when": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/sourceFields"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sourceFields": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "branch": {
+      "type": "object",
+      "required": [
+        "address",
+        "val"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/semanticAddress"
+        },
+        "val": {
+          "$ref": "#/$defs/tokenValue"
+        },
+        "expression": {
+          "$ref": "#/$defs/expression"
+        }
+      },
+      "additionalProperties": false
+    },
+    "portability": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "portable",
+            "codec",
+            "nonportable"
+          ]
+        },
+        "extension": {
+          "$ref": "#/$defs/extensionValue"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "preview": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "val",
+            "environment"
+          ],
+          "properties": {
+            "status": {
+              "const": "resolved"
+            },
+            "val": {
+              "type": "string"
+            },
+            "environment": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "caveats": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "status",
+            "reason"
+          ],
+          "properties": {
+            "status": {
+              "const": "unavailable"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "registration": {
+      "type": "object",
+      "required": [
+        "syntax",
+        "inherits"
+      ],
+      "properties": {
+        "syntax": {
+          "type": "string"
+        },
+        "inherits": {
+          "type": "boolean"
+        },
+        "initialVal": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokenRuntimeValidation": {
+      "type": "object",
+      "required": [
+        "id",
+        "runtime",
+        "onInvalid"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "const": false
+            },
+            {
+              "enum": [
+                "dev",
+                "always"
+              ]
+            }
+          ]
+        },
+        "onInvalid": {
+          "type": "string"
+        },
+        "fallback": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokenRuntimeAddress": {
+      "type": "object",
+      "required": [
+        "address",
+        "slot"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/semanticAddress"
+        },
+        "slot": {
+          "type": "string",
+          "pattern": "^--"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokenRuntime": {
+      "type": "object",
+      "required": [
+        "type",
+        "addresses"
+      ],
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/cssType"
+        },
+        "addresses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tokenRuntimeAddress"
+          }
+        },
+        "validation": {
+          "$ref": "#/$defs/tokenRuntimeValidation"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokenRecord": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "path",
+            "root",
+            "type",
+            "reference",
+            "emit",
+            "mutable",
+            "hasDefault",
+            "expression",
+            "inference",
+            "fold",
+            "dependencies",
+            "support",
+            "declarations",
+            "branches",
+            "portability",
+            "preview",
+            "metadata"
+          ],
+          "properties": {
+            "kind": {
+              "const": "token"
+            },
+            "path": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "root": {
+              "type": "string"
+            },
+            "scopes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "module": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^--"
+            },
+            "type": {
+              "$ref": "#/$defs/cssType"
+            },
+            "reference": {
+              "enum": [
+                "val",
+                "var"
+              ]
+            },
+            "emit": {
+              "type": "boolean"
+            },
+            "mutable": {
+              "type": "boolean"
+            },
+            "hasDefault": {
+              "type": "boolean"
+            },
+            "expression": {
+              "$ref": "#/$defs/expression"
+            },
+            "inference": {
+              "$ref": "#/$defs/inference"
+            },
+            "fold": {
+              "$ref": "#/$defs/fold"
+            },
+            "dependencies": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/dependency"
+              }
+            },
+            "support": {
+              "$ref": "#/$defs/support"
+            },
+            "declarations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/declaration"
+              }
+            },
+            "branches": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/branch"
+              }
+            },
+            "portability": {
+              "$ref": "#/$defs/portability"
+            },
+            "preview": {
+              "$ref": "#/$defs/preview"
+            },
+            "metadata": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "registration": {
+              "$ref": "#/$defs/registration"
+            },
+            "runtime": {
+              "$ref": "#/$defs/tokenRuntime"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "tokenRecordMap": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/tokenRecord"
+      }
+    },
+    "runtimeAttribute": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "const": "attribute"
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtimeProjection": {
+      "type": "object",
+      "properties": {
+        "style": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtimeAxis": {
+      "type": "object",
+      "properties": {
+        "defaultMode": {
+          "type": "string"
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "attribute": {
+          "type": "object",
+          "required": [
+            "name",
+            "values"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "values": {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "control": {
+          "type": "object",
+          "required": [
+            "id"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "projections": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/runtimeProjection"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtimeRoot": {
+      "type": "object",
+      "required": [
+        "path",
+        "selector",
+        "axes"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "selector": {
+          "type": "string"
+        },
+        "axes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtimeBranch": {
+      "type": "object",
+      "required": [
+        "address"
+      ],
+      "properties": {
+        "address": {
+          "$ref": "#/$defs/semanticAddress"
+        },
+        "slot": {
+          "type": "string",
+          "pattern": "^--"
+        },
+        "value": {
+          "$ref": "#/$defs/tokenValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtimeToken": {
+      "type": "object",
+      "required": [
+        "token",
+        "name",
+        "rootPath",
+        "root",
+        "type",
+        "reference",
+        "emit",
+        "mutable",
+        "branches"
+      ],
+      "properties": {
+        "token": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^--"
+        },
+        "rootPath": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "$ref": "#/$defs/cssType"
+        },
+        "reference": {
+          "enum": [
+            "self",
+            "system",
+            "val",
+            "var"
+          ]
+        },
+        "emit": {
+          "type": "boolean"
+        },
+        "mutable": {
+          "type": "boolean"
+        },
+        "value": {
+          "$ref": "#/$defs/tokenValue"
+        },
+        "description": {
+          "type": "string"
+        },
+        "deprecated": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "validation": {
+          "$ref": "#/$defs/tokenRuntimeValidation"
+        },
+        "baseSlot": {
+          "type": "string",
+          "pattern": "^--"
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/runtimeBranch"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtimeContract": {
+      "type": "object",
+      "required": [
+        "protocol",
+        "system",
+        "prefix",
+        "root",
+        "axisOrder",
+        "axes",
+        "roots",
+        "tokens"
+      ],
+      "properties": {
+        "protocol": {
+          "const": 2
+        },
+        "system": {
+          "type": "string"
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        },
+        "axisOrder": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "axes": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/runtimeAxis"
+          }
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/runtimeRoot"
+          }
+        },
+        "tokens": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/runtimeToken"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "recipe": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "variants",
+            "toggles",
+            "defaults",
+            "ports"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "recipe",
+                "anatomy"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "variants": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "toggles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "defaults": {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            },
+            "ports": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "recipeRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/recipe"
+      }
+    },
+    "port": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "name",
+            "var",
+            "type",
+            "default"
+          ],
+          "properties": {
+            "kind": {
+              "const": "port"
+            },
+            "name": {
+              "type": "string"
+            },
+            "var": {
+              "type": "string",
+              "pattern": "^--"
+            },
+            "type": {
+              "$ref": "#/$defs/cssType"
+            },
+            "default": {
+              "$ref": "#/$defs/tokenValue"
+            },
+            "validation": {
+              "$ref": "#/$defs/portValidation"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "portRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/port"
+      }
+    },
+    "portValidation": {
+      "type": "object",
+      "required": [
+        "id",
+        "runtime",
+        "onInvalid"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "onInvalid": {
+          "type": "string"
+        },
+        "fallback": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "style": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "class",
+            "tokens"
+          ],
+          "properties": {
+            "kind": {
+              "const": "style"
+            },
+            "class": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "tokens": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "styleRecord": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/style"
+      }
+    },
+    "escape": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "form",
+            "detail"
+          ],
+          "properties": {
+            "kind": {
+              "const": "escape"
+            },
+            "form": {
+              "enum": [
+                "class.standard",
+                "raw",
+                "rules",
+                "unsafe",
+                "overrides"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "layer": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
+    },
+    "contrast": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/semanticEntry"
+        },
+        {
+          "type": "object",
+          "required": [
+            "pairing",
+            "scheme",
+            "algorithm",
+            "measured",
+            "min",
+            "accepted"
+          ],
+          "properties": {
+            "kind": {
+              "const": "contrast"
+            },
+            "pairing": {
+              "type": "string"
+            },
+            "scheme": {
+              "enum": [
+                "light",
+                "dark"
+              ]
+            },
+            "algorithm": {
+              "enum": [
+                "apca",
+                "wcag2"
+              ]
+            },
+            "measured": {
+              "type": "number"
+            },
+            "min": {
+              "type": "number"
+            },
+            "accepted": {
+              "type": "boolean"
+            }
+          }
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
     },
     "system": {
       "allOf": [
@@ -158,6 +2296,7 @@
             "constructors",
             "utilities",
             "runtime",
+            "ruleGroups",
             "overwrites",
             "audits"
           ],
@@ -188,59 +2327,70 @@
               "type": "string"
             },
             "capabilities": {
-              "$ref": "#/$defs/semanticEntry"
+              "$ref": "#/$defs/capabilities"
             },
             "policies": {
-              "type": "object"
+              "$ref": "#/$defs/policies"
             },
             "layers": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/semanticEntry"
+                "$ref": "#/$defs/layer"
               }
             },
             "conditions": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/conditionRecord"
             },
             "axes": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/axisRecord"
             },
             "roots": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/rootRecord"
             },
             "tokens": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/tokenRecordMap"
             },
             "plugins": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/pluginRecord"
             },
             "extensions": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/extensionRecord"
             },
             "consts": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/constRecord"
             },
             "constructors": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/constructorRecord"
             },
             "utilities": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/utilityRecord"
             },
             "runtime": {
-              "type": "object"
+              "$ref": "#/$defs/runtimeContract"
+            },
+            "ruleGroups": {
+              "$ref": "#/$defs/ruleGroupRecord"
             },
             "overwrites": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/semanticEntry"
+                "$ref": "#/$defs/overwrite"
               }
             },
             "audits": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/auditRecord"
+            },
+            "declaredAt": {
+              "$ref": "#/$defs/declaredAt"
+            },
+            "tokenLayer": {
+              "type": "string"
             }
           }
         }
-      ]
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
     },
     "module": {
       "allOf": [
@@ -266,24 +2416,24 @@
               "type": "string"
             },
             "recipes": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/recipeRecord"
             },
             "ports": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/portRecord"
             },
             "styles": {
-              "$ref": "#/$defs/semanticRecord"
+              "$ref": "#/$defs/styleRecord"
             },
             "escapes": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/semanticEntry"
+                "$ref": "#/$defs/escape"
               }
             },
             "contrast": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/semanticEntry"
+                "$ref": "#/$defs/contrast"
               }
             },
             "tokenUsage": {
@@ -295,7 +2445,9 @@
             }
           }
         }
-      ]
+      ],
+      "type": "object",
+      "unevaluatedProperties": false
     }
   }
 }

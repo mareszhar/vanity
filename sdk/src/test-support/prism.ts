@@ -1,6 +1,6 @@
 /**
  * The Prism fixture design system — the one graph every evidence dimension exercises
- * ([workspace.md §5]). Mirrors the spec's snippets: a live brand seed,
+ * ([testing.md §2]). Mirrors the spec's snippets: a live brand seed,
  * relative-color surfaces, derivations, a checked pairing, a scheme pair, scales,
  * and composite text styles.
  */

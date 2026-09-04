@@ -2,7 +2,7 @@
 
 Benchmarks are regression signals for deterministic generated projects. They are not product promises or cross-machine comparisons.
 
-## Reference baseline environment and fixtures
+## Reference baseline — 2026-07-31
 
 | Field | Value |
 | --- | --- |
@@ -46,13 +46,13 @@ TypeScript total time excludes process startup; wall time includes it. Editor me
 | Medium | 1.074s / 109,703 B | 1.064s | 24,749 B / 2,981 B | 1,188,535 B / 33,572 B |
 | Large | 1.905s / 587,110 B | 6.259s | 208,603 B / 21,455 B | 11,516,121 B / 257,480 B |
 
-The baseline root entry was 508,132 B. The baseline runtime entry was 56,237 B raw, 31.5 kB minified, and 9.71 kB gzip. Hail was isolated in a 22,953 B presets entry. The baseline `pnpm pack --dry-run` contained 23 intended files and produced a 313.1 kB tarball. The reviewed hardening receipt below is the current release-candidate record.
+The baseline root entry was 508,132 B. The baseline runtime entry was 56,237 B raw, 31.5 kB minified, and 9.71 kB gzip. Hail was isolated in a 22,953 B presets entry. The baseline `pnpm pack --dry-run` contained 23 intended files and produced a 313.1 kB tarball. These measurements are retained for comparison; the accepted baseline is recorded below.
 
 The 2026-07-31 runtime-index audit replaced per-token scans during runtime-address attachment and manifest recording with one linear index. Two consecutive large-fixture builds measured 6.168s and 6.259s, down from the accepted 15.658s, with byte-identical CSS and manifest artifacts. Runtime token mutation now reuses a lazy contract index as well.
 
-## Reference dated comparison baseline
+## Comparison with v0.3.0 — 2026-09-02
 
-This one-run comparison was recorded on 2026-09-02 against the `v0.3.0` baseline. Both runs used the same Darwin arm64 host, Node 24.18.0, pnpm 11.8.0, and TypeScript 6.0.3, with the checked-in Small, Medium, and Large fixtures and `pnpm run bench:baseline`. The reviewed hardening receipt below is the current release-candidate record.
+This one-run comparison was recorded on 2026-09-02 against the `v0.3.0` baseline. Both runs used the same Darwin arm64 host, Node 24.18.0, pnpm 11.8.0, and TypeScript 6.0.3, with the checked-in Small, Medium, and Large fixtures and `pnpm run bench:baseline`.
 
 The table reports current versus v0.3.0. Wall-clock measurements are noisy one-run signals; negative percentages are improvements, while byte counts are deterministic artifact comparisons.
 
@@ -64,29 +64,29 @@ The table reports current versus v0.3.0. Wall-clock measurements are noisy one-r
 
 The package entry grew from 508,081 B to 519,286 B (+2.2%), and the runtime entry grew from 56,237 B to 56,843 B (+1.1%). The CSS output is byte-identical at all three fixture scales. The raw measurements remain in ignored `.vanity/benchmarks/current.json`; this page retains the like-for-like comparison rather than machine-specific receipt data.
 
-## Hardening completion receipt
+## Accepted baseline — 2026-09-04
 
-Recorded on 2026-09-03 with `pnpm run bench:baseline`. This is the current release-candidate baseline for the checkout: Darwin 25.4.0 arm64, Node 24.18.0, pnpm 11.24.0, TypeScript 6.0.3, and the checked-in Small, Medium, and Large fixtures. Wall-clock measurements are local one-run signals; raw output is retained in ignored `.vanity/benchmarks/current.json`.
+Recorded on 2026-09-04 with `pnpm run bench:baseline`. This is the accepted baseline for the checkout: Darwin 25.4.0 arm64, Node 24.18.0, pnpm 11.24.0, TypeScript 6.0.3, and the checked-in Small, Medium, and Large fixtures. Wall-clock measurements are local one-run signals; raw output is retained in ignored `.vanity/benchmarks/current.json`.
 
 | Scale | Cold TS / wall | Instantiations | Memory | Incremental TS / wall |
 | --- | --: | --: | --: | --: |
-| Small | 0.42s / 0.927s | 33,164 | 138,817 kB | 0.23s / 0.738s |
-| Medium | 0.52s / 1.036s | 64,087 | 110,502 kB | 0.25s / 0.755s |
-| Large | 1.03s / 1.530s | 287,198 | 186,943 kB | 0.25s / 0.795s |
+| Small | 0.42s / 0.924s | 33,164 | 138,815 kB | 0.23s / 0.734s |
+| Medium | 0.52s / 1.030s | 64,087 | 110,895 kB | 0.22s / 0.730s |
+| Large | 1.06s / 1.562s | 287,198 | 145,612 kB | 0.24s / 0.746s |
 
 | Scale | Root | Deep | Axis | Case | Runtime | CSS | Diagnostic | Rename |
 | --- | --: | --: | --: | --: | --: | --: | --: | --: |
-| Small | 0.089ms | 0.134ms | 0.230ms | 0.239ms | 0.194ms | 5.563ms | 0.225ms | 1.341ms |
-| Medium | 0.097ms | 0.171ms | 0.090ms | 0.145ms | 0.118ms | 5.327ms | 0.103ms | 1.326ms |
-| Large | 0.146ms | 0.268ms | 0.082ms | 0.139ms | 0.102ms | 6.121ms | 0.142ms | 6.367ms |
+| Small | 0.083ms | 0.133ms | 0.174ms | 0.234ms | 0.161ms | 5.929ms | 0.252ms | 1.231ms |
+| Medium | 0.079ms | 0.181ms | 0.094ms | 0.148ms | 0.182ms | 5.712ms | 0.104ms | 1.356ms |
+| Large | 0.150ms | 0.351ms | 0.085ms | 0.211ms | 0.102ms | 5.502ms | 0.102ms | 6.425ms |
 
 | Scale | Declaration emit / bytes | Vite build | CSS raw / gzip | Manifest v4 raw / gzip |
 | --- | --: | --: | --: | --: |
-| Small | 1.002s / 44,270 B | 0.905s | 4,497 B / 816 B | 154,537 B / 7,270 B |
-| Medium | 1.127s / 109,909 B | 1.029s | 24,749 B / 2,981 B | 1,170,006 B / 32,690 B |
-| Large | 2.107s / 587,316 B | 3.614s | 208,603 B / 21,455 B | 11,393,040 B / 255,993 B |
+| Small | 0.980s / 44,270 B | 1.132s | 4,497 B / 816 B | 154,537 B / 7,270 B |
+| Medium | 1.136s / 109,909 B | 1.085s | 24,749 B / 2,981 B | 1,170,006 B / 32,690 B |
+| Large | 2.006s / 587,316 B | 3.609s | 208,603 B / 21,455 B | 11,393,040 B / 255,993 B |
 
-The current package root entry is 567,643 B raw, 331 kB minified, and 94.7 kB min+gzipped. The runtime entry is 65,814 B raw, 38,155 B minified, and 11,318 B min+gzipped. Hail is isolated in a 31,202 B presets entry, 17.5 kB minified, and 6.12 kB min+gzipped. `npm pack --dry-run --json` reports a 456,609 B tarball with 34 intended files. The root and runtime growth is deliberate: named public type surfaces, structured authoring/runtime diagnostics, and the verb-first internal error callback name account for the increase. Authoring-context routing adds 6 raw bytes to the root entry; runtime diagnostics remain formatter-free in the browser entry. The structured runtime diagnostics account for about 1.6 kB of min+gzip growth over the reference runtime and buy browser failures with stable codes, paths, and fixes. CSS and manifest bytes remain unchanged from the reviewed 2026-09-02 comparison.
+The current package root entry is 568,048 B raw; the build reports 332 kB minified and 94.8 kB min+gzipped. The runtime entry is 65,808 B raw, 38,155 B minified, and 11,318 B min+gzipped. Hail is isolated in a 31,202 B presets entry, 17.5 kB minified, and 6.12 kB min+gzipped. `npm pack --dry-run --json` reports a 461,763 B tarball with 34 intended files. The root and runtime growth is deliberate: named public type surfaces, structured authoring/runtime diagnostics, the root runtime-error export, the closed published manifest schema, and the verb-first internal error callback name account for the increase. Authoring-context routing adds 6 raw bytes to the root entry; runtime diagnostics remain formatter-free in the browser entry. The structured runtime diagnostics account for about 1.6 kB of min+gzip growth over the reference runtime and buy browser failures with stable codes, paths, and fixes. CSS and manifest bytes remain unchanged from the reviewed 2026-09-02 comparison.
 
 `scripts/benchmark.ts` enforces a 12,400 B min+gzip runtime-entry budget. The current runtime leaves 1,082 B (9.6%) of headroom; any future runtime-affecting change must either stay within that budget or receive an explicit benchmark review and budget decision. The measured runtime figures above retain raw, minified, and min+gzip values together so the download-facing guard remains comparable with the source-size and minified-size signals.
 

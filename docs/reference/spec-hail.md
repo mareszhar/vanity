@@ -2,8 +2,6 @@
 
 Hail is Vanity’s opinionated layer: one configurable, independently deletable plugin that installs ergonomic constructors, design controls, token presets, and named system rules. Core remains an opinion-free design-system capability set for typed CSS.
 
-Every entry states the durable behavior and why it matters before naming the implementation.
-
 ## 1. Opinion boundary
 
 **Contract — an opinion belongs in Hail when removing it leaves core fully capable.** This keeps CSS capability and project taste separate.

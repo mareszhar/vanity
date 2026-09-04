@@ -12,12 +12,14 @@ export type VanityCssSpecMaturity
     | 'working-draft'
     | 'editor-draft'
 
+/** Coverage level recorded for one CSS API in the parity ledger. */
 export type VanityCssParityCoverage
   = 'complete'
     | 'typed-subset+raw'
     | 'raw-only'
     | 'planned'
 
+/** Standards source, grammar, lowering, and evidence for one CSS API. */
 export interface VanityCssParityRecord {
   readonly id: `CSS-${string}`
   readonly api: string

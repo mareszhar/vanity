@@ -13,4 +13,14 @@ describe('published package contracts', () => {
     assert.ok(target.startsWith('./bin/'), 'the workspace bin must use an install-time launcher')
     await access(new URL(`../sdk/${target.slice(2)}`, import.meta.url))
   })
+
+  it('keeps the TypeScript plugin diagnostic code in the public diagnostic union', async () => {
+    const plugin = await readFile(new URL('../sdk/typescript.cjs', import.meta.url), 'utf8')
+    const diagnostics = await readFile(new URL('../sdk/src/diagnostics.ts', import.meta.url), 'utf8')
+    const code = /const AMBIENT_SOURCE_CODE = '([^']+)'/.exec(plugin)?.[1]
+
+    assert.ok(code, 'the TypeScript plugin must name its diagnostic code')
+    assert.match(diagnostics, new RegExp(`\\|\\s*'${code.replaceAll('_', '\\_')}'`))
+    assert.match(plugin, /\$\{AMBIENT_SOURCE_CODE\}:/)
+  })
 })

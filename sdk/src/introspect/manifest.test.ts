@@ -5,7 +5,7 @@ import Ajv2020 from 'ajv/dist/2020.js'
 import { describe, expect, it } from 'vitest'
 import { assertManifest } from '../cli'
 import { diffManifests } from './diff'
-import { buildManifest, VANITY_MANIFEST_VERSION } from './manifest'
+import { buildManifest, VANITY_MANIFEST_SCHEMA, VANITY_MANIFEST_VERSION } from './manifest'
 import { collectInspection } from './records'
 
 function fixture(value = 'red', description = 'Brand color') {
@@ -83,10 +83,104 @@ describe('canonical introspection', () => {
       new URL('../../manifest.schema.json', import.meta.url),
       'utf8',
     ))
+    expect(schema.$id).toBe(VANITY_MANIFEST_SCHEMA)
     const validate = new Ajv2020({ strict: true }).compile(schema)
+    const manifest = manifestOf(fixture())
 
-    expect(validate(manifestOf(fixture()))).toBe(true)
+    expect(validate(manifest)).toBe(true)
     expect(validate.errors).toBeNull()
+
+    const tokenName = Object.keys(manifest.system.tokens)[0]!
+    const conditionName = Object.keys(manifest.system.conditions)[0]!
+    const axisName = Object.keys(manifest.system.axes)[0]!
+    const invalidCases = [
+      {
+        name: 'missing system ruleGroups',
+        value: (() => {
+          const { ruleGroups: _ruleGroups, ...system } = manifest.system
+          return { ...manifest, system }
+        })(),
+      },
+      {
+        name: 'missing runtime tokens',
+        value: {
+          ...manifest,
+          system: {
+            ...manifest.system,
+            runtime: (() => {
+              const { tokens: _tokens, ...runtime } = manifest.system.runtime
+              return runtime
+            })(),
+          },
+        },
+      },
+      {
+        name: 'missing token reference',
+        value: {
+          ...manifest,
+          system: {
+            ...manifest.system,
+            tokens: {
+              ...manifest.system.tokens,
+              [tokenName]: (() => {
+                const { reference: _reference, ...token } = manifest.system.tokens[tokenName]!
+                return token
+              })(),
+            },
+          },
+        },
+      },
+      {
+        name: 'missing condition ast',
+        value: {
+          ...manifest,
+          system: {
+            ...manifest.system,
+            conditions: {
+              ...manifest.system.conditions,
+              [conditionName]: (() => {
+                const { ast: _ast, ...condition } = manifest.system.conditions[conditionName]!
+                return condition
+              })(),
+            },
+          },
+        },
+      },
+      {
+        name: 'missing axis modes',
+        value: {
+          ...manifest,
+          system: {
+            ...manifest.system,
+            axes: {
+              ...manifest.system.axes,
+              [axisName]: (() => {
+                const { modes: _modes, ...axis } = manifest.system.axes[axisName]!
+                return axis
+              })(),
+            },
+          },
+        },
+      },
+      {
+        name: 'unknown token field',
+        value: {
+          ...manifest,
+          system: {
+            ...manifest.system,
+            tokens: {
+              ...manifest.system.tokens,
+              [tokenName]: { ...manifest.system.tokens[tokenName], unexpected: true },
+            },
+          },
+        },
+      },
+    ]
+
+    for (const { name, value } of invalidCases) {
+      expect(() => assertManifest(value), name).toThrow()
+      expect(validate(value), `${name} must be rejected by the published schema`).toBe(false)
+    }
   })
 
   it('rejects malformed, unknown, and semantically invalid Manifest v4 data at the CLI boundary', () => {

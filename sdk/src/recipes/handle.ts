@@ -69,7 +69,7 @@ function selectVariantValues(
   return selected
 }
 
-function matchSelection(when: Record<string, string | boolean>, selected: Record<string, string | boolean>): boolean {
+function matchesSelection(when: Record<string, string | boolean>, selected: Record<string, string | boolean>): boolean {
   return Object.entries(when).every(([key, value]) => selected[key] === value)
 }
 
@@ -112,7 +112,7 @@ export function createRecipeHandle(runtime: VanityRecipeRuntime): VanityRecipe<R
     }
 
     for (const entry of runtime.compound) {
-      if (entry.class && matchSelection(entry.when, selected))
+      if (entry.class && matchesSelection(entry.when, selected))
         classes.push(entry.class)
     }
 
@@ -164,7 +164,7 @@ export function createAnatomyHandle(runtime: VanityAnatomyRuntime): VanityAnatom
     }
 
     for (const entry of runtime.compound) {
-      if (matchSelection(entry.when, selected))
+      if (matchesSelection(entry.when, selected))
         add(entry.classes)
     }
 

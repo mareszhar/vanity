@@ -8,6 +8,7 @@ import {
   createSystem,
   data,
   media,
+  VanityRuntimeError as RootVanityRuntimeError,
   scope as scopeCondition,
   selector,
   systemRoot,
@@ -182,6 +183,7 @@ describe('mutable runtime', () => {
       invalidOptions = error
     }
     expect(invalidOptions).toBeInstanceOf(VanityRuntimeError)
+    expect(invalidOptions).toBeInstanceOf(RootVanityRuntimeError)
     expect(invalidOptions).toMatchObject({
       code: 'VANITY_RUNTIME_INVALID_OPTIONS',
       diagnostic: {

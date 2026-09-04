@@ -2,8 +2,10 @@
 
 import type { VanityCssFeature } from './protocol'
 
+/** Release confidence recorded for one CSS helper capability. */
 export type VanityHelperMaturity = 'stable' | 'experimental'
 
+/** Machine-readable CSS grammar, lowering, and evidence for one helper. */
 export interface VanityCssHelperCapability {
   readonly css: string
   readonly accepted: readonly string[]

@@ -2,32 +2,26 @@
 
 This map protects user-visible capabilities. It names the contract, its canonical specification, and the evidence that keeps it true. Domain specs own the exact behavior; this page answers where a reader can find it.
 
-| Capability | Contract | Evidence |
-| --- | --- | --- |
-| Immutable system growth | Open systems add capability; explicit augmentation and overwrite have separate ownership rules. | [System authoring](../reference/spec-system-authoring.md), [`sdk/src/system`](../../sdk/src/system) |
-| Locked system projection | Consolidation is pure; the compiler projects CSS, browser, SSR, and tooling artifacts. | [Architecture](./architecture.md), [system spec](../reference/spec-system.md) |
-| Package and HMR safety | Four projection identities govern deduplication, invalidation, and last-good recovery. | [System spec](../reference/spec-system.md), `sdk/src/vite.test.ts` |
-| Typed CSS without a capability cliff | CSS-named APIs preserve CSS semantics, token handles work as values, and raw standards escapes remain available. | [Value spec](../reference/spec-values.md), [CSS parity ledger](./parity-ledger.md) |
-| Token composition | Token modules compose additively, preserve lazy references, and project contextual handles for one semantic identity. | [Token spec](../reference/spec-tokens.md), token type/output/DX suites |
-| Conditions, roots, and axes | Typed condition ASTs lower to platform CSS; axis precedence and locality are explicit. | [Condition spec](../reference/spec-conditions.md), browser fixtures |
-| Lossless styling | Ordered contributions preserve repeated declarations, conditions, fragments, and raw CSS. | [CSS spec](../reference/spec-css.md), rule-IR tests |
-| Component contracts | Recipes, anatomy, ports, and atoms expose typed component styling without rebuilding a style graph at runtime. | [Recipes](../reference/spec-recipes.md), [ports](../reference/spec-ports.md) |
-| Extension ownership | Plugins add or require public system shape; they cannot silently overwrite host-owned shape. | [Extension spec](../reference/spec-extensions.md), plugin suites |
-| Runtime control | Mutable tokens and activatable axes target declared browser-native slots and preserve semantic snapshots. | [Runtime spec](../reference/spec-runtime.md), runtime/browser suites |
-| Semantic tooling | Introspection, manifests, diagnostics, audit, DTCG, and CLI share one semantic record. | [Introspection spec](../reference/spec-introspection.md), introspection suites |
-| Framework integration | Vite, Vue, Nuxt, SSR, and HMR consume projected contracts while core remains framework-independent. | [Integration spec](../reference/spec-integrations.md), [Vue/Nuxt spec](../reference/spec-vue.md) |
-| Opinionated authoring | Hail is an optional, deletable plugin; its design opinions never narrow core CSS capability. | [Hail spec](../reference/spec-hail.md), Hail suites and demo |
-| Consumer evidence | The testing kit exposes emitted CSS, folding, rendering, and editor-DX evidence to system and plugin authors. | [Testing kit](../reference/testing-kit.md), packed fresh-app smoke |
+| Capability | Guarantee | Contract | Evidence |
+| --- | --- | --- | --- |
+| Immutable system growth | Open systems add capability; explicit augmentation and overwrite have separate ownership rules. | [System authoring](../reference/spec-system-authoring.md) | [`open.test.ts`](../../sdk/src/system/open.test.ts) · [`symmetric-authoring.test.ts`](../../sdk/src/system/symmetric-authoring.test.ts) |
+| Locked system projection | Consolidation is pure; the compiler projects CSS, browser, SSR, and tooling artifacts. | [Open and locked systems](../reference/spec-system.md) · [architecture](./architecture.md) | [`projection.test.ts`](../../sdk/src/system/projection.test.ts) |
+| Package and HMR safety | Four projection identities govern deduplication, invalidation, and last-good recovery. | [Open and locked systems](../reference/spec-system.md) | [`vite.test.ts`](../../sdk/src/vite.test.ts) · [`projection.test.ts`](../../sdk/src/system/projection.test.ts) |
+| Typed CSS | CSS-named APIs preserve CSS semantics, token handles work as values, and raw standards escapes remain available. | [Typed CSS values](../reference/spec-values.md) · [styling and output](../reference/spec-css.md) | [`parity.test.ts`](../../sdk/src/values/parity.test.ts) · [`css.out.test.ts`](../../sdk/src/css/css.out.test.ts) · [CSS parity ledger](./parity-ledger.md) |
+| Token composition | Token modules compose additively, preserve lazy references, and project contextual handles for one semantic identity. | [Tokens](../reference/spec-tokens.md) | [`tokens.module.test.ts`](../../sdk/src/tokens/tokens.module.test.ts) · [`tokens.axes.test.ts`](../../sdk/src/tokens/tokens.axes.test.ts) |
+| Conditions, roots, and axes | Typed condition ASTs lower to platform CSS; axis precedence and locality are explicit. | [Conditions, roots, and axes](../reference/spec-conditions.md) | [`tokens.axes.out.test.ts`](../../sdk/src/tokens/tokens.axes.out.test.ts) · [`conditions.spec.ts`](../../sandbox/canary/tests/conditions.spec.ts) |
+| Lossless styling | Ordered contributions preserve repeated declarations, conditions, fragments, and raw CSS. | [Styling and output](../reference/spec-css.md) | [`css.out.test.ts`](../../sdk/src/css/css.out.test.ts) · [`class-rules.test.ts`](../../sdk/src/css/class-rules.test.ts) |
+| Component contracts | Recipes, anatomy, ports, and atoms expose typed component styling without rebuilding a style graph at runtime. | [Recipes](../reference/spec-recipes.md) · [ports](../reference/spec-ports.md) · [styling and output](../reference/spec-css.md) | [`recipes.out.test.ts`](../../sdk/src/recipes/recipes.out.test.ts) · [`port.out.test.ts`](../../sdk/src/ports/port.out.test.ts) · [`atoms.out.test.ts`](../../sdk/src/atoms/atoms.out.test.ts) |
+| Extension ownership | Plugins add or require public system shape; they cannot silently overwrite host-owned shape. | [Plugins, constructors, and policy](../reference/spec-extensions.md) | [`open.test.ts`](../../sdk/src/system/open.test.ts) · [`propertyAliases.test.ts`](../../sdk/src/plugins/propertyAliases.test.ts) · [`hail.test.ts`](../../sdk/src/presets/hail/hail.test.ts) |
+| Runtime control | Mutable tokens and activatable axes target declared browser-native slots and preserve semantic snapshots. | [Runtime](../reference/spec-runtime.md) | [`controller.test.ts`](../../sdk/src/runtime/controller.test.ts) · [`scheme-axis.spec.ts`](../../tests/scheme-axis.spec.ts) |
+| Semantic tooling | Introspection, manifests, diagnostics, audit, DTCG, and CLI share one semantic record. | [Introspection and diagnostics](../reference/spec-introspection.md) | [`introspect.test.ts`](../../sdk/src/introspect/introspect.test.ts) · [`audit.test.ts`](../../sdk/src/introspect/audit.test.ts) · [`cli.test.ts`](../../sdk/src/cli.test.ts) |
+| Framework integration | Vite, Vue, Nuxt, SSR, and HMR consume projected contracts while core remains framework-independent. | [Integration adapters](../reference/spec-integrations.md) · [Vue and Nuxt](../reference/spec-vue.md) | [`vite.test.ts`](../../sdk/src/vite.test.ts) · [`vue.test.ts`](../../sdk/src/vue.test.ts) · [`fresh-smoke.ts`](../../scripts/fresh-smoke.ts) |
+| Opinionated authoring | Hail is an optional, deletable plugin; its design opinions never narrow core CSS capability. | [Hail](../reference/spec-hail.md) | [`hail.test.ts`](../../sdk/src/presets/hail/hail.test.ts) · [`demos.spec.ts`](../../tests/demos.spec.ts) |
+| Consumer evidence | The testing kit exposes emitted CSS, folding, rendering, and editor-DX evidence to system and plugin authors. | [Consumer testing kit](../reference/testing-kit.md) | [`testing.test.ts`](../../sdk/src/testing.test.ts) · [`fresh-smoke.ts`](../../scripts/fresh-smoke.ts) |
 
-## Deliberately absent capabilities
+## Scope boundaries
 
-| Capability | Boundary | Re-entry trigger |
-| --- | --- | --- |
-| Runtime CSS-in-JS | The browser cascade owns live styling work. | Never; it contradicts the product boundary. |
-| Component library | Vanity provides component styling contracts, not components. | Never; a component library is a separate product. |
-| Whole-system composition | Plugins and token-module handoff cover composable shape without a second system merger. | A real multi-package compatibility problem that those seams cannot express. |
-| Generic middleware or hooks | Existing emitter and plugin seams remain the extension contract. | A second real emission-transform consumer that cannot use those seams. |
-| SVG/Iconify product API | Ports and ordinary CSS compose with external content systems. | A real external-content consumer with a documented ownership boundary. |
+The [decision register](./decisions.md#deliberate-boundaries) owns capabilities Vanity deliberately excludes and their re-entry conditions. The [vision](../vision.md#6-the-capability-boundary) describes the product boundary.
 
 ## Change rule
 

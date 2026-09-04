@@ -1,8 +1,8 @@
 /**
- * Public atom-set types ([spec-integrations.md §5]): finite declared utility selection.
+ * Public atom-set types ([spec-css.md §1]): finite declared utility selection.
  * Token keys autocomplete; values outside the map are rejected at the key —
  * unless passed through the labeled escape (`unsafe.value`). Conditional maps
- * use the same condition grammar as everything else (principle 5), over the
+ * use the same condition grammar as every other styling emitter, over the
  * conditions the atoms declare — declaring them is what keeps the emitted CSS
  * bounded by construction.
  */
@@ -57,7 +57,7 @@ export interface VanityAtomsOptions<
   /**
    * The conditions available at atoms call sites. Each declared condition
    * pre-generates one class per property value, so output stays bounded —
-   * and none are declared by default (principle 10).
+   * and none are declared by default.
    */
   conditions?: TCond
 }

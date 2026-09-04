@@ -172,9 +172,11 @@ Its normalized colors, semantic elevation, sizing, controls, tokens, and rules a
 
 ## 9. Deferred surfaces
 
+The [decision register](../maintainers/decisions.md#deliberate-boundaries) owns the boundaries and re-entry conditions for these surfaces.
+
 ### Whole-system composition
 
-`addSystem` / `expectSystem` remain deferred until a real multi-package use case proves plugins and token handoff insufficient.
+`addSystem` / `expectSystem` are not part of the current contract. Plugins and token-module handoff remain the composition seams.
 
 When reconsidered:
 
@@ -186,11 +188,11 @@ When reconsidered:
 
 ### Middleware and hooks
 
-No generic lifecycle API ships without a second real consumer. Structured diagnostics ship now. The open rule IR is designed so a future emission transform has a stable input.
+Generic lifecycle middleware is not part of the current contract. Structured diagnostics ship now, and the open rule IR is designed so a future emission transform has a stable input.
 
 ### External asset workflows
 
-No SVG/Iconify core API. Ports plus uniform projections are the model. A future content-agnostic substitution projection may rewrite literal attribute values to `var(--port, literal)` while preserving values such as `none` and `currentColor`. It re-enters only after ports and one real consumer exist.
+There is no built-in SVG/Iconify API. Ports plus uniform projections are the current model. A future content-agnostic substitution projection may rewrite literal attribute values to `var(--port, literal)` while preserving values such as `none` and `currentColor`. It re-enters only after ports and one real consumer exist.
 
 ## 10. Evidence
 

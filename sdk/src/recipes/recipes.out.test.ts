@@ -1,6 +1,6 @@
 /**
  * The output evidence dimension: recipe and anatomy CSS is a public contract
- * ([workspace.md §5]) — per-arm classes in the recipes layer, defaults
+ * ([testing.md §1]) — per-arm classes in the recipes layer, defaults
  * folded into base where sound, compound entries last so they win by order,
  * part-scoped conditions compiled to ancestor-state selectors, locked.
  */

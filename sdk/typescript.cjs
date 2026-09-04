@@ -17,6 +17,7 @@ const { dirname, join } = require('node:path')
 
 const AMBIENT_SOURCE_NOTICE = 990001
 const STYLE_DESTINATION_MISUSE = 990002
+const AMBIENT_SOURCE_CODE = 'VANITY_AMBIENT_SOURCE_DECLARATION'
 const styleEmitters = new Set(['class', 'recipe', 'anatomy', 'atoms', 'rules', 'raw', 'keyframes', 'fontFace', 'port', 'tdec'])
 
 module.exports = function init(modules) {
@@ -144,7 +145,7 @@ function collectVanityDiagnostics(ts, program, source) {
         source,
         ambient.node,
         AMBIENT_SOURCE_NOTICE,
-        `VANITY_AMBIENT_SOURCE_DECLARATION: ${packageInfo.name} ships this style source; consumers compiling it need these declarations unless each consumer configures Vanity.`,
+        `${AMBIENT_SOURCE_CODE}: ${packageInfo.name} ships this style source; consumers compiling it need these declarations unless each consumer configures Vanity.`,
       ))
     }
   }

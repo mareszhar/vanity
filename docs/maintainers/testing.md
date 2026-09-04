@@ -6,6 +6,8 @@ This document defines Vanity's permanent evidence policy. Product claims are acc
 
 A contract is complete only when every relevant evidence dimension is green.
 
+A red lint rule, budget, golden, or schema check is evidence of a contract change, not an obstacle. Investigate it and preserve the gate; do not weaken the check to make it pass.
+
 | Evidence dimension | Typical suffix/artifact | What it proves |
 | --- | --- | --- |
 | Runtime | `*.test.ts` | Graph evaluation, serializers, recipes, setters, validation, snapshots, diagnostics. |
@@ -23,6 +25,8 @@ A contract is complete only when every relevant evidence dimension is green.
 Unit coverage cannot substitute for browser cascade behavior. Browser success cannot substitute for editor diagnostics. A green repository build cannot substitute for installing the tarball in a clean app.
 
 Interpret evidence sweeps semantically. A text match may be executable code, a comment, a denylist entry, or a test asserting absence; inspect its context and run the enforcing check (`pnpm run test:maintainer`) before treating the sweep as proof.
+
+Deterministic identity goldens are reportable contract evidence. A changed emitted class name, custom-property name, runtime state key, or deterministic signature is an identity change, not a fixture refresh; re-record it only after an explicit decision names every changed identity and the user-visible gain.
 
 ### 1.1 Release gate
 

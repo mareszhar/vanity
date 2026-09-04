@@ -4,7 +4,7 @@
  * escape inventory, scale strays. Advisory by default, promotable per system.
  */
 
-import type { VanityAuditFinding } from './audit'
+import type { VanityAuditFinding, VanityUnevaluatedAudit } from './audit'
 import {
   axis,
   createSystem,
@@ -332,6 +332,9 @@ describe('system-scope audit', () => {
       { kind: 'staleArtifacts', requires: 'buildEvidence' },
       { kind: 'rootModeDisagreements', requires: 'buildEvidence' },
     ])
+
+    const silenced = system({ color: { brand: 'red' } }, { audit: { unusedTokens: 'off' } }).audit()
+    expect(silenced.unevaluated.some((entry: VanityUnevaluatedAudit) => entry.kind === 'unusedTokens')).toBe(false)
   })
 
   it('applies consolidated promotion and per-call overrides to findings', () => {
@@ -343,8 +346,10 @@ describe('system-scope audit', () => {
     expect(ds.audit().findings.find((finding: VanityAuditFinding) => finding.kind === 'overwriteInventory')?.level).toBe('error')
     const warned = ds.audit({ overwriteInventory: 'warn' }).findings.find((finding: VanityAuditFinding) => finding.kind === 'overwriteInventory')
     const silenced = ds.audit({ overwriteInventory: 'off' }).findings.some((finding: VanityAuditFinding) => finding.kind === 'overwriteInventory')
+    const defaulted = ds.audit({ overwriteInventory: undefined } as any).findings
     expect(warned?.level).toBe('warn')
     expect(silenced).toBe(false)
+    expect(defaulted.every((finding: VanityAuditFinding) => finding.level === 'warn' || finding.level === 'error')).toBe(true)
   })
 
   it('shares the five system category implementations with the CLI audit', () => {

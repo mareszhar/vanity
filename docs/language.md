@@ -27,6 +27,8 @@ Apply that rule to repository names, comments, assertions, and fixtures: describ
 
 CSS owns CSS vocabulary. Vanity uses a CSS name only for the platform concept exactly. Vanity-specific behavior receives Vanity-specific language.
 
+`$` is a namespace fence, not decoration. It appears on `ds.t.color.brand.$name`, `rt.t.color.brand.$set`, `$axes`, and fenced path keys such as `'$system'`. It does not appear on wholly Vanity-owned surfaces such as `rt.refreshRoots()` or `port.dec()`. User token, axis, and mode names may not begin with `$`. Nothing else is reserved merely for possible future use.
+
 ### Verb-first implementation names
 
 Implementation functions, methods, and callable constants begin with a verb. These meanings are closed:
@@ -38,7 +40,7 @@ Implementation functions, methods, and callable constants begin with a verb. The
 | `add*` / `augment*` / `overwrite*` | Add absent data, refine existing identity, or replace definition data. |
 | `expect*` | Throw immediately at the call site unless a named structural element already exists; this is a stateless, order-sensitive existence guard that checks presence, not a particular value. |
 | `get*` / `read*` | Retrieve in-memory data / cross an I/O, process, filesystem, or evaluated-module boundary. |
-| `is*` / `has*` / `can*` / `should*` | Return a boolean predicate. |
+| `is*` / `has*` / `can*` / `should*` / `matches*` / `contains*` | Return a boolean predicate. |
 | `assert*` / `require*` / `validate*` | Assert an existing invariant / require a value / produce validation evidence. |
 | `normalize*` / `prepare*` / `apply*` / `update*` | Canonicalize / prepare a named next phase / apply a described transformation / update bookkeeping. |
 | `parse*` / `format*` / `encode*` / `decode*` | Convert textual or interchange representations. |
@@ -76,7 +78,7 @@ contrast-check thresholds `aa`, `aaa`, and `lc`, and the token declaration short
 public authoring vocabulary. `invalidColor` is the resolver protocol callback, `transaction` is
 the runtime batching protocol, `forEach`, `entries`, `keys`, and `values` are standard collection
 protocol methods, `toString` is the JavaScript string protocol, and `ownKeys` is the JavaScript
-`Proxy` trap. `config`, `configResolved`, `handler`, `unstable_pluginFilter`, and
+`Proxy` trap. `config`, `configResolved`, `transformInclude`, `handler`, `unstable_pluginFilter`, and
 `onEndFileScope` are Vite or Vanilla Extract lifecycle spellings; `fallback`, `deprecated`, and
 `optionsIdentity` belong to public extension/plugin contracts. The public cascade and condition
 algebra uses `layer`, `and`, `or`, `not`, `to`, `activate`, `absoluteCondition`, `scheme`, `val`,
@@ -521,7 +523,7 @@ consolidate
 ### Locked system
 
 ```text
-t / consts / conditions / axes
+t / consts / conditions / axes / layers / policies
 constructors and added utils
 class / recipe / anatomy / atoms / fragment / rules
 tdec / port / keyframes / fontFace / raw
@@ -540,6 +542,7 @@ axes.<axis>.$switchTo / $cycle / $current
 axes.<axis>.<mode>.$activate
 refreshRoots / bindRoot / transaction
 snapshot / hydrate / inspect
+VanityRuntimeError
 ```
 
 ### Component/framework projections

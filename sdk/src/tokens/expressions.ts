@@ -60,7 +60,7 @@ export function getExpressionTraits(expr: VanityColorExpr, resolver: VanityResol
       const node = getNode(expr.value)
       const dependency = node.dependencies.length > 0
       return {
-        cssLive: dependency || preserveNativeNode(node),
+        cssLive: dependency || shouldPreserveNativeNode(node),
         volatile: dependency,
         conditional: false,
       }
@@ -108,20 +108,20 @@ export function getExpressionTraits(expr: VanityColorExpr, resolver: VanityResol
   }
 }
 
-function preserveNativeNode(node: import('../values/protocol').VanityExpressionNode): boolean {
+function shouldPreserveNativeNode(node: import('../values/protocol').VanityExpressionNode): boolean {
   switch (node.kind) {
     case 'raw':
       return true
     case 'plugin':
       return node.fold === undefined
     case 'function':
-      return node.values.some(preserveNativeNode)
+      return node.values.some(shouldPreserveNativeNode)
     case 'operation':
-      return preserveNativeNode(node.left) || preserveNativeNode(node.right)
+      return shouldPreserveNativeNode(node.left) || shouldPreserveNativeNode(node.right)
     case 'var':
       return true
     case 'composite':
-      return node.parts.some(part => typeof part !== 'string' && preserveNativeNode(part))
+      return node.parts.some(part => typeof part !== 'string' && shouldPreserveNativeNode(part))
     case 'literal':
       return false
   }

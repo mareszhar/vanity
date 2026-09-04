@@ -3,7 +3,7 @@
  * (diagnostics aggregated across every arm, not thrown at the first),
  * selection validation for `defaults` and compound `when`, port publication
  * checks, and the defaults fold — the pieces that keep the two factories one
- * grammar ([spec-recipes.md §3], principle 5).
+ * grammar ([spec-recipes.md §3]).
  */
 
 import type { VanitySystemContext } from '../css/context'

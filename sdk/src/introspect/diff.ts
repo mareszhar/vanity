@@ -1,8 +1,10 @@
 import type { VanityManifest } from './manifest'
 
+/** Identity projection affected by one manifest change. */
 export type VanityChangeCategory = 'compatibility' | 'css' | 'runtime' | 'docs'
 export type VanityChangeOperation = 'added' | 'removed' | 'changed'
 
+/** One semantic change reported by the manifest diff. */
 export interface VanityManifestChange {
   readonly category: VanityChangeCategory
   readonly operation: VanityChangeOperation
@@ -11,6 +13,7 @@ export interface VanityManifestChange {
   readonly after?: unknown
 }
 
+/** Complete semantic diff between two Manifest v4 artifacts. */
 export interface VanityManifestDiff {
   readonly format: 'vanity.manifest-diff/1'
   readonly version: 1

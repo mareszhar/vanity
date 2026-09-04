@@ -4,8 +4,6 @@ This contract owns the open system's registration grammar, detached modules, pol
 
 ## 1. Canonical model
 
-> Grow a system additively; consolidate it; style with it.
-
 Shape-data and value-data are distinct:
 
 - shape-data is names, token slots, axis modes, types, traits, callable members, and metadata;

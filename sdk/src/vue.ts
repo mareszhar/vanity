@@ -4,7 +4,7 @@
  * `usePorts` because reactivity needs a binding, `useAnatomy` because a record
  * of part classes silently loses reactivity without one. Single-class recipes
  * stay wrapper-free — `:class="button(props)"` inline is already reactive, and
- * no `useRecipe` exists (principle 10: a wrapper must carry something).
+ * no `useRecipe` exists because a single class call needs no reactivity wrapper.
  */
 
 import type { ComputedRef, CSSProperties, MaybeRefOrGetter, PropType } from 'vue'
@@ -12,7 +12,9 @@ import type { VanityPortStyle } from './ports/types'
 import { computed, toValue } from 'vue'
 import { ports } from './runtime'
 
+/** One port fragment, omission marker, or nullish value accepted by `usePorts`. */
 export type VanityPortSource = VanityPortStyle | false | null | undefined
+/** Lazy source form used when a port fragment depends on reactive state. */
 export type VanityPortSourceFactory = () => VanityPortSource | readonly VanityPortSource[]
 
 /**
@@ -51,6 +53,7 @@ type VanityProjectedOptions<Source> = Source extends VanityPropsSource<infer Pro
   ? VanityPropsOptions<Props>
   : Source extends VanityOptionMap ? Source : never
 type VanityUnionToIntersection<Union> = (Union extends unknown ? (value: Union) => void : never) extends (value: infer Intersection) => void ? Intersection : never
+/** Vue prop options keyed with the source prefix for a grouped projection. */
 export type VanityNamespacedPropsOptions<Sources extends Readonly<Record<string, VanityPropsSource<object> | VanityOptionMap>>>
   = VanityUnionToIntersection<{
     [Prefix in keyof Sources & string]: {
@@ -99,6 +102,7 @@ function isPropsSource(value: unknown): value is VanityPropsSource<object> {
     && 'toggles' in value
 }
 
+/** Callable anatomy projection that resolves props into part class names. */
 export type VanityAnatomyResolver<TProps extends object, TParts extends Record<string, string>>
   = (props?: TProps) => TParts
 

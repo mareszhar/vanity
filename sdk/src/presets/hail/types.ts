@@ -36,6 +36,7 @@ export type HailRange = readonly [minimum: number, maximum: number]
 /** Channels whose ranges express meaningful design coordinates. */
 export type HailRangeName = 'l' | 'c' | 'h' | 's' | 'w' | 'a' | 'b' | 'alpha' | 'e'
 
+/** Named Hail controls that can be selected or overridden in a preset. */
 export type HailControlName
   = 'base'
     | 'remTarget'
@@ -50,6 +51,7 @@ export type HailColorRanges = Readonly<Partial<Record<HailRangeName, HailRange>>
   readonly g?: never
 }
 
+/** Custom names for the relative-value markers installed by Hail. */
 export interface HailMarkerNames {
   /** Installed name of the span-scaled relative marker. */
   readonly span?: string
@@ -57,6 +59,7 @@ export interface HailMarkerNames {
   readonly exact?: string
 }
 
+/** Hail color normalization, elevation, contrast, and marker options. */
 export interface HailColorOptions {
   /** Normalize bare numeric channels into these design ranges. */
   readonly ranges?: HailColorRanges
@@ -68,6 +71,7 @@ export interface HailColorOptions {
   readonly markers?: HailMarkerNames
 }
 
+/** Hail base-scale and root-size options. */
 export interface HailSizeOptions {
   /** Base scale step in CSS pixels; defaults to `8`. */
   readonly base?: number
@@ -75,6 +79,7 @@ export interface HailSizeOptions {
   readonly remTarget?: number
 }
 
+/** Default and per-control liveness options for Hail. */
 export interface HailControlsOptions {
   /** Resolution used by every control without an override; defaults to `static`. */
   readonly default?: HailControlResolution
@@ -82,6 +87,7 @@ export interface HailControlsOptions {
   readonly overrides?: Readonly<Partial<Record<HailControlName, HailControlResolution>>>
 }
 
+/** Exact Hail preset installation mode and selected preset names. */
 export type HailPresetSelection
   = {
     /** Install only the listed presets. */
@@ -131,13 +137,17 @@ export interface HailExactFactory {
   <const Input extends VanityCssInput>(input: Input): HailExact<Input>
 }
 
+/** Numeric channel input with an optional exact-value marker. */
 export type HailNumericInput = VanityNumericColorChannel | HailExact
 export type HailHueInput = VanityHueChannel | HailExact
+/** Numeric channel input accepted by relative Hail color operations. */
 export type HailRelativeNumericInput
   = HailNumericInput | HailSpan | VanityChannelOperation<VanityNumericColorChannel>
+/** Hue input accepted by relative Hail color operations. */
 export type HailRelativeHueInput
   = HailHueInput | HailSpan | VanityChannelOperation<VanityHueChannel>
 
+/** Relative sRGB channels accepted by Hail's `rgbx.from(...)`. */
 export interface HailRgbxChannels {
   /** Replace red in native sRGB units. RGB components are never normalized. */
   readonly r?: VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel>
@@ -149,6 +159,7 @@ export interface HailRgbxChannels {
   readonly alpha?: HailRelativeNumericInput
 }
 
+/** Relative HSL channels accepted by Hail's `hslx.from(...)`. */
 export interface HailHslxChannels {
   /** Replace or adjust hue. */
   readonly h?: HailRelativeHueInput
@@ -160,6 +171,7 @@ export interface HailHslxChannels {
   readonly alpha?: HailRelativeNumericInput
 }
 
+/** Relative HWB channels accepted by Hail's `hwbx.from(...)`. */
 export interface HailHwbxChannels {
   /** Replace or adjust hue. */
   readonly h?: HailRelativeHueInput
@@ -171,6 +183,7 @@ export interface HailHwbxChannels {
   readonly alpha?: HailRelativeNumericInput
 }
 
+/** Relative Lab channels accepted by Hail's `labx.from(...)`. */
 export interface HailLabxChannels {
   /** Replace or adjust perceptual lightness. */
   readonly l?: HailRelativeNumericInput
@@ -182,6 +195,7 @@ export interface HailLabxChannels {
   readonly alpha?: HailRelativeNumericInput
 }
 
+/** Relative LCH channels accepted by Hail's `lchx.from(...)`. */
 export interface HailLchxChannels {
   /** Replace or adjust perceptual lightness. */
   readonly l?: HailRelativeNumericInput
@@ -218,6 +232,7 @@ export type HailOklchxChannels<Enabled extends boolean = false>
     readonly alpha?: HailRelativeNumericInput
   }
 
+/** Relative channels accepted by Hail's profile-generic `colorx.from(...)`. */
 export interface HailColorxChannels extends Omit<VanityColorFunctionChannels, 'alpha'> {
   /** Replace or adjust opacity; profile channels remain native and unnormalized. */
   readonly alpha?: HailRelativeNumericInput
@@ -229,6 +244,7 @@ interface HailColorFamily<Channels, Arguments extends readonly unknown[]> {
   from: <Base extends VanityColorish>(base: Base, channels: Channels) => VanityAuthoredColor
 }
 
+/** Hail's normalized-alpha sRGB constructor family. */
 export type HailRgbx = HailColorFamily<HailRgbxChannels, readonly [
   r: VanityNumericColorChannel,
   g: VanityNumericColorChannel,
@@ -236,6 +252,7 @@ export type HailRgbx = HailColorFamily<HailRgbxChannels, readonly [
   alpha?: HailNumericInput,
 ]>
 
+/** Hail's normalized HSL constructor family. */
 export type HailHslx = HailColorFamily<HailHslxChannels, readonly [
   h: HailHueInput,
   s: HailNumericInput,
@@ -243,6 +260,7 @@ export type HailHslx = HailColorFamily<HailHslxChannels, readonly [
   alpha?: HailNumericInput,
 ]>
 
+/** Hail's normalized HWB constructor family. */
 export type HailHwbx = HailColorFamily<HailHwbxChannels, readonly [
   h: HailHueInput,
   w: HailNumericInput,
@@ -250,6 +268,7 @@ export type HailHwbx = HailColorFamily<HailHwbxChannels, readonly [
   alpha?: HailNumericInput,
 ]>
 
+/** Hail's normalized Lab constructor family. */
 export type HailLabx = HailColorFamily<HailLabxChannels, readonly [
   l: HailNumericInput,
   a: HailNumericInput,
@@ -257,6 +276,7 @@ export type HailLabx = HailColorFamily<HailLabxChannels, readonly [
   alpha?: HailNumericInput,
 ]>
 
+/** Hail's normalized LCH constructor family. */
 export type HailLchx = HailColorFamily<HailLchxChannels, readonly [
   l: HailNumericInput,
   c: HailNumericInput,
@@ -264,6 +284,7 @@ export type HailLchx = HailColorFamily<HailLchxChannels, readonly [
   alpha?: HailNumericInput,
 ]>
 
+/** Hail's normalized OKLab constructor family. */
 export type HailOklabx = HailColorFamily<HailLabxChannels, readonly [
   l: HailNumericInput,
   a: HailNumericInput,
@@ -284,6 +305,7 @@ type HailOklchElevationMember<Enabled extends boolean>
       }
     : object
 
+/** Hail's normalized OKLCH constructor family with optional elevation. */
 export type HailOklchx<Enabled extends boolean = false>
   = HailColorFamily<HailOklchxChannels<Enabled>, readonly [
     l: HailNumericInput,
@@ -292,6 +314,7 @@ export type HailOklchx<Enabled extends boolean = false>
     alpha?: HailNumericInput,
   ]> & HailOklchElevationMember<Enabled>
 
+/** Hail's profile-generic `color()` constructor family. */
 export interface HailColorx {
   /** Author raw `color()` syntax when a future/custom profile needs the raw CSS form. */
   (css: string): VanityAuthoredColor
@@ -324,6 +347,7 @@ export interface HailBem {
   (step: VanityCssInput): VanityMathValue<'length'>
 }
 
+/** Small declaration fragments installed by Hail's `mx` utility group. */
 export interface HailMixins {
   /** Equal logical dimensions with a circular radius. */
   readonly circle: (size: VanityCssInput) => VanityFragment
@@ -338,9 +362,11 @@ type MarkerOptionsOf<Options> = ColorOptionsOf<Options> extends { readonly marke
 type MarkerName<Options, Kind extends 'span' | 'exact', Fallback extends string>
   = MarkerOptionsOf<Options> extends Readonly<Record<Kind, infer Name extends string>> ? Name : Fallback
 
+/** Whether Hail's semantic elevation control is enabled by configuration. */
 export type HailElevationEnabled<Options>
   = ColorOptionsOf<Options> extends { readonly elevation: true } ? true : false
 
+/** Marker utility members with names derived from Hail's color options. */
 export type HailMarkerUtils<Options> = {
   readonly [Name in MarkerName<Options, 'span', 'span'>]: HailSpanFactory
 } & {

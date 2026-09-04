@@ -32,7 +32,7 @@ import {
   updateTemplates,
 } from '@nuxt/kit'
 import { isPackageSpecifier } from './compiler/auto-imports/applicationImports'
-import { styleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
+import { renderStyleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
 import { planAutoImportDeclarations } from './compiler/auto-imports/autoImportPlan'
 import { configureVanityViteHost } from './compiler/hosts/viteHost'
 import { renderVanityNuxtConfigTypes } from './nuxt/configTypes'
@@ -206,7 +206,7 @@ function renderNuxtStyleAutoImportDeclarations(
   }
 
   const path = join(buildDir ?? join(root, '.nuxt'), 'vanity-style-auto-imports.d.ts')
-  return styleAutoImportDeclarations(style.sources.map(source => ({
+  return renderStyleAutoImportDeclarations(style.sources.map(source => ({
     ...source,
     imports: source.imports.filter(name => !appNamesBySource.get(source.from)?.has(name)),
   })), { relativeTo: path })

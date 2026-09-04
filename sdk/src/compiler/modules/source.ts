@@ -3,7 +3,7 @@
 import type { CallExpression, Expression, ObjectExpression, ObjectProperty } from 'oxc-parser'
 import { posix } from 'node:path'
 import { parseSync, Visitor } from 'oxc-parser'
-import { styleAutoImportDeclarations as renderStyleAutoImportDeclarations } from '../auto-imports/autoImportDeclarations'
+import { renderStyleAutoImportDeclarations as renderStyleAutoImportDeclarationsFromSources } from '../auto-imports/autoImportDeclarations'
 import { normalizePath } from '../core/path'
 
 // ─── Export-name detection ───────────────────────────────────────────────────
@@ -13,7 +13,7 @@ import { normalizePath } from '../core/path'
  * Destructuring, aliases, re-exports, comments, and TypeScript-only exports
  * follow parser semantics instead of source-text guesses.
  */
-export function styleExportNames(source: string, fileName = 'system.css.ts'): string[] {
+export function readStyleExportNames(source: string, fileName = 'system.css.ts'): string[] {
   const parsed = parseSync(fileName, source)
 
   if (parsed.errors.some(error => error.severity === 'Error'))
@@ -43,11 +43,11 @@ export function styleExportNames(source: string, fileName = 'system.css.ts'): st
  * Vite also writes a tiny generated `@types/vanity-style-auto-imports` reference
  * bridge so ordinary TypeScript automatic type discovery sees the stable file.
  */
-export function styleAutoImportDeclarations(
-  sources: readonly import('../auto-imports/autoImportDeclarations').AutoImportDeclarationSource[],
+export function renderStyleAutoImportDeclarations(
+  sources: readonly import('../auto-imports/autoImportDeclarations').VanityAutoImportDeclarationSource[],
   options: { relativeTo?: string } = {},
 ): string {
-  return renderStyleAutoImportDeclarations(sources, options)
+  return renderStyleAutoImportDeclarationsFromSources(sources, options)
 }
 
 // ─── The debug-name transform ────────────────────────────────────────────────

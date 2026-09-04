@@ -3,7 +3,7 @@
  * validation split ([patterns.md §2]). lightningcss owns value grammar and
  * selector/query syntax; the W3C property list owns property existence, so a
  * platform property lightningcss has not learned yet is never blocked
- * ([vision.md §3], principle 6). Every check memoizes — style sheets
+ * ([patterns.md §2]). Every check memoizes — style sheets
  * repeat themselves, native calls shouldn't.
  */
 

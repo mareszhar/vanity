@@ -7,14 +7,18 @@
  * system's own config promoted a lane to a hard gate.
  */
 
+import { execFile } from 'node:child_process'
 import { cp, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { extname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
 import ts from 'typescript'
 import { audit, formatAuditFindings } from '../sdk/src/introspect/audit'
+
+const execFileAsync = promisify(execFile)
 
 const here = fileURLToPath(new URL('.', import.meta.url))
 const packageDir = join(here, '..', 'sdk')
@@ -27,6 +31,8 @@ const packageToolingFiles = [
 const historyScanDirectories = ['sdk/src', 'docs', 'scripts', 'sandbox', 'spikes']
 const historyScanFiles = ['README.md']
 const historyScanExtensions = new Set(['.cjs', '.js', '.json', '.md', '.mjs', '.ts', '.tsx'])
+/** Tracked generated bundles are composition tripwires, not authored text sources. */
+const trackedGeneratedBundles = new Set(['sandbox/canary/dist-ssr/entry-server.js'])
 
 /**
  * These are current, user-relevant terms rather than migration notes:
@@ -55,6 +61,7 @@ const requireFromPackage = createRequire(join(packageDir, 'package.json'))
 async function main(): Promise<void> {
   await auditProductionNames()
   await auditHistoryVocabulary()
+  await auditControlCharacters()
 
   const target = process.argv[2]
   const source = target === undefined ? join(packageDir, 'src', 'test-support', 'vite-app') : resolve(target)
@@ -173,6 +180,7 @@ const NAMING_VERB_PREFIXES = [
   'replace',
   'protect',
   'match',
+  'matches',
   'nest',
   'declare',
   'report',
@@ -261,6 +269,7 @@ const NAMING_VERB_PREFIXES = [
   'wrap',
   'preserve',
   'contain',
+  'contains',
   'classify',
   'guard',
   'parenthesize',
@@ -301,9 +310,6 @@ const NAMING_ALLOWLIST = new Set([
   'inspectManifest',
   'explainManifestPath',
   'runVanityCli',
-  'styleAutoImportDeclarations',
-  'appAutoImportDeclarations',
-  'styleExportNames',
   'didYouMean',
   'exportDesignTokens',
   'importDesignTokens',
@@ -393,6 +399,7 @@ const NAMING_ALLOWLIST = new Set([
   // Vite plugin lifecycle hook names are framework-mandated.
   'config',
   'configResolved',
+  'transformInclude',
   // Public token-declaration shorthand and JavaScript Proxy protocol hook.
   'tdec',
   'ownKeys',
@@ -473,6 +480,9 @@ const NAMING_ALLOWLIST = new Set([
   'specificityContexts',
 ])
 
+const NAMING_PREDICATE_PREFIXES = ['is', 'has', 'can', 'should', 'matches', 'contains'] as const
+const NAMING_BOOLEAN_EXCEPTIONS = new Set(['transformInclude'])
+
 export async function auditProductionNames(root = packageSourceRoot): Promise<void> {
   const roots = root === packageSourceRoot ? [root, ...packageToolingFiles] : [root]
   const files = (await Promise.all(roots.map(candidate => candidate.endsWith('.cjs') || candidate.endsWith('.mjs')
@@ -523,6 +533,49 @@ export async function auditHistoryVocabulary(root = join(here, '..')): Promise<v
   }
 }
 
+export interface ControlCharacterFinding {
+  readonly file: string
+  readonly line: number
+  readonly column: number
+  readonly code: string
+}
+
+/** Enforce text-source hygiene across tracked repository files. */
+export async function auditControlCharacters(root = join(here, '..')): Promise<void> {
+  const findings: ControlCharacterFinding[] = []
+  for (const file of await trackedTextFiles(root)) {
+    const source = await readFile(file, 'utf8')
+    findings.push(...findControlCharactersInSource(relative(root, file), source))
+  }
+
+  if (findings.length > 0) {
+    throw new Error([
+      '[vanity] control-character violations:',
+      ...findings.map(finding => `  ${finding.file}:${finding.line}:${finding.column} U+${finding.code}`),
+      'Use an escaped representation or remove the control character from the tracked text source.',
+    ].join('\n'))
+  }
+}
+
+/** Scan one source unit so control-character hygiene stays directly testable. */
+export function findControlCharactersInSource(file: string, source: string): ControlCharacterFinding[] {
+  const findings: ControlCharacterFinding[] = []
+  for (const [lineIndex, line] of source.split('\n').entries()) {
+    for (let index = 0; index < line.length; index++) {
+      const code = line.charCodeAt(index)
+      if (!isDisallowedControlCharacter(code))
+        continue
+      findings.push({
+        file,
+        line: lineIndex + 1,
+        column: index + 1,
+        code: code.toString(16).padStart(4, '0').toUpperCase(),
+      })
+    }
+  }
+  return findings
+}
+
 /** Scan one source unit so the vocabulary rule stays directly testable. */
 export function findHistoryVocabularyInSource(file: string, source: string): HistoryVocabularyFinding[] {
   const findings: HistoryVocabularyFinding[] = []
@@ -551,42 +604,55 @@ export function findHistoryVocabularyInSource(file: string, source: string): His
 export function findNamingLawViolations(file: string, source: string, root = packageDir): string[] {
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
   const violations: string[] = []
-  const check = (name: ts.PropertyName | ts.BindingName | undefined): void => {
+  const check = (name: ts.PropertyName | ts.BindingName | undefined, returnsBoolean = false): void => {
     if (!name || !ts.isIdentifier(name))
       return
     const value = name.text
+    const position = tree.getLineAndCharacterOfPosition(name.getStart(tree)).line + 1
+    if (returnsBoolean && !NAMING_BOOLEAN_EXCEPTIONS.has(value)
+      && !NAMING_PREDICATE_PREFIXES.some(prefix => value === prefix
+        || (value.startsWith(prefix) && /^[A-Z]/.test(value.slice(prefix.length))))) {
+      violations.push(`${relative(root, file)}:${position} ${value} (boolean operation must use a predicate name)`)
+      return
+    }
     if (value.startsWith('$') || value === 'constructor' || NAMING_ALLOWLIST.has(value))
       return
     if (NAMING_VERB_PREFIXES.some(prefix => value === prefix
       || (value.startsWith(prefix) && /^[A-Z]/.test(value.slice(prefix.length))))) {
       return
     }
-    const position = tree.getLineAndCharacterOfPosition(name.getStart(tree)).line + 1
-    violations.push(`${file.slice(root.length + (file.startsWith(root) ? 1 : 0))}:${position} ${value}`)
+    violations.push(`${relative(root, file)}:${position} ${value}`)
   }
+  const isBooleanType = (type: ts.TypeNode | undefined): boolean => type?.kind === ts.SyntaxKind.BooleanKeyword
+  const isBooleanFunction = (node: ts.ArrowFunction | ts.FunctionExpression): boolean => isBooleanType(node.type)
 
   const visit = (node: ts.Node): void => {
     // Function declarations are operations even when they are local to a
     // production module; exported-only checking misses precisely these helpers.
     if (ts.isFunctionDeclaration(node))
-      check(node.name)
+      check(node.name, isBooleanType(node.type))
 
     // MethodDeclaration covers both class methods and object-literal methods.
     if (ts.isMethodDeclaration(node))
-      check(node.name)
+      check(node.name, isBooleanType(node.type))
+
+    // Method signatures are public callable members even when their
+    // implementation is elsewhere.
+    if (ts.isMethodSignature(node))
+      check(node.name, isBooleanType(node.type))
 
     // Object-literal facades commonly expose callable operations as arrow
     // properties. Treat their public key as the operation name as well.
     if (ts.isPropertyAssignment(node)
       && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
-      check(node.name)
+      check(node.name, isBooleanFunction(node.initializer))
     }
 
     // Function-valued interface/type members are part of the public contract;
     // checking them prevents implementation names from escaping through a
     // structural surface.
     if (ts.isPropertySignature(node) && node.type && ts.isFunctionTypeNode(node.type))
-      check(node.name)
+      check(node.name, isBooleanType(node.type.type))
 
     // Callable constants are named operations regardless of whether they are
     // exported directly or only become reachable through another facade.
@@ -594,7 +660,7 @@ export function findNamingLawViolations(file: string, source: string, root = pac
       && ts.isVariableDeclarationList(node.parent)
       && (node.parent.flags & ts.NodeFlags.Const) !== 0
       && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
-      check(node.name)
+      check(node.name, isBooleanFunction(node.initializer))
     }
     ts.forEachChild(node, visit)
   }
@@ -636,6 +702,20 @@ async function historyFiles(path: string): Promise<string[]> {
     }
   }
   return files
+}
+
+async function trackedTextFiles(root: string): Promise<string[]> {
+  const { stdout } = await execFileAsync('git', ['-C', root, 'ls-files', '-z'])
+  return stdout
+    .split('\0')
+    .filter(file => file.length > 0
+      && historyScanExtensions.has(extname(file))
+      && !trackedGeneratedBundles.has(file))
+    .map(file => join(root, file))
+}
+
+function isDisallowedControlCharacter(code: number): boolean {
+  return (code >= 0 && code <= 8) || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127
 }
 
 function isTestFile(file: string): boolean {

@@ -277,7 +277,7 @@ type VanitySystemReadSurface<
   readonly anatomy: VanityAnatomyFactory<C, L>
   /** The typed runtime boundary: declare a port with a default, typed by it. */
   readonly port: VanityPortFactory
-  /** Finite declared utility selection over your token map ([spec-integrations.md §5]). */
+  /** Finite declared utility selection over your token map ([spec-css.md §1]). */
   readonly atoms: VanityAtomsFactory<C, L>
   /** Resolve an unfinished module, subtree, or composed selection against this system. */
   readonly tokensOf: <const Selection extends object>(
@@ -394,7 +394,7 @@ interface VanitySystemBindingSurface<
   readonly anatomy: VanityAnatomyFactory<C, L>
   /** The typed runtime boundary: declare a port with a default, typed by it. */
   readonly port: VanityPortFactory
-  /** Finite declared utility selection over your token map ([spec-integrations.md §5]). */
+  /** Finite declared utility selection over your token map ([spec-css.md §1]). */
   readonly atoms: VanityAtomsFactory<C, L>
   readonly inLayer: <Layer extends L>(name: Layer) => VanitySystemBindingSurface<T, C, Layer, Axes>
   /** Resolve an unfinished module, subtree, or composed selection against this system. */

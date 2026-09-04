@@ -144,7 +144,7 @@ class CalcValue<Dimension extends VanityMathDimension> extends ExpressionValue<D
   multiply<const Input extends VanityCssInput>(value: Input): VanityCalc<VanityProductDimension<Dimension, VanityDimensionOf<Input>>> {
     validateFiniteOperand('multiply', value)
     const other = getDimension(value)
-    return createBinaryOperation(this.expression, '*', createMathNode(value), getProductRuntimeDimension(this.dimension, other), requireTypedArithmetic(this.dimension, other)) as never
+    return createBinaryOperation(this.expression, '*', createMathNode(value), getProductRuntimeDimension(this.dimension, other), shouldRequireTypedArithmetic(this.dimension, other)) as never
   }
 
   divide<const Input extends VanityCssInput>(value: Input): VanityCalc<VanityQuotientDimension<Dimension, VanityDimensionOf<Input>>> {
@@ -158,7 +158,7 @@ class CalcValue<Dimension extends VanityMathDimension> extends ExpressionValue<D
       )
     }
     const other = getDimension(value)
-    return createBinaryOperation(this.expression, '/', createMathNode(value), getQuotientRuntimeDimension(this.dimension, other), requireTypedArithmetic(this.dimension, other)) as never
+    return createBinaryOperation(this.expression, '/', createMathNode(value), getQuotientRuntimeDimension(this.dimension, other), shouldRequireTypedArithmetic(this.dimension, other)) as never
   }
 
   negate(): VanityCalc<Dimension> {
@@ -354,7 +354,7 @@ function getQuotientRuntimeDimension(a: VanityMathDimension, b: VanityMathDimens
   return 'unknown'
 }
 
-function requireTypedArithmetic(a: VanityMathDimension, b: VanityMathDimension): boolean {
+function shouldRequireTypedArithmetic(a: VanityMathDimension, b: VanityMathDimension): boolean {
   return a !== 'unknown' && b !== 'unknown' && a !== 'none' && b !== 'none' && a !== 'number' && b !== 'number'
 }
 

@@ -9,11 +9,11 @@ import { writeAutoImportDeclarations as write } from './compiler/auto-imports/au
 import { resolveConfiguredModuleSource } from './compiler/projection/exportNames'
 import { VanityError } from './diagnostics'
 
-export type { AutoImportDeclarationSource } from './compiler/auto-imports/autoImportDeclarations'
+export type { VanityAutoImportDeclarationSource } from './compiler/auto-imports/autoImportDeclarations'
 export type {
-  AutoImportDeclarationFile,
-  AutoImportDeclarationPaths,
   VanityAppAutoImportPlan,
+  VanityAutoImportDeclarationFile,
+  VanityAutoImportDeclarationPaths,
   VanityAutoImportPlan,
   VanityStyleAutoImportPlan,
 } from './compiler/auto-imports/autoImportPlan'

@@ -393,24 +393,28 @@ function evaluateNumericExpression(expression: string): number | undefined {
     while (/\s/.test(expression[cursor] ?? ''))
       cursor++
   }
-  const consume = (character: string): boolean => {
+  const hasNextCharacter = (character: string): boolean => {
     consumeWhitespace()
-    if (expression[cursor] !== character)
-      return false
-    cursor++
-    return true
+    return expression[cursor] === character
   }
   function parsePrimary(): number | undefined {
     consumeWhitespace()
-    if (consume('+'))
+    if (hasNextCharacter('+')) {
+      cursor++
       return parsePrimary()
-    if (consume('-')) {
+    }
+    if (hasNextCharacter('-')) {
+      cursor++
       const value = parsePrimary()
       return value === undefined ? undefined : -value
     }
-    if (consume('(')) {
+    if (hasNextCharacter('(')) {
+      cursor++
       const value = parseSum()
-      return value === undefined || !consume(')') ? undefined : value
+      if (value === undefined || !hasNextCharacter(')'))
+        return undefined
+      cursor++
+      return value
     }
     const match = /^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?/i.exec(expression.slice(cursor))
     if (!match)
@@ -423,13 +427,15 @@ function evaluateNumericExpression(expression: string): number | undefined {
     if (value === undefined)
       return undefined
     while (true) {
-      if (consume('*')) {
+      if (hasNextCharacter('*')) {
+        cursor++
         const right = parsePrimary()
         if (right === undefined)
           return undefined
         value *= right
       }
-      else if (consume('/')) {
+      else if (hasNextCharacter('/')) {
+        cursor++
         const right = parsePrimary()
         if (right === undefined || right === 0)
           return undefined
@@ -445,13 +451,15 @@ function evaluateNumericExpression(expression: string): number | undefined {
     if (value === undefined)
       return undefined
     while (true) {
-      if (consume('+')) {
+      if (hasNextCharacter('+')) {
+        cursor++
         const right = parseProduct()
         if (right === undefined)
           return undefined
         value += right
       }
-      else if (consume('-')) {
+      else if (hasNextCharacter('-')) {
+        cursor++
         const right = parseProduct()
         if (right === undefined)
           return undefined

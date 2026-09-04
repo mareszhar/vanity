@@ -369,7 +369,7 @@ Required fixtures include:
 - manifest/explain provenance;
 - accepted large-fixture type/editor/declaration budgets.
 
-### Evidence
+### Test ownership
 
 - `sdk/src/tokens/builder.{test.ts,test-d.ts,dx.test.ts,out.test.ts}` covers the four builder forms, portable/system boundaries, lazy mount rebinding, `tdef`, reservations, axis methods, `$axes`, base/default rules, patches, roots, anchors, DTCG projection, types, diagnostics, and output.
 - `sdk/src/tokens/builder.scale.test-d.ts` forces a 60-link token builder through registration and two locked forks without TS2589.

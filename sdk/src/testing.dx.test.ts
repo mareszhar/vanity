@@ -1,7 +1,7 @@
 import { cursor, defineVanityProject } from '@mszr/vanity/testing'
 import { describe, expect, it } from 'vitest'
 import { renderVanityNuxtConfigTypes } from './nuxt/configTypes'
-import { styleAutoImportDeclarations } from './vite'
+import { renderStyleAutoImportDeclarations } from './vite'
 import '@mszr/selenita/vitest'
 
 const project = defineVanityProject({
@@ -31,7 +31,7 @@ const autoImportProject = defineVanityProject({
       export const t = ds.t
       export const style = ds.class
     `,
-    'vanity-style-auto-imports.d.ts': styleAutoImportDeclarations([{ from: './authoring.ts', imports: ['ds', 't', 'style'] }]),
+    'vanity-style-auto-imports.d.ts': renderStyleAutoImportDeclarations([{ from: './authoring.ts', imports: ['ds', 't', 'style'] }]),
   },
 })
 
@@ -123,8 +123,8 @@ const ENTRYPOINT_VALUES = {
     'formatAuditFindings',
     'formatManifestDiff',
     'generateAgentContext',
-    'styleAutoImportDeclarations',
-    'styleExportNames',
+    'renderStyleAutoImportDeclarations',
+    'readStyleExportNames',
     'VANITY_MANIFEST_FORMAT',
     'VANITY_MANIFEST_SCHEMA',
     'VANITY_MANIFEST_VERSION',

@@ -1,10 +1,9 @@
 // Exports are ordered by source module. Each heading describes the source-module
 // group that follows it; the order stays alphabetical so drift remains visible.
 
-export { unsafe } from './atoms/handle'
-
 // ─── Atoms and collection helpers ───────────────────────────────────────────
 
+export { unsafe } from './atoms/handle'
 export type {
   VanityAtomInput,
   VanityAtomKey,
@@ -180,6 +179,7 @@ export type {
   VanityRuntimeTokens,
   VanitySnapshotFrom,
 } from './runtime/contract'
+export { VanityRuntimeError } from './runtime/contract'
 
 // ─── System authoring, conditions, and contracts ─────────────────────────────
 

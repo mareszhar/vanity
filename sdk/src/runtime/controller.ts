@@ -511,7 +511,7 @@ function getCurrentMode(
         : Object.entries(definition.attribute!.values)
           .find(([, expected]) => expected === (target.getAttribute?.(definition.attribute!.name) ?? null))?.[0]
       const knownMode = mode === undefined || definition.modes.includes(mode) ? mode : undefined
-      if (mode !== undefined && knownMode === undefined && (state.options.dev ?? inferDevelopmentMode())) {
+      if (mode !== undefined && knownMode === undefined && (state.options.dev ?? isDevelopmentMode())) {
         appendRuntimeDiagnostic(state, {
           code: 'VANITY_RUNTIME_UNKNOWN_MODE',
           message: `runtime control for axis '${axis}' read unknown mode '${mode}' at '${root.contract.path}'`,
@@ -531,7 +531,7 @@ function getCurrentMode(
   const first = readings[0]!.mode
   if (readings.every(reading => reading.mode === first))
     return first
-  if (state.options.dev ?? inferDevelopmentMode()) {
+  if (state.options.dev ?? isDevelopmentMode()) {
     appendRuntimeDiagnostic(state, {
       code: 'VANITY_RUNTIME_MODE_DISAGREEMENT',
       message: `runtime axis '${axis}' disagrees across roots: ${readings.map(reading => `${reading.root}=${reading.mode ?? 'unknown'}`).join(', ')}`,
@@ -1145,10 +1145,10 @@ function serializeRuntimeValue(input: unknown): string {
 }
 
 function shouldValidate(mode: VanityRuntimeValidationContract['runtime'], options: VanityRuntimeOptions): boolean {
-  return mode === 'always' || (mode === 'dev' && (options.dev ?? inferDevelopmentMode()))
+  return mode === 'always' || (mode === 'dev' && (options.dev ?? isDevelopmentMode()))
 }
 
-function inferDevelopmentMode(): boolean {
+function isDevelopmentMode(): boolean {
   const runtimeProcess = Reflect.get(globalThis, 'process') as { env?: { NODE_ENV?: string } } | undefined
   return runtimeProcess?.env?.NODE_ENV !== 'production'
 }

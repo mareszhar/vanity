@@ -15,10 +15,14 @@ import {
 } from '../projection/exportNames'
 import { selectAutoImportNames } from './autoImportNames'
 
+/** Built-in application import group name accepted by `autoImports.app`. */
 export type VanityAppAutoImportPresetName = 'core' | 'vue'
 
+/** One resolved application import group and its named exports. */
 export interface VanityAppAutoImportPreset {
+  /** Package or project module that supplies the exports. */
   readonly from: string
+  /** Named value exports to expose to application modules. */
   readonly imports: readonly string[]
 }
 
@@ -74,6 +78,7 @@ interface VanityAppAutoImportSourceWithExclude extends VanityAppAutoImportSource
   exclude: readonly string[]
 }
 
+/** One application module source with optional include/exclude filtering. */
 export type VanityAppAutoImportSource
   = VanityAppAutoImportSourcePlain
     | VanityAppAutoImportSourceWithInclude

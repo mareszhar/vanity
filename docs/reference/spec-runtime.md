@@ -203,7 +203,7 @@ Optional Standard Schema contracts:
 
 Transactions validate all values before writes.
 
-Synchronous runtime misuse and runtime-controller failures throw `VanityRuntimeError` from `@mszr/vanity/runtime`. Its `code` and `diagnostic` fields carry a stable runtime code, semantic location, supporting detail, and repair guidance. Reconciliation and inspection return runtime diagnostics in their result objects when a per-entry problem can be reported without aborting the whole operation.
+Synchronous runtime misuse and runtime-controller failures throw `VanityRuntimeError`. Import it from `@mszr/vanity` or `@mszr/vanity/runtime`; both expose the same browser-safe class. Its `code` and `diagnostic` fields carry a stable runtime code, semantic location, supporting detail, and repair guidance. Reconciliation and inspection return runtime diagnostics in their result objects when a per-entry problem can be reported without aborting the whole operation.
 
 ## 10. Generic custom-property escape
 

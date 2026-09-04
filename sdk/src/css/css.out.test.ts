@@ -1,6 +1,6 @@
 /**
  * The output evidence dimension: the emitted CSS is a public contract
- * ([workspace.md §5]) — layer order, condition compilation in both
+ * ([testing.md §1]) — layer order, condition compilation in both
  * directions, arm intersection, scheme arms, and global/raw forms.
  */
 
