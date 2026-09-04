@@ -1,4 +1,4 @@
-# vanity — testing and benchmarks
+# vanity — testing and evidence
 
 This document defines Vanity's permanent evidence policy. Product claims are accepted only when reproducible tests observe them in every relevant evidence dimension.
 
@@ -21,6 +21,8 @@ A contract is complete only when every relevant evidence dimension is green.
 | Documentation | compiled snippets | Public examples describe the package that actually ships. |
 
 Unit coverage cannot substitute for browser cascade behavior. Browser success cannot substitute for editor diagnostics. A green repository build cannot substitute for installing the tarball in a clean app.
+
+Interpret evidence sweeps semantically. A text match may be executable code, a comment, a denylist entry, or a test asserting absence; inspect its context and run the enforcing check (`pnpm run test:maintainer`) before treating the sweep as proof.
 
 ### 1.1 Release gate
 
@@ -175,6 +177,8 @@ For every new public API, lock:
 
 Hover fixtures evaluate the text a user actually reads. They reject leaked compiler internals, unexplained overload counts, repeated expanded shapes when a named public type can preserve the same inference, and documentation blocks too long to scan in an editor popup. When TypeScript forces a trade-off between compact presentation, inference, soundness, and compiler performance, the chosen trade-off is measured and recorded rather than accepted accidentally.
 
+Measure hover through the language service's `getQuickInfoAtPosition` path, exposed by Selenita as `result.at(...).hover`. Do not use `checker.typeToString` with `NoTruncation | InTypeAlias` to estimate editor output; it forces structural expansion.
+
 Every public callable or callable namespace used in the canonical workflow must appear in the editor-DX suite through at least one completion, hover, or cursor-local diagnostic fixture. Domain tests may share that evidence; the requirement is public-surface coverage, not one test file per export. Framework-generated imports must resolve to the exact public export type and may never degrade to `any`.
 
 Auto-import integrations receive the same tests as explicit imports. A generated global must retain the exact `typeof import(...)` public signature; `any`, widened variant keys, or lost documentation is a release blocker.
@@ -259,7 +263,7 @@ Selectors are tested against actual DOM placement, not only string snapshots.
 
 ## 8. Dev/HMR/toolchain matrix
 
-The permanent matrix preserves the lessons of the July 2026 hardening review:
+The permanent matrix enforces the following integration contracts:
 
 - every virtual stylesheet URL requested by a browser returns 200;
 - repeated reloads preserve styled first paint;

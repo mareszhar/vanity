@@ -32,7 +32,7 @@ test('history vocabulary audit catches names tied to an earlier shape', () => {
   const findings = findHistoryVocabularyInSource('fixture.ts', [
     `// ${firstTerm} alias`,
     `const ${secondTerm} = 1`,
-    'const current = 2',
+    'const value = 2',
   ].join('\n'))
 
   assert.deepEqual(findings.map(finding => finding.match), [firstTerm, secondTerm])

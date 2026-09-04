@@ -2010,7 +2010,7 @@ function classifyLeaf(result: unknown, node: TokenNode): VanityLeafDefinition {
 // ─── Introspection ───────────────────────────────────────────────────────────
 
 /**
- * Record the resolved graph for the manifest ([spec-introspection.md §2]):
+ * Record the resolved graph for the manifest ([spec-introspection.md §5]):
  * every token with its per-scheme built values and graph edges, plus the
  * contrast results `legibleOn` pairings measured — passes and consciously-
  * accepted thresholds included. Runs only under an open collector.

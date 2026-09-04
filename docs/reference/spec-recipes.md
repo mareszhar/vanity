@@ -120,7 +120,7 @@ export const toolbar = ds.class({
 **Contract details.**
 
 - `ports:` is publication, not declaration: values are ordinary port handles ([spec-ports.md §1](./spec-ports.md#1-declaration-and-interpolation)) created in module scope, so arms reference them directly and the grammar never forks into callback forms.
-- Published ports surface as `button.ports.*` — one import gives a consumer the classes _and_ the style API — and are recorded in the manifest as the component's runtime surface ([spec-introspection.md §5](./spec-introspection.md#5-manifest-v3)).
+- Published ports surface as `button.ports.*` — one import gives a consumer the classes _and_ the style API — and are recorded in Manifest v4 as the component's runtime surface ([spec-introspection.md §5](./spec-introspection.md#5-manifest-v4)).
 - Anatomy publishes identically (`dialog.ports.*`).
 - An unpublished port still works everywhere; publication is how a component _advertises_ its themeable surface (principle 10 — publishing is opt-in, not a tax).
 
@@ -128,7 +128,7 @@ export const toolbar = ds.class({
 
 ## 3. `anatomy()` — parts styled as one unit
 
-**Why.** Serious components are multi-part — dialog, select, tabs, data table. Without a first-class unit, every component invents its own naming, context, and override conventions. An anatomy styles named **parts** together, with variants that apply across parts. (The canonical term is _part_; see [language.md §2](../language.md#2-vocabulary).)
+**Why.** Serious components are multi-part — dialog, select, tabs, data table. Without a first-class unit, every component invents its own naming, context, and override conventions. An anatomy styles named **parts** together, with variants that apply across parts.
 
 **Usage.**
 

@@ -352,6 +352,7 @@ Inside a runtime controller, a mutable token leaf is a token control, not a gene
 | axis | Ordered set of intended alternative modes plus optional default and runtime-control metadata. |
 | mode | Named condition within an axis. |
 | root | Selector or scope owning a system/module token declaration. |
+| part | Named element of an anatomy, with its own class and typed cross-part relationships. |
 | policy | System-wide conformance, restriction, output, or support law. |
 | constructor | System-extensible typed CSS value family. |
 | portable constructor | Built-in top-level constructor whose system policy resolves when its value enters a system. |
@@ -529,7 +530,7 @@ runtime / snapshotFrom / reconcileRuntimeSnapshot / runtimeStyle / runtimeProps
 introspect / explain / audit
 ```
 
-`ds.audit(config?)` is the locked system's truthful, build-free audit surface. It reports findings for `ambiguousAxes`, `mutableRootHazards`, `overwriteInventory`, `nonportableValues`, and `specificityContexts`, and returns an explicit `unevaluated` list for categories that need module-usage data, emitted CSS, or build evidence. Every category is `warn` by default; `consolidate({ audit: { ... } })` records system policy and the per-call config overrides it.
+Introspection, explanation, manifest, diagnostic, and audit contracts are defined in [spec-introspection.md](./reference/spec-introspection.md).
 
 ### Runtime controller
 

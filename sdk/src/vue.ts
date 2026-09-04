@@ -21,7 +21,7 @@ export type VanityPortSourceFactory = () => VanityPortSource | readonly VanityPo
  * cross-file, rename-safe ([spec-vue.md §1]). Accepts a thunk returning
  * fragments (reactive) or plain fragments (static); the thunk's array **is**
  * the merge — no `ports()` wrapper inside. SSR-safe: the computed serializes
- * into the rendered `style` attribute ([spec-ports.md §5]).
+ * into the rendered `style` attribute ([spec-ports.md §6]).
  */
 export function usePorts(
   source: VanityPortSource | readonly VanityPortSource[] | VanityPortSourceFactory,

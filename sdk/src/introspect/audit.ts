@@ -1,7 +1,7 @@
 /**
  * Audits ([spec-introspection.md §3]): the build knows enough to flag
  * drift lint can't see. Each finding is a warning with a fix-it — never a
- * hard gate unless the system promoted it (`createSystem({ audit })`), and
+ * hard gate unless the system promoted it (`consolidate({ audit })`), and
  * never moralizing: a category only speaks where the system's own data shows a
  * convention exists to stray from.
  */

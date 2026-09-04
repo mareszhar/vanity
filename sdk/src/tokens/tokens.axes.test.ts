@@ -185,11 +185,11 @@ describe('axis declarations and contexts', () => {
       },
     }).consolidate())))).toThrow(/register\.initialVal conflicts[\s\S]*use a color value; this branch is length/)
 
-    const oldTarget = createSystem({
+    const unsupportedTarget = createSystem({
       support: defineCssSupportTarget({ id: 'without-light-dark', features: ['custom-properties'] }),
     }).addAxis('scheme', colorSchemes())
-    expect(() => emit(() => inSystemScope(() => emitSystem(oldTarget.addTokens({
-      color: { accent: oldTarget.tdef.color({ axes: { scheme: { light: 'white', dark: 'black' } } }) },
+    expect(() => emit(() => inSystemScope(() => emitSystem(unsupportedTarget.addTokens({
+      color: { accent: unsupportedTarget.tdef.color({ axes: { scheme: { light: 'white', dark: 'black' } } }) },
     }).consolidate())))).toThrow(/requests element-local scheme selection.*lacks light-dark/)
 
     const rootBound = createSystem({

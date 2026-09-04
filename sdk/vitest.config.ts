@@ -32,7 +32,7 @@ export default defineConfig({
     // CI runners can exceed Vitest's default budgets.
     hookTimeout: 30_000,
     // Rename-symbol fixtures each hydrate two whole-project language services.
-    // Parallel DX suites can make that cross the old 30s ceiling on otherwise
+    // Parallel DX suites can exceed the default 30s timeout on otherwise
     // healthy runs; keep the contract assertion deterministic under load.
     testTimeout: 60_000,
     // Runtime (*.test.ts), editor-DX (*.dx.test.ts), and output (*.out.test.ts)

@@ -152,7 +152,7 @@ Identity changes constrain the system categories reported. Module recipes, ports
 
 ## 7. Diagnostics
 
-The normalized diagnostic delivered by `VanityError`, compiler sinks, and integrations is:
+Authoring and build failures use the normalized diagnostic delivered by `VanityError`, compiler sinks, and integrations:
 
 ```TS
 interface VanityDiagnostic {
@@ -174,6 +174,8 @@ interface VanityDiagnostic {
 Compiler call sites may use the authoring-friendly `VanityDiagnosticInput` with a dot-path string or fix string. `normalizeDiagnostic()` makes those arrays and objects before they leave the compiler. `reportDiagnostics()` and `VanityDiagnosticSink` are the one hook-shaped boundary used by Vite/Nuxt and other integrations.
 
 Rendering adds terminal locations and synthetic author frames editors can click. Related sites keep their own location/range. Substrate errors retain their `cause` for maintainers while the primary message uses Vanity language. Putting an `(at file:line)` suffix only in message text does not satisfy locality.
+
+Browser/runtime failures use the separate [`VanityRuntimeError` contract](./spec-runtime.md#9-validation). Both diagnostic families use stable codes and repair guidance.
 
 ## 8. Diagnostic house style
 

@@ -66,7 +66,7 @@ The package entry grew from 508,081 B to 519,286 B (+2.2%), and the runtime entr
 
 ## Hardening completion receipt
 
-Recorded on 2026-09-03 after the round-3 hardening sweep with `pnpm run bench:baseline`. This is the current release-candidate baseline for the checkout: Darwin 25.4.0 arm64, Node 24.18.0, pnpm 11.24.0, TypeScript 6.0.3, and the checked-in Small, Medium, and Large fixtures. Wall-clock measurements are local one-run signals; raw output is retained in ignored `.vanity/benchmarks/current.json`.
+Recorded on 2026-09-03 with `pnpm run bench:baseline`. This is the current release-candidate baseline for the checkout: Darwin 25.4.0 arm64, Node 24.18.0, pnpm 11.24.0, TypeScript 6.0.3, and the checked-in Small, Medium, and Large fixtures. Wall-clock measurements are local one-run signals; raw output is retained in ignored `.vanity/benchmarks/current.json`.
 
 | Scale | Cold TS / wall | Instantiations | Memory | Incremental TS / wall |
 | --- | --: | --: | --: | --: |
@@ -86,11 +86,11 @@ Recorded on 2026-09-03 after the round-3 hardening sweep with `pnpm run bench:ba
 | Medium | 1.127s / 109,909 B | 1.029s | 24,749 B / 2,981 B | 1,170,006 B / 32,690 B |
 | Large | 2.107s / 587,316 B | 3.614s | 208,603 B / 21,455 B | 11,393,040 B / 255,993 B |
 
-The current package root entry is 567,643 B raw, 331 kB minified, and 94.7 kB min+gzipped. The runtime entry is 65,814 B raw, 38,155 B minified, and 11,318 B min+gzipped. Hail is isolated in a 31,202 B presets entry, 17.5 kB minified, and 6.12 kB min+gzipped. `npm pack --dry-run --json` reports a 456,609 B tarball with 34 intended files. The root and runtime growth is the deliberate result of named public type surfaces, structured authoring/runtime diagnostics, and the verb-first internal error callback name; the final round-3 authoring-context routing adds 6 raw bytes to the root entry while runtime diagnostics remain formatter-free in the browser entry. The structured runtime diagnostics account for about 1.6 kB of min+gzip growth over the reference runtime and buy browser failures with stable codes, paths, and fixes. CSS and manifest bytes remain unchanged from the reviewed 2026-09-02 comparison.
+The current package root entry is 567,643 B raw, 331 kB minified, and 94.7 kB min+gzipped. The runtime entry is 65,814 B raw, 38,155 B minified, and 11,318 B min+gzipped. Hail is isolated in a 31,202 B presets entry, 17.5 kB minified, and 6.12 kB min+gzipped. `npm pack --dry-run --json` reports a 456,609 B tarball with 34 intended files. The root and runtime growth is deliberate: named public type surfaces, structured authoring/runtime diagnostics, and the verb-first internal error callback name account for the increase. Authoring-context routing adds 6 raw bytes to the root entry; runtime diagnostics remain formatter-free in the browser entry. The structured runtime diagnostics account for about 1.6 kB of min+gzip growth over the reference runtime and buy browser failures with stable codes, paths, and fixes. CSS and manifest bytes remain unchanged from the reviewed 2026-09-02 comparison.
 
 `scripts/benchmark.ts` enforces a 12,400 B min+gzip runtime-entry budget. The current runtime leaves 1,082 B (9.6%) of headroom; any future runtime-affecting change must either stay within that budget or receive an explicit benchmark review and budget decision. The measured runtime figures above retain raw, minified, and min+gzip values together so the download-facing guard remains comparable with the source-size and minified-size signals.
 
-The round-3 benchmark rerun follows the pure call-routing change: CSS and manifest bytes remain identical, while the changed wall-clock and memory readings are local one-run signals rather than deterministic regressions.
+CSS and manifest bytes remain unchanged; wall-clock and memory readings are local one-run signals rather than deterministic regressions.
 
 ## Acceptance policy
 
@@ -98,4 +98,5 @@ The round-3 benchmark rerun follows the pure call-routing change: CSS and manife
 - Investigate a large-fixture editor or type regression above 20%; editor interactions below 1ms use absolute timing and repeated-run stability instead.
 - Record an explicit decision for an intentional regression and name the user-visible gain.
 - Keep raw machine output outside version control; update this page only for a reviewed baseline.
+- Measure hover with the language-service path defined in [testing §5](./testing.md#5-typescripteditor-dx-contract).
 - Keep browser, optimizer, package, fresh-app, and lifecycle checks separate from benchmark numbers. See [testing](./testing.md).

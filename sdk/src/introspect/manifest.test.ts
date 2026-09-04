@@ -5,7 +5,7 @@ import Ajv2020 from 'ajv/dist/2020.js'
 import { describe, expect, it } from 'vitest'
 import { assertManifest } from '../cli'
 import { diffManifests } from './diff'
-import { buildManifest } from './manifest'
+import { buildManifest, VANITY_MANIFEST_VERSION } from './manifest'
 import { collectInspection } from './records'
 
 function fixture(value = 'red', description = 'Brand color') {
@@ -98,8 +98,11 @@ describe('canonical introspection', () => {
 
     expect(() => assertManifest(withoutModules)).toThrow(/modules.*required/)
     expect(() => assertManifest({ ...manifest, unexpected: {} })).toThrow(/unexpected.*not a property/)
-    expect(() => assertManifest({ ...manifest, version: 3 })).toThrow(/version.*must be 4/)
-    expect(() => assertManifest({ ...manifest, format: 'vanity.manifest/3', version: 3 })).toThrow(/format.*must be/)
+    expect(() => assertManifest({
+      ...manifest,
+      version: VANITY_MANIFEST_VERSION - 1,
+    })).toThrow(new RegExp(`version.*must be ${VANITY_MANIFEST_VERSION}`))
+    expect(() => assertManifest({ ...manifest, format: 'vanity.manifest/3' })).toThrow(/format.*must be/)
     expect(() => assertManifest({
       ...manifest,
       system: withoutRuntime,

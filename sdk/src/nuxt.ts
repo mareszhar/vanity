@@ -6,7 +6,7 @@
  *
  * The Nuxt DevTools tab is the `/vite` plugin's manifest view (`/__vanity/`)
  * embedded — one implementation serves plain Vite and Nuxt alike
- * ([spec-introspection.md §2]).
+ * ([spec-introspection.md §5]).
  */
 
 import type { NuxtModule } from '@nuxt/schema'

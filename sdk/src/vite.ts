@@ -24,7 +24,7 @@
  * styles) are watched and mapped back to their dependents, so editing a
  * token file hot-updates every style module built on it.
  *
- * **The manifest rides the same evaluation** ([spec-introspection.md §2]):
+ * **The manifest rides the same evaluation** ([spec-introspection.md §5]):
  * each pass drains the inspection channel, and the projection lands in
  * `.vanity/manifest.json` — debounced in dev, once per build — plus the live
  * `/__vanity/` endpoints (`manifest.json`, and the DevTools view over it).

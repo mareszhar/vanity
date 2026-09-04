@@ -1,9 +1,9 @@
 /**
  * The build-time CSS parser gate: the "parse the values" half of the
- * validation split ([dux-patterns.md §2]). lightningcss owns value grammar and
+ * validation split ([patterns.md §2]). lightningcss owns value grammar and
  * selector/query syntax; the W3C property list owns property existence, so a
  * platform property lightningcss has not learned yet is never blocked
- * ([dux-vision.md §3], principle 6). Every check memoizes — style sheets
+ * ([vision.md §3], principle 6). Every check memoizes — style sheets
  * repeat themselves, native calls shouldn't.
  */
 

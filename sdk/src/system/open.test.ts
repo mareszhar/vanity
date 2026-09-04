@@ -474,6 +474,6 @@ describe('open and locked systems', () => {
       ...portable,
       runtime: withoutRuntimeTokens,
     })).toThrow(/runtime\.tokens.*required/)
-    expect(() => assertPortableSystem({ ...portable, format: 'vanity.system/1' })).toThrow(/unsupported portable system format/)
+    expect(() => assertPortableSystem({ ...portable, format: 'vanity.system/unsupported' })).toThrow(/unsupported portable system format/)
   })
 })

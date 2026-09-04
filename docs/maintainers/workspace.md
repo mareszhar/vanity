@@ -85,7 +85,7 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run lint` | lint and format-check the repository with a persistent cache |
 | `pnpm run lint:staged` | lint only staged files; this is the pre-commit guard |
 | `pnpm run check:fast` | run cached lint, root tooling/browser-spec typechecking, incremental SDK typechecking, and non-editor SDK tests for the normal edit loop |
-| `pnpm run clean:validation` | remove the exact ignored demo-generated declaration and adapter-cache paths before validation; release state is preserved |
+| `pnpm run clean:validation` | remove the exact ignored application-generated declaration, adapter-cache, and `.vanity/` paths before validation; release state is preserved |
 | `pnpm run check` | run non-browser quality gates |
 | `pnpm run validate` | run non-browser gates, the permanent canary, all demo builds, optimized-CSS checks, production/development browsers, and lifecycle cleanup |
 | `pnpm run audit` | build and audit the canonical SDK fixture |
@@ -168,7 +168,7 @@ The root `.gitignore` is the single ignore authority. Generated or machine-local
 - `.vanity/` manifests, benchmark measurements, release validation receipts, and in-flight release records;
 - generated auto-import declarations.
 
-The validation entrypoints clear only the demo-generated declaration and adapter-cache paths before typechecking. This prevents an ignored ambient file from masking a removed or renamed import while preserving the root `.vanity/` receipts, benchmark measurements, and resumable release records.
+The validation entrypoints clear the exact ignored application-generated declaration, adapter-cache, and `.vanity/` paths before typechecking. This prevents stale ambient files or generated contracts from masking a removed or renamed import while preserving the root `.vanity/` receipts, benchmark measurements, and resumable release records.
 
 Non-Nuxt demos run `vanity prepare` before typechecking, so a clean checkout has the generated ambient declarations its `*.css.ts` and application modules rely on; the command's contract lives in [spec-integrations.md §8](../reference/spec-integrations.md#8-integration-adapters). The Turbo `prep` task declares the canonical `.vanity/types/` directory and the `@types/vanity-*-auto-imports` bridges as outputs, so a cached preparation stays usable by the dependent typecheck task.
 

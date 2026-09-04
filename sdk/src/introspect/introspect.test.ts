@@ -1,5 +1,5 @@
 /**
- * The manifest ([spec-introspection.md §2]): one machine-readable
+ * The manifest ([spec-introspection.md §5]): one machine-readable
  * projection of everything the build knows — tokens with per-scheme values
  * and usage, recipes with their variant spaces, ports, escapes, contrast
  * results. Locked over the Prism fixtures through the same collection channel

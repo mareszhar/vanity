@@ -638,31 +638,31 @@ describe('mutable runtime', () => {
 
   it('reconciles schema changes entry by entry and rejects protocol changes wholesale', () => {
     const first = createFixture().ds
-    const old = first.runtime({ within: new MemoryRoot() })
-    old.t.color.brand.$set('red')
-    const prior = old.snapshot()
+    const sourceRuntime = first.runtime({ within: new MemoryRoot() })
+    sourceRuntime.t.color.brand.$set('red')
+    const sourceSnapshot = sourceRuntime.snapshot()
 
-    const next = createFixture(true).ds
-    expect(Object.keys(next.runtimeProps(prior).$system!.style)).toHaveLength(1)
-    expect(Object.keys(next.runtimeProps(prior).$system!.style)[0]).toMatch(/^--app-v-/)
-    const result = next.reconcileRuntimeSnapshot(prior)
+    const target = createFixture(true).ds
+    expect(Object.keys(target.runtimeProps(sourceSnapshot).$system!.style)).toHaveLength(1)
+    expect(Object.keys(target.runtimeProps(sourceSnapshot).$system!.style)[0]).toMatch(/^--app-v-/)
+    const result = target.reconcileRuntimeSnapshot(sourceSnapshot)
     expect(result.snapshot.overrides).toHaveLength(1)
-    expect(result.snapshot.system).not.toBe(prior.system)
+    expect(result.snapshot.system).not.toBe(sourceSnapshot.system)
     expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_SCHEMA_MISMATCH' }))
 
-    const removed: VanityRuntimeSnapshot = {
-      ...prior,
-      overrides: [...prior.overrides, {
-        token: ['gone'],
+    const unknownTokenSnapshot: VanityRuntimeSnapshot = {
+      ...sourceSnapshot,
+      overrides: [...sourceSnapshot.overrides, {
+        token: ['missing'],
         address: { kind: 'base' },
         val: 'red',
       }],
     }
-    expect(next.reconcileRuntimeSnapshot(removed).diagnostics)
-      .toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_UNKNOWN_TOKEN', token: ['gone'] }))
+    expect(target.reconcileRuntimeSnapshot(unknownTokenSnapshot).diagnostics)
+      .toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_UNKNOWN_TOKEN', token: ['missing'] }))
     const incompatible: VanityRuntimeSnapshot = {
-      ...prior,
-      overrides: [...prior.overrides, {
+      ...sourceSnapshot,
+      overrides: [...sourceSnapshot.overrides, {
         token: ['color', 'brand'],
         address: { kind: 'axis', axis: 'scheme', mode: 'sepia' },
         val: 'red',
@@ -673,11 +673,11 @@ describe('mutable runtime', () => {
       }],
       modes: { motion: 'none' },
     }
-    const diagnostics = next.reconcileRuntimeSnapshot(incompatible).diagnostics
+    const diagnostics = target.reconcileRuntimeSnapshot(incompatible).diagnostics
     expect(diagnostics).toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_UNKNOWN_ADDRESS' }))
     expect(diagnostics).toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_INVALID_VALUE', token: ['ratio'] }))
     expect(diagnostics).toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_UNKNOWN_MODE', axis: 'motion' }))
-    expect(() => next.reconcileRuntimeSnapshot({ ...prior, version: 2 })).toThrow(/unsupported runtime snapshot protocol/)
+    expect(() => target.reconcileRuntimeSnapshot({ ...sourceSnapshot, version: 2 })).toThrow(/unsupported runtime snapshot protocol/)
   })
 
   it('uses synchronous Standard Schema output and app-supplied schema registries', () => {

@@ -60,12 +60,15 @@ These verbs are different contracts.
 
 The additive families are:
 
-- `addTokens`;
-- `addAxis` and `addAxes`;
-- `addConditions`;
-- `addPlugin`;
-- `addConsts`;
-- `addUtils`.
+- `addToken` / `addTokens`;
+- `addAxis` / `addAxes`;
+- `addCondition` / `addConditions`;
+- `addConst` / `addConsts`;
+- `addUtil` / `addUtils`;
+- `addRule` / `addRules`;
+- `addConstructor` / `addConstructors`;
+- `addPolicy` / `addPolicies`;
+- `addPlugin`.
 
 An `add*` operation requires the target name or token path to be absent. Duplicate additions fail at the input in TypeScript where possible and through a local runtime diagnostic otherwise.
 
@@ -163,11 +166,11 @@ Calling `consolidate()` from a `*.css.ts` file is a dedicated error: `VANITY_SYS
 
 The locked surface contains resolved reads and build and runtime families:
 
-- `t`, configured value constructors, constants, and added utilities;
+- `t`, configured value constructors, and added utilities;
 - `class`, `rules`, `raw`, `fragment`, `omit`, `tdec`, keyframes, font faces, recipes, anatomy, ports, atoms, `inLayer`, and token projections;
 - runtime binding, DOM-free `snapshotFrom`, reconciliation, runtime style, and runtime props;
-- normalized conditions and layers;
-- `introspect()`.
+- normalized conditions, axes, layers, constants, and policy reads;
+- `introspect()`, `explain()`, and `audit()`.
 
 Open mutation methods are absent from completion and type surfaces. Runtime access receives a lifecycle-specific throwing stub.
 
