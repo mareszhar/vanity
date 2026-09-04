@@ -25,7 +25,7 @@ catalog:
   '@playwright/test': ^1.62.1
   '@tailwindcss/vite': ^4.3.3
   '@types/culori': ^4.0.1
-  '@types/node': ^26.3.0
+  '@types/node': ^26.4.1
   '@vanilla-extract/css': ^1.21.2
   '@vanilla-extract/dynamic': ^2.1.5
   '@vanilla-extract/integration': ^8.0.10
@@ -42,20 +42,20 @@ catalog:
   jiti: ^2.7.0
   known-css-properties: ^0.37.0
   lightningcss: ^1.33.0
-  lint-staged: ^17.3.0
+  lint-staged: ^17.4.1
   nuxt: 4.5.2
   obuild: ^0.4.38
-  oxc-parser: ^0.147.0
+  oxc-parser: ^0.148.0
   pug: ^3.0.4
   tailwindcss: ^4.3.3
-  tsx: ^4.23.12
-  turbo: 2.10.11
+  tsx: ^4.23.13
+  turbo: 2.10.12
   # @typescript-eslint 8.x supports TypeScript < 6.1; do not upgrade to 7 yet.
-  typescript: '>=6.0.3 <6.1.0'
+  typescript: ^6.0.3
   unplugin-auto-import: ^21.1.0
   vite: 8.2.2
   vitest: ^4.1.11
-  vue: ^3.5.41
+  vue: ^3.5.42
   vue-tsc: ^3.3.11
   wxt: ^0.21.4
 
