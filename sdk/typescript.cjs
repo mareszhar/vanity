@@ -4,7 +4,7 @@
  * TypeScript deliberately treats a mapped property as synthesized, so native
  * rename cannot connect a `defineTokens` object key to the handle properties
  * inferred from it. Vanity has more information: every handle carries a literal
- * `$path` type (or legacy `path` during migration), and every use can be traced
+ * `$path` type, and every use can be traced
  * to one graph-producing call. This
  * plugin adds only those missing rename locations; every other language-
  * service operation remains TypeScript's own.
@@ -38,7 +38,7 @@ module.exports = function init(modules) {
         if (native.canRename)
           return native
 
-        const identity = identityAt(ts, languageService.getProgram(), fileName, position)
+        const identity = findIdentityAt(ts, languageService.getProgram(), fileName, position)
 
         if (!identity)
           return native
@@ -56,12 +56,12 @@ module.exports = function init(modules) {
       proxy.findRenameLocations = (fileName, position, findInStrings, findInComments, preferences) => {
         const native = languageService.findRenameLocations(fileName, position, findInStrings, findInComments, preferences) ?? []
         const program = languageService.getProgram()
-        const identity = identityAt(ts, program, fileName, position)
+        const identity = findIdentityAt(ts, program, fileName, position)
 
         if (!identity || !program)
           return native
 
-        const added = locationsFor(ts, program, identity)
+        const added = findLocationsFor(ts, program, identity)
         const unique = new Map()
 
         for (const location of [...native, ...added])
@@ -75,7 +75,7 @@ module.exports = function init(modules) {
         if (!native || !isStyleModule(fileName))
           return native
 
-        const barrels = authoringBarrels(info.config, languageService.getProgram())
+        const barrels = collectAuthoringBarrels(info.config, languageService.getProgram())
         if (barrels.size === 0)
           return native
 
@@ -98,7 +98,7 @@ module.exports = function init(modules) {
         if (!program || !source)
           return native
 
-        return [...native, ...vanityDiagnostics(ts, program, source)]
+        return [...native, ...collectVanityDiagnostics(ts, program, source)]
       }
 
       proxy.getCodeFixesAtPosition = (fileName, start, end, errorCodes, formatOptions, preferences) => {
@@ -115,13 +115,13 @@ module.exports = function init(modules) {
 
         const program = languageService.getProgram()
         const source = program?.getSourceFile(fileName)
-        const ambient = program && source ? ambientUseAt(ts, program, source, start) : undefined
+        const ambient = program && source ? findAmbientUseAt(ts, program, source, start) : undefined
         if (!ambient)
           return native
 
         const fixes = [
-          codeFix(fileName, `import type {} from '${packageOf(ambient.source)}/vanity-style-auto-imports'\n`, 'Add the type-only unlock import'),
-          codeFix(fileName, `import { ${ambient.name} } from '${ambient.source}'\n`, `Import ${ambient.name} from the authoring barrel`),
+          createCodeFix(fileName, `import type {} from '${getPackageOf(ambient.source)}/vanity-style-auto-imports'\n`, 'Add the type-only unlock import'),
+          createCodeFix(fileName, `import { ${ambient.name} } from '${ambient.source}'\n`, `Import ${ambient.name} from the authoring barrel`),
         ]
         return [...native, ...fixes]
       }
@@ -131,15 +131,15 @@ module.exports = function init(modules) {
   }
 }
 
-function vanityDiagnostics(ts, program, source) {
+function collectVanityDiagnostics(ts, program, source) {
   const diagnostics = []
-  const packageInfo = sourceShippingPackage(source.fileName)
+  const packageInfo = findSourceShippingPackage(source.fileName)
 
   if (packageInfo && !packageInfo.vanity?.suppressAmbientSourceDeclarationNotice && isStyleModule(source.fileName)
     && !hasTypeOnlyUnlock(ts, source)) {
-    const ambient = firstAmbientUse(ts, program, source)
+    const ambient = findFirstAmbientUse(ts, program, source)
     if (ambient) {
-      diagnostics.push(diagnostic(
+      diagnostics.push(createDiagnostic(
         ts,
         source,
         ambient.node,
@@ -157,7 +157,7 @@ function vanityDiagnostics(ts, program, source) {
       && node.expression.getText(source) === 'ds'
       && styleEmitters.has(node.name.text)
       && !isStyleModule(source.fileName)) {
-      diagnostics.push(diagnostic(
+      diagnostics.push(createDiagnostic(
         ts,
         source,
         node.name,
@@ -174,7 +174,7 @@ function isStyleModule(fileName) {
   return /\.css\.[cm]?[jt]sx?$/.test(fileName)
 }
 
-function authoringBarrels(config, program) {
+function collectAuthoringBarrels(config, program) {
   const sources = new Set()
   const configured = config?.authoringBarrels
   for (const source of typeof configured === 'string' ? [configured] : Array.isArray(configured) ? configured : [])
@@ -192,7 +192,7 @@ function authoringBarrels(config, program) {
   return sources
 }
 
-function diagnostic(ts, source, node, code, messageText, category = ts.DiagnosticCategory.Suggestion) {
+function createDiagnostic(ts, source, node, code, messageText, category = ts.DiagnosticCategory.Suggestion) {
   return {
     file: source,
     start: node.getStart(source),
@@ -203,7 +203,7 @@ function diagnostic(ts, source, node, code, messageText, category = ts.Diagnosti
   }
 }
 
-function firstAmbientUse(ts, program, source) {
+function findFirstAmbientUse(ts, program, source) {
   let found
   visit(source)
   return found
@@ -212,7 +212,7 @@ function firstAmbientUse(ts, program, source) {
     if (found)
       return
     if (ts.isIdentifier(node)) {
-      const candidate = ambientUseForName(ts, program.getTypeChecker(), node)
+      const candidate = findAmbientUseForName(ts, program.getTypeChecker(), node)
       if (candidate)
         found = { node, ...candidate }
     }
@@ -220,12 +220,12 @@ function firstAmbientUse(ts, program, source) {
   }
 }
 
-function ambientUseAt(ts, program, source, position) {
-  const node = nodeAt(ts, source, position)
+function findAmbientUseAt(ts, program, source, position) {
+  const node = findNodeAt(ts, source, position)
   let current = node
   while (current) {
     if (ts.isIdentifier(current)) {
-      const candidate = ambientUseForName(ts, program.getTypeChecker(), current)
+      const candidate = findAmbientUseForName(ts, program.getTypeChecker(), current)
       if (candidate)
         return { node: current, ...candidate }
     }
@@ -234,21 +234,21 @@ function ambientUseAt(ts, program, source, position) {
   return undefined
 }
 
-function ambientUseForName(ts, checker, node) {
+function findAmbientUseForName(ts, checker, node) {
   if (isImportOrDeclarationName(ts, node))
     return undefined
   const symbol = checker.getSymbolAtLocation(node)
   if (!symbol)
     return undefined
   for (const declaration of symbol.declarations || []) {
-    const source = ambientSource(ts, declaration)
+    const source = findAmbientSource(ts, declaration)
     if (source)
       return { name: node.text, source }
   }
   return undefined
 }
 
-function ambientSource(ts, declaration) {
+function findAmbientSource(ts, declaration) {
   const file = declaration.getSourceFile()
   if (!file.isDeclarationFile || !/generated by vanity/.test(file.text))
     return undefined
@@ -271,7 +271,7 @@ function hasTypeOnlyUnlock(ts, source) {
     && statement.importClause.namedBindings === undefined)
 }
 
-function sourceShippingPackage(fileName) {
+function findSourceShippingPackage(fileName) {
   let directory = dirname(fileName)
   for (;;) {
     const path = join(directory, 'package.json')
@@ -291,13 +291,13 @@ function sourceShippingPackage(fileName) {
   }
 }
 
-function packageOf(source) {
+function getPackageOf(source) {
   if (source.startsWith('@'))
     return source.split('/').slice(0, 2).join('/')
   return source.split('/')[0]
 }
 
-function codeFix(fileName, text, description) {
+function createCodeFix(fileName, text, description) {
   return {
     fixName: 'vanity-ambient-source-declaration',
     description,
@@ -305,7 +305,7 @@ function codeFix(fileName, text, description) {
   }
 }
 
-function identityAt(ts, program, fileName, position) {
+function findIdentityAt(ts, program, fileName, position) {
   if (!program)
     return undefined
 
@@ -315,24 +315,24 @@ function identityAt(ts, program, fileName, position) {
     return undefined
 
   const checker = program.getTypeChecker()
-  const node = nodeAt(ts, source, position)
-  const name = renameName(ts, node)
+  const node = findNodeAt(ts, source, position)
+  const name = findRenameName(ts, node)
 
   if (!name)
     return undefined
 
-  const typed = typedTokenPath(ts, checker, name)
+  const typed = findTypedTokenPath(ts, checker, name)
 
   if (typed) {
-    const graph = graphForUse(ts, checker, name, typed)
-    return graph ? { graph, path: typed, span: spanOf(name) } : undefined
+    const graph = findGraphForUse(ts, checker, name, typed)
+    return graph ? { graph, path: typed, span: getSpanOf(name) } : undefined
   }
 
-  const definition = definitionIdentity(ts, checker, name)
-  return definition ? { ...definition, span: spanOf(name) } : undefined
+  const definition = findDefinitionIdentity(ts, checker, name)
+  return definition ? { ...definition, span: getSpanOf(name) } : undefined
 }
 
-function locationsFor(ts, program, identity) {
+function findLocationsFor(ts, program, identity) {
   const checker = program.getTypeChecker()
   const locations = []
   const leaf = identity.path.split('.').at(-1)
@@ -344,21 +344,21 @@ function locationsFor(ts, program, identity) {
     visit(source)
 
     function visit(node) {
-      const name = candidateName(ts, node)
+      const name = getCandidateName(ts, node)
 
       // A matching semantic path must end in the same property spelling. This
       // cheap syntax filter avoids asking TypeScript to instantiate the type of
       // every property in large, composed graphs during one rename.
-      if (name && propertyName(ts, name) === leaf) {
-        const typedPath = typedTokenPath(ts, checker, name)
+      if (name && getPropertyName(ts, name) === leaf) {
+        const typedPath = findTypedTokenPath(ts, checker, name)
 
-        if (typedPath === identity.path && graphForUse(ts, checker, name, typedPath) === identity.graph)
-          locations.push({ fileName: source.fileName, textSpan: spanOf(name) })
+        if (typedPath === identity.path && findGraphForUse(ts, checker, name, typedPath) === identity.graph)
+          locations.push({ fileName: source.fileName, textSpan: getSpanOf(name) })
 
-        const definition = definitionIdentity(ts, checker, name)
+        const definition = findDefinitionIdentity(ts, checker, name)
 
         if (definition && definition.path === identity.path && definition.graph === identity.graph)
-          locations.push({ fileName: source.fileName, textSpan: spanOf(name) })
+          locations.push({ fileName: source.fileName, textSpan: getSpanOf(name) })
       }
 
       ts.forEachChild(node, visit)
@@ -368,7 +368,7 @@ function locationsFor(ts, program, identity) {
   return locations
 }
 
-function candidateName(ts, node) {
+function getCandidateName(ts, node) {
   if (ts.isPropertyAccessExpression(node))
     return node.name
   if (ts.isElementAccessExpression(node) && node.argumentExpression && ts.isStringLiteralLike(node.argumentExpression))
@@ -382,11 +382,11 @@ function candidateName(ts, node) {
   return undefined
 }
 
-function renameName(ts, node) {
+function findRenameName(ts, node) {
   let current = node
 
   while (current) {
-    if ((ts.isIdentifier(current) || ts.isStringLiteralLike(current)) && candidateParent(ts, current))
+    if ((ts.isIdentifier(current) || ts.isStringLiteralLike(current)) && getCandidateParent(ts, current))
       return current
     current = current.parent
   }
@@ -394,7 +394,7 @@ function renameName(ts, node) {
   return undefined
 }
 
-function candidateParent(ts, node) {
+function getCandidateParent(ts, node) {
   const parent = node.parent
   return (ts.isPropertyAccessExpression(parent) && parent.name === node)
     || (ts.isElementAccessExpression(parent) && parent.argumentExpression === node)
@@ -402,7 +402,7 @@ function candidateParent(ts, node) {
     || (ts.isCallExpression(parent) && callSyntaxName(ts, parent) === 'add' && parent.arguments[0] === node)
 }
 
-function typedTokenPath(ts, checker, name) {
+function findTypedTokenPath(ts, checker, name) {
   const parent = name.parent
   const value = ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent) ? parent : undefined
 
@@ -410,17 +410,17 @@ function typedTokenPath(ts, checker, name) {
     return undefined
 
   const type = checker.getTypeAtLocation(value)
-  const property = type.getProperty('$path') || type.getProperty('path')
+  const property = type.getProperty('$path')
 
   if (!property)
     return undefined
 
   const pathType = checker.getTypeOfSymbolAtLocation(property, value)
-  const values = stringLiterals(ts, pathType)
+  const values = collectStringLiterals(ts, pathType)
   return values.size === 1 ? [...values][0] : undefined
 }
 
-function stringLiterals(ts, type) {
+function collectStringLiterals(ts, type) {
   const values = new Set()
 
   if (type.isStringLiteral && type.isStringLiteral()) {
@@ -428,7 +428,7 @@ function stringLiterals(ts, type) {
   }
   else if (type.isUnion && type.isUnion()) {
     for (const member of type.types) {
-      for (const value of stringLiterals(ts, member))
+      for (const value of collectStringLiterals(ts, member))
         values.add(value)
     }
   }
@@ -436,13 +436,13 @@ function stringLiterals(ts, type) {
   return values
 }
 
-function definitionIdentity(ts, checker, name) {
+function findDefinitionIdentity(ts, checker, name) {
   const property = name.parent
 
   if (ts.isStringLiteralLike(name) && ts.isCallExpression(property)
     && callName(ts, checker, property) === 'add' && property.arguments[0] === name) {
-    const graph = graphExpression(ts, checker, property)
-    return graph ? { graph: graphId(graph), path: name.text } : undefined
+    const graph = findGraphExpression(ts, checker, property)
+    return graph ? { graph: createGraphId(graph), path: name.text } : undefined
   }
 
   if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property))
@@ -457,7 +457,7 @@ function definitionIdentity(ts, checker, name) {
   let top
 
   while (current) {
-    const text = propertyName(ts, current.name)
+    const text = getPropertyName(ts, current.name)
 
     if (!text)
       return undefined
@@ -479,48 +479,48 @@ function definitionIdentity(ts, checker, name) {
     break
   }
 
-  const graph = graphForDefinition(ts, checker, top)
+  const graph = findGraphForDefinition(ts, checker, top)
   return graph ? { graph, path: names.join('.') } : undefined
 }
 
-function graphForDefinition(ts, checker, object) {
+function findGraphForDefinition(ts, checker, object) {
   const parent = unwrapParent(ts, object)
 
   if (ts.isCallExpression(parent) && parent.arguments.some(argument => unwrap(ts, argument) === object)) {
-    const root = graphExpression(ts, checker, parent)
-    return root && callName(ts, checker, root) === 'defineTokens' ? graphId(root) : undefined
+    const root = findGraphExpression(ts, checker, parent)
+    return root && callName(ts, checker, root) === 'defineTokens' ? createGraphId(root) : undefined
   }
 
   if (ts.isArrowFunction(parent) && unwrap(ts, parent.body) === object) {
     const call = unwrapParent(ts, parent)
-    const root = ts.isCallExpression(call) ? graphExpression(ts, checker, call) : undefined
-    return root ? graphId(root) : undefined
+    const root = ts.isCallExpression(call) ? findGraphExpression(ts, checker, call) : undefined
+    return root ? createGraphId(root) : undefined
   }
 
   if (ts.isReturnStatement(parent)) {
-    const fn = containingFunction(ts, parent)
+    const fn = findContainingFunction(ts, parent)
     const call = fn && unwrapParent(ts, fn)
-    const root = call && ts.isCallExpression(call) ? graphExpression(ts, checker, call) : undefined
-    return root ? graphId(root) : undefined
+    const root = call && ts.isCallExpression(call) ? findGraphExpression(ts, checker, call) : undefined
+    return root ? createGraphId(root) : undefined
   }
 
   return undefined
 }
 
-function graphForUse(ts, checker, name, path) {
+function findGraphForUse(ts, checker, name, path) {
   const access = name.parent
   let root = access
 
   while (ts.isPropertyAccessExpression(root) || ts.isElementAccessExpression(root))
     root = root.expression
 
-  const origin = tokenOrigin(ts, checker, root, path)
+  const origin = getTokenOrigin(ts, checker, root, path)
 
   if (origin)
     return origin
 
-  const graph = graphExpression(ts, checker, root)
-  return graph ? graphId(graph) : undefined
+  const graph = findGraphExpression(ts, checker, root)
+  return graph ? createGraphId(graph) : undefined
 }
 
 /**
@@ -530,7 +530,7 @@ function graphForUse(ts, checker, name, path) {
  * public topological semantics and keeps rename identity on the source module
  * instead of collapsing every module into the aggregate graph.
  */
-function tokenOrigin(ts, checker, expression, path, seen = new Set()) {
+function getTokenOrigin(ts, checker, expression, path, seen = new Set()) {
   expression = unwrap(ts, expression)
 
   if (!expression || seen.has(expression))
@@ -541,14 +541,14 @@ function tokenOrigin(ts, checker, expression, path, seen = new Set()) {
     const name = callName(ts, checker, expression)
 
     if (name === 'createSystem') {
-      const tokens = objectOption(ts, expression, 'tokens')
-      return tokens ? tokenOrigin(ts, checker, tokens, path, seen) : undefined
+      const tokens = findObjectOption(ts, expression, 'tokens')
+      return tokens ? getTokenOrigin(ts, checker, tokens, path, seen) : undefined
     }
 
     if (name === 'defineTokens') {
       const seed = expression.arguments[0]
-      return seed && expressionDefinesPath(ts, checker, seed, path)
-        ? graphId(expression)
+      return seed && findExpressionPath(ts, checker, seed, path)
+        ? createGraphId(expression)
         : undefined
     }
 
@@ -556,90 +556,90 @@ function tokenOrigin(ts, checker, expression, path, seen = new Set()) {
 
     if (name === 'compose') {
       const module = expression.arguments[0]
-      const moduleOrigin = module && tokenOrigin(ts, checker, module, path, new Set(seen))
-      return moduleOrigin ?? (base ? tokenOrigin(ts, checker, base, path, seen) : undefined)
+      const moduleOrigin = module && getTokenOrigin(ts, checker, module, path, new Set(seen))
+      return moduleOrigin ?? (base ? getTokenOrigin(ts, checker, base, path, seen) : undefined)
     }
 
     if (name === 'derive') {
       const stage = expression.arguments[0]
 
-      if (stage && functionDefinesPath(ts, checker, stage, path)) {
-        const graph = graphExpression(ts, checker, expression)
-        return graph ? graphId(graph) : undefined
+      if (stage && findFunctionPath(ts, checker, stage, path)) {
+        const graph = findGraphExpression(ts, checker, expression)
+        return graph ? createGraphId(graph) : undefined
       }
 
-      return base ? tokenOrigin(ts, checker, base, path, seen) : undefined
+      return base ? getTokenOrigin(ts, checker, base, path, seen) : undefined
     }
 
     if (name === 'add') {
       const first = expression.arguments[0]
       if (first && ts.isStringLiteralLike(first) && first.text === path) {
-        const graph = graphExpression(ts, checker, expression)
-        return graph ? graphId(graph) : undefined
+        const graph = findGraphExpression(ts, checker, expression)
+        return graph ? createGraphId(graph) : undefined
       }
-      if (first && functionDefinesPath(ts, checker, first, path)) {
-        const graph = graphExpression(ts, checker, expression)
-        return graph ? graphId(graph) : undefined
+      if (first && findFunctionPath(ts, checker, first, path)) {
+        const graph = findGraphExpression(ts, checker, expression)
+        return graph ? createGraphId(graph) : undefined
       }
-      if (first && expressionDefinesPath(ts, checker, first, path)) {
-        const graph = graphExpression(ts, checker, expression)
-        return graph ? graphId(graph) : undefined
+      if (first && findExpressionPath(ts, checker, first, path)) {
+        const graph = findGraphExpression(ts, checker, expression)
+        return graph ? createGraphId(graph) : undefined
       }
       if (first && ts.isArrayLiteralExpression(unwrap(ts, first))) {
         for (const element of unwrap(ts, first).elements) {
-          const origin = tokenOrigin(ts, checker, element, path, new Set(seen))
+          const origin = getTokenOrigin(ts, checker, element, path, new Set(seen))
           if (origin)
             return origin
         }
       }
       else if (first) {
-        const origin = tokenOrigin(ts, checker, first, path, new Set(seen))
+        const origin = getTokenOrigin(ts, checker, first, path, new Set(seen))
         if (origin)
           return origin
       }
-      return base ? tokenOrigin(ts, checker, base, path, seen) : undefined
+      return base ? getTokenOrigin(ts, checker, base, path, seen) : undefined
     }
 
     if (name === 'build')
-      return base ? tokenOrigin(ts, checker, base, path, seen) : undefined
+      return base ? getTokenOrigin(ts, checker, base, path, seen) : undefined
 
     if (name === 'consolidate')
-      return base ? tokenOrigin(ts, checker, base, path, seen) : undefined
+      return base ? getTokenOrigin(ts, checker, base, path, seen) : undefined
 
     if (name === 'addTokens') {
       const module = expression.arguments[0]
-      const moduleOrigin = module && tokenOrigin(ts, checker, module, path, new Set(seen))
-      return moduleOrigin ?? (base ? tokenOrigin(ts, checker, base, path, seen) : undefined)
+      const moduleOrigin = module && getTokenOrigin(ts, checker, module, path, new Set(seen))
+      return moduleOrigin ?? (base ? getTokenOrigin(ts, checker, base, path, seen) : undefined)
     }
   }
 
   if (ts.isIdentifier(expression)) {
-    const symbol = resolvedSymbol(ts, checker, expression)
+    const symbol = getResolvedSymbol(ts, checker, expression)
 
     for (const declaration of symbol?.declarations ?? []) {
       if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-        const origin = tokenOrigin(ts, checker, declaration.initializer, path, seen)
+        const origin = getTokenOrigin(ts, checker, declaration.initializer, path, seen)
         if (origin)
           return origin
       }
 
       if (ts.isBindingElement(declaration) || ts.isParameter(declaration)) {
-        const fn = containingFunction(ts, declaration)
+        const fn = findContainingFunction(ts, declaration)
         const call = fn && unwrapParent(ts, fn)
 
         if (call && ts.isCallExpression(call) && ['derive', 'add'].includes(callName(ts, checker, call))) {
           const base = callBase(ts, call)
-          const origin = base && tokenOrigin(ts, checker, base, path, seen)
+          const origin = base && getTokenOrigin(ts, checker, base, path, seen)
           if (origin)
             return origin
         }
 
-        const variable = containingVariable(ts, declaration)
+        const variable = findContainingVariable(ts, declaration)
         const initializer = variable?.initializer
 
         if (initializer && ts.isCallExpression(unwrap(ts, initializer)) && callName(ts, checker, unwrap(ts, initializer)) === 'createSystem') {
-          const tokens = objectOption(ts, unwrap(ts, initializer), 'tokens')
-          const origin = tokens && tokenOrigin(ts, checker, tokens, path, seen)
+          const tokens = findObjectOption(ts, unwrap(ts, initializer), 'tokens')
+          const origin = tokens && getTokenOrigin(ts, checker, tokens, path, seen)
           if (origin)
             return origin
         }
@@ -656,24 +656,24 @@ function callBase(ts, call) {
     : undefined
 }
 
-function functionDefinesPath(ts, checker, expression, path) {
+function findFunctionPath(ts, checker, expression, path) {
   expression = unwrap(ts, expression)
 
   if (!ts.isArrowFunction(expression) && !ts.isFunctionExpression(expression))
     return false
 
   if (!ts.isBlock(expression.body))
-    return expressionDefinesPath(ts, checker, expression.body, path)
+    return findExpressionPath(ts, checker, expression.body, path)
 
   for (const statement of expression.body.statements) {
-    if (ts.isReturnStatement(statement) && statement.expression && expressionDefinesPath(ts, checker, statement.expression, path))
+    if (ts.isReturnStatement(statement) && statement.expression && findExpressionPath(ts, checker, statement.expression, path))
       return true
   }
 
   return false
 }
 
-function expressionDefinesPath(ts, checker, expression, path, seen = new Set()) {
+function findExpressionPath(ts, checker, expression, path, seen = new Set()) {
   expression = unwrap(ts, expression)
 
   if (!expression || seen.has(expression))
@@ -681,11 +681,11 @@ function expressionDefinesPath(ts, checker, expression, path, seen = new Set()) 
   seen.add(expression)
 
   if (ts.isIdentifier(expression)) {
-    const symbol = resolvedSymbol(ts, checker, expression)
+    const symbol = getResolvedSymbol(ts, checker, expression)
 
     for (const declaration of symbol?.declarations ?? []) {
       if (ts.isVariableDeclaration(declaration) && declaration.initializer
-        && expressionDefinesPath(ts, checker, declaration.initializer, path, seen)) {
+        && findExpressionPath(ts, checker, declaration.initializer, path, seen)) {
         return true
       }
     }
@@ -702,7 +702,7 @@ function expressionDefinesPath(ts, checker, expression, path, seen = new Set()) 
   for (const [index, segment] of segments.entries()) {
     const property = object.properties.find(property =>
       (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property))
-      && propertyName(ts, property.name) === segment)
+      && getPropertyName(ts, property.name) === segment)
 
     if (!property)
       return false
@@ -730,7 +730,7 @@ function resolveObjectExpression(ts, checker, expression, seen) {
 
   if (ts.isIdentifier(expression) && !seen.has(expression)) {
     seen.add(expression)
-    const symbol = resolvedSymbol(ts, checker, expression)
+    const symbol = getResolvedSymbol(ts, checker, expression)
 
     for (const declaration of symbol?.declarations ?? []) {
       if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
@@ -744,7 +744,7 @@ function resolveObjectExpression(ts, checker, expression, seen) {
   return undefined
 }
 
-function graphExpression(ts, checker, expression, seen = new Set()) {
+function findGraphExpression(ts, checker, expression, seen = new Set()) {
   expression = unwrap(ts, expression)
 
   if (!expression || seen.has(expression))
@@ -758,42 +758,42 @@ function graphExpression(ts, checker, expression, seen = new Set()) {
       return expression
 
     if (name === 'createSystem') {
-      const tokens = objectOption(ts, expression, 'tokens')
-      return (tokens && graphExpression(ts, checker, tokens, seen)) || expression
+      const tokens = findObjectOption(ts, expression, 'tokens')
+      return (tokens && findGraphExpression(ts, checker, tokens, seen)) || expression
     }
 
     if (ts.isPropertyAccessExpression(expression.expression))
-      return graphExpression(ts, checker, expression.expression.expression, seen)
+      return findGraphExpression(ts, checker, expression.expression.expression, seen)
 
     return expression
   }
 
   if (ts.isIdentifier(expression)) {
-    const symbol = resolvedSymbol(ts, checker, expression)
+    const symbol = getResolvedSymbol(ts, checker, expression)
 
     for (const declaration of symbol?.declarations ?? []) {
       if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-        const root = graphExpression(ts, checker, declaration.initializer, seen)
+        const root = findGraphExpression(ts, checker, declaration.initializer, seen)
         if (root)
           return root
       }
 
       if (ts.isBindingElement(declaration)) {
-        const fn = containingFunction(ts, declaration)
+        const fn = findContainingFunction(ts, declaration)
         const call = fn && unwrapParent(ts, fn)
 
         if (call && ts.isCallExpression(call) && ['derive', 'add'].includes(callName(ts, checker, call))) {
-          const root = graphExpression(ts, checker, call, seen)
+          const root = findGraphExpression(ts, checker, call, seen)
           if (root)
             return root
         }
 
-        const variable = containingVariable(ts, declaration)
+        const variable = findContainingVariable(ts, declaration)
         const initializer = variable?.initializer
 
         if (initializer && ts.isCallExpression(unwrap(ts, initializer)) && callName(ts, checker, unwrap(ts, initializer)) === 'createSystem') {
-          const tokens = objectOption(ts, unwrap(ts, initializer), 'tokens')
-          return (tokens && graphExpression(ts, checker, tokens, seen)) || unwrap(ts, initializer)
+          const tokens = findObjectOption(ts, unwrap(ts, initializer), 'tokens')
+          return (tokens && findGraphExpression(ts, checker, tokens, seen)) || unwrap(ts, initializer)
         }
       }
     }
@@ -802,7 +802,7 @@ function graphExpression(ts, checker, expression, seen = new Set()) {
   return undefined
 }
 
-function resolvedSymbol(ts, checker, node) {
+function getResolvedSymbol(ts, checker, node) {
   let symbol = checker.getSymbolAtLocation(node)
 
   if (symbol && (symbol.flags & ts.SymbolFlags.Alias))
@@ -814,7 +814,7 @@ function resolvedSymbol(ts, checker, node) {
 function callName(ts, checker, call) {
   const expression = call.expression
   const name = ts.isPropertyAccessExpression(expression) ? expression.name : expression
-  const symbol = resolvedSymbol(ts, checker, name)
+  const symbol = getResolvedSymbol(ts, checker, name)
   return symbol?.getName?.() || (ts.isIdentifier(name) ? name.text : undefined)
 }
 
@@ -825,30 +825,30 @@ function callSyntaxName(ts, call) {
     : ts.isIdentifier(expression) ? expression.text : undefined
 }
 
-function objectOption(ts, call, key) {
+function findObjectOption(ts, call, key) {
   const options = unwrap(ts, call.arguments[0])
 
   if (!options || !ts.isObjectLiteralExpression(options))
     return undefined
 
   for (const property of options.properties) {
-    if (ts.isPropertyAssignment(property) && propertyName(ts, property.name) === key)
+    if (ts.isPropertyAssignment(property) && getPropertyName(ts, property.name) === key)
       return property.initializer
   }
 
   return undefined
 }
 
-function graphId(node) {
+function createGraphId(node) {
   const source = node.getSourceFile()
   return `${source.fileName}:${node.getStart(source)}`
 }
 
-function propertyName(ts, name) {
+function getPropertyName(ts, name) {
   return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name) ? name.text : undefined
 }
 
-function nodeAt(ts, source, position) {
+function findNodeAt(ts, source, position) {
   let found = source
 
   function visit(node) {
@@ -863,7 +863,7 @@ function nodeAt(ts, source, position) {
   return found
 }
 
-function spanOf(node) {
+function getSpanOf(node) {
   const source = node.getSourceFile()
   const start = node.getStart(source)
   const width = node.getWidth(source)
@@ -890,7 +890,7 @@ function unwrapParent(ts, node) {
   return parent
 }
 
-function containingFunction(ts, node) {
+function findContainingFunction(ts, node) {
   let current = node.parent
 
   while (current && !ts.isSourceFile(current)) {
@@ -902,7 +902,7 @@ function containingFunction(ts, node) {
   return undefined
 }
 
-function containingVariable(ts, node) {
+function findContainingVariable(ts, node) {
   let current = node.parent
 
   while (current && !ts.isSourceFile(current)) {

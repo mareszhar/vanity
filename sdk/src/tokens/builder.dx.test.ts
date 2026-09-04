@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const project = vanityProject()
 
-describe('unified token and condition editor DX', () => {
+describe('token builder and condition editor DX', () => {
   it('discovers tdef types, token-builder operations, axes, and condition algebra', () => {
     const result = project.query`
       import { createSystem, data, selector } from '@mszr/vanity'
@@ -17,6 +17,7 @@ describe('unified token and condition editor DX', () => {
       const state = selector('&:hover')
       void open.tdef.${cursor('tdef')}
       void tokens.${cursor('builder')}
+      void tokens.${cursor('add')}add
       void reservation.${cursor('axis')}
       void state.${cursor('condition')}
     `
@@ -29,6 +30,7 @@ describe('unified token and condition editor DX', () => {
       'number',
     ])
     expect(result.at('builder').completions).toContainCompletions(['add', 'refs', 'root'])
+    expect(result.at('add').hover).toContain('Add a named value')
     expect(result.at('builder').completions).not.toContainCompletion('t')
     expect(result.at('axis').completions).toContainCompletion('density')
     expect(result.at('axis').completions).not.toContainCompletions(['config', 'type'])

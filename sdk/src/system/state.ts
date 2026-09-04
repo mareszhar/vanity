@@ -2,7 +2,7 @@
  * Persistent state contracts for one open system.
  *
  * These interfaces describe ownership, not the implementation of any one
- * registry. The open-system facade stores immutable snapshots of these
+ * registry. The open system stores immutable snapshots of these
  * facets and projects them into authoring and locked surfaces.
  */
 
@@ -51,7 +51,7 @@ export interface OpenSystemState {
   readonly revisions: SystemRevisions
 }
 
-/** The sole internal bridge from a public open-system facade to its snapshot. */
+/** The sole internal bridge from the public open-system surface to its snapshot. */
 export const VANITY_OPEN_SYSTEM_STATE = Symbol.for('vanity.openSystem.state')
 
 export function getOpenSystemState(value: unknown): OpenSystemState | undefined {

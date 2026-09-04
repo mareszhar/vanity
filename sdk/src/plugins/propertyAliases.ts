@@ -6,21 +6,28 @@ import type {
   VanitySystemPlugin,
 } from '../system/open'
 import { all as knownCssProperties } from 'known-css-properties'
+import { VanityError } from '../diagnostics'
 import { definePlugin } from '../system/open'
 
 const KNOWN_CSS_PROPERTIES = new Set(knownCssProperties)
 
+/** Choose whether a property alias is exposed beside, or instead of, its CSS spelling. */
 export type VanityPropertyAliasExposure = 'both' | 'aliases-only'
 
+/** Configure the public exposure mode for `propertyAliases()`. */
 export interface VanityPropertyAliasOptions<Expose extends VanityPropertyAliasExposure = 'both'> {
+  /** Expose aliases alongside CSS names, or hide the CSS spellings in ordinary emitters. */
   readonly expose?: Expose
 }
 
+/** Normalized alias mapping and exposure policy carried by the property-alias plugin. */
 export interface VanityPropertyAliasConfig<
   Aliases extends Readonly<Record<string, VanityCssPropertyName>> = Readonly<Record<string, VanityCssPropertyName>>,
   Expose extends VanityPropertyAliasExposure = VanityPropertyAliasExposure,
 > {
+  /** Alias-to-standard-CSS-property mapping. */
   readonly aliases: Aliases
+  /** Exposure mode selected when the plugin was installed. */
   readonly expose: Expose
 }
 
@@ -78,16 +85,40 @@ export function propertyAliases<
   const expose = options.expose ?? 'both' as Expose
   const entries = Object.entries(aliases)
 
-  if (entries.length === 0)
-    throw new TypeError('[vanity] propertyAliases() needs at least one alias')
+  if (entries.length === 0) {
+    throw new VanityError({
+      code: 'VANITY_CSS_INVALID_KEY',
+      message: 'propertyAliases() needs at least one alias',
+      path: ['aliases'],
+      fix: 'Provide at least one alias-to-CSS-property entry.',
+    })
+  }
 
   for (const [alias, property] of entries) {
-    if (!/^[$A-Z_][$\w-]*$/i.test(alias))
-      throw new TypeError(`[vanity] property alias '${alias}' is not a usable object key`)
-    if (alias.startsWith('--') || isCssProperty(alias))
-      throw new TypeError(`[vanity] property alias '${alias}' collides with standard CSS vocabulary`)
-    if (!isCssProperty(property))
-      throw new TypeError(`[vanity] property alias '${alias}' targets unknown CSS property '${property}'`)
+    if (!/^[$A-Z_][$\w-]*$/i.test(alias)) {
+      throw new VanityError({
+        code: 'VANITY_CSS_INVALID_KEY',
+        message: `property alias '${alias}' is not a usable object key`,
+        path: ['aliases', alias],
+        fix: 'Use a non-empty JavaScript identifier as the alias name.',
+      })
+    }
+    if (alias.startsWith('--') || isCssProperty(alias)) {
+      throw new VanityError({
+        code: 'VANITY_CSS_INVALID_KEY',
+        message: `property alias '${alias}' collides with standard CSS vocabulary`,
+        path: ['aliases', alias],
+        fix: 'Choose an alias that is not already a CSS property or custom property.',
+      })
+    }
+    if (!isCssProperty(property)) {
+      throw new VanityError({
+        code: 'VANITY_CSS_UNKNOWN_PROPERTY',
+        message: `property alias '${alias}' targets unknown CSS property '${property}'`,
+        path: ['aliases', alias],
+        fix: 'Use a property name from the CSS vocabulary.',
+      })
+    }
   }
 
   const normalized = Object.freeze({ ...aliases }) as Aliases

@@ -1,9 +1,9 @@
 {
-  "name": "vanity-phase4-canary",
+  "name": "vanity-canary",
   "type": "module",
   "version": "0.0.0",
   "private": true,
-  "description": "Permanent small vertical gate for Vanity's reorientation",
+  "description": "Permanent small vertical gate for Vanity's public system contract",
   "scripts": {
     "build": "vite build",
     "build:ssr": "vite build --ssr src/entry-server.ts --outDir dist-ssr",

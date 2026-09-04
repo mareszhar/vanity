@@ -1,5 +1,6 @@
 import { dirname, isAbsolute, relative } from 'node:path'
-import { normalizePath } from '../path'
+import { VanityError } from '../../diagnostics'
+import { normalizePath } from '../core/path'
 
 const identifierPattern = /^[$a-z_][$\w]*$/i
 
@@ -92,9 +93,12 @@ function getEntriesFor(
     assertIdentifier(entry.name, kind)
     const previous = seen.get(entry.name)
     if (previous !== undefined && previous !== entry.from) {
-      throw new TypeError(
-        `[vanity] ${kind} '${entry.name}' is provided by both '${previous}' and '${entry.from}'`,
-      )
+      throw new VanityError({
+        code: 'VANITY_AUTO_IMPORT_INVALID',
+        message: `${kind} '${entry.name}' is provided by both '${previous}' and '${entry.from}'`,
+        path: ['autoImports', entry.name],
+        fix: 'rename the export or narrow one source with include/exclude',
+      })
     }
     seen.set(entry.name, entry.from)
   }
@@ -118,7 +122,13 @@ export function getModuleSpecifier(from: string, relativeTo?: string): string {
   return path.startsWith('.') ? path : `./${path}`
 }
 
-export function assertIdentifier(name: string, kind: string): void {
-  if (!identifierPattern.test(name))
-    throw new TypeError(`[vanity] '${name}' cannot be exposed as a ${kind} global`)
+function assertIdentifier(name: string, kind: string): void {
+  if (!identifierPattern.test(name)) {
+    throw new VanityError({
+      code: 'VANITY_AUTO_IMPORT_INVALID',
+      message: `'${name}' cannot be exposed as a ${kind} global`,
+      path: ['autoImports', name],
+      fix: 'expose a valid TypeScript identifier as an auto-import global',
+    })
+  }
 }

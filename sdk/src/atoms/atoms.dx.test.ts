@@ -58,3 +58,13 @@ describe('atoms, at the cursor', () => {
     expect(errors).toHaveErrorCount(1)
   })
 })
+
+describe('atoms option documentation', () => {
+  it('describes the finite property and condition inputs at their keys', () => {
+    const result = project.query`${defineFixture}
+      void makeAtoms({ properties${cursor('properties')}: { display: ['none', 'flex'] }, conditions${cursor('conditions')}: ['md'] })
+    `
+    expect(result.at('properties').hover).toContain('Property → its closed value set')
+    expect(result.at('conditions').hover).toContain('conditions available at atoms call sites')
+  })
+})

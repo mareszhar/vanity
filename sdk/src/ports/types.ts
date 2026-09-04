@@ -14,13 +14,19 @@ import type {
 export type VanityPortValue = string | number
 export type VanityPortStyle = Record<`--${string}`, VanityPortValue>
 
+/** Token handle accepted as a port default or declaration value. */
 export interface VanityPortTokenReference<Type extends VanityCssDataType = VanityCssDataType> {
+  /** CSS data type carried by the referenced token. */
   readonly $type: Type
+  /** Return the referenced token's CSS variable. */
   readonly $var: (fallback?: never) => `var(--${string})` | `var(--${string}, ${string})`
+  /** Serialize the reference as a CSS variable. */
   toString: () => string
 }
 
-export interface VanityPortLegacyReference {
+/** Explicit CSS variable reference used as a port default or declaration value. */
+export interface VanityPortVarReference {
+  /** CSS variable expression carried by this reference. */
   readonly var: `var(--${string})` | `var(--${string}, ${string})`
 }
 
@@ -29,7 +35,7 @@ export type VanityPortInput
     | number
     | VanityValue
     | VanityPortTokenReference
-    | VanityPortLegacyReference
+    | VanityPortVarReference
 
 export type VanityPortDataTypeOf<Value>
   = Value extends VanityValue<infer Type> ? Type
@@ -50,11 +56,13 @@ export type VanityPortDecValue<Type extends VanityCssDataType>
   = (Type extends 'number' | 'integer' ? number : string)
     | VanityValue<Type>
     | VanityPortTokenReference<Type>
-    | VanityPortLegacyReference
+    | VanityPortVarReference
 
+/** Runtime validation policy for values supplied through a port. */
 export interface VanityPortValidation<Input = unknown, Output = Input> {
   /** Stable application-runtime lookup key. */
   readonly id: string
+  /** Standard Schema implementation used to validate values. */
   readonly schema?: VanityStandardSchemaV1<Input, Output>
   /** `dev` by default; `false` is type-only, `always` includes production. */
   readonly runtime?: VanityRuntimeValidationMode
@@ -64,8 +72,11 @@ export interface VanityPortValidation<Input = unknown, Output = Input> {
   readonly fallback?: Output
 }
 
+/** Optional label and runtime validation attached to a port definition. */
 export interface VanityPortOptions<Input = unknown, Output = Input> {
+  /** Human-readable port label for component documentation. */
   readonly label?: string
+  /** Runtime validation policy for values supplied through the port. */
   readonly validate?: VanityPortValidation<Input, Output>
 }
 
@@ -76,8 +87,11 @@ export interface VanityPortDefinition<
   readonly val: Value
 }
 
+/** Application-runtime implementations used when a port validates a value. */
 export interface VanityPortBindingOptions {
+  /** Validators keyed by the stable ids declared in port metadata. */
   readonly validators?: Readonly<Record<string, VanityStandardSchemaV1>>
+  /** Enable development-only validation when a validator requests it. */
   readonly dev?: boolean
 }
 

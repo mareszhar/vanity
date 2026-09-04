@@ -44,7 +44,9 @@ describe('consumer testing kit', () => {
       { $name: '--restored' },
     )
 
-    expect(() => foldOf(restored as any)).toThrow(/consolidated in this process.*application handle/)
+    expect(() => foldOf(restored as any)).toThrow(
+      /VANITY_TESTING_INVALID_INPUT[\s\S]*consolidated in this process[\s\S]*application handle/,
+    )
   })
 
   it('reads and matches exact or patterned computed values', () => {

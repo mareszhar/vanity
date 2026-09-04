@@ -10,8 +10,8 @@ import type { VanitySystemContext } from './context'
 import type { VanityFontFaceFunction, VanityKeyframesFunction } from './types'
 import { VanityError } from '../diagnostics'
 import { substrate } from '../substrate'
-import { toKebab } from '../tokens/names'
-import { createLayerContext } from './context'
+import { convertToKebab } from '../tokens/names'
+import { createLayerContext, requireStyleModuleFile } from './context'
 import { isPlainObject, isSelectorKey } from './rule'
 import { checkCssBlock, checkDeclaration } from './validation'
 import { serializeStyleValue } from './values'
@@ -20,7 +20,7 @@ const TIME = /^(?:from|to|\d+(?:\.\d+)?%)(?:\s*,\s*(?:from|to|\d+(?:\.\d+)?%))*$
 
 export function bindKeyframes(system: VanitySystemContext): VanityKeyframesFunction {
   const keyframes = ((steps, debugId?) => {
-    const file = substrate.modules.requireStyleModule('keyframes')
+    const file = requireStyleModuleFile('keyframes')
     const diagnostics: VanityDiagnostic[] = []
     const compiled: Record<string, Record<string, string | number | Array<string | number>>> = {}
 
@@ -76,7 +76,7 @@ export function bindKeyframes(system: VanitySystemContext): VanityKeyframesFunct
             if (typeof entry !== 'string')
               continue
 
-            const issue = checkDeclaration(toKebab(property), entry)
+            const issue = checkDeclaration(convertToKebab(property), entry)
 
             if (issue !== undefined) {
               diagnostics.push({
@@ -133,7 +133,7 @@ export function bindKeyframes(system: VanitySystemContext): VanityKeyframesFunct
 
 export function bindFontFace(system: VanitySystemContext): VanityFontFaceFunction {
   const fontFace = ((rule, debugId?) => {
-    const file = substrate.modules.requireStyleModule('fontFace')
+    const file = requireStyleModuleFile('fontFace')
     const declarations: Record<string, string | number | Array<string | number>> = {}
     for (const [property, value] of Object.entries(rule)) {
       if (value === undefined)
@@ -173,7 +173,7 @@ function serializeDeclarations(
 ): string {
   return Object.entries(declarations)
     .flatMap(([property, value]) => (Array.isArray(value) ? value : [value])
-      .map(entry => `${indent}${property.startsWith('--') ? property : toKebab(property)}: ${String(entry)};`))
+      .map(entry => `${indent}${property.startsWith('--') ? property : convertToKebab(property)}: ${String(entry)};`))
     .join('\n')
 }
 

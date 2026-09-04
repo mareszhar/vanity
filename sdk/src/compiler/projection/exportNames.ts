@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { parseSync } from 'oxc-parser'
+import { VanityError } from '../../diagnostics'
 
 const moduleExtensions = ['.mts', '.cts', '.ts', '.tsx', '.mjs', '.cjs', '.js', '.jsx']
 const styleModuleFile = /\.css\.(?:js|cjs|mjs|jsx|ts|tsx)$/
@@ -47,9 +48,12 @@ export function resolveConfiguredModuleSource(
   owner: string,
 ): { from: string, file: string } {
   if (value.startsWith('~')) {
-    throw new Error(
-      `[vanity] ${owner} cannot resolve '${value}' outside a framework alias; use a project-relative path or package specifier`,
-    )
+    throw new VanityError({
+      code: 'VANITY_COMPILER_INVALID_INPUT',
+      message: `${owner} cannot resolve '${value}' outside a framework alias`,
+      path: [owner],
+      fix: 'use a project-relative path or package specifier',
+    })
   }
 
   if (!isPackageSpecifier(value)) {
@@ -62,12 +66,19 @@ export function resolveConfiguredModuleSource(
   }
   catch (error) {
     if (isBarePath(value)) {
-      throw new Error(
-        `[vanity] no package '${value}' is installed — did you mean './${value}'?`,
-        { cause: error },
-      )
+      throw new VanityError({
+        code: 'VANITY_COMPILER_INVALID_INPUT',
+        message: `no package '${value}' is installed — did you mean './${value}'?`,
+        path: [owner],
+        fix: `install '${value}' or use './${value}' for a project-relative source`,
+      }, { cause: error })
     }
-    throw new Error(`[vanity] cannot resolve package '${value}' configured as ${owner}`, { cause: error })
+    throw new VanityError({
+      code: 'VANITY_COMPILER_INVALID_INPUT',
+      message: `cannot resolve package '${value}' configured as ${owner}`,
+      path: [owner],
+      fix: `install '${value}' or point ${owner} at a resolvable package`,
+    }, { cause: error })
   }
 }
 
@@ -163,7 +174,7 @@ function resolveModuleRequest(specifier: string, importer: string): string {
 }
 
 /** Resolve a local path or package specifier to the module file Node would load. */
-export function resolveModuleFile(filePath: string, baseDir = process.cwd()): string {
+function resolveModuleFile(filePath: string, baseDir = process.cwd()): string {
   if (existsSync(filePath) && extname(filePath) !== '')
     return resolve(filePath)
 

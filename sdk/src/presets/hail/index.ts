@@ -175,11 +175,11 @@ function setupHail(initial: VanityPluginSetupSystem, rawOptions: HailOptions): o
 
 function setupFlatHail(initial: VanityPluginSetupSystem, options: HailNormalizedOptions): object {
   const withControls = initial.addTokens(createControlTokenSeed(initial, options))
-  return installVocabularyAndPresets(toWorkingSystem(withControls), options)
+  return installVocabularyAndPresets(getWorkingSystem(withControls), options)
 }
 
 function setupElevatedHail(initial: VanityPluginSetupSystem, options: HailNormalizedOptions): object {
-  const withScheme = toWorkingSystem(Object.hasOwn(initial.axes, 'scheme')
+  const withScheme = getWorkingSystem(Object.hasOwn(initial.axes, 'scheme')
     ? initial.expectAxis('scheme', ['light', 'dark'])
     : initial.addAxis('scheme', colorSchemes({ locality: 'root' })))
   const schemeTdef = withScheme.tdef as unknown as VanityTokenFactory<{
@@ -197,7 +197,7 @@ function setupElevatedHail(initial: VanityPluginSetupSystem, options: HailNormal
       }),
     },
   })
-  return installVocabularyAndPresets(toWorkingSystem(withControls), options)
+  return installVocabularyAndPresets(getWorkingSystem(withControls), options)
 }
 
 function createControlTokenSeed(ds: VanityOpenSystemBase, options: HailNormalizedOptions) {
@@ -251,30 +251,30 @@ function installVocabularyAndPresets(
 
   const withConstructors = system.addConstructors(createHailColorConstructors(system, options, controls))
   const withUtils = withConstructors.addUtils(createHailUtils(withConstructors, options, controls))
-  let current = toWorkingSystem(withUtils)
+  let current = getWorkingSystem(withUtils)
 
   if (options.presets.has('palette'))
-    current = toWorkingSystem(current.addTokens(createHailPaletteTokens(current as Parameters<typeof createHailPaletteTokens>[0])))
+    current = getWorkingSystem(current.addTokens(createHailPaletteTokens(current as Parameters<typeof createHailPaletteTokens>[0])))
   if (options.presets.has('roles'))
-    current = toWorkingSystem(current.addTokens(createHailRoleTokens(current as Parameters<typeof createHailRoleTokens>[0], options.elevation)))
+    current = getWorkingSystem(current.addTokens(createHailRoleTokens(current as Parameters<typeof createHailRoleTokens>[0], options.elevation)))
   if (options.presets.has('sizes'))
-    current = toWorkingSystem(current.addTokens(createHailSizeTokens(current as Parameters<typeof createHailSizeTokens>[0])))
+    current = getWorkingSystem(current.addTokens(createHailSizeTokens(current as Parameters<typeof createHailSizeTokens>[0])))
   if (options.presets.has('breakpoints'))
-    current = toWorkingSystem(current.addTokens(createHailBreakpointTokens(current as Parameters<typeof createHailBreakpointTokens>[0])))
+    current = getWorkingSystem(current.addTokens(createHailBreakpointTokens(current as Parameters<typeof createHailBreakpointTokens>[0])))
   if (options.presets.has('icons'))
-    current = toWorkingSystem(current.addTokens(createHailIconTokens(current as Parameters<typeof createHailIconTokens>[0])))
+    current = getWorkingSystem(current.addTokens(createHailIconTokens(current as Parameters<typeof createHailIconTokens>[0])))
 
   if (options.presets.has('reset'))
-    current = toWorkingSystem(current.addRules(hailResetRules))
+    current = getWorkingSystem(current.addRules(hailResetRules))
   if (options.presets.has('motion'))
-    current = toWorkingSystem(current.addRules(hailMotionRules))
+    current = getWorkingSystem(current.addRules(hailMotionRules))
   if (options.presets.has('theming'))
-    current = toWorkingSystem(current.addRules(hailThemingRules))
+    current = getWorkingSystem(current.addRules(hailThemingRules))
 
   return current
 }
 
-function toWorkingSystem(system: object): HailWorkingSystem {
+function getWorkingSystem(system: object): HailWorkingSystem {
   return system as unknown as HailWorkingSystem
 }
 

@@ -4,7 +4,7 @@ import type { CallExpression, Expression, ObjectExpression, ObjectProperty } fro
 import { posix } from 'node:path'
 import { parseSync, Visitor } from 'oxc-parser'
 import { styleAutoImportDeclarations as renderStyleAutoImportDeclarations } from '../auto-imports/autoImportDeclarations'
-import { normalizePath } from '../path'
+import { normalizePath } from '../core/path'
 
 // ─── Export-name detection ───────────────────────────────────────────────────
 

@@ -113,7 +113,7 @@ export const minTarget = 'min-target'
       compiler: { system: './authoring.ts' },
       autoImports: { style: '$system', app: './helpers.ts' },
     }), { root })).rejects.toThrow(
-      '[vanity] auto-import \'ds\' is exposed by different autoImports module roles',
+      /VANITY_AUTO_IMPORT_INVALID[\s\S]*auto-import 'ds' is exposed by different autoImports module roles/,
     )
   })
 
@@ -231,10 +231,11 @@ export const buttonClass = cls(t.color.brand)
     const root = await fixtureRoot()
     const path = join(root, 'vanity.config.ts')
 
-    await expect(loadVanityConfig(path)).rejects.toThrow(
-      `[vanity] no Vanity config found at ${path}\n`
-      + '  fix: create vanity.config.ts, pass --config <path>, or use the programmatic preparation API',
-    )
+    await expect(loadVanityConfig(path)).rejects.toThrow(new RegExp([
+      'VANITY_CONFIG_INVALID',
+      `no Vanity config found at ${path}`,
+      'fix: create vanity.config.ts, pass --config <path>, or use the programmatic preparation API',
+    ].map(value => value.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s\\S]*')))
   })
 
   it('resolves system and config package specifiers instead of treating them as root paths', async () => {
@@ -271,7 +272,7 @@ export const buttonClass = cls(t.color.brand)
       compiler: { system: 'src/system.ts' },
       autoImports: { style: '$system' },
     }), { root })).rejects.toThrow(
-      `[vanity] no package 'src/system.ts' is installed — did you mean './src/system.ts'?`,
+      /VANITY_COMPILER_INVALID_INPUT[\s\S]*no package 'src\/system\.ts' is installed — did you mean '\.\/src\/system\.ts'\?/,
     )
   })
 

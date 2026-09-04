@@ -227,7 +227,7 @@ ds.tdef({
   })
 ```
 
-The `.scheme(...)` spelling above is a manufactured method for an axis literally named `scheme`. It is not the removed `scheme(light, dark)` value constructor; the CSS function constructor is `lightDark(light, dark)`.
+The `.scheme(...)` spelling above is a manufactured method for an axis literally named `scheme`. There is no `scheme(light, dark)` value constructor; the CSS function constructor is `lightDark(light, dark)`.
 
 Axis-name methods are manufactured safely because Vanity reserves only `$`-prefixed members in that user-shaped namespace. Axis names may not start with `$`. The internal `config` and `type` transport fields are not part of the public `tdef` completion surface.
 
@@ -371,7 +371,7 @@ Required fixtures include:
 
 ### Evidence
 
-- `sdk/src/tokens/unified.{test.ts,test-d.ts,dx.test.ts,out.test.ts}` covers the four builder forms, portable/system boundaries, lazy mount rebinding, `tdef`, reservations, axis methods, `$axes`, base/default rules, patches, roots, anchors, DTCG projection, types, diagnostics, and output.
-- `sdk/src/tokens/unified.scale.test-d.ts` forces a 60-link unified builder through registration and two locked forks without TS2589.
-- `sdk/src/tokens/tokens.rename.test.ts` covers unified builder definitions, callbacks, registration, consolidation, and consumers.
+- `sdk/src/tokens/builder.{test.ts,test-d.ts,dx.test.ts,out.test.ts}` covers the four builder forms, portable/system boundaries, lazy mount rebinding, `tdef`, reservations, axis methods, `$axes`, base/default rules, patches, roots, anchors, DTCG projection, types, diagnostics, and output.
+- `sdk/src/tokens/builder.scale.test-d.ts` forces a 60-link token builder through registration and two locked forks without TS2589.
+- `sdk/src/tokens/tokens.rename.test.ts` covers token-builder definitions, callbacks, registration, consolidation, and consumers.
 - The existing graph, registration, runtime, DTCG codec/unknown-extension, manifest, explanation, check, projection, and package suites remain the preservation evidence for the semantic substrate rather than being replaced by narrower token-only tests.

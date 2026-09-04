@@ -15,8 +15,9 @@ import type {
   VanityIntrospectionDependency,
   VanityIntrospectionExpression,
   VanitySemanticEntry,
-  VanitySystemMapV2,
+  VanitySystemMap,
 } from './system'
+import { VanityError } from '../diagnostics'
 import { introspectSystem, normalizeSourceId } from './system'
 
 /** Stable manifest format discriminator: `manifest.format === VANITY_MANIFEST_FORMAT`. */
@@ -26,76 +27,127 @@ export const VANITY_MANIFEST_VERSION = 4 as const
 /** Published JSON Schema identifier: `manifest.$schema === VANITY_MANIFEST_SCHEMA`. */
 export const VANITY_MANIFEST_SCHEMA = 'https://schemas.mszr.dev/vanity/manifest-4.schema.json' as const
 
+/** Source location attached to a manifest record. */
 export type VanityManifestSource = VanityDeclaredAt
+/** Token declaration record used by a manifest module. */
 export type VanityManifestDeclaration = VanityIntrospectionDeclaration
+/** Token dependency record used by a manifest module. */
 export type VanityManifestDependency = VanityIntrospectionDependency
+/** Serialized token expression used by a manifest module. */
 export type VanityManifestExpression = VanityIntrospectionExpression
+/** Introspected token record embedded in a manifest system map. */
 export type VanityManifestToken = VanityIntrospectedToken
 
+/** Manifest record for a recipe or anatomy definition. */
 export interface VanityManifestRecipe extends VanitySemanticEntry {
+  /** Recipe or anatomy discriminator. */
   readonly kind: 'recipe' | 'anatomy'
+  /** Public recipe or anatomy name. */
   readonly name: string
+  /** Named anatomy parts, when this is an anatomy. */
   readonly parts?: readonly string[]
+  /** Variant names and their accepted values. */
   readonly variants: Readonly<Record<string, readonly string[]>>
+  /** Boolean toggle names. */
   readonly toggles: readonly string[]
+  /** Default variant and toggle values. */
   readonly defaults: Readonly<Record<string, string | boolean>>
+  /** Ports published by the recipe or anatomy. */
   readonly ports: Readonly<Record<string, string>>
 }
 
+/** Manifest record for a component-owned custom-property port. */
 export interface VanityManifestPort extends VanitySemanticEntry {
+  /** Port discriminator. */
   readonly kind: 'port'
+  /** Public port name. */
   readonly name: string
+  /** CSS variable expression including its default. */
   readonly var: string
+  /** CSS data type accepted by the port. */
   readonly type: import('../values/types').VanityCssDataType
+  /** Default value serialized into the port metadata. */
   readonly default: string | number
+  /** Runtime validation metadata, when configured. */
   readonly validation?: import('../ports/types').VanityPortValidationMeta
 }
 
+/** Manifest record for an explicit authoring escape hatch. */
 export interface VanityManifestEscape extends VanitySemanticEntry {
+  /** Escape discriminator. */
   readonly kind: 'escape'
+  /** Escape form used by the author. */
   readonly form: VanityEscapeForm
+  /** Normalized escaped value or selector detail. */
   readonly detail: string
+  /** Author-provided reason for the escape. */
   readonly reason?: string
+  /** Layer receiving the escaped output. */
   readonly layer?: string
 }
 
+/** Manifest record for a contrast guarantee or check. */
 export interface VanityManifestContrast extends VanitySemanticEntry {
+  /** Contrast discriminator. */
   readonly kind: 'contrast'
+  /** Token or color pairing being measured. */
   readonly pairing: string
+  /** Color scheme used for the measurement. */
   readonly scheme: 'light' | 'dark'
+  /** Contrast algorithm used by the check. */
   readonly algorithm: 'apca' | 'wcag2'
+  /** Measured contrast value. */
   readonly measured: number
+  /** Minimum accepted contrast value. */
   readonly min: number
+  /** Whether the measured value satisfies the guarantee. */
   readonly accepted: boolean
 }
 
+/** Manifest record for one emitted style class. */
 export interface VanityManifestStyle extends VanitySemanticEntry {
+  /** Style discriminator. */
   readonly kind: 'style'
+  /** Emitted class name. */
   readonly class: string
+  /** Optional author-provided style name. */
   readonly name?: string
+  /** Semantic token paths referenced by the style. */
   readonly tokens: readonly string[]
 }
 
+/** Build-time records grouped by one source module. */
 export interface VanityManifestModule extends VanitySemanticEntry {
+  /** Module discriminator. */
   readonly kind: 'module'
+  /** Package-relative source id. */
   readonly source: string
+  /** Recipes and anatomies declared by the module. */
   readonly recipes: Readonly<Record<string, VanityManifestRecipe>>
+  /** Ports declared by the module. */
   readonly ports: Readonly<Record<string, VanityManifestPort>>
+  /** Styles declared by the module. */
   readonly styles: Readonly<Record<string, VanityManifestStyle>>
+  /** Explicit escapes recorded while compiling the module. */
   readonly escapes: readonly VanityManifestEscape[]
+  /** Contrast checks recorded while compiling the module. */
   readonly contrast: readonly VanityManifestContrast[]
   /** References in emitted CSS, excluding graph-internal references. */
   readonly tokenUsage: Readonly<Record<string, number>>
 }
 
+/** Versioned build manifest combining semantic system data and module evidence. */
 export interface VanityManifest {
+  /** Published JSON Schema identifier. */
   readonly $schema: typeof VANITY_MANIFEST_SCHEMA
+  /** Manifest wire-format discriminator. */
   readonly format: typeof VANITY_MANIFEST_FORMAT
+  /** Current manifest schema version. */
   readonly version: typeof VANITY_MANIFEST_VERSION
   /** Byte-for-byte semantic equality with `ds.introspect()`. */
-  readonly system: VanitySystemMapV2
+  readonly system: VanitySystemMap
   /** Additional system maps, keyed by compatibility identity. */
-  readonly systems: Readonly<Record<string, VanitySystemMapV2>>
+  readonly systems: Readonly<Record<string, VanitySystemMap>>
   /** Style/build records grouped under package-relative source IDs. */
   readonly modules: Readonly<Record<string, VanityManifestModule>>
 }
@@ -136,8 +188,14 @@ export function buildManifest(
       all.findIndex(candidate => candidate.identities.compatibility === portable.identities.compatibility) === index)
 
   const primary = portableSystems[0]
-  if (!primary)
-    throw new TypeError('[vanity] Manifest v4 requires a consolidated system record')
+  if (!primary) {
+    throw new VanityError({
+      code: 'VANITY_MANIFEST_INVALID',
+      message: 'Manifest v4 requires a consolidated system record',
+      path: ['records'],
+      fix: 'consolidate a system before building its manifest',
+    })
+  }
 
   const system = introspectSystem(primary)
   const modules = new Map<string, MutableModule>()

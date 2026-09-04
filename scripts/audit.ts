@@ -10,7 +10,7 @@
 import { cp, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { extname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
@@ -18,12 +18,43 @@ import { audit, formatAuditFindings } from '../sdk/src/introspect/audit'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
 const packageDir = join(here, '..', 'sdk')
+const packageSourceRoot = join(packageDir, 'src')
+const packageToolingFiles = [
+  join(packageDir, 'typescript.cjs'),
+  join(packageDir, 'bin', 'vanity.mjs'),
+]
+
+const historyScanDirectories = ['sdk/src', 'docs', 'scripts', 'sandbox', 'spikes']
+const historyScanFiles = ['README.md']
+const historyScanExtensions = new Set(['.cjs', '.js', '.json', '.md', '.mjs', '.ts', '.tsx'])
+
+/**
+ * These are current, user-relevant terms rather than migration notes:
+ * language.md states the naming law itself; the runtime and spec docs name
+ * the HMR status; the patterns doc names the fallback expression; the
+ * architecture and vision docs describe current boundary policy. The source
+ * line fragment is intentional: if one of these sentences changes shape,
+ * the audit asks for a fresh review instead of silently widening the waiver.
+ */
+const historyVocabularyAllowlist = [
+  { file: 'docs/language.md', line: 'Current, not historical.' },
+  { file: 'docs/language.md', line: 'ships no deprecated aliases' },
+  { file: 'docs/reference/spec-runtime.md', line: 'mark superseded controllers stale' },
+  { file: 'docs/reference/spec-runtime.md', line: 'stale/superseded status' },
+  { file: 'docs/maintainers/patterns.md', line: 'fallback restores the previously effective expression' },
+  { file: 'docs/maintainers/architecture.md', line: 'formats, and superseded versions' },
+  { file: 'docs/vision.md', line: 'release-time compatibility layer' },
+  { file: 'sdk/src/runtime/controller.ts', line: 'this runtime binding was superseded' },
+] as const
+
+const historyVocabularyPattern = /\b(?:legacy|formerly|previously|obsolete|superseded|characterization|realignment|phase\s?\d+|backwards?[- ]compat|compatibility (?:bridge|layer|shim)|old (?:api|surface|name|way)|used to be|deprecated alias|historical)\b/gi
 
 /** Tooling resolves from the package, exactly as the plugin ships it. */
 const requireFromPackage = createRequire(join(packageDir, 'package.json'))
 
 async function main(): Promise<void> {
   await auditProductionNames()
+  await auditHistoryVocabulary()
 
   const target = process.argv[2]
   const source = target === undefined ? join(packageDir, 'src', 'test-support', 'vite-app') : resolve(target)
@@ -144,8 +175,6 @@ const NAMING_VERB_PREFIXES = [
   'match',
   'nest',
   'declare',
-  'unit',
-  'at',
   'report',
   'check',
   'describe',
@@ -180,7 +209,6 @@ const NAMING_VERB_PREFIXES = [
   'fold',
   'evaluate',
   'consume',
-  'to',
   'join',
   'negate',
   'intersect',
@@ -215,7 +243,6 @@ const NAMING_VERB_PREFIXES = [
   'measure',
   'group',
   'flush',
-  'end',
   'import',
   'round',
   'refresh',
@@ -369,17 +396,96 @@ const NAMING_ALLOWLIST = new Set([
   // Public token-declaration shorthand and JavaScript Proxy protocol hook.
   'tdec',
   'ownKeys',
+  // Public cascade and condition algebra vocabulary. These names are the
+  // language users write, not implementation helpers that happen to be
+  // attached to an emitter or condition object.
+  'layer',
+  'and',
+  'or',
+  'not',
+  'to',
+  'activate',
+  'absoluteCondition',
+  'scheme',
+  'val',
+  'tokens',
+  'textContrast',
+  // Public runtime, extension, and platform protocol names.
+  'deprecated',
+  'toString',
+  'matches',
+  'contains',
+  'snapshot',
+  'runtimeStyle',
+  'runtimeProps',
+  'fallback',
+  'entries',
+  'keys',
+  'values',
+  'checks',
+  'introspect',
+  'optionsIdentity',
+  // Vanilla Extract and Vite own this lifecycle spelling; the adapter mirrors
+  // it at the backend boundary instead of inventing a competing hook name.
+  'onEndFileScope',
+  'handler',
+  'unstable_pluginFilter',
+  // Hail's documented constructor/mixin vocabulary.
+  'inE',
+  'circle',
+  'square',
+  'truncate',
+  'contrastOf',
+  // The raw-value object is a public CSS data-type vocabulary, including
+  // names that are not also first-class constructors yet.
+  'unknown',
+  'declaration',
+  'percentage',
+  'length',
+  'numberPercentage',
+  'lengthPercentage',
+  'image',
+  'position',
+  'easingFunction',
+  'transformFunction',
+  'transformList',
+  'customIdent',
+  'dashedIdent',
+  'string',
+  'url',
+  'plugin',
+  // Audit category ids are the stable introspection taxonomy.
+  'unusedTokens',
+  'nearDuplicates',
+  'contrast',
+  'escapes',
+  'scaleStrays',
+  'focusVisibility',
+  'rawAssertions',
+  'aliasEscapes',
+  'eagerStyleBarrels',
+  'cssParityGaps',
+  'staleArtifacts',
+  'rootModeDisagreements',
+  'ambiguousAxes',
+  'mutableRootHazards',
+  'nonportableValues',
+  'specificityContexts',
 ])
 
-export async function auditProductionNames(root = join(packageDir, 'src')): Promise<void> {
-  const files = await sourceFiles(root)
+export async function auditProductionNames(root = packageSourceRoot): Promise<void> {
+  const roots = root === packageSourceRoot ? [root, ...packageToolingFiles] : [root]
+  const files = (await Promise.all(roots.map(candidate => candidate.endsWith('.cjs') || candidate.endsWith('.mjs')
+    ? [candidate]
+    : sourceFiles(candidate)))).flat()
   const violations: string[] = []
+  const displayRoot = root === packageSourceRoot ? packageDir : root
 
   for (const file of files) {
     if (isTestFile(file) || file.includes('/test-support/'))
       continue
     const source = await readFile(file, 'utf8')
-    violations.push(...findNamingLawViolations(file, source, root))
+    violations.push(...findNamingLawViolations(file, source, displayRoot))
   }
 
   if (violations.length > 0) {
@@ -389,6 +495,53 @@ export async function auditProductionNames(root = join(packageDir, 'src')): Prom
       'Rename the operation with a documented verb or add a deliberate public-DSL exception to docs/language.md.',
     ].join('\n'))
   }
+}
+
+export interface HistoryVocabularyFinding {
+  readonly file: string
+  readonly line: number
+  readonly match: string
+  readonly source: string
+}
+
+/** Enforce the no-history naming law across the repository's live sources. */
+export async function auditHistoryVocabulary(root = join(here, '..')): Promise<void> {
+  const findings: HistoryVocabularyFinding[] = []
+  for (const file of await historyVocabularyFiles(root)) {
+    if (relative(root, file) === 'scripts/audit.ts')
+      continue
+    const source = await readFile(file, 'utf8')
+    findings.push(...findHistoryVocabularyInSource(relative(root, file), source))
+  }
+
+  if (findings.length > 0) {
+    throw new Error([
+      '[vanity] history-vocabulary violations:',
+      ...findings.map(finding => `  ${finding.file}:${finding.line} ${finding.match} — ${finding.source.trim()}`),
+      'Name the current behavior, or add a narrowly documented current-use exception to historyVocabularyAllowlist.',
+    ].join('\n'))
+  }
+}
+
+/** Scan one source unit so the vocabulary rule stays directly testable. */
+export function findHistoryVocabularyInSource(file: string, source: string): HistoryVocabularyFinding[] {
+  const findings: HistoryVocabularyFinding[] = []
+  for (const [lineIndex, line] of source.split('\n').entries()) {
+    historyVocabularyPattern.lastIndex = 0
+    for (const match of line.matchAll(historyVocabularyPattern)) {
+      const value = match[0]
+      const allowed = historyVocabularyAllowlist.some(entry => entry.file === file && line.includes(entry.line))
+      if (!allowed) {
+        findings.push({
+          file,
+          line: lineIndex + 1,
+          match: value,
+          source: line,
+        })
+      }
+    }
+  }
+  return findings
 }
 
 /**
@@ -404,8 +557,10 @@ export function findNamingLawViolations(file: string, source: string, root = pac
     const value = name.text
     if (value.startsWith('$') || value === 'constructor' || NAMING_ALLOWLIST.has(value))
       return
-    if (NAMING_VERB_PREFIXES.some(prefix => value.startsWith(prefix)))
+    if (NAMING_VERB_PREFIXES.some(prefix => value === prefix
+      || (value.startsWith(prefix) && /^[A-Z]/.test(value.slice(prefix.length))))) {
       return
+    }
     const position = tree.getLineAndCharacterOfPosition(name.getStart(tree)).line + 1
     violations.push(`${file.slice(root.length + (file.startsWith(root) ? 1 : 0))}:${position} ${value}`)
   }
@@ -418,6 +573,19 @@ export function findNamingLawViolations(file: string, source: string, root = pac
 
     // MethodDeclaration covers both class methods and object-literal methods.
     if (ts.isMethodDeclaration(node))
+      check(node.name)
+
+    // Object-literal facades commonly expose callable operations as arrow
+    // properties. Treat their public key as the operation name as well.
+    if (ts.isPropertyAssignment(node)
+      && (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer))) {
+      check(node.name)
+    }
+
+    // Function-valued interface/type members are part of the public contract;
+    // checking them prevents implementation names from escaping through a
+    // structural surface.
+    if (ts.isPropertySignature(node) && node.type && ts.isFunctionTypeNode(node.type))
       check(node.name)
 
     // Callable constants are named operations regardless of whether they are
@@ -442,6 +610,30 @@ async function sourceFiles(directory: string): Promise<string[]> {
       files.push(...await sourceFiles(file))
     else if (entry.isFile() && file.endsWith('.ts'))
       files.push(file)
+  }
+  return files
+}
+
+async function historyVocabularyFiles(root: string): Promise<string[]> {
+  const files = await Promise.all([
+    ...historyScanDirectories.map(directory => historyFiles(join(root, directory))),
+    ...historyScanFiles.map(file => [join(root, file)]),
+  ])
+  return files.flat().filter(file => historyScanExtensions.has(extname(file)))
+}
+
+async function historyFiles(path: string): Promise<string[]> {
+  const entries = await readdir(path, { withFileTypes: true })
+  const files: string[] = []
+  for (const entry of entries) {
+    const file = join(path, entry.name)
+    if (entry.isDirectory()) {
+      if (!['.cache', '.git', '.nuxt', '.output', '.turbo', '.vanity', 'coverage', 'dist', 'dist-ssr', 'node_modules', 'styled-system'].includes(entry.name))
+        files.push(...await historyFiles(file))
+    }
+    else if (entry.isFile() && historyScanExtensions.has(extname(file))) {
+      files.push(file)
+    }
   }
   return files
 }

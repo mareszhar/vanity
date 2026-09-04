@@ -7,7 +7,7 @@ import {
 } from '@mszr/vanity'
 import { describe, expectTypeOf, it } from 'vitest'
 
-describe('unified token and axis types', () => {
+describe('token builder and axis types', () => {
   it('keeps logical graph handles valid through calculations and color channels', () => {
     const open = createSystem()
       .addTokens(current => ({

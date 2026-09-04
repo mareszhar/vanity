@@ -7,6 +7,7 @@
  * concrete self-contained form exposed by serializable value constructors.
  */
 
+/** CSS data-type vocabulary used to constrain constructors, tokens, and ports. */
 export type VanityCssDataType
   = | 'unknown'
     | 'declaration'
@@ -33,6 +34,7 @@ export type VanityCssDataType
     | 'url'
     | `plugin:${string}`
 
+/** Whether a value reference resolves against itself or an owning system. */
 export type VanityResolution = 'self' | 'system'
 
 /** Runtime and cross-package brand; `Symbol.for` survives duplicate installs. */
@@ -154,25 +156,3 @@ export type VanityCssInput<Type extends VanityCssDataType = VanityCssDataType>
 /** A token compatible with a CSS data type; the unparameterized form accepts any token. */
 export type VanityToken<Type extends VanityCssDataType = VanityCssDataType>
   = VanityCompatibleTokenInput<Type>
-
-/** Serialize a self-contained value without losing references. */
-export function serializeCssText(value: VanityCssInput): string {
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value))
-      throw new RangeError(`[vanity] a CSS number must be finite; received ${value}`)
-
-    return String(Object.is(value, -0) ? 0 : value)
-  }
-
-  if (typeof value === 'string') {
-    if (value.trim().length === 0)
-      throw new TypeError('[vanity] a CSS value cannot be empty')
-
-    return value
-  }
-
-  if (isCssValue(value))
-    return value.css
-
-  return 'var' in value ? value.var : String(value)
-}

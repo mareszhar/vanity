@@ -1,6 +1,7 @@
 /** DTCG codec identity and immutable storage for extension-backed values. */
 
 import type { VanityDtcgCodec } from '../introspect/interchange'
+import { throwValueError } from './error'
 
 /** Installed authored-interchange codecs, keyed by their stable identity. */
 export type DtcgCodecRegistry = readonly VanityDtcgCodec[]
@@ -26,12 +27,30 @@ export function mergeDtcgCodecs(
   const identities = new Set<string>()
   for (const codec of codecs) {
     const identity = `${codec.id}@${codec.version}`
-    if (!codec.id.trim() || !String(codec.version).trim() || !codec.extension.trim())
-      throw new TypeError('[vanity] a DTCG codec needs non-empty id, version, and extension fields')
-    if (typeof codec.encode !== 'function' || typeof codec.decode !== 'function')
-      throw new TypeError(`[vanity] DTCG codec '${identity}' needs encode() and decode() functions`)
-    if (identities.has(identity))
-      throw new TypeError(`[vanity] duplicate DTCG codec '${identity}'`)
+    if (!codec.id.trim() || !String(codec.version).trim() || !codec.extension.trim()) {
+      throwValueError(
+        'VANITY_VALUE_INVALID',
+        'a DTCG codec needs non-empty id, version, and extension fields',
+        'codec',
+        'provide stable id, version, and extension fields',
+      )
+    }
+    if (typeof codec.encode !== 'function' || typeof codec.decode !== 'function') {
+      throwValueError(
+        'VANITY_VALUE_INVALID',
+        `DTCG codec '${identity}' needs encode() and decode() functions`,
+        'codec',
+        'provide callable encode() and decode() functions',
+      )
+    }
+    if (identities.has(identity)) {
+      throwValueError(
+        'VANITY_VALUE_INVALID',
+        `duplicate DTCG codec '${identity}'`,
+        'codec',
+        'register the codec identity only once',
+      )
+    }
     identities.add(identity)
   }
   return Object.freeze(codecs.map(codec => Object.freeze({ ...codec })))

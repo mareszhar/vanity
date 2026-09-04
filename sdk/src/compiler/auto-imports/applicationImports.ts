@@ -5,7 +5,8 @@
  */
 
 import { resolve } from 'node:path'
-import { normalizePath } from '../path'
+import { VanityError } from '../../diagnostics'
+import { normalizePath } from '../core/path'
 import {
   getExportModuleFilesFromFile,
   getExportNamesFromFile,
@@ -138,8 +139,14 @@ export function normalizeAppAutoImports(
     presets: (config.presets ?? []).flatMap((name) => {
       const preset = vanityAppAutoImportPresets[name]
 
-      if (preset === undefined)
-        throw new TypeError(`[vanity] unknown autoImports.app preset '${name}'`)
+      if (preset === undefined) {
+        throw new VanityError({
+          code: 'VANITY_AUTO_IMPORT_INVALID',
+          message: `unknown autoImports.app preset '${name}'`,
+          path: ['autoImports', 'app', 'presets', name],
+          fix: `use one of the built-in presets: ${Object.keys(vanityAppAutoImportPresets).join(', ')}`,
+        })
+      }
 
       return preset
     }),
@@ -196,11 +203,13 @@ function assertApplicationSourceDoesNotReexportStyleModule(
   if (styleModule === undefined)
     return
 
-  throw new Error(
-    `[vanity] VANITY_APP_AUTO_IMPORT_STYLE_MODULE: autoImports.app source '${configuredSource}' reaches '${styleModule}', a *.css.ts style module\n`
-    + '  why: app and shared barrels must contain application-safe values; style modules are compiler-evaluated\n'
-    + `  fix: keep '${styleModule}' out of the barrel and import its emitted handle directly where application code uses it`,
-  )
+  throw new VanityError({
+    code: 'VANITY_APP_AUTO_IMPORT_STYLE_MODULE',
+    message: `autoImports.app source '${configuredSource}' reaches '${styleModule}', a *.css.ts style module`,
+    detail: ['app and shared barrels must contain application-safe values; style modules are compiler-evaluated'],
+    path: ['autoImports', 'app', configuredSource],
+    fix: `keep '${styleModule}' out of the barrel and import its emitted handle directly where application code uses it`,
+  })
 }
 
 function assertAppAutoImportSourceFilters(
@@ -211,9 +220,12 @@ function assertAppAutoImportSourceFilters(
   },
 ): void {
   if (source.include !== undefined && source.exclude !== undefined) {
-    throw new TypeError(
-      `[vanity] autoImports.app source '${source.from}' cannot use both include and exclude`,
-    )
+    throw new VanityError({
+      code: 'VANITY_AUTO_IMPORT_INVALID',
+      message: `autoImports.app source '${source.from}' cannot use both include and exclude`,
+      path: ['autoImports', 'app', 'sources', source.from],
+      fix: 'choose either include or exclude for an application source',
+    })
   }
 }
 
@@ -225,10 +237,12 @@ function isAppAutoImportsOptions(
 
 function resolveLocalApplicationSource(source: string, root: string): string {
   if (source.startsWith('~')) {
-    throw new Error(
-      `[vanity] autoImports.app cannot resolve '${source}' outside a framework alias; `
-      + 'use a project-relative or absolute path',
-    )
+    throw new VanityError({
+      code: 'VANITY_AUTO_IMPORT_INVALID',
+      message: `autoImports.app cannot resolve '${source}' outside a framework alias`,
+      path: ['autoImports', 'app', 'source'],
+      fix: 'use a project-relative or absolute path',
+    })
   }
 
   return resolve(root, source)

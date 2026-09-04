@@ -2,7 +2,7 @@ import { createSystem, fromEntries, mapRecord, range, VanityError } from '@mszr/
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
 
-describe('the target styling family', () => {
+describe('the class and rules', () => {
   it('preserves ordered contributions, repeated fallbacks, fragments, and omission', () => {
     const ds = createSystem()
       .addConditions({ hover: '&:hover' })

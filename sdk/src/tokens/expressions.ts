@@ -38,7 +38,7 @@ export interface VanityResolver {
   /** Fold a graph edge to its per-scheme build value (cycle-guarded by the graph). */
   foldRef: (handle: VanityInternalTokenHandle, scheme: VanityScheme) => VanityOklch
   /** Classify a graph edge (cycle-guarded by the graph). */
-  refTraits: (handle: VanityInternalTokenHandle) => VanityExprTraits
+  getRefTraits: (handle: VanityInternalTokenHandle) => VanityExprTraits
   /** Reject a non-color value with a diagnostic naming the offending token. */
   invalidColor: (detail: string) => never
   /** Choose a token's declared val/var projection at a graph edge. */
@@ -60,7 +60,7 @@ export function getExpressionTraits(expr: VanityColorExpr, resolver: VanityResol
       const node = getNode(expr.value)
       const dependency = node.dependencies.length > 0
       return {
-        cssLive: dependency || preservesNativeNode(node),
+        cssLive: dependency || preserveNativeNode(node),
         volatile: dependency,
         conditional: false,
       }
@@ -70,7 +70,7 @@ export function getExpressionTraits(expr: VanityColorExpr, resolver: VanityResol
       return { cssLive: true, volatile: inner.volatile, conditional: true }
     }
     case 'ref':
-      return resolver.refTraits(expr.handle)
+      return resolver.getRefTraits(expr.handle)
     case 'alpha':
     case 'adjust':
       return getExpressionTraits(expr.input, resolver)
@@ -108,20 +108,20 @@ export function getExpressionTraits(expr: VanityColorExpr, resolver: VanityResol
   }
 }
 
-function preservesNativeNode(node: import('../values/protocol').VanityExpressionNode): boolean {
+function preserveNativeNode(node: import('../values/protocol').VanityExpressionNode): boolean {
   switch (node.kind) {
     case 'raw':
       return true
     case 'plugin':
       return node.fold === undefined
     case 'function':
-      return node.values.some(preservesNativeNode)
+      return node.values.some(preserveNativeNode)
     case 'operation':
-      return preservesNativeNode(node.left) || preservesNativeNode(node.right)
+      return preserveNativeNode(node.left) || preserveNativeNode(node.right)
     case 'var':
       return true
     case 'composite':
-      return node.parts.some(part => typeof part !== 'string' && preservesNativeNode(part))
+      return node.parts.some(part => typeof part !== 'string' && preserveNativeNode(part))
     case 'literal':
       return false
   }
@@ -196,7 +196,7 @@ export function collectRefs(expr: VanityColorExpr, into: Set<string>): void {
   }
 }
 
-function containsColorReference(expr: VanityColorExpr): boolean {
+function hasColorReference(expr: VanityColorExpr): boolean {
   switch (expr.kind) {
     case 'oklch':
     case 'parse':
@@ -209,13 +209,13 @@ function containsColorReference(expr: VanityColorExpr): boolean {
     case 'adjust':
     case 'channels':
     case 'relative':
-      return containsColorReference(expr.input)
+      return hasColorReference(expr.input)
     case 'mix':
-      return containsColorReference(expr.input) || containsColorReference(expr.other)
+      return hasColorReference(expr.input) || hasColorReference(expr.other)
     case 'scheme':
-      return containsColorReference(expr.light) || containsColorReference(expr.dark)
+      return hasColorReference(expr.light) || hasColorReference(expr.dark)
     case 'contrast':
-      return containsColorReference(expr.target)
+      return hasColorReference(expr.target)
   }
 }
 
@@ -282,7 +282,7 @@ export function serializeExpr(expr: VanityColorExpr, resolver: VanityResolver, c
   const traits = getExpressionTraits(expr, resolver)
 
   // An anonymous static subtree folds — graph edges stay `var()` references.
-  if (!traits.cssLive && !traits.volatile && !containsColorReference(expr))
+  if (!traits.cssLive && !traits.volatile && !hasColorReference(expr))
     return formatOklch(foldExpr(expr, 'light', resolver))
 
   switch (expr.kind) {

@@ -1,22 +1,21 @@
 //#region ../../sdk/dist/runtime.mjs
-var VANITY_VALUE = Symbol.for("vanity.value");
-function isVanityValue(value) {
-	return (typeof value === "object" || typeof value === "function") && value !== null && VANITY_VALUE in value;
-}
-function isCssValue(value) {
-	return isVanityValue(value) && "css" in value;
-}
-function serializeCssText(value) {
-	if (typeof value === "number") {
-		if (!Number.isFinite(value)) throw new RangeError(`[vanity] a CSS number must be finite; received ${value}`);
-		return String(Object.is(value, -0) ? 0 : value);
+var VanityRuntimeError = class extends Error {
+	diagnostic;
+	code;
+	constructor(diagnostic) {
+		super([diagnostic.message, ...diagnostic.detail ?? []].join("; "));
+		this.name = "VanityRuntimeError";
+		this.diagnostic = Object.freeze({
+			...diagnostic,
+			...diagnostic.token === void 0 ? {} : { token: Object.freeze([...diagnostic.token]) },
+			...diagnostic.path === void 0 ? {} : { path: Object.freeze([...diagnostic.path]) },
+			...diagnostic.detail === void 0 ? {} : { detail: Object.freeze([...diagnostic.detail]) }
+		});
+		this.code = this.diagnostic.code;
 	}
-	if (typeof value === "string") {
-		if (value.trim().length === 0) throw new TypeError("[vanity] a CSS value cannot be empty");
-		return value;
-	}
-	if (isCssValue(value)) return value.css;
-	return "var" in value ? value.var : String(value);
+};
+function createVanityRuntimeError(diagnostic) {
+	return new VanityRuntimeError(diagnostic);
 }
 function getVanityHandleSymbol() {
 	return Symbol.for("vanity.tokenHandle");
@@ -30,7 +29,7 @@ function getVanityRuntimeAddressSymbol() {
 function getCaseBranchesSymbol() {
 	return Symbol.for("vanity.caseBranches");
 }
-function createHandle(meta) {
+function createHandle(meta, options = {}) {
 	const state = {
 		...meta,
 		reference: meta.reference ?? "var",
@@ -53,7 +52,7 @@ function createHandle(meta) {
 	defineMutable(handle, "$val", () => state.value, (value) => state.value = value);
 	defineGetter(handle, "$var", () => (fallback) => {
 		if (fallback === void 0) return variable;
-		const serialized = serializeFallback(fallback);
+		const serialized = serializeFallback(fallback, options.serializeFallback);
 		return `var(${state.name}, ${serialized})`;
 	});
 	defineGetter(handle, "$path", () => state.path);
@@ -73,13 +72,17 @@ function createHandle(meta) {
 	defineGetter(handle, "$validate", () => state.validate);
 	defineGetter(handle, "$axes", () => axes);
 	defineGetter(handle, "$case", () => (when) => {
-		const branch = cases.get(addressKey$1(when));
-		if (!branch) throw new TypeError(`[vanity] ${state.path} has no authored case for ${JSON.stringify(when)}`);
+		const branch = cases.get(getAddressKey$1(when));
+		if (!branch) return throwHandleError(options.handleError, {
+			message: `${state.path} has no authored case for ${JSON.stringify(when)}`,
+			path: state.path,
+			fix: "use an authored case address"
+		});
 		return branch;
 	});
 	defineGetter(handle, "toString", () => render);
 	if (meta.axes || meta.cases) {
-		attachCaseBranches(handle);
+		attachCaseBranches(handle, options);
 		for (const [axis, modes] of Object.entries(meta.axes ?? {})) for (const [mode, branch] of Object.entries(modes)) attachAxisBranch(handle, axis, mode, createBranchHandle(branch.value, branch));
 		for (const branch of meta.cases ?? []) attachCaseBranch(handle, branch.when, createBranchHandle(branch.value, branch));
 	}
@@ -87,7 +90,12 @@ function createHandle(meta) {
 }
 function readHandleMeta(handle) {
 	const meta = handle[handleMetadataSymbol()];
-	if (!meta) throw new TypeError("[vanity] value is not a canonical token handle");
+	if (!meta) throw createVanityRuntimeError({
+		code: "VANITY_RUNTIME_INVALID_HANDLE",
+		message: "the value is not a canonical token handle",
+		path: ["handle"],
+		fix: "pass a token handle created by Vanity"
+	});
 	return meta;
 }
 function readHandlePath(handle) {
@@ -127,9 +135,9 @@ function attachCaseBranch(handle, when, branch) {
 		cases = /* @__PURE__ */ new Map();
 		Object.defineProperty(owner, symbol, { value: cases });
 	}
-	cases.set(addressKey$1(when), branch);
+	cases.set(getAddressKey$1(when), branch);
 }
-function attachCaseBranches(handle) {
+function attachCaseBranches(handle, options = {}) {
 	const symbol = getCaseBranchesSymbol();
 	const owner = handle;
 	const cases = owner[symbol] ?? /* @__PURE__ */ new Map();
@@ -137,8 +145,12 @@ function attachCaseBranches(handle) {
 	Object.defineProperty(handle, "$case", {
 		configurable: true,
 		get: () => (when) => {
-			const branch = cases.get(addressKey$1(when));
-			if (!branch) throw new TypeError(`[vanity] ${readHandlePath(handle)} has no authored case for ${JSON.stringify(when)}`);
+			const branch = cases.get(getAddressKey$1(when));
+			if (!branch) return throwHandleError(options.handleError, {
+				message: `${readHandlePath(handle)} has no authored case for ${JSON.stringify(when)}`,
+				path: readHandlePath(handle),
+				fix: "use an authored case address"
+			});
 			return branch;
 		}
 	});
@@ -149,15 +161,24 @@ function isHandle(value) {
 function isBranchHandle(value) {
 	return typeof value === "function" && value[getVanityBranchHandleSymbol()] === true;
 }
-function runtimeAddressOf(value) {
+function getRuntimeAddress(value) {
 	if (!isHandle(value) && !isBranchHandle(value)) return void 0;
 	return value[getVanityRuntimeAddressSymbol()];
 }
-function serializeFallback(value) {
+function serializeFallback(value, serialize) {
 	if (isHandle(value) || isBranchHandle(value)) return String(value);
-	return serializeCssText(value);
+	return serialize ? serialize(value) : String(value);
 }
-function addressKey$1(when) {
+function throwHandleError(handleError, input) {
+	if (handleError) return handleError(input);
+	throw createVanityRuntimeError({
+		code: "VANITY_RUNTIME_INVALID_HANDLE",
+		message: input.message,
+		path: typeof input.path === "string" ? [input.path] : input.path,
+		fix: input.fix
+	});
+}
+function getAddressKey$1(when) {
 	return Object.entries(when).sort(([left], [right]) => left.localeCompare(right)).map(([axis, mode]) => `${axis}\0${mode}`).join("");
 }
 function defineGetter(target, key, get) {
@@ -174,6 +195,36 @@ function defineMutable(target, key, get, set) {
 		get,
 		set
 	});
+}
+var VANITY_VALUE = Symbol.for("vanity.value");
+function isVanityValue(value) {
+	return (typeof value === "object" || typeof value === "function") && value !== null && VANITY_VALUE in value;
+}
+function isCssValue(value) {
+	return isVanityValue(value) && "css" in value;
+}
+function serializeRuntimeCssText(value) {
+	if (typeof value === "number") {
+		if (!Number.isFinite(value)) throw createVanityRuntimeError({
+			code: "VANITY_RUNTIME_INVALID_VALUE",
+			message: `a runtime CSS number must be finite; received ${value}`,
+			path: ["value"],
+			fix: "pass a finite number"
+		});
+		return String(Object.is(value, -0) ? 0 : value);
+	}
+	if (typeof value === "string") {
+		if (value.trim().length === 0) throw createVanityRuntimeError({
+			code: "VANITY_RUNTIME_INVALID_VALUE",
+			message: "a runtime CSS value cannot be empty",
+			path: ["value"],
+			fix: "provide non-empty CSS text"
+		});
+		return value;
+	}
+	if (isCssValue(value)) return value.css;
+	if ((typeof value === "object" || typeof value === "function") && value !== null && "var" in value) return String(value.var);
+	return String(value);
 }
 var BOUND_RUNTIMES = /* @__PURE__ */ new WeakMap();
 function createRuntimeServices(contract, embeddedSchemas = {}, embeddedControls = {}) {
@@ -196,7 +247,12 @@ function createRuntimeServices(contract, embeddedSchemas = {}, embeddedControls 
 			}, mergeSchemas(embeddedSchemas, options.validators));
 		}),
 		snapshotFrom: ((configure, options = {}) => {
-			if (typeof configure !== "function") throw new TypeError("[vanity] snapshotFrom() needs a callback that configures the seed runtime");
+			if (typeof configure !== "function") throwRuntimeDiagnostic({
+				code: "VANITY_RUNTIME_INVALID_OPTIONS",
+				message: "snapshotFrom() needs a callback that configures the seed runtime",
+				path: ["snapshotFrom"],
+				fix: "pass a callback such as snapshotFrom(runtime => runtime.t.color.$set(...))"
+			});
 			const runtime = bindRuntime(contract, {
 				...options,
 				controls: {
@@ -213,8 +269,18 @@ function createRuntimeServices(contract, embeddedSchemas = {}, embeddedControls 
 	};
 }
 function assertRuntimeOptions(options) {
-	if (isRuntimeTarget(options)) throw new TypeError("[vanity] ds.runtime() resolves declared roots; use runtime({ within: element }) or runtime().bindRoot(path, element)");
-	if (!isPlainObject(options)) throw new TypeError("[vanity] ds.runtime() accepts only an options object; selector strings are not accepted");
+	if (isRuntimeTarget(options)) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_INVALID_OPTIONS",
+		message: "ds.runtime() resolves declared roots; use runtime({ within: element }) or runtime().bindRoot(path, element)",
+		path: ["within"],
+		fix: "pass the target as runtime({ within }) or bind it with runtime().bindRoot(path, element)"
+	});
+	if (!isPlainObject(options)) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_INVALID_OPTIONS",
+		message: "ds.runtime() accepts only an options object; selector strings are not accepted",
+		path: ["options"],
+		fix: "pass an options object, for example runtime({ within: document })"
+	});
 }
 function restoreRuntimeControllerFactory(contract) {
 	return createRuntimeServices(contract).runtime;
@@ -301,8 +367,8 @@ function createRuntimeController(contract, state, schemas, queued) {
 		else applyMutations(state, [mutation]);
 	};
 	const controller = {
-		t: runtimeTree(contract, state, schemas, emit),
-		axes: runtimeAxes(contract, state, emit),
+		t: createRuntimeTree(contract, state, schemas, emit),
+		axes: createRuntimeAxes(contract, state, emit),
 		get diagnostics() {
 			return Object.freeze([...state.diagnostics]);
 		},
@@ -315,14 +381,14 @@ function createRuntimeController(contract, state, schemas, queued) {
 				}
 				return;
 			}
-			const root = runtimeRoot(state, path);
+			const root = getRuntimeRoot(state, path);
 			resolveRuntimeRoot(state, root, true);
 			applyStateToRoot(state, root);
 		},
 		bindRoot(path, element) {
 			assertActive(state);
 			assertRuntimeTarget(element);
-			const root = runtimeRoot(state, path);
+			const root = getRuntimeRoot(state, path);
 			root.targets = [element];
 			root.resolved = true;
 			root.bound = true;
@@ -330,7 +396,12 @@ function createRuntimeController(contract, state, schemas, queued) {
 		},
 		transaction(configure) {
 			assertActive(state);
-			if (typeof configure !== "function") throw new TypeError("[vanity] runtime.transaction() needs a callback");
+			if (typeof configure !== "function") throwRuntimeDiagnostic({
+				code: "VANITY_RUNTIME_INVALID_OPTIONS",
+				message: "runtime.transaction() needs a callback",
+				path: ["transaction"],
+				fix: "pass a callback that performs the runtime operations"
+			});
 			const mutations = [];
 			configure(createRuntimeController(contract, state, schemas, mutations));
 			applyMutations(state, mutations);
@@ -347,7 +418,7 @@ function createRuntimeController(contract, state, schemas, queued) {
 	};
 	return Object.freeze(controller);
 }
-function runtimeAxes(contract, state, emit) {
+function createRuntimeAxes(contract, state, emit) {
 	const tree = {};
 	for (const axis of contract.axisOrder) {
 		const definition = contract.axes[axis];
@@ -357,7 +428,12 @@ function runtimeAxes(contract, state, emit) {
 			$current: () => getCurrentMode(contract, state, axis),
 			$cycle: (options = {}) => {
 				const modes = definition.modes.filter((mode) => definition.control !== void 0 || definition.attribute?.values[mode] !== void 0).filter((mode) => !options.exclude?.includes(mode));
-				if (modes.length === 0) throw new TypeError(`[vanity] runtime axis '${axis}' has no activatable modes left to cycle`);
+				if (modes.length === 0) throwRuntimeDiagnostic({
+					code: "VANITY_RUNTIME_UNSELECTABLE_AXIS",
+					message: `runtime axis '${axis}' has no activatable modes left to cycle`,
+					axis,
+					fix: "leave at least one activatable mode in the cycle or remove it from exclude"
+				});
 				const current = getCurrentMode(contract, state, axis);
 				const next = current === void 0 ? definition.defaultMode && modes.includes(definition.defaultMode) ? definition.defaultMode : modes[0] : modes[(modes.indexOf(current) + 1) % modes.length] ?? modes[0];
 				switchTo(next);
@@ -371,10 +447,34 @@ function runtimeAxes(contract, state, emit) {
 function prepareMode(contract, state, axis, mode) {
 	assertActive(state);
 	const definition = contract.axes[axis];
-	if (!definition || !definition.modes.includes(mode)) throw new TypeError(`[vanity] runtime axis '${axis}' has no mode '${mode}'`);
+	if (!definition) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_UNKNOWN_AXIS",
+		message: `runtime has no axis '${axis}'`,
+		axis,
+		fix: "use one of the axes declared by the system runtime contract"
+	});
+	if (!definition.modes.includes(mode)) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_UNKNOWN_MODE",
+		message: `runtime axis '${axis}' has no mode '${mode}'`,
+		axis,
+		mode,
+		fix: `use one of the declared modes: ${definition.modes.join(", ")}`
+	});
 	const value = definition.attribute?.values[mode];
-	if ((!definition.attribute || value === void 0) && !definition.control) throw new TypeError(`[vanity] runtime axis '${axis}' cannot activate mode '${mode}'`);
-	if (definition.control && !state.options.controls?.[definition.control.id]) throw new TypeError(`[vanity] runtime axis '${axis}' needs control '${definition.control.id}' in runtime({ controls })`);
+	if ((!definition.attribute || value === void 0) && !definition.control) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_UNSELECTABLE_AXIS",
+		message: `runtime axis '${axis}' cannot activate mode '${mode}'`,
+		axis,
+		mode,
+		fix: "declare an attribute mapping or provide the control implementation for this axis"
+	});
+	if (definition.control && !state.options.controls?.[definition.control.id]) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_UNSELECTABLE_AXIS",
+		message: `runtime axis '${axis}' needs control '${definition.control.id}' in runtime({ controls })`,
+		axis,
+		mode,
+		fix: `provide controls: { ${definition.control.id}: ... } when creating the runtime`
+	});
 	return {
 		kind: "mode",
 		axis,
@@ -388,7 +488,12 @@ function prepareMode(contract, state, axis, mode) {
 function getCurrentMode(contract, state, axis) {
 	assertActive(state);
 	const definition = contract.axes[axis];
-	if (!definition) throw new TypeError(`[vanity] runtime has no axis '${axis}'`);
+	if (!definition) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_UNKNOWN_AXIS",
+		message: `runtime has no axis '${axis}'`,
+		axis,
+		fix: "use one of the axes declared by the system runtime contract"
+	});
 	const control = definition.control && state.options.controls?.[definition.control.id];
 	if (!definition.attribute && !control) return void 0;
 	if (state.memory) return state.modes.get(axis);
@@ -435,7 +540,7 @@ function inspectRuntime(contract, state) {
 		}))),
 		modes: snapshot.modes,
 		overrides: Object.freeze(snapshot.overrides.flatMap((override) => {
-			const token = tokenByPath(contract, override.token);
+			const token = getTokenByPath(contract, override.token);
 			if (!token) return [];
 			const slot = getTokenSlot(token, override.address);
 			if (!slot) return [];
@@ -455,7 +560,7 @@ function inspectRuntime(contract, state) {
 		diagnostics: Object.freeze([...state.diagnostics])
 	});
 }
-function runtimeTree(contract, state, schemas, emit) {
+function createRuntimeTree(contract, state, schemas, emit) {
 	const tree = {};
 	for (const token of contract.tokens) {
 		const axes = {};
@@ -463,7 +568,7 @@ function runtimeTree(contract, state, schemas, emit) {
 		for (const branch of token.branches) {
 			const branchMeta = {
 				...branch.value === void 0 ? {} : { value: branch.value },
-				...token.mutable && branch.slot ? { runtime: runtimeMeta(contract, token, branch.address, branch.slot) } : {}
+				...token.mutable && branch.slot ? { runtime: createRuntimeMeta(contract, token, branch.address, branch.slot) } : {}
 			};
 			if (branch.address.kind === "axis") {
 				axes[branch.address.axis] ??= {};
@@ -485,10 +590,10 @@ function runtimeTree(contract, state, schemas, emit) {
 			...token.deprecated === void 0 ? {} : { deprecated: token.deprecated },
 			...token.metadata === void 0 ? {} : { metadata: token.metadata },
 			...token.validation === void 0 ? {} : { validate: token.validation },
-			...token.mutable && token.baseSlot ? { runtime: runtimeMeta(contract, token, { kind: "base" }, token.baseSlot) } : {},
+			...token.mutable && token.baseSlot ? { runtime: createRuntimeMeta(contract, token, { kind: "base" }, token.baseSlot) } : {},
 			...Object.keys(axes).length === 0 ? {} : { axes },
 			...cases.length === 0 ? {} : { cases }
-		});
+		}, { serializeFallback: serializeRuntimeCssText });
 		decorateMutableHandle(handle, contract, state, schemas, emit);
 		for (const modes of Object.values(handle.$axes)) for (const branch of Object.values(modes)) decorateMutableBranch(branch, contract, state, schemas, emit);
 		for (const branch of token.branches) if (branch.address.kind === "case") decorateMutableBranch(handle.$case(branch.address.when), contract, state, schemas, emit);
@@ -497,22 +602,33 @@ function runtimeTree(contract, state, schemas, emit) {
 	return freezeDeep(tree);
 }
 function decorateMutableHandle(handle, contract, state, schemas, emit) {
-	const runtime = runtimeAddressOf(handle);
+	const runtime = getRuntimeAddress(handle);
 	if (!runtime) return;
 	defineAction(handle, "$set", (input) => emit(prepareOverride(contract, state, schemas, runtime, input)));
 	defineAction(handle, "$unset", () => emit(prepareUnset(contract, state, runtime)));
 }
 function decorateMutableBranch(handle, contract, state, schemas, emit) {
-	const runtime = runtimeAddressOf(handle);
+	const runtime = getRuntimeAddress(handle);
 	if (!runtime) return;
 	defineAction(handle, "$set", (input) => emit(prepareOverride(contract, state, schemas, runtime, input)));
 	defineAction(handle, "$unset", () => emit(prepareUnset(contract, state, runtime)));
 }
 function prepareOverride(contract, state, schemas, runtime, input) {
 	assertActive(state);
-	const token = tokenByPath(contract, runtime.token);
-	if (!token || !token.mutable) throw new TypeError(`[vanity] ${runtime.token.join(".")} is not a mutable token in this runtime`);
-	if (!getTokenSlot(token, runtime.address)) throw new TypeError(`[vanity] ${formatAddress(runtime.token, runtime.address)} is not an authored runtime address`);
+	const token = getTokenByPath(contract, runtime.token);
+	if (!token || !token.mutable) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_IMMUTABLE_TOKEN",
+		message: `${runtime.token.join(".")} is not a mutable token in this runtime`,
+		token: runtime.token,
+		fix: "set only a token declared with mutable: true"
+	});
+	if (!getTokenSlot(token, runtime.address)) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_UNKNOWN_ADDRESS",
+		message: `${formatAddress(runtime.token, runtime.address)} is not an authored runtime address`,
+		token: runtime.token,
+		address: runtime.address,
+		fix: "set the base or branch address emitted by this runtime contract"
+	});
 	const value = validateAndSerialize(token, input, schemas, state.options);
 	if (value === void 0) return {
 		kind: "unset",
@@ -533,8 +649,14 @@ function prepareOverride(contract, state, schemas, runtime, input) {
 }
 function prepareUnset(contract, state, runtime) {
 	assertActive(state);
-	const token = tokenByPath(contract, runtime.token);
-	if (!token || !token.mutable || !getTokenSlot(token, runtime.address)) throw new TypeError(`[vanity] ${formatAddress(runtime.token, runtime.address)} is not an authored mutable runtime address`);
+	const token = getTokenByPath(contract, runtime.token);
+	if (!token || !token.mutable || !getTokenSlot(token, runtime.address)) throwRuntimeDiagnostic({
+		code: !token || !token.mutable ? "VANITY_RUNTIME_IMMUTABLE_TOKEN" : "VANITY_RUNTIME_UNKNOWN_ADDRESS",
+		message: `${formatAddress(runtime.token, runtime.address)} is not an authored mutable runtime address`,
+		token: runtime.token,
+		address: runtime.address,
+		fix: "unset a base or branch address emitted for a mutable token by this runtime contract"
+	});
 	return {
 		kind: "unset",
 		token,
@@ -545,7 +667,7 @@ function applyMutations(state, mutations) {
 	assertActive(state);
 	const targets = /* @__PURE__ */ new Map();
 	for (const mutation of mutations) if (mutation.kind === "set" || mutation.kind === "unset") {
-		const root = runtimeRoot(state, mutation.token.rootPath);
+		const root = getRuntimeRoot(state, mutation.token.rootPath);
 		targets.set(mutation, getTargetsForRoot(state, root, true));
 	} else {
 		const resolved = getRootsForAxis(state, mutation.axis).flatMap((root) => [...getTargetsForRoot(state, root, false)]);
@@ -570,7 +692,13 @@ function applyMutations(state, mutations) {
 				if (control) control.activate(target, mutation.mode);
 				else if (mutation.name !== void 0 && mutation.value === null) removeAttribute(target, mutation.name);
 				else if (mutation.name !== void 0 && typeof mutation.value === "string") writeAttribute(target, mutation.name, mutation.value);
-				else throw new TypeError(`[vanity] runtime axis '${mutation.axis}' needs control '${definition.control?.id}' in runtime({ controls })`);
+				else throwRuntimeDiagnostic({
+					code: "VANITY_RUNTIME_UNSELECTABLE_AXIS",
+					message: `runtime axis '${mutation.axis}' needs control '${definition.control?.id}' in runtime({ controls })`,
+					axis: mutation.axis,
+					mode: mutation.mode,
+					fix: `provide controls: { ${definition.control?.id ?? "axis"}: ... } when creating the runtime`
+				});
 			}
 			state.modes.set(mutation.axis, mutation.mode);
 		}
@@ -608,7 +736,7 @@ function reconcileSnapshot(contract, input, schemas, options) {
 			});
 			continue;
 		}
-		const token = tokenByPath(contract, entry.token);
+		const token = getTokenByPath(contract, entry.token);
 		if (!token) {
 			diagnostics.push({
 				code: "VANITY_RUNTIME_UNKNOWN_TOKEN",
@@ -701,9 +829,24 @@ function reconcileSnapshot(contract, input, schemas, options) {
 	});
 }
 function parseSnapshot(input) {
-	if (!isPlainObject(input) || input.version !== 1) throw new TypeError(`[vanity] unsupported runtime snapshot protocol '${isPlainObject(input) ? String(input.version) : "unreadable"}'; expected version 1`);
-	if (typeof input.system !== "string" || !Array.isArray(input.overrides) || !isPlainObject(input.modes)) throw new TypeError("[vanity] runtime snapshot v1 is unreadable: expected system, overrides, and modes fields");
-	for (const mode of Object.values(input.modes)) if (typeof mode !== "string") throw new TypeError("[vanity] runtime snapshot v1 modes must be strings");
+	if (!isPlainObject(input) || input.version !== 1) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_SCHEMA_MISMATCH",
+		message: `unsupported runtime snapshot protocol '${isPlainObject(input) ? String(input.version) : "unreadable"}'; expected version 1`,
+		path: ["snapshot", "version"],
+		fix: `provide a runtime snapshot with version 1`
+	});
+	if (typeof input.system !== "string" || !Array.isArray(input.overrides) || !isPlainObject(input.modes)) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_SCHEMA_MISMATCH",
+		message: "runtime snapshot v1 is unreadable: expected system, overrides, and modes fields",
+		path: ["snapshot"],
+		fix: "provide system, overrides, and modes fields using the runtime snapshot protocol"
+	});
+	for (const mode of Object.values(input.modes)) if (typeof mode !== "string") throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_SCHEMA_MISMATCH",
+		message: "runtime snapshot v1 modes must be strings",
+		path: ["snapshot", "modes"],
+		fix: "serialize each active axis mode as a string"
+	});
 	return input;
 }
 function isSnapshotOverride(input) {
@@ -722,37 +865,86 @@ function validateAndSerialize(token, input, schemas, options) {
 	let output = input;
 	if (policy && shouldValidate(policy.runtime, options)) {
 		const schema = schemas[policy.id];
-		if (!schema) throw new TypeError(`validation schema '${policy.id}' is not registered on this application runtime controller`);
+		if (!schema) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_SCHEMA_MISMATCH",
+			message: `validation schema '${policy.id}' is not registered on this application runtime controller`,
+			token: token.token,
+			path: [...token.token, "validate"],
+			fix: `register the '${policy.id}' Standard Schema validator in runtime({ validators })`
+		});
 		const result = schema["~standard"].validate(input);
-		if (isPromiseLike(result)) throw new TypeError(`validation schema '${policy.id}' is async; runtime setters are synchronous`);
+		if (isPromiseLike(result)) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_SCHEMA_MISMATCH",
+			message: `validation schema '${policy.id}' is async; runtime setters are synchronous`,
+			token: token.token,
+			path: [...token.token, "validate"],
+			fix: "provide a synchronous Standard Schema validator for runtime setters"
+		});
 		if ("issues" in result && result.issues !== void 0) {
 			if (policy.onInvalid === "omit") return void 0;
 			if (policy.onInvalid === "fallback" && policy.fallback !== void 0) output = policy.fallback;
-			else throw new TypeError(result.issues.map((issue) => issue.message).join("; ") || `validation schema '${policy.id}' rejected the value`);
+			else throwRuntimeDiagnostic({
+				code: "VANITY_RUNTIME_INVALID_VALUE",
+				message: `validation schema '${policy.id}' rejected the value`,
+				detail: result.issues.map((issue) => issue.message),
+				token: token.token,
+				path: [...token.token, "value"],
+				fix: "set a value accepted by the registered validator, or configure onInvalid: fallback/omit"
+			});
 		} else output = result.value;
 		assertUniversalInput(token.type, output);
 	}
 	return serializeRuntimeValue(output);
 }
 function assertUniversalInput(type, input) {
-	if (isVanityValue(input) && type !== "unknown" && input.type !== "unknown" && !isCompatibleType(type, input.type)) throw new TypeError(`expected <${type}> but received a <${input.type}> vanity value`);
+	if (isVanityValue(input) && type !== "unknown" && input.type !== "unknown" && !isCompatibleType(type, input.type)) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_INVALID_VALUE",
+		message: `expected <${type}> but received a <${input.type}> vanity value`,
+		path: ["value"],
+		fix: `provide a value compatible with <${type}>`
+	});
 	if (typeof input === "number") {
-		if (!Number.isFinite(input)) throw new TypeError("a runtime CSS number must be finite");
-		if (type === "integer" && !Number.isInteger(input)) throw new TypeError(`expected <integer> but received ${input}`);
+		if (!Number.isFinite(input)) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_INVALID_VALUE",
+			message: "a runtime CSS number must be finite",
+			path: ["value"],
+			fix: "pass a finite number"
+		});
+		if (type === "integer" && !Number.isInteger(input)) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_INVALID_VALUE",
+			message: `expected <integer> but received ${input}`,
+			path: ["value"],
+			fix: "pass a whole number"
+		});
 		if (![
 			"unknown",
 			"number",
 			"integer",
 			"percentage",
 			"number-percentage"
-		].includes(type)) throw new TypeError(`a bare number is not a <${type}> runtime input`);
+		].includes(type)) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_INVALID_VALUE",
+			message: `a bare number is not a <${type}> runtime input`,
+			path: ["value"],
+			fix: `pass a typed value or a compatible token for <${type}>`
+		});
 		return;
 	}
 	if (typeof input === "string") {
-		if (input.trim().length === 0) throw new TypeError("a runtime CSS value cannot be empty");
+		if (input.trim().length === 0) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_INVALID_VALUE",
+			message: "a runtime CSS value cannot be empty",
+			path: ["value"],
+			fix: "provide non-empty CSS text"
+		});
 		return;
 	}
-	if (!isVanityValue(input) && !isHandle(input) && !isBranchHandle(input)) throw new TypeError("runtime CSS values must be strings, finite numbers, vanity values, or token handles");
+	if (!isVanityValue(input) && !isHandle(input) && !isBranchHandle(input)) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_INVALID_VALUE",
+		message: "runtime CSS values must be strings, finite numbers, vanity values, or token handles",
+		path: ["value"],
+		fix: "pass a string, finite number, vanity value, or token handle"
+	});
 }
 function parseSnapshotInput(type, val) {
 	if ((type === "number" || type === "integer" || type === "number-percentage") && /^[-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?$/i.test(val.trim())) return Number(val);
@@ -764,16 +956,31 @@ function isCompatibleType(expected, actual) {
 function serializeRuntimeValue(input) {
 	if (typeof input === "number") return String(Object.is(input, -0) ? 0 : input);
 	if (typeof input === "string") {
-		if (input.trim().length === 0) throw new TypeError("[vanity] a runtime CSS value cannot be empty");
+		if (input.trim().length === 0) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_INVALID_VALUE",
+			message: "a runtime CSS value cannot be empty",
+			path: ["value"],
+			fix: "provide non-empty CSS text"
+		});
 		return input;
 	}
 	if (isCssValue(input)) return input.css;
 	if (isHandle(input) || isBranchHandle(input) || isVanityValue(input)) {
 		const serialized = String(input);
-		if (serialized.trim().length === 0) throw new TypeError("[vanity] a runtime CSS value cannot serialize to an empty string");
+		if (serialized.trim().length === 0) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_INVALID_VALUE",
+			message: "a runtime CSS value cannot serialize to an empty string",
+			path: ["value"],
+			fix: "provide a serializable CSS value or token reference"
+		});
 		return serialized;
 	}
-	throw new TypeError("[vanity] cannot serialize this runtime CSS value");
+	throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_INVALID_VALUE",
+		message: "cannot serialize this runtime CSS value",
+		path: ["value"],
+		fix: "pass a string, finite number, vanity value, or token handle"
+	});
 }
 function shouldValidate(mode, options) {
 	return mode === "always" || mode === "dev" && (options.dev ?? inferDevelopmentMode());
@@ -787,7 +994,7 @@ function isPromiseLike(value) {
 function projectStyles(contract, snapshot) {
 	const styles = Object.fromEntries(contract.roots.map((root) => [root.path, {}]));
 	for (const entry of snapshot.overrides) {
-		const token = tokenByPath(contract, entry.token);
+		const token = getTokenByPath(contract, entry.token);
 		const slot = token && getTokenSlot(token, entry.address);
 		if (token && slot) styles[token.rootPath][slot] = entry.val;
 	}
@@ -822,10 +1029,10 @@ function restoreRuntimeState(contract, state, snapshot) {
 	for (const root of contract.roots) {
 		const rootProps = props[root.path];
 		const needsUniqueOwner = Object.keys(rootProps.style).length > 0;
-		targets.set(root.path, getTargetsForRoot(state, runtimeRoot(state, root.path), needsUniqueOwner));
+		targets.set(root.path, getTargetsForRoot(state, getRuntimeRoot(state, root.path), needsUniqueOwner));
 	}
 	for (const previous of state.overrides.values()) {
-		const token = tokenByPath(contract, previous.token);
+		const token = getTokenByPath(contract, previous.token);
 		const slot = token && getTokenSlot(token, previous.address);
 		if (token && slot && !snapshot.overrides.some((entry) => recordKey(entry.token, entry.address) === recordKey(previous.token, previous.address))) {
 			const [target] = targets.get(token.rootPath) ?? [];
@@ -833,7 +1040,7 @@ function restoreRuntimeState(contract, state, snapshot) {
 		}
 	}
 	for (const entry of snapshot.overrides) {
-		const token = tokenByPath(contract, entry.token);
+		const token = getTokenByPath(contract, entry.token);
 		const slot = getTokenSlot(token, entry.address);
 		writeStyle(targets.get(token.rootPath)[0].style, slot, entry.val);
 	}
@@ -848,7 +1055,13 @@ function restoreRuntimeState(contract, state, snapshot) {
 		const adapter = definition.attribute;
 		const value = adapter?.values[mode];
 		const control = definition.control && state.options.controls?.[definition.control.id];
-		if (definition.control && !control) throw new TypeError(`[vanity] runtime axis '${axis}' needs control '${definition.control.id}' in runtime({ controls })`);
+		if (definition.control && !control) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_UNSELECTABLE_AXIS",
+			message: `runtime axis '${axis}' needs control '${definition.control.id}' in runtime({ controls })`,
+			axis,
+			mode,
+			fix: `provide controls: { ${definition.control.id}: ... } when creating the runtime`
+		});
 		for (const root of getRootsForAxis(state, axis)) for (const target of targets.get(root.contract.path) ?? []) if (control) control.activate(target, mode);
 		else if (adapter && value === null) removeAttribute(target, adapter.name);
 		else if (adapter && value !== void 0) writeAttribute(target, adapter.name, value);
@@ -874,7 +1087,7 @@ function createEmptySnapshot(contract) {
 		modes: Object.freeze({})
 	});
 }
-function runtimeMeta(contract, token, address, slot) {
+function createRuntimeMeta(contract, token, address, slot) {
 	return freezeDeep({
 		system: contract.system,
 		token: token.token,
@@ -893,7 +1106,7 @@ function isSameTokenAddress(left, right) {
 	return left.kind === "case" && right.kind === "case" && serializeStableString(sortRecord(left.when)) === serializeStableString(sortRecord(right.when));
 }
 var tokenIndexes = /* @__PURE__ */ new WeakMap();
-function tokenByPath(contract, token) {
+function getTokenByPath(contract, token) {
 	let index = tokenIndexes.get(contract);
 	if (index === void 0) {
 		index = new Map(contract.tokens.map((entry) => [entry.token.join("."), entry]));
@@ -902,9 +1115,9 @@ function tokenByPath(contract, token) {
 	return index.get(token.join("."));
 }
 function recordKey(token, address) {
-	return `${token.join(".")}\0${addressKey(address)}`;
+	return `${token.join(".")}\0${getAddressKey(address)}`;
 }
-function addressKey(address, axisOrder = []) {
+function getAddressKey(address, axisOrder = []) {
 	if (address.kind === "base") return "0:base";
 	if (address.kind === "axis") return `1:axis:${address.axis}:${address.mode}`;
 	return `2:case:${Object.entries(sortRecord(address.when, axisOrder)).map(([axis, mode]) => `${axis}:${mode}`).join("|")}`;
@@ -917,7 +1130,7 @@ function normalizeAddress(address, axisOrder) {
 }
 function sortOverrides(entries, axisOrder) {
 	return entries.sort((left, right) => {
-		return left.token.join(".").localeCompare(right.token.join(".")) || addressKey(left.address, axisOrder).localeCompare(addressKey(right.address, axisOrder));
+		return left.token.join(".").localeCompare(right.token.join(".")) || getAddressKey(left.address, axisOrder).localeCompare(getAddressKey(right.address, axisOrder));
 	});
 }
 function sortRecord(record, preferred = []) {
@@ -933,14 +1146,24 @@ function formatAddress(token, address) {
 }
 function getResolutionScope(options) {
 	if (options.within !== void 0) {
-		if (typeof options.within !== "object" && typeof options.within !== "function" || options.within === null) throw new TypeError("[vanity] runtime({ within }) needs a document, shadow root, element, or query adapter");
+		if (typeof options.within !== "object" && typeof options.within !== "function" || options.within === null) throwRuntimeDiagnostic({
+			code: "VANITY_RUNTIME_INVALID_TARGET",
+			message: "runtime({ within }) needs a document, shadow root, element, or query adapter",
+			path: ["within"],
+			fix: "pass a document, shadow root, element, or query adapter with the required lookup methods"
+		});
 		return options.within;
 	}
 	return globalThis.document;
 }
-function runtimeRoot(state, path) {
+function getRuntimeRoot(state, path) {
 	const root = state.roots.get(path);
-	if (!root) throw new TypeError(`[vanity] runtime has no root '${path}'; expected '$system' or one of: ${[...state.roots.keys()].filter((key) => key !== "$system").join(", ") || "(none)"}`);
+	if (!root) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_ROOT_NOT_FOUND",
+		message: `runtime has no root '${path}'; expected '$system' or one of: ${[...state.roots.keys()].filter((key) => key !== "$system").join(", ") || "(none)"}`,
+		rootPath: path,
+		fix: `use '$system' or one of the declared runtime roots`
+	});
 	return root;
 }
 function getRootsForAxis(state, axis) {
@@ -960,7 +1183,10 @@ function getTargetsForRoot(state, root, unique) {
 		rootPath: root.contract.path
 	};
 	appendRuntimeDiagnostic(state, diagnostic);
-	throw new TypeError(`[vanity] ${diagnostic.message}`);
+	throw createVanityRuntimeError({
+		...diagnostic,
+		fix: diagnostic.code === "VANITY_RUNTIME_ROOT_NOT_FOUND" ? `mount the root and call refreshRoots('${root.contract.path}') or bindRoot('${root.contract.path}', element)` : "narrow runtime({ within }) to one matching root or bind the intended root explicitly"
+	});
 }
 function resolveRuntimeRoot(state, root, force = false) {
 	if (root.bound || root.resolved && !force) return;
@@ -986,7 +1212,12 @@ function resolveRuntimeRoot(state, root, force = false) {
 	root.resolved = true;
 }
 function assertRuntimeTarget(value) {
-	if (!isRuntimeTarget(value)) throw new TypeError("[vanity] bindRoot() needs one concrete HTML/SVG inline-style target; selector strings are not accepted");
+	if (!isRuntimeTarget(value)) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_INVALID_TARGET",
+		message: "bindRoot() needs one concrete HTML/SVG inline-style target; selector strings are not accepted",
+		path: ["bindRoot", "element"],
+		fix: "pass an element or adapter with style, setAttribute, and removeAttribute methods"
+	});
 }
 function isRuntimeTarget(value) {
 	return (typeof value === "object" || typeof value === "function") && value !== null && isStyleDeclaration(value.style) && typeof value.setAttribute === "function" && typeof value.removeAttribute === "function";
@@ -1007,7 +1238,12 @@ function removeAttribute(target, name) {
 	if (!target.getAttribute || target.getAttribute(name) !== null) target.removeAttribute(name);
 }
 function assertActive(state) {
-	if (!state.active) throw new TypeError("[vanity] this runtime binding was superseded on the same root; use the current ds.runtime() instance after HMR/rebind");
+	if (!state.active) throwRuntimeDiagnostic({
+		code: "VANITY_RUNTIME_INVALID_TARGET",
+		message: "this runtime binding was superseded on the same root; use the current ds.runtime() instance after HMR/rebind",
+		path: ["runtime"],
+		fix: "create or use the current ds.runtime() instance for this root"
+	});
 }
 function isStyleDeclaration(value) {
 	return (typeof value === "object" || typeof value === "function") && value !== null && typeof value.setProperty === "function" && typeof value.removeProperty === "function";
@@ -1028,6 +1264,9 @@ function setPath(tree, path, value) {
 			target = target[key];
 		}
 	}
+}
+function throwRuntimeDiagnostic(diagnostic) {
+	throw createVanityRuntimeError(diagnostic);
 }
 function defineAction(target, name, value) {
 	Object.defineProperty(target, name, {
@@ -1057,13 +1296,17 @@ function getErrorMessage(error) {
 	return error instanceof Error ? error.message : String(error);
 }
 function restoreToken(meta) {
-	return createHandle(meta);
+	return createHandle(meta, { serializeFallback: serializeRuntimeCssText });
 }
 function restoreStyleAuthoringStub(meta) {
 	return () => {
 		const remedy = meta.name === "class" ? "Use the generated class export in application modules." : meta.name === "rules" ? "Import the style module for its emitted CSS in application modules." : meta.name === "introspect" ? "Use ds.introspect() in a system module, or consume the generated manifest." : "Use ds.runtime() in application modules, or consume serialized style exports.";
-		const location = meta.name === "introspect" ? "introspect belongs in a system module." : `${meta.name} belongs in a *.css.ts style module.`;
-		throw new Error(`[vanity] VANITY_STYLE_MODULE_MISUSE: ${location} ${remedy}`);
+		throw createVanityRuntimeError({
+			code: "VANITY_STYLE_MODULE_MISUSE",
+			message: `[vanity] VANITY_STYLE_MODULE_MISUSE: ${meta.name === "introspect" ? "introspect belongs in a system module." : `${meta.name} belongs in a *.css.ts style module.`} ${remedy}`,
+			path: ["styleModule", meta.name],
+			fix: remedy
+		});
 	};
 }
 //#endregion

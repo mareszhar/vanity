@@ -6,7 +6,8 @@ import type {
 import type { AutoImportDeclarationFile, AutoImportDeclarationSource } from './autoImportDeclarations'
 import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { normalizePath } from '../path'
+import { VanityError } from '../../diagnostics'
+import { normalizePath } from '../core/path'
 import { getExportNamesFromFile, resolveConfiguredModuleSource } from '../projection/exportNames'
 import { resolveAppAutoImports } from './applicationImports'
 import {
@@ -117,7 +118,7 @@ export async function planAutoImportDeclarations(
 }
 
 /** Refuse one global name only when the two module roles resolve it differently. */
-export function assertAutoImportRoleSeparation(
+function assertAutoImportRoleSeparation(
   style: VanityStyleAutoImportPlan | undefined,
   app: VanityAppAutoImportPlan | undefined,
 ): void {
@@ -133,12 +134,16 @@ export function assertAutoImportRoleSeparation(
     if ([...styleSources].every(source => appSources.has(source)))
       continue
 
-    throw new TypeError(
-      `[vanity] auto-import '${name}' is exposed by different autoImports module roles\n`
-      + `  style: ${[...styleSources].map(source => `'${source}'`).join(', ')}\n`
-      + `  app: ${[...appSources].map(source => `'${source}'`).join(', ')}\n`
-      + '  fix: rename one export, or narrow autoImports.style or autoImports.app with include or exclude',
-    )
+    throw new VanityError({
+      code: 'VANITY_AUTO_IMPORT_INVALID',
+      message: `auto-import '${name}' is exposed by different autoImports module roles`,
+      detail: [
+        `style: ${[...styleSources].map(source => `'${source}'`).join(', ')}`,
+        `app: ${[...appSources].map(source => `'${source}'`).join(', ')}`,
+      ],
+      path: ['autoImports', name],
+      fix: 'rename one export, or narrow autoImports.style or autoImports.app with include or exclude',
+    })
   }
 }
 
@@ -263,9 +268,12 @@ function getStyleSource(
     return requested
   const values = system === undefined ? [] : Array.isArray(system) ? system : [system]
   if (values.length !== 1) {
-    throw new TypeError(
-      '[vanity] autoImports.style using $system requires exactly one compiler.system entry',
-    )
+    throw new VanityError({
+      code: 'VANITY_AUTO_IMPORT_INVALID',
+      message: 'autoImports.style using $system requires exactly one compiler.system entry',
+      path: ['autoImports', 'style'],
+      fix: 'configure exactly one compiler.system entry before using $system',
+    })
   }
   const [systemSource] = values
   return typeof systemSource === 'string' ? systemSource : systemSource.entry
@@ -299,10 +307,12 @@ async function readSource(path: string, owner: string): Promise<void> {
     await readFile(path, 'utf8')
   }
   catch {
-    throw new Error(
-      `[vanity] the configured ${owner} module does not exist: ${path}\n`
-      + `  fix: point ${owner} at a readable module`,
-    )
+    throw new VanityError({
+      code: 'VANITY_AUTO_IMPORT_INVALID',
+      message: `the configured ${owner} module does not exist: ${path}`,
+      path: ['autoImports', owner],
+      fix: `point ${owner} at a readable module`,
+    })
   }
 }
 
@@ -324,7 +334,13 @@ function groupSourcesByName(sources: readonly AutoImportDeclarationSource[]): Ma
 
 function assertSourceNamesAreUnambiguous(sources: readonly AutoImportDeclarationSource[], kind: string): void {
   for (const [name, values] of groupSourcesByName(sources)) {
-    if (values.size > 1)
-      throw new TypeError(`[vanity] ${kind} '${name}' is provided by both ${[...values].map(value => `'${value}'`).join(' and ')}`)
+    if (values.size > 1) {
+      throw new VanityError({
+        code: 'VANITY_AUTO_IMPORT_INVALID',
+        message: `${kind} '${name}' is provided by both ${[...values].map(value => `'${value}'`).join(' and ')}`,
+        path: ['autoImports', name],
+        fix: 'rename the export or narrow one source with include/exclude',
+      })
+    }
   }
 }

@@ -1,13 +1,12 @@
 /** Compiler-owned system source normalization and namespace identity rules. */
 
 import type { VanityCompilerOptions, VanitySystemSource } from '../../config'
-import type { VanityPortableSystemV2 } from '../../system/contract'
+import type { VanityPortableSystem } from '../../system/contract'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { VanityError } from '../../diagnostics'
-import { substrate } from '../../substrate'
-import { normalizePath } from '../path'
 import { resolveConfiguredModuleSource } from '../projection/exportNames'
+import { normalizePath } from './path'
 
 export interface NormalizedSystemSource {
   entry: string
@@ -18,7 +17,7 @@ export interface NormalizedSystemSource {
 }
 
 export interface EvaluatedSystem {
-  portable: VanityPortableSystemV2
+  portable: VanityPortableSystem
   exportNames: readonly string[]
   contractExport: string
   /** Compiler-only exports reused while evaluating importing style modules. */
@@ -83,15 +82,15 @@ export function resolveConfiguredSystemImport(
 
 export function assertFreshPortablePair(
   source: NormalizedSystemSource,
-  build: VanityPortableSystemV2,
-  portable: VanityPortableSystemV2,
+  build: VanityPortableSystem,
+  portable: VanityPortableSystem,
+  owner: string,
 ): void {
   const mismatches = (Object.keys(build.identities) as Array<keyof typeof build.identities>)
     .filter(kind => build.identities[kind] !== portable.identities[kind])
   if (mismatches.length === 0)
     return
 
-  const owner = source.packageName ?? substrate.modules.getPackageName(dirname(source.entry)) ?? source.entry
   throw new VanityError({
     code: 'VANITY_VITE_BUILD_FAILED',
     message: `the build JS and portable system artifact for package '${owner}' are stale`,
@@ -102,17 +101,17 @@ export function assertFreshPortablePair(
   })
 }
 
-export function getNamespaceKey(system: VanityPortableSystemV2): string {
+function getNamespaceKey(system: VanityPortableSystem): string {
   return `${system.prefix}\0${system.root}\0${system.layerRoot}`
 }
 
 export function assertNamespaceOwnership(
   owner: string,
-  system: VanityPortableSystemV2,
-  owners: Map<string, Map<string, VanityPortableSystemV2>>,
+  system: VanityPortableSystem,
+  owners: Map<string, Map<string, VanityPortableSystem>>,
 ): void {
   const key = getNamespaceKey(system)
-  const namespace = owners.get(key) ?? new Map<string, VanityPortableSystemV2>()
+  const namespace = owners.get(key) ?? new Map<string, VanityPortableSystem>()
   for (const [otherOwner, other] of namespace) {
     if (
       otherOwner !== owner
@@ -134,7 +133,7 @@ export function assertNamespaceOwnership(
   owners.set(key, namespace)
 }
 
-export function runtimeIdentity(system: VanityPortableSystemV2): string {
+export function getRuntimeIdentity(system: VanityPortableSystem): string {
   return `${system.identities.compatibility}:${system.identities.runtime}`
 }
 

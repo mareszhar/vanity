@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { resolvePolicies } from '../system/policies'
 import { defineCssValue } from '../values/extensions'
 import {
   createValueKernel,
@@ -41,8 +42,7 @@ describe('the value kernel', () => {
     const bare = createValueKernel({})
     const context = {
       values: bare,
-      support: VANITY_DEFAULT_CSS_SUPPORT,
-      policies: {},
+      policies: resolvePolicies({ support: VANITY_DEFAULT_CSS_SUPPORT }),
     }
     expect(() => serializeValueWithContext(context, measure)).toThrow(/requires extension com.example.measure@1/)
     const installed = extendValueKernel(bare, identity, { editorial: {} })

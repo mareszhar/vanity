@@ -39,6 +39,7 @@ export type VanityAtomsPropertiesInput<P> = {
 
 export type VanityAtomsToggles<C extends string, G> = { [K in keyof G]: VanityNestedRule<C> }
 
+/** Declare the finite property values and conditional toggles accepted by `atoms()`. */
 export interface VanityAtomsOptions<
   C extends string,
   _L extends string,

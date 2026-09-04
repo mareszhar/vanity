@@ -181,7 +181,7 @@ The locked object owns a private immutable in-process system contract:
 
 ```ts
 interface VanityInProcessSystemContract {
-  readonly portable: VanityPortableSystemV2
+  readonly portable: VanityPortableSystem
   readonly emit: () => void
 }
 ```
@@ -269,6 +269,6 @@ Permanent release evidence:
 - the permanent `sandbox/canary` app with a plain system, two eager styles, one lazy style, mutable token, activatable axis, DOM-free SSR seed, manifest, pure introspection/explanation, and compiler-first cascade prelude;
 - emitted package declarations and the public-surface absence test;
 - the type-accumulation, system-scale, system-package, and compiler-projection spikes.
-- the unified token behavior/type/DX/output/rename/scale suites described in [spec-tokens.md §13](./spec-tokens.md#13-evidence);
+- the token-builder behavior/type/DX/output/rename/scale suites described in [spec-tokens.md §13](./spec-tokens.md#13-evidence);
 - the condition algebra, root/scope, axis-order, introspection, and Chromium canary evidence described in [spec-conditions.md §13](./spec-conditions.md#13-evidence).
 - the styling rule-IR, recipe/anatomy, port/atom, plugin, property-alias, and Hail suites described by their owning specifications.

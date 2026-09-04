@@ -43,4 +43,14 @@ describe('the audit config', () => {
     expect(errors).toHaveError(/unusedToken/)
     expect(errors).toHaveErrorCount(1)
   })
+
+  it('documents the locked audit capability at its cursor', () => {
+    const result = project.query`${preamble}
+      const ds = open.addTokens({ color: { brand: 'red' } }).consolidate()
+      void ds.${cursor('audit')}audit()
+    `
+
+    expect(result.at('audit').hover).toContain('Run every audit this system can evaluate')
+    expect(result.at('audit').hover).toContain('VanityAuditReport')
+  })
 })

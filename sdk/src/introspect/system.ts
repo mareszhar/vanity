@@ -5,7 +5,7 @@
 
 import type {
   VanityCapabilityOrigin,
-  VanityPortableSystemV2,
+  VanityPortableSystem,
   VanitySystemIdentities,
 } from '../system/contract'
 import type { VanityTokenRecord } from './records'
@@ -15,55 +15,94 @@ export const VANITY_INTROSPECTION_FORMAT = 'vanity.introspection/2' as const
 /** Current introspection schema version: `ds.introspect().version === VANITY_INTROSPECTION_VERSION`. */
 export const VANITY_INTROSPECTION_VERSION = 2 as const
 
+/** Source location attached to a semantic entry. */
 export interface VanityDeclaredAt {
+  /** Package-relative source identifier. */
   readonly file: string
+  /** One-based source line. */
   readonly line?: number
+  /** One-based source column. */
   readonly column?: number
 }
 
+/** Identifies the system, module, or plugin that owns a semantic entry. */
 export type VanitySemanticOwner
   = { readonly kind: 'system', readonly id: string }
     | { readonly kind: 'module', readonly id: string }
     | { readonly kind: 'plugin', readonly id: string }
 
+/** Common identity and provenance fields shared by introspection records. */
 export interface VanitySemanticEntry {
+  /** Stable semantic record id. */
   readonly id: string
+  /** Semantic record kind. */
   readonly kind: string
+  /** Owning authoring surface. */
   readonly owner: VanitySemanticOwner
+  /** Source location where the entry was declared. */
   readonly declaredAt?: VanityDeclaredAt
+  /** Human-readable explanation attached to the entry. */
   readonly description?: string
+  /** Deprecation guidance attached to the entry. */
   readonly deprecated?: string
 }
 
+/** Token declaration detail projected into a manifest. */
 export type VanityIntrospectionDeclaration = VanityTokenRecord['semantic']['declarations'][number]
+/** Token dependency detail projected into a manifest. */
 export type VanityIntrospectionDependency = VanityTokenRecord['semantic']['dependencies'][number]
+/** Token expression detail projected into a manifest. */
 export type VanityIntrospectionExpression = VanityTokenRecord['semantic']['expression']
 
+/** Fully resolved token record returned by `ds.introspect()`. */
 export interface VanityIntrospectedToken extends VanitySemanticEntry {
+  /** Token discriminator. */
   readonly kind: 'token'
+  /** Semantic token path. */
   readonly path: readonly string[]
+  /** Root selector or root path owning the token. */
   readonly root: string
+  /** Internal selector scopes applied before the token declaration. */
   readonly scopes?: readonly string[]
+  /** Module-relative path when authored through a builder. */
   readonly module?: readonly string[]
+  /** Emitted custom-property name. */
   readonly name?: `--${string}`
+  /** CSS data type inferred for the token. */
   readonly type: VanityTokenRecord['semantic']['type']
+  /** Resolved reference mode. */
   readonly reference: 'val' | 'var'
+  /** Resolved emission decision. */
   readonly emit: boolean
+  /** Whether runtime updates are permitted. */
   readonly mutable: boolean
+  /** Whether the token has a default value. */
   readonly hasDefault: boolean
+  /** Normalized value expression. */
   readonly expression: VanityIntrospectionExpression
+  /** Inference evidence collected while resolving the token. */
   readonly inference: VanityTokenRecord['semantic']['inference']
+  /** Fold decision recorded for this token. */
   readonly fold: VanityTokenRecord['semantic']['fold']
+  /** Semantic dependencies of the token. */
   readonly dependencies: readonly VanityIntrospectionDependency[]
+  /** CSS feature support result for the token value. */
   readonly support: VanityTokenRecord['semantic']['support']
+  /** CSS declaration contexts generated for the token. */
   readonly declarations: readonly VanityIntrospectionDeclaration[]
+  /** Axis branches and their semantic addresses. */
   readonly branches: VanityTokenRecord['semantic']['branches']
+  /** Browser registration metadata, when enabled. */
   readonly registration?: VanityTokenRecord['semantic']['registration']
+  /** DTCG portability classification. */
   readonly portability: VanityTokenRecord['semantic']['portability']
+  /** Build-time preview value or an honest unavailable result. */
   readonly preview:
     | { readonly status: 'resolved', readonly val: string, readonly environment: Readonly<Record<string, string>>, readonly caveats?: readonly string[] }
     | { readonly status: 'unavailable', readonly reason: string }
+  /** JSON-safe metadata attached to the token. */
   readonly metadata: Readonly<Record<string, unknown>>
+  /** Runtime contract metadata, when the token is mutable or branched. */
   readonly runtime?: VanityTokenRecord['runtime']
 }
 
@@ -71,107 +110,186 @@ export interface VanityIntrospectedToken extends VanitySemanticEntry {
  * Stable JSON-safe semantic map returned by `ds.introspect()`.
  *
  * @example
- * `const map: VanitySystemMapV2 = ds.introspect()`
+ * `const map: VanitySystemMap = ds.introspect()`
  */
-export interface VanitySystemMapV2 {
+export interface VanitySystemMap {
+  /** Introspection wire-format discriminator. */
   readonly format: typeof VANITY_INTROSPECTION_FORMAT
+  /** Current introspection schema version. */
   readonly version: typeof VANITY_INTROSPECTION_VERSION
+  /** Stable semantic system id. */
   readonly id: string
+  /** System-map discriminator. */
   readonly kind: 'system'
+  /** Projection identities shared with the portable contract. */
   readonly identities: VanitySystemIdentities
+  /** Source location where the system was declared. */
   readonly declaredAt?: VanityDeclaredAt
+  /** Custom-property and class-name prefix. */
   readonly prefix: string
+  /** Root selector used by the system. */
   readonly root: string
+  /** Layer receiving token declarations. */
   readonly tokenLayer?: string
+  /** Root layer derived from the prefix. */
   readonly layerRoot: string
+  /** Value and constructor capabilities exposed by the system. */
   readonly capabilities: VanitySemanticEntry & {
+    /** Capability record discriminator. */
     readonly kind: 'capabilities'
+    /** Deterministic capability signature. */
     readonly signature: string
+    /** CSS feature target used for serialization. */
     readonly supportTarget: string
   }
+  /** Resolved policy data keyed by known and extension policy names. */
   readonly policies: Readonly<Record<string, unknown>>
+  /** Cascade layers in deterministic order. */
   readonly layers: readonly (VanitySemanticEntry & {
+    /** Layer record discriminator. */
     readonly kind: 'layer'
+    /** Public layer name. */
     readonly name: string
+    /** Zero-based layer order. */
     readonly order: number
   })[]
+  /** Named conditions and their normalized trigger arms. */
   readonly conditions: Readonly<Record<string, VanitySemanticEntry & {
+    /** Condition record discriminator. */
     readonly kind: 'condition'
+    /** Public condition name. */
     readonly name: string
+    /** Readable condition expression. */
     readonly readable: string
-    readonly arms: VanityPortableSystemV2['conditionArms'][string]
-    readonly ast: VanityPortableSystemV2['conditionAsts'][string]
+    /** Condition trigger arms. */
+    readonly arms: VanityPortableSystem['conditionArms'][string]
+    /** Condition AST. */
+    readonly ast: VanityPortableSystem['conditionAsts'][string]
   }>>
+  /** Environmental axes and their mode metadata. */
   readonly axes: Readonly<Record<string, VanitySemanticEntry & {
+    /** Axis record discriminator. */
     readonly kind: 'axis'
+    /** Public axis name. */
     readonly name: string
+    /** Default axis mode. */
     readonly defaultMode?: string
+    /** Deterministic mode order. */
     readonly modeOrder: readonly string[]
-    readonly modes: NonNullable<VanityPortableSystemV2['axes']>['definitions'][string]['modes']
+    /** Mode trigger and derivation metadata. */
+    readonly modes: NonNullable<VanityPortableSystem['axes']>['definitions'][string]['modes']
+    /** Custom runtime control identity. */
     readonly control?: { readonly id: string }
-    readonly native?: NonNullable<VanityPortableSystemV2['axes']>['definitions'][string]['native']
+    /** Native scheme policy. */
+    readonly native?: NonNullable<VanityPortableSystem['axes']>['definitions'][string]['native']
   }>>
+  /** Declared roots and the axes they carry. */
   readonly roots: Readonly<Record<string, VanitySemanticEntry & {
+    /** Root record discriminator. */
     readonly kind: 'root'
+    /** Root path used by runtime bindings. */
     readonly path: string
+    /** CSS selector used to locate the root. */
     readonly selector: string
+    /** Internal selector scopes. */
     readonly scopes?: readonly string[]
+    /** Axes whose declarations are emitted at this root. */
     readonly axes: readonly string[]
   }>>
+  /** Resolved tokens keyed by semantic path. */
   readonly tokens: Readonly<Record<string, VanityIntrospectedToken>>
+  /** Mounted plugins keyed by stable id. */
   readonly plugins: Readonly<Record<string, VanitySemanticEntry & {
+    /** Plugin record discriminator. */
     readonly kind: 'plugin'
+    /** Public plugin name. */
     readonly name: string
+    /** Plugin release version. */
     readonly version: string
+    /** Plugin behavior fingerprint. */
     readonly fingerprint?: string
   }>>
+  /** Installed value extensions keyed by stable id. */
   readonly extensions: Readonly<Record<string, VanitySemanticEntry & {
+    /** Extension record discriminator. */
     readonly kind: 'extension'
+    /** Public extension name. */
     readonly name: string
+    /** Extension release version. */
     readonly version: string
+    /** Extension behavior fingerprint. */
     readonly fingerprint?: string
   }>>
+  /** JSON-safe constants keyed by public name. */
   readonly consts: Readonly<Record<string, VanitySemanticEntry & {
+    /** Constant record discriminator. */
     readonly kind: 'const'
+    /** Public constant name. */
     readonly name: string
+    /** Serialized constant value. */
     readonly value: unknown
   }>>
+  /** Value constructors keyed by public name. */
   readonly constructors: Readonly<Record<string, VanitySemanticEntry & {
+    /** Constructor record discriminator. */
     readonly kind: 'constructor'
+    /** Public constructor name. */
     readonly name: string
+    /** Capability owner. */
     readonly origin: VanityCapabilityOrigin
   }>>
+  /** Public utilities keyed by dot path. */
   readonly utilities: Readonly<Record<string, VanitySemanticEntry & {
+    /** Utility record discriminator. */
     readonly kind: 'utility'
+    /** Utility path segments. */
     readonly path: readonly string[]
   }>>
+  /** Named rule groups and their normalized selector fingerprints. */
   readonly ruleGroups: Readonly<Record<string, VanitySemanticEntry & {
+    /** Rule-group record discriminator. */
     readonly kind: 'rule-group'
+    /** Public rule-group name. */
     readonly name: string
+    /** Optional rule-group description. */
     readonly description?: string
+    /** Cascade layer receiving the group. */
     readonly layer?: string
+    /** Deterministic order within the layer. */
     readonly order?: number
+    /** Selectors emitted by the group. */
     readonly selectors: readonly string[]
+    /** Fingerprint of the normalized group. */
     readonly fingerprint: string
   }>>
-  readonly runtime: VanityPortableSystemV2['runtime']
+  /** Runtime contract projected from the locked system. */
+  readonly runtime: VanityPortableSystem['runtime']
+  /** Ordered overwrite and augmentation records. */
   readonly overwrites: readonly (VanitySemanticEntry & {
+    /** Overwrite record discriminator. */
     readonly kind: 'overwrite'
+    /** Operation applied to the target. */
     readonly operation: 'augment' | 'overwrite'
-    readonly target: VanityPortableSystemV2['overwrites'][number]['kind']
+    /** Facet receiving the operation. */
+    readonly target: VanityPortableSystem['overwrites'][number]['kind']
+    /** Paths affected by the operation. */
     readonly paths: readonly string[]
   })[]
+  /** Resolved audit levels for each category. */
   readonly audits: Readonly<Record<string, VanitySemanticEntry & {
+    /** Audit record discriminator. */
     readonly kind: 'audit'
+    /** Audit category name. */
     readonly name: string
+    /** Effective audit level. */
     readonly level: 'off' | 'warn' | 'error'
   }>>
 }
 
 /** Build the one deterministic, data-only semantic representation of a system. */
-export function introspectSystem(portable: VanityPortableSystemV2): VanitySystemMapV2 {
+export function introspectSystem(portable: VanityPortableSystem): VanitySystemMap {
   const systemId = `system:${portable.identities.compatibility}`
-  const systemSource = declaredAt(portable.source)
+  const systemSource = createDeclaredAt(portable.source)
   const systemOwner = getOwner('system', systemId)
   const getSemanticOwner = (id: string, fallback: VanitySemanticOwner = systemOwner): VanitySemanticOwner =>
     portable.owners[id] ?? fallback
@@ -338,7 +456,7 @@ export function introspectSystem(portable: VanityPortableSystemV2): VanitySystem
       id: `overwrite:${index}:${entry.kind}:${entry.paths.join(',')}`,
       kind: 'overwrite',
       owner: systemOwner,
-      ...(declaredAt(entry.source) === undefined ? {} : { declaredAt: declaredAt(entry.source) }),
+      ...(createDeclaredAt(entry.source) === undefined ? {} : { declaredAt: createDeclaredAt(entry.source) }),
       operation: entry.operation ?? 'overwrite',
       target: entry.kind,
       paths: entry.paths,
@@ -354,19 +472,19 @@ export function introspectSystem(portable: VanityPortableSystemV2): VanitySystem
         level: portable.audits[name],
       },
     ])),
-  }) as VanitySystemMapV2
+  }) as VanitySystemMap
 }
 
 function createIntrospectedToken(
   token: VanityTokenRecord,
-  portable: VanityPortableSystemV2,
+  portable: VanityPortableSystem,
   defaultOwner: VanitySemanticOwner,
 ): VanityIntrospectedToken {
   const semantic = token.semantic
   const tokenOwner = token.module === undefined || token.module.length === 0
     ? defaultOwner
     : getOwner('module', `module:${token.module.join('.')}`)
-  const source = declaredAt(token.file, token.line, token.column)
+  const source = createDeclaredAt(token.file, token.line, token.column)
   return {
     id: `token:${token.path}`,
     kind: 'token',
@@ -391,7 +509,7 @@ function createIntrospectedToken(
     branches: semantic.branches,
     ...(semantic.registration === undefined ? {} : { registration: semantic.registration }),
     portability: semantic.portability,
-    preview: tokenPreview(token, portable),
+    preview: getTokenPreview(token, portable),
     metadata: semantic.metadata,
     ...(token.runtime === undefined ? {} : { runtime: token.runtime }),
     ...(token.description === undefined ? {} : { description: token.description }),
@@ -399,7 +517,7 @@ function createIntrospectedToken(
   }
 }
 
-function tokenPreview(token: VanityTokenRecord, portable: VanityPortableSystemV2): VanityIntrospectedToken['preview'] {
+function getTokenPreview(token: VanityTokenRecord, portable: VanityPortableSystem): VanityIntrospectedToken['preview'] {
   const environment = Object.freeze(Object.fromEntries(Object.entries(portable.axes?.definitions ?? {}).flatMap(([axis, definition]) =>
     definition.defaultMode === undefined ? [] : [[axis, definition.defaultMode]],
   )))
@@ -439,7 +557,7 @@ function tokenPreview(token: VanityTokenRecord, portable: VanityPortableSystemV2
   }
 }
 
-function declaredAt(file: string | undefined, line?: number, column?: number): VanityDeclaredAt | undefined {
+function createDeclaredAt(file: string | undefined, line?: number, column?: number): VanityDeclaredAt | undefined {
   if (file === undefined)
     return undefined
   return {

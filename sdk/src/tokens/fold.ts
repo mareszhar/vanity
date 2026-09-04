@@ -1,4 +1,5 @@
 import type { VanityInternalTokenHandle } from './handle'
+import { VanityError } from '../diagnostics'
 
 export interface VanityTokenFoldEvidence {
   readonly status: 'folded' | 'preserved' | 'unavailable'
@@ -38,13 +39,16 @@ export function rememberTokenFold(
  *
  * @internal
  */
-export function tokenFoldOf(handle: VanityInternalTokenHandle): VanityTokenFoldEvidence {
+export function readTokenFoldEvidence(handle: VanityInternalTokenHandle): VanityTokenFoldEvidence {
   const read = foldEvidence().get(handle)
   if (!read) {
-    throw new TypeError(
-      '[vanity] foldOf() needs a token from a system consolidated in this process; '
-      + 'restored application handles no longer carry build-time fold evidence',
-    )
+    throw new VanityError({
+      code: 'VANITY_TESTING_INVALID_INPUT',
+      message: 'foldOf() needs a token from a system consolidated in this process',
+      detail: ['restored application handles no longer carry build-time fold evidence'],
+      path: ['token'],
+      fix: 'pass a token from a system consolidated in the current process',
+    })
   }
   return read()
 }

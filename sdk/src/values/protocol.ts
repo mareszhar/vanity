@@ -4,6 +4,7 @@
  * `defineCssOperation`, never by subclassing these classes.
  */
 
+import type { VanityResolvedPolicies } from './policies'
 import type {
   VanityCssDataType,
   VanityCssInput,
@@ -12,7 +13,9 @@ import type {
   VanitySelfValue,
   VanityValue,
 } from './types'
-import { CssValue, isVanityValue, serializeCssText } from './types'
+import { throwValueError } from './error'
+import { serializeCssText } from './serialize'
+import { CssValue, isVanityValue } from './types'
 
 const CONSTRUCTOR_USAGES = new WeakMap<object, ReadonlySet<string>>()
 
@@ -38,6 +41,7 @@ export function getConstructorUsagesOfValue(value: unknown): ReadonlySet<string>
     : new Set()
 }
 
+/** Discriminator for the portable value-expression nodes used in introspection. */
 export type VanityExpressionKind
   = | 'literal'
     | 'function'
@@ -96,7 +100,7 @@ export interface VanityCssSupportTarget {
 export interface VanitySerializeContext {
   readonly support: VanityCssSupportTarget
   /** Host policy book used only by adaptive portable values. */
-  readonly policies: Readonly<Record<string, unknown>>
+  readonly policies: VanityResolvedPolicies
   serialize: (value: VanityValue | VanityCssInput) => string
   resolveReference: (reference: VanityReference) => string
   /**
@@ -209,6 +213,14 @@ export const VANITY_DEFAULT_CSS_SUPPORT: VanityCssSupportTarget = Object.freeze(
   ]),
 })
 
+const EMPTY_RESOLVED_POLICIES: VanityResolvedPolicies = Object.freeze({
+  constructors: Object.freeze({}),
+  support: VANITY_DEFAULT_CSS_SUPPORT,
+  layerOrder: Object.freeze([]),
+  tokens: Object.freeze({ reference: 'var', emit: true }),
+  plugins: Object.freeze({}),
+})
+
 /**
  * Define the CSS capability set used for folding and fallback decisions.
  *
@@ -219,8 +231,14 @@ export function defineCssSupportTarget(input: {
   id: string
   features: Iterable<VanityCssFeature>
 }): VanityCssSupportTarget {
-  if (input.id.trim().length === 0)
-    throw new TypeError('[vanity] a CSS support target needs a stable non-empty id')
+  if (input.id.trim().length === 0) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      'a CSS support target needs a stable non-empty id',
+      ['support', 'id'],
+      'provide a stable non-empty support target id',
+    )
+  }
 
   return Object.freeze({ id: input.id, features: createImmutableSet(input.features) })
 }
@@ -242,8 +260,14 @@ export function createCssValueSerializer(support: VanityCssSupportTarget): {
 export function getNode<Type extends VanityCssDataType>(value: VanityValue<Type>): VanityExpressionNode<Type> {
   const node = (value as Partial<VanityNodeValue<Type>>)[VANITY_NODE]
 
-  if (!node)
-    throw new TypeError('[vanity] this value does not expose a portable vanity expression node')
+  if (!node) {
+    throwValueError(
+      'VANITY_VALUE_INVALID',
+      'this value does not expose a portable vanity expression node',
+      ['value'],
+      'pass a value created by Vanity or a compatible value extension',
+    )
+  }
 
   return node
 }
@@ -259,9 +283,11 @@ export function serializeNode(node: VanityExpressionNode, context: VanitySeriali
     if (node.fallback)
       return serializeNode(node.fallback, context)
 
-    throw new TypeError(
-      `[vanity] ${node.source?.helper ?? node.kind} requires ${missing.join(', ')}, which is outside CSS support target "${context.support.id}"; `
-      + 'provide a proven fallback, choose a compatible support target, or use an acknowledged raw/experimental form',
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `${node.source?.helper ?? node.kind} requires ${missing.join(', ')}, which is outside CSS support target "${context.support.id}"; no "${context.support.id}" fallback is available`,
+      'value',
+      'provide a proven fallback, choose a compatible support target, or use an acknowledged raw/experimental form',
     )
   }
 
@@ -273,7 +299,7 @@ export function serializeNode(node: VanityExpressionNode, context: VanitySeriali
     case 'operation': {
       const folded = foldNumericNode(node)
       if (folded !== undefined)
-        return foldedNumber(folded)
+        return foldNumber(folded)
       const expression = `${serializeNode(node.left, context)} ${node.operator} ${serializeNode(node.right, context)}`
       return node.parenthesize ? `(${expression})` : expression
     }
@@ -368,7 +394,7 @@ export function createSerializeContext(
   support: VanityCssSupportTarget = VANITY_DEFAULT_CSS_SUPPORT,
   resolveReference: VanitySerializeContext['resolveReference'] = getSelfReference,
   resolveReferenceValue?: VanitySerializeContext['resolveReferenceValue'],
-  policies: Readonly<Record<string, unknown>> = {},
+  policies: VanityResolvedPolicies = EMPTY_RESOLVED_POLICIES,
 ): VanitySerializeContext {
   const context: VanitySerializeContext = {
     support,
@@ -385,7 +411,12 @@ export function createSerializeContext(
           return value.var
         if ((typeof value === 'object' || typeof value === 'function') && value !== null && '$var' in value)
           return String(value)
-        throw new TypeError('[vanity] the serializer received a value from an incompatible expression protocol')
+        throwValueError(
+          'VANITY_VALUE_INVALID',
+          'the serializer received a value from an incompatible expression protocol',
+          ['value'],
+          'pass a value created by the same portable expression protocol',
+        )
       }
       return serializeNode(value[VANITY_NODE], context)
     },
@@ -594,8 +625,14 @@ export function normalizeExtension(identity: VanityExtensionIdentity): VanityExt
   const version = String(identity.version).trim()
   const fingerprint = identity.fingerprint?.trim()
 
-  if (!id || !version)
-    throw new TypeError('[vanity] opaque CSS value semantics require a stable extension id and version')
+  if (!id || !version) {
+    throwValueError(
+      'VANITY_VALUE_INVALID',
+      'opaque CSS value semantics require a stable extension id and version',
+      'extension',
+      'provide non-empty extension id and version fields',
+    )
+  }
 
   return Object.freeze({ id, version, ...(fingerprint ? { fingerprint } : {}) })
 }
@@ -613,10 +650,22 @@ function createBaseNode<T extends VanityExpressionNode>(
 }
 
 function getSelfReference(reference: VanityReference): string {
-  if (reference.resolution === 'system')
-    throw new TypeError('[vanity] this value needs a finalized system before it can be serialized')
-  if (!reference.name)
-    throw new TypeError('[vanity] a self-contained custom-property reference needs its final name')
+  if (reference.resolution === 'system') {
+    throwValueError(
+      'VANITY_VALUE_INVALID',
+      'this value needs a finalized system before it can be serialized',
+      'value.reference',
+      'serialize the value through the finalized system that owns its token reference',
+    )
+  }
+  if (!reference.name) {
+    throwValueError(
+      'VANITY_VALUE_INVALID',
+      'a self-contained custom-property reference needs its final name',
+      'value.reference',
+      'provide the final custom-property name before serializing the value',
+    )
+  }
   return reference.name
 }
 
@@ -641,8 +690,14 @@ function dedupeDependencies(dependencies: readonly VanityReference[]): readonly 
 
 function getCustomPropertyName(reference: string): `--${string}` {
   const match = reference.match(/^var\((--[^,\s)]+)/)
-  if (!match)
-    throw new TypeError(`[vanity] '${reference}' is not a custom-property var() reference`)
+  if (!match) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `'${reference}' is not a custom-property var() reference`,
+      'value.reference',
+      'provide a var(--custom-property) reference',
+    )
+  }
   return match[1] as `--${string}`
 }
 
@@ -669,19 +724,31 @@ function inferLiteralType(value: VanityCssInput): VanityCssDataType {
 }
 
 function formatFiniteNumber(value: number): string {
-  if (!Number.isFinite(value))
-    throw new RangeError(`[vanity] a CSS number must be finite; received ${value}`)
+  if (!Number.isFinite(value)) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `a CSS number must be finite; received ${value}`,
+      'value',
+      'pass a finite number',
+    )
+  }
   return String(Object.is(value, -0) ? 0 : value)
 }
 
 /** Remove binary floating-point residue from build-folded decimal arithmetic. */
-function foldedNumber(value: number): string {
+function foldNumber(value: number): string {
   return formatFiniteNumber(Number(value.toPrecision(15)))
 }
 
 function assertNonEmpty(value: string): string {
-  if (value.trim().length === 0)
-    throw new TypeError('[vanity] a CSS value cannot be empty')
+  if (value.trim().length === 0) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      'a CSS value cannot be empty',
+      'value',
+      'provide non-empty CSS text',
+    )
+  }
   return value
 }
 

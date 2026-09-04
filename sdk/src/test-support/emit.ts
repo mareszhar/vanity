@@ -16,7 +16,7 @@ export function emit<T>(body: () => T): EmitResult<T> {
   const cssObjs: unknown[] = []
   const localClassNames = new Set<string>()
 
-  substrate.modules.installCapture({
+  substrate.backend.installCapture({
     appendCss: cssObj => void cssObjs.push(cssObj),
     registerClassName: className => void localClassNames.add(className),
     registerComposition: () => {},
@@ -24,7 +24,7 @@ export function emit<T>(body: () => T): EmitResult<T> {
     getIdentOption: () => 'debug',
   })
 
-  substrate.modules.setFileScope({ filePath: 'src/test-support/prism.css.ts', packageName: '@prism/fixture' })
+  substrate.backend.setFileScope({ filePath: 'src/test-support/prism.css.ts', packageName: '@prism/fixture' })
 
   try {
     const returned = body()
@@ -37,7 +37,7 @@ export function emit<T>(body: () => T): EmitResult<T> {
     return { css, returned }
   }
   finally {
-    substrate.modules.endFileScope()
-    substrate.modules.removeCapture()
+    substrate.backend.finishFileScope()
+    substrate.backend.removeCapture()
   }
 }

@@ -8,14 +8,16 @@
  * configured substrate — which is never re-exported.
  */
 
+import type { VanityDiagnosticCode } from '../diagnostics'
 import type { VanityRuntimeContract, VanityRuntimeTokenContract } from '../runtime/contract'
 import type { VanityAxisDefinition, VanityAxisRegistry, VanityAxisTriggerArm } from '../system/axes'
+import type { VanityResolvedPolicies } from '../values/policies'
 import type { VanityCssSupportTarget, VanityExpressionNode } from '../values/protocol'
 import type { VanityCssValue, VanityValue } from '../values/types'
 import type { VanityTokenBuilder } from './builder'
 import type { VanityColorExpr } from './color'
 import type { VanityExprTraits, VanityResolver, VanityScheme } from './expressions'
-import type { VanityInternalTokenBranchHandle, VanityInternalTokenHandle, VanitySemanticTokenAddress } from './handle'
+import type { VanityHandleErrorInput, VanityHandleOptions, VanityInternalTokenBranchHandle, VanityInternalTokenHandle, VanitySemanticTokenAddress } from './handle'
 import type {
   VanityDefaultTokenPolicy,
   VanityGraphInput,
@@ -26,10 +28,11 @@ import type {
   VanityTokens,
   VanityTokensOptions,
 } from './types'
+import { getStyleModuleFile } from '../css/context'
 import { emitTokenCss } from '../css/tokens'
 import { checkSelector } from '../css/validation'
 import { didYouMean, getDiagnosticSource, VanityError } from '../diagnostics'
-import { collectInspection, inspecting, record } from '../introspect/records'
+import { collectInspection, isInspecting, record } from '../introspect/records'
 import { sealRuntimeContract } from '../runtime/contract'
 import { substrate } from '../substrate'
 import {
@@ -39,6 +42,7 @@ import {
   serializeNode,
   getNode as valueNodeOf,
 } from '../values/protocol'
+import { serializeCssText } from '../values/serialize'
 import { isCssValue } from '../values/types'
 import { getColorRequirements, handleColorMethods, isColorValue, isContrastValue } from './color'
 import { createTokenFactory, isConfiguredToken } from './config'
@@ -61,7 +65,19 @@ import { formatOklch, pickLegible } from './math'
 import { getTokenName } from './names'
 import { createTokenCheckResolver, resolveGraph, runTokenChecks } from './resolve'
 
-export const GRAPH = Symbol.for('vanity.graph')
+const TOKEN_HANDLE_OPTIONS: VanityHandleOptions = {
+  serializeFallback: value => serializeCssText(value as Parameters<typeof serializeCssText>[0]),
+  handleError: (input: VanityHandleErrorInput): never => {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_DEFINITION',
+      message: input.message,
+      path: input.path,
+      fix: input.fix,
+    })
+  },
+}
+
+const GRAPH = Symbol.for('vanity.graph')
 export const TOKEN_MODULE = Symbol.for('vanity.tokenModule')
 export const VANITY_MODULE_TOKEN_REF = Symbol.for('vanity.moduleTokenRef')
 const NODE = Symbol.for('vanity.node')
@@ -143,7 +159,7 @@ export interface TokenGraph {
   /** System-bound serializer; absent only on the low-level graph helper. */
   serializeValue?: (value: VanityCssValue) => string
   support?: VanityCssSupportTarget
-  policies?: Readonly<Record<string, unknown>>
+  policies?: VanityResolvedPolicies
   axes?: VanityAxisRegistry<any>
   phaseLayers?: VanityTokenPhaseLayers
   contributions?: ReadonlySet<object>
@@ -161,8 +177,14 @@ export function getTokenGraph(tokens: object): TokenGraph | undefined {
 /** Built-in constructor provenance per token, used by system policy borders. */
 export function getConstructorUsages(tokens: object): Readonly<Record<string, readonly string[]>> {
   const graph = getTokenGraph(tokens)
-  if (!graph)
-    throw new TypeError('[vanity] constructor-usage inspection needs a resolved token module')
+  if (!graph) {
+    throwTokenModuleError(
+      'VANITY_TOKENS_INVALID_DEFINITION',
+      'constructor-usage inspection needs a resolved token module',
+      ['tokens'],
+      'pass tokens returned by a finalized token module',
+    )
+  }
   return Object.freeze(Object.fromEntries([...graph.nodes.values()].map((node) => {
     const usages = new Set<string>()
     collectDefinitionConstructorUsages(node.definition, usages)
@@ -215,11 +237,11 @@ function collectColorConstructorUsages(expr: VanityColorExpr, usages: Set<string
       usages.add('oklch')
       collectColorConstructorUsages(expr.input, usages)
       Object.values(expr.channels).forEach((channel) => {
-        const values: readonly unknown[] = channel && typeof channel === 'object' && 'operations' in channel
+        const values: readonly unknown[] = channel && typeof channel === 'object' && Object.hasOwn(channel, 'operations')
           ? (channel as { readonly operations: readonly { readonly value: unknown }[] }).operations.map(operation => operation.value)
           : [channel]
         values.forEach((value) => {
-          if (value && typeof value === 'object' && 'type' in value)
+          if (value && typeof value === 'object' && Object.hasOwn(value, 'type'))
             collectNodeConstructorUsages(valueNodeOf(value as VanityValue), usages)
         })
       })
@@ -228,11 +250,11 @@ function collectColorConstructorUsages(expr: VanityColorExpr, usages: Set<string
       usages.add(expr.function)
       collectColorConstructorUsages(expr.input, usages)
       ;[...expr.channels, expr.alpha].forEach((channel) => {
-        const values: readonly unknown[] = channel && typeof channel === 'object' && 'operations' in channel
+        const values: readonly unknown[] = channel && typeof channel === 'object' && Object.hasOwn(channel, 'operations')
           ? (channel as { readonly operations: readonly { readonly value: unknown }[] }).operations.map(operation => operation.value)
           : [channel]
         values.forEach((value) => {
-          if (value && (typeof value === 'object' || typeof value === 'function') && 'type' in value)
+          if (value && (typeof value === 'object' || typeof value === 'function') && Object.hasOwn(value, 'type'))
             collectNodeConstructorUsages(valueNodeOf(value as VanityValue), usages)
         })
       })
@@ -264,17 +286,29 @@ export function getRuntimeSchemas(tokens: object): Readonly<Record<string, impor
 /** Data-only token restoration table used by compiler-owned runtime projection. */
 export function getTokenRestorations(tokens: object): readonly import('./handle').VanityHandleMeta[] {
   const graph = getTokenGraph(tokens)
-  if (!graph)
-    throw new TypeError('[vanity] token restoration needs a resolved token module')
-  return Object.freeze([...graph.nodes.values()].map(node => Object.freeze(tokenRestorationMeta(node, graph))))
+  if (!graph) {
+    throwTokenModuleError(
+      'VANITY_TOKENS_INVALID_DEFINITION',
+      'token restoration needs a resolved token module',
+      ['tokens'],
+      'pass tokens returned by a finalized token module',
+    )
+  }
+  return Object.freeze([...graph.nodes.values()].map(node => Object.freeze(createTokenRestorationMeta(node, graph))))
 }
 
-/** Emit a previously resolved graph. Consolidation itself always uses `emitCss: false`. */
+/** Emit a resolved graph. Consolidation itself always uses `emitCss: false`. */
 export function emitTokenGraph(tokens: object): void {
   const graph = getTokenGraph(tokens)
-  if (!graph)
-    throw new TypeError('[vanity] system emission needs a resolved token module')
-  if (inspecting())
+  if (!graph) {
+    throwTokenModuleError(
+      'VANITY_TOKENS_INVALID_DEFINITION',
+      'system emission needs a resolved token module',
+      ['tokens'],
+      'pass tokens returned by a finalized token module',
+    )
+  }
+  if (isInspecting())
     recordGraph(graph)
   emitTokenCss(graph)
 }
@@ -302,14 +336,26 @@ export function getTokenInspection(
   handle: VanityInternalTokenHandle,
 ): import('../introspect/records').VanityTokenRecord {
   const node = getNode(handle)
-  if (!node || graph.nodes.get(node.key) !== node)
-    throw new TypeError('[vanity] explain() needs a token handle owned by this system')
+  if (!node || graph.nodes.get(node.key) !== node) {
+    throwTokenModuleError(
+      'VANITY_TOKENS_UNKNOWN_REF',
+      'explain() needs a token handle owned by this system',
+      ['token'],
+      'pass a token handle created by this system',
+    )
+  }
 
   getTokenInspections(graph)
   const cached = TOKEN_INSPECTION_CACHE.get(graph)!
   const token = cached.get(node.key)
-  if (!token)
-    throw new TypeError(`[vanity] no explanation record exists for ${node.key}`)
+  if (!token) {
+    throwTokenModuleError(
+      'VANITY_TOKENS_UNKNOWN_REF',
+      `no explanation record exists for ${node.key}`,
+      [node.key],
+      'explain a token that is present in the finalized system',
+    )
+  }
   return token
 }
 
@@ -326,15 +372,6 @@ export function getNode(handle: VanityInternalTokenHandle): TokenNode | undefine
  * knowledge for surfaces that infer a type from a token default (ports).
  * Undefined for handles outside a resolved graph.
  */
-export function getTokenKind(handle: VanityInternalTokenHandle): 'color' | 'value' | undefined {
-  const node = getNode(handle)
-
-  if (!node)
-    return undefined
-
-  return node.definition.kind === 'literal' || (node.definition.kind === 'value' && node.definition.value.type !== 'color') ? 'value' : 'color'
-}
-
 // ─── defineTokens ────────────────────────────────────────────────────────────
 
 export type TokenDerivation = (m: Record<string, unknown>) => object
@@ -348,13 +385,13 @@ export type TokenContribution
   }
   | {
     readonly kind: 'derive'
-    readonly stage: TokenDerivation
+    readonly derive: TokenDerivation
     readonly emission: VanityTokenModuleOptions
     readonly moduleId?: symbol
     readonly modulePath?: readonly string[]
   }
   | { readonly kind: 'patch', readonly mode: 'augment' | 'overwrite', readonly graph: VanityGraphInput }
-  | { readonly kind: 'patch-stage', readonly mode: 'augment' | 'overwrite', readonly stage: TokenDerivation }
+  | { readonly kind: 'patch-stage', readonly mode: 'augment' | 'overwrite', readonly derive: TokenDerivation }
 
 const CONTRIBUTION_PATHS = new WeakMap<object, readonly string[]>()
 
@@ -372,7 +409,7 @@ export interface TokenResolutionOptions extends VanityTokensOptions<object, stri
   readonly layers?: readonly string[]
   readonly serializeValue?: (value: VanityCssValue) => string
   readonly support?: VanityCssSupportTarget
-  readonly policies?: Readonly<Record<string, unknown>>
+  readonly policies?: VanityResolvedPolicies
   readonly axes?: VanityAxisRegistry<any>
   readonly phaseLayers?: VanityTokenPhaseLayers
   /** Introspection/interchange finalization can build the graph without touching a stylesheet. */
@@ -403,7 +440,7 @@ export function defineTokens<const T extends VanityGraphInput = Record<never, ne
   return createTokenModule([{ kind: 'seed', graph, emission: {} }], undefined, undefined, {}) as unknown as VanityTokenBuilder<T>
 }
 
-/** Canonical, system-portable module used by the unified token builder. */
+/** Canonical, system-portable module used by the token builder. */
 export function definePortableTokenModule<
   const T extends VanityGraphInput = Record<never, never>,
   const Policy extends VanityTokenPolicy = VanityDefaultTokenPolicy,
@@ -463,17 +500,41 @@ export function freezeTokenGroup(group: object): object {
 
 function validateModuleOptions(options: VanityTokenModuleOptions): void {
   if (options.root !== undefined) {
-    if (options.root.includes('&') || checkSelector(options.root))
-      throw new TypeError(`[vanity] token module root '${options.root}' is not a valid absolute CSS selector`)
+    if (options.root.includes('&') || checkSelector(options.root)) {
+      throwTokenModuleError(
+        'VANITY_TOKENS_INVALID_CONFIG',
+        `token module root '${options.root}' is not a valid absolute CSS selector`,
+        'root',
+        'use an absolute selector without \'&\'',
+      )
+    }
   }
-  if (options.runtimeRoot !== undefined && checkSelector(options.runtimeRoot))
-    throw new TypeError(`[vanity] token module runtime root '${options.runtimeRoot}' is not a valid CSS selector`)
+  if (options.runtimeRoot !== undefined && checkSelector(options.runtimeRoot)) {
+    throwTokenModuleError(
+      'VANITY_TOKENS_INVALID_CONFIG',
+      `token module runtime root '${options.runtimeRoot}' is not a valid CSS selector`,
+      'runtimeRoot',
+      'use a valid CSS selector for the runtime root',
+    )
+  }
   for (const scope of options.scopes ?? []) {
-    if (scope.trim().length === 0)
-      throw new TypeError('[vanity] a token module @scope prelude cannot be empty')
+    if (scope.trim().length === 0) {
+      throwTokenModuleError(
+        'VANITY_TOKENS_INVALID_CONFIG',
+        'a token module @scope prelude cannot be empty',
+        'scopes',
+        'remove the empty scope or provide a valid @scope prelude',
+      )
+    }
   }
-  if (options.layer !== undefined && !isLayerPath(options.layer))
-    throw new TypeError(`[vanity] token module layer '${options.layer}' is not a valid dotted CSS layer path`)
+  if (options.layer !== undefined && !isLayerPath(options.layer)) {
+    throwTokenModuleError(
+      'VANITY_TOKENS_INVALID_CONFIG',
+      `token module layer '${options.layer}' is not a valid dotted CSS layer path`,
+      'layer',
+      'use a dotted CSS layer path such as tokens.components',
+    )
+  }
 }
 
 function isLayerPath(value: string): boolean {
@@ -537,7 +598,7 @@ export function buildTokens<T extends object, Prefix extends string = 'vanity'>(
   const prefix = options.prefix ?? 'vanity'
   const defaultRoot = options.root ?? ':root'
   const defaultLayer = options.layer
-  const file = substrate.modules.getFileScope()?.filePath
+  const file = getStyleModuleFile()?.filePath
   const nodes = new Map<string, TokenNode>()
   const tree: Record<string, unknown> = {}
 
@@ -586,7 +647,7 @@ export function buildTokens<T extends object, Prefix extends string = 'vanity'>(
 
     stageIndex++
     hydratePartialGraph(prefix, nodes, options, file)
-    const additions = contribution.stage(createRefsProxy(
+    const additions = contribution.derive(createRefsProxy(
       tree,
       [],
       `${contribution.kind === 'patch-stage' ? 'patch' : 'derivation'} stage ${stageIndex}`,
@@ -595,8 +656,9 @@ export function buildTokens<T extends object, Prefix extends string = 'vanity'>(
 
     if (!isGroup(additions)) {
       throw new VanityError({
-        code: 'VANITY_TOKENS_INVALID_COLOR',
+        code: 'VANITY_TOKENS_INVALID_DEFINITION',
         message: `${contribution.kind === 'patch-stage' ? 'patch' : 'derivation'} stage ${stageIndex} did not return a token group`,
+        path: `tokens.${contribution.kind}.${stageIndex}`,
         file,
         fix: 'return an object whose leaves are token values',
       })
@@ -672,7 +734,7 @@ export function buildTokens<T extends object, Prefix extends string = 'vanity'>(
     substrate.modules.registerFunctionSerialization(node.handle as unknown as (...args: unknown[]) => unknown, {
       importPath: '@mszr/vanity/runtime',
       importName: 'restoreToken',
-      args: [tokenRestorationMeta(node, resolved) as any],
+      args: [createTokenRestorationMeta(node, resolved) as any],
     })
   }
 
@@ -681,7 +743,7 @@ export function buildTokens<T extends object, Prefix extends string = 'vanity'>(
 
   Object.defineProperty(tree, GRAPH, { value: resolved })
 
-  if (options.emitCss !== false && inspecting())
+  if (options.emitCss !== false && isInspecting())
     recordGraph(resolved)
 
   return tree as VanityTokens<T, Prefix>
@@ -748,8 +810,14 @@ function applyTokenPatch(
         current.modulePath,
       )
       const normalizedReplacement = temporaryNodes.get(key)
-      if (!normalizedReplacement)
-        throw new TypeError(`[vanity] ${contribution.mode}Tokens() did not produce a token at '${key}'`)
+      if (!normalizedReplacement) {
+        throwTokenModuleError(
+          'VANITY_TOKENS_INVALID_OVERRIDE',
+          `${contribution.mode}Tokens() did not produce a token at '${key}'`,
+          key,
+          `return a token value for '${key}' from the ${contribution.mode}Tokens() input`,
+        )
+      }
       const replacement = filterPatchBranches(normalizedReplacement, resolvedRaw)
 
       const next = mergePatchedNode(current, replacement, contribution.mode, patchesBase, file)
@@ -775,7 +843,7 @@ function filterPatchBranches(replacement: TokenNode, raw: unknown): TokenNode {
   return {
     ...replacement,
     branches: replacement.branches.filter((branch) => {
-      const key = tokenBranchKey(branch)
+      const key = getTokenBranchKey(branch)
       return branch.kind === 'axis' ? axisSlots.has(key) : raw.config.cases !== undefined
     }),
   }
@@ -790,13 +858,13 @@ function resolvePatchValue(
     return raw
 
   const token = createTokenFactory(axes)
-  const configured = (config: import('./types').VanityTokenConfig): unknown => {
+  const createConfiguredPatch = (config: import('./types').VanityTokenConfig): unknown => {
     const value = (token as any)(config)
     return new Proxy(value, {
       get(target, key, receiver) {
         if (typeof key !== 'string' || axes?.definitions[key] === undefined)
           return Reflect.get(target, key, receiver)
-        return (input: unknown) => configured({
+        return (input: unknown) => createConfiguredPatch({
           ...config,
           axes: {
             ...config.axes,
@@ -809,9 +877,9 @@ function resolvePatchValue(
   const target = new Proxy(Object.create(null) as Record<string, unknown>, {
     get(_target, key) {
       if (key === 'val')
-        return (value: unknown) => configured({ val: value })
+        return (value: unknown) => createConfiguredPatch({ val: value })
       if (typeof key === 'string' && axes?.definitions[key] !== undefined) {
-        return (input: unknown) => configured({
+        return (input: unknown) => createConfiguredPatch({
           axes: { [key]: normalizePatchAxisInput(input, axes.definitions[key]!) },
         })
       }
@@ -839,8 +907,14 @@ function normalizePatchAxisInput(
 ): Readonly<Record<string, unknown | null>> {
   if (typeof input === 'function')
     return Object.fromEntries(axis.modeOrder.map(mode => [mode, input(mode)]))
-  if (!input || typeof input !== 'object')
-    throw new TypeError('an axis patch needs a mode-value object or mode callback')
+  if (!input || typeof input !== 'object') {
+    throwTokenModuleError(
+      'VANITY_TOKENS_INVALID_AXES',
+      'an axis patch needs a mode-value object or mode callback',
+      'axes',
+      'provide an object keyed by mode or a callback that receives the mode map',
+    )
+  }
   return input as Readonly<Record<string, unknown | null>>
 }
 
@@ -854,8 +928,8 @@ function mergePatchedNode(
   if (mode === 'augment' && patchesBase && current.definition.kind !== 'none')
     assertPatchSlotAvailable(current.key, 'val', file)
 
-  const currentBranches = new Map(current.branches.map(branch => [tokenBranchKey(branch), branch]))
-  const replacementBranches = new Map(replacement.branches.map(branch => [tokenBranchKey(branch), branch]))
+  const currentBranches = new Map(current.branches.map(branch => [getTokenBranchKey(branch), branch]))
+  const replacementBranches = new Map(replacement.branches.map(branch => [getTokenBranchKey(branch), branch]))
   for (const [address, branch] of replacementBranches) {
     const existing = currentBranches.get(address)
     if (mode === 'augment' && existing?.definition.kind !== undefined && existing.definition.kind !== 'none')
@@ -871,8 +945,8 @@ function mergePatchedNode(
   }
 
   const branches = [
-    ...current.branches.map(branch => replacementBranches.get(tokenBranchKey(branch)) ?? branch),
-    ...replacement.branches.filter(branch => !currentBranches.has(tokenBranchKey(branch))),
+    ...current.branches.map(branch => replacementBranches.get(getTokenBranchKey(branch)) ?? branch),
+    ...replacement.branches.filter(branch => !currentBranches.has(getTokenBranchKey(branch))),
   ]
   const metadata = current.contract.metadata === undefined && replacement.contract.metadata === undefined
     ? undefined
@@ -910,7 +984,7 @@ function mergePatchedNode(
   }
 }
 
-function tokenBranchKey(branch: TokenBranch): string {
+function getTokenBranchKey(branch: TokenBranch): string {
   return branch.kind === 'axis'
     ? `axis:${branch.axis}:${branch.mode}`
     : `case:${Object.entries(branch.when).map(([axis, mode]) => `${axis}:${mode}`).join('|')}`
@@ -926,7 +1000,7 @@ function assertPatchSlotAvailable(token: string, slot: string, file?: string): n
   })
 }
 
-function tokenRestorationMeta(
+function createTokenRestorationMeta(
   node: TokenNode,
   graph: TokenGraph,
 ): import('./handle').VanityHandleMeta {
@@ -1034,7 +1108,7 @@ function serializeBranch(definition: VanityLeafDefinition, graph: TokenGraph): s
   const base = createTokenCheckResolver(graph, 'light')
   const resolver: VanityResolver = {
     ...base,
-    refTraits: (handle) => {
+    getRefTraits: (handle) => {
       const node = getNode(handle)
       const result = node ? graph.results.get(node.key) : undefined
       return {
@@ -1062,7 +1136,7 @@ function serializeBranch(definition: VanityLeafDefinition, graph: TokenGraph): s
 
 function buildRuntimeContract(graph: TokenGraph): VanityRuntimeContract {
   const axisOrder = [...(graph.axes?.order ?? [])]
-  const rootPaths = runtimeRootPaths(graph)
+  const rootPaths = getRuntimeRootPaths(graph)
   const axes = Object.fromEntries(axisOrder.map((axis) => {
     const definition = graph.axes!.definitions[axis]!
     const runtimeArms: { mode: string, arm: VanityAxisTriggerArm | undefined }[] = definition.modeOrder.map((mode: string) => ({
@@ -1113,10 +1187,10 @@ function buildRuntimeContract(graph: TokenGraph): VanityRuntimeContract {
     const branches = node.branches.map((branch) => {
       const address: Exclude<VanitySemanticTokenAddress, { readonly kind: 'base' }> = branch.kind === 'axis'
         ? { kind: 'axis', axis: branch.axis, mode: branch.mode }
-        : { kind: 'case', when: orderedWhen(branch.when, axisOrder) }
+        : { kind: 'case', when: orderWhen(branch.when, axisOrder) }
       return Object.freeze({
         address,
-        ...(usesMutableSlots(node) ? { slot: getBranchSlot(graph.prefix, node, branch) } : {}),
+        ...(hasMutableSlots(node) ? { slot: getBranchSlot(graph.prefix, node, branch) } : {}),
         ...(branch.handle.$val === undefined ? {} : { value: branch.handle.$val }),
       })
     })
@@ -1136,7 +1210,7 @@ function buildRuntimeContract(graph: TokenGraph): VanityRuntimeContract {
       ...(node.meta.deprecated === undefined ? {} : { deprecated: node.meta.deprecated }),
       ...(node.contract.metadata === undefined ? {} : { metadata: node.contract.metadata }),
       ...(validation === undefined ? {} : { validation }),
-      ...(usesMutableSlots(node) ? { baseSlot: createPrivateAddress(graph.prefix, node.key, 'base') } : {}),
+      ...(hasMutableSlots(node) ? { baseSlot: createPrivateAddress(graph.prefix, node.key, 'base') } : {}),
       branches: Object.freeze(branches),
     }))
   }
@@ -1159,8 +1233,11 @@ function buildRuntimeContract(graph: TokenGraph): VanityRuntimeContract {
     const selector = node.runtimeRoot ?? token.root
     const existing = rootMap.get(token.rootPath)
     if (existing && existing.selector !== selector) {
-      throw new TypeError(
-        `[vanity] runtime root path '${token.rootPath}' resolves to both '${existing.selector}' and '${selector}'`,
+      throwTokenModuleError(
+        'VANITY_TOKENS_INVALID_CONFIG',
+        `runtime root path '${token.rootPath}' resolves to both '${existing.selector}' and '${selector}'`,
+        ['runtimeRoot', token.rootPath],
+        'use one selector for every token module mounted at this runtime root path',
       )
     }
     const root = existing ?? {
@@ -1196,7 +1273,7 @@ function buildRuntimeContract(graph: TokenGraph): VanityRuntimeContract {
   })
 }
 
-function runtimeRootPaths(graph: TokenGraph): Map<TokenNode, string> {
+function getRuntimeRootPaths(graph: TokenGraph): Map<TokenNode, string> {
   const paths = new Map<TokenNode, string>()
   const unnamed = new Map<string, TokenNode[]>()
   for (const node of graph.nodes.values()) {
@@ -1232,8 +1309,14 @@ function collectRuntimeSchemas(graph: TokenGraph): Readonly<Record<string, impor
     if (!validate?.schema)
       continue
     const existing = schemas[validate.id]
-    if (existing && existing['~standard'].vendor !== validate.schema['~standard'].vendor)
-      throw new TypeError(`[vanity] runtime validation id '${validate.id}' is claimed by multiple Standard Schema vendors`)
+    if (existing && existing['~standard'].vendor !== validate.schema['~standard'].vendor) {
+      throwTokenModuleError(
+        'VANITY_TOKENS_INVALID_CONFIG',
+        `runtime validation id '${validate.id}' is claimed by multiple Standard Schema vendors`,
+        ['validate', 'id'],
+        'use one validation id per Standard Schema vendor',
+      )
+    }
     schemas[validate.id] ??= validate.schema
   }
   return Object.freeze(schemas)
@@ -1286,7 +1369,7 @@ function attachRuntimeAddresses(graph: TokenGraph): void {
     for (const branch of node.branches) {
       const address: Exclude<VanitySemanticTokenAddress, { readonly kind: 'base' }> = branch.kind === 'axis'
         ? { kind: 'axis', axis: branch.axis, mode: branch.mode }
-        : { kind: 'case', when: orderedWhen(branch.when, contract.axisOrder) }
+        : { kind: 'case', when: orderWhen(branch.when, contract.axisOrder) }
       const runtimeBranch = token.branches.find(candidate => isSameSemanticAddress(candidate.address, address))!
       setRuntimeAddress(branch.handle, Object.freeze({
         system: contract.system,
@@ -1311,7 +1394,7 @@ function getRuntimeTokenIndex(
   return index
 }
 
-function orderedWhen(
+function orderWhen(
   when: Readonly<Record<string, string>>,
   axisOrder: readonly string[],
 ): Readonly<Record<string, string>> {
@@ -1378,7 +1461,7 @@ function walkInto(
       continue
     if (tokenPolicy !== undefined && key === '$axes') {
       throw new VanityError({
-        code: 'VANITY_TOKENS_INVALID_COLOR',
+        code: 'VANITY_TOKENS_INVALID_AXES',
         message: `${path.join('.') || 'the token root'}.$axes is not part of the canonical token language`,
         path: [...path, key].join('.'),
         file,
@@ -1414,7 +1497,7 @@ function walkInto(
       continue
     }
 
-    if (key in tree)
+    if (Object.hasOwn(tree, key))
       throwDuplicateToken(keyPath, file)
 
     const node = createNode(leafPath, prefix, raw, derived, groupEmission, tokenPolicy, axes, moduleId, modulePath)
@@ -1449,6 +1532,7 @@ function getGroupEmission(
       message: `${path.join('.') || 'the token root'}.$root must be a non-empty selector`,
       path: [...path, '$root'].join('.'),
       file,
+      fix: 'use an absolute selector, or anchor a relative selector with &',
     })
   }
 
@@ -1488,7 +1572,7 @@ function isGroup(value: unknown): value is object {
 function createRefsProxy(tree: Record<string, unknown>, path: string[], context: string, file?: string): Record<string, unknown> {
   return new Proxy(tree, {
     get(target, prop, receiver) {
-      if (typeof prop === 'symbol' || prop in target) {
+      if (typeof prop === 'symbol' || Object.hasOwn(target, prop)) {
         const value = Reflect.get(target, prop, receiver)
 
         return typeof value === 'object' && value !== null && typeof prop === 'string'
@@ -1542,8 +1626,8 @@ function createNode(
     metadata: normalized.contract.metadata,
     register: normalized.contract.register,
     validate: normalized.contract.validate,
-  })
-  attachCaseBranches(handle)
+  }, TOKEN_HANDLE_OPTIONS)
+  attachCaseBranches(handle, TOKEN_HANDLE_OPTIONS)
   Object.assign(handle, handleColorMethods(handle))
 
   const node: TokenNode = {
@@ -1718,11 +1802,11 @@ function normalizeToken(
     const definition = requireAxis(axes, axis, key)
     const authored = { ...modes }
     for (const mode of Object.keys(authored)) {
-      if (!(mode in definition.modes))
+      if (!Object.hasOwn(definition.modes, mode))
         assertValidTrait(key, `axes.${axis}.${mode}`, `use one of the declared modes: ${definition.modeOrder.join(', ')}`)
     }
 
-    if (hasVal && definition.defaultMode !== undefined && !(definition.defaultMode in authored))
+    if (hasVal && definition.defaultMode !== undefined && !Object.hasOwn(authored, definition.defaultMode))
       authored[definition.defaultMode] = rawVal
 
     authoredAxes.set(axis, authored)
@@ -1736,17 +1820,17 @@ function normalizeToken(
       assertValidTrait(key, 'cases.when', 'a sparse case intersects at least two declared axes; use an axis mode for one dimension')
     const normalizedWhen: Record<string, string> = {}
     for (const axis of axes?.order ?? []) {
-      if (!(axis in entry.when))
+      if (!Object.hasOwn(entry.when, axis))
         continue
       const mode = entry.when[axis]!
       const definition = requireAxis(axes, axis, key)
-      if (!(mode in definition.modes))
+      if (!Object.hasOwn(definition.modes, mode))
         assertValidTrait(key, `cases.when.${axis}`, `use one of the declared modes: ${definition.modeOrder.join(', ')}`)
       normalizedWhen[axis] = mode
       caseAxes.add(axis)
     }
     for (const axis of Object.keys(entry.when)) {
-      if (!(axis in normalizedWhen))
+      if (!Object.hasOwn(normalizedWhen, axis))
         requireAxis(axes, axis, key)
     }
     const address = Object.entries(normalizedWhen).map(([axis, mode]) => `${axis}:${mode}`).join('|')
@@ -1762,7 +1846,7 @@ function normalizeToken(
   if (!hasVal && authoredAxes.size === 1) {
     const [axis, authored] = [...authoredAxes][0]!
     const definition = requireAxis(axes, axis, key)
-    const missing = definition.modeOrder.filter(mode => !(mode in authored))
+    const missing = definition.modeOrder.filter(mode => !Object.hasOwn(authored, mode))
     if (missing.length > 0) {
       assertValidTrait(
         key,
@@ -1790,13 +1874,13 @@ function normalizeToken(
     if (entry.val === null && config?.mutable !== true)
       assertValidTrait(key, 'cases.val', 'null reserves a runtime address and therefore requires mutable: true')
     assertBranchType(type, entry.val, key, 'cases.val')
-    const orderedWhen = Object.freeze(Object.fromEntries((axes?.order ?? Object.keys(entry.when))
-      .filter(axis => axis in entry.when)
+    const orderWhen = Object.freeze(Object.fromEntries((axes?.order ?? Object.keys(entry.when))
+      .filter(axis => Object.hasOwn(entry.when, axis))
       .map(axis => [axis, entry.when[axis]!]),
     ))
     branches.push({
       kind: 'case',
-      when: orderedWhen,
+      when: orderWhen,
       definition: entry.val === null ? { kind: 'none' } : classifyLeafValue(entry.val, `${key}.$case`),
     })
   }
@@ -1859,7 +1943,7 @@ function assertBranchType(
 
 function assertValidTrait(path: string, field: string, fix: string): never {
   throw new VanityError({
-    code: 'VANITY_TOKENS_INVALID_COLOR',
+    code: 'VANITY_TOKENS_TRAIT_CONFLICT',
     message: `${path}.${field} conflicts with this token's independent traits`,
     path: `${path}.${field}`,
     fix,
@@ -1869,8 +1953,11 @@ function assertValidTrait(path: string, field: string, fix: string): never {
 function inferTokenType(raw: unknown): import('../values/types').VanityCssDataType {
   if (isColorValue(raw) || isContrastValue(raw))
     return 'color'
-  if ((typeof raw === 'object' || typeof raw === 'function') && raw !== null && 'type' in raw && typeof raw.type === 'string')
-    return raw.type as import('../values/types').VanityCssDataType
+  if ((typeof raw === 'object' || typeof raw === 'function') && raw !== null && Object.hasOwn(raw, 'type')) {
+    const type = (raw as { readonly type?: unknown }).type
+    if (typeof type === 'string')
+      return type as import('../values/types').VanityCssDataType
+  }
   if (typeof raw === 'number')
     return Number.isInteger(raw) ? 'integer' : 'number'
   return 'unknown'
@@ -1906,7 +1993,7 @@ function classifyLeafValue(raw: unknown, key: string): VanityLeafDefinition {
     return { kind: 'value', value: raw }
 
   throw new VanityError({
-    code: 'VANITY_TOKENS_INVALID_COLOR',
+    code: 'VANITY_TOKENS_INVALID_DEFINITION',
     message: `${key} is not a token value — expected a string, number, color, or derivation`,
     path: key,
   })
@@ -2592,17 +2679,17 @@ export function planTokenEmission(node: TokenNode, graph: TokenGraph): PlannedTo
     }
   }
 
-  const usedAxisOrder = axes?.order.filter(axis => branchAxes.has(axis) || cases.some(branch => axis in branch.when)) ?? []
+  const usedAxisOrder = axes?.order.filter(axis => branchAxes.has(axis) || cases.some(branch => Object.hasOwn(branch.when, axis))) ?? []
   const native = planNativeScheme(node, graph, branchAxes, usedAxisOrder)
   // Ordinary token branches compose most faithfully by declaring the public
   // property in ordered layers: descendant and absolute triggers then compute
   // where their selector matches. Private stages are only needed for mutable
   // multi-axis fallback chains, whose bindings are constrained to the token's
   // effective root so var() substitution cannot freeze a downstream trigger.
-  const needsStages = usesMutableSlots(node) && usedAxisOrder.length > 1
+  const needsStages = hasMutableSlots(node) && usedAxisOrder.length > 1
   let priorExpression: string | undefined
 
-  if (usesMutableSlots(node)) {
+  if (hasMutableSlots(node)) {
     const baseSlot = createPrivateAddress(graph.prefix, node.key, 'base')
     if (node.definition.kind !== 'none')
       baseVars[baseSlot] = result.emitted
@@ -2771,7 +2858,7 @@ function planNativeScheme(
         : undefined)
     if (!light || !dark)
       continue
-    if (node.branches.some(branch => branch.kind === 'case' && axis in branch.when)
+    if (node.branches.some(branch => branch.kind === 'case' && Object.hasOwn(branch.when, axis))
       && native.locality === 'element') {
       assertValidTrait(
         node.key,
@@ -2808,7 +2895,7 @@ function serializeNativeSourceExpression(
 ): string {
   if (source.kind !== 'base')
     return serializeBranchExpression(node, source, graph, fallback)
-  if (usesMutableSlots(node)) {
+  if (hasMutableSlots(node)) {
     const slot = createPrivateAddress(graph.prefix, node.key, 'base')
     return `var(${slot})`
   }
@@ -2821,7 +2908,7 @@ function serializeBranchExpression(
   graph: TokenGraph,
   fallback: string | undefined,
 ): string {
-  if (usesMutableSlots(node)) {
+  if (hasMutableSlots(node)) {
     const slot = getBranchSlot(graph.prefix, node, branch)
     return fallback === undefined ? `var(${slot})` : `var(${slot}, ${fallback})`
   }
@@ -2916,7 +3003,7 @@ function getBranchSlot(prefix: string, node: TokenNode, branch: TokenBranch): st
     : createPrivateAddress(prefix, node.key, `case:${Object.entries(branch.when).map(([axis, mode]) => `${axis}:${mode}`).join('|')}`)
 }
 
-function usesMutableSlots(node: TokenNode): boolean {
+function hasMutableSlots(node: TokenNode): boolean {
   return node.contract.canonical && node.contract.mutable
 }
 
@@ -3049,4 +3136,13 @@ function combineQuery(left: string | undefined, right: string | undefined): stri
   if (right === undefined)
     return left
   return `${left} and ${right}`
+}
+
+function throwTokenModuleError(
+  code: Extract<VanityDiagnosticCode, `VANITY_TOKENS_${string}`>,
+  message: string,
+  path: string | readonly string[],
+  fix: string,
+): never {
+  throw new VanityError({ code, message, path, fix })
 }

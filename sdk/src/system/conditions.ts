@@ -12,7 +12,7 @@ import type { VanityKebab } from '../tokens/types'
 import type { VanityCssValue, VanityTokenInput } from '../values/types'
 import { checkQuery, checkSelector, isCssProperty } from '../css/validation'
 import { VanityError } from '../diagnostics'
-import { toKebab } from '../tokens/names'
+import { convertToKebab } from '../tokens/names'
 
 /** One compiled way a condition applies: at-rule wrappers and/or a `&` selector. */
 export interface VanityConditionArm {
@@ -319,7 +319,7 @@ export function data<const Attribute extends string, const Value extends string>
   value: Value,
 ): VanityFluentCondition<`[data-${VanityKebab<Attribute>}='${Value}']`, true>
 export function data(attribute: string, value?: string): VanityFluentCondition<string, true> {
-  const name = `data-${toKebab(attribute)}`
+  const name = `data-${convertToKebab(attribute)}`
   const compiled = value === undefined ? `[${name}]` : `[${name}='${value}']`
   return createCondition(
     compiled,
@@ -336,7 +336,7 @@ export function aria<const Attribute extends string, const Value extends string 
   attribute: Attribute,
   value: Value = true as Value,
 ): VanityFluentCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`> {
-  return selector(`[aria-${toKebab(attribute)}='${value}']`) as VanityFluentCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`>
+  return selector(`[aria-${convertToKebab(attribute)}='${value}']`) as VanityFluentCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`>
 }
 
 export interface VanityScopeCondition extends VanityFluentCondition<string> {
@@ -454,10 +454,10 @@ export function normalizeConditions(
   const diagnostics: VanityDiagnostic[] = []
 
   for (const [name, input] of Object.entries(conditions)) {
-    if (isCssProperty(toKebab(name))) {
+    if (isCssProperty(convertToKebab(name))) {
       diagnostics.push({
         code: 'VANITY_SYSTEM_CONDITION_COLLISION' as const,
-        message: `the condition '${name}' collides with the CSS property '${toKebab(name)}'`,
+        message: `the condition '${name}' collides with the CSS property '${convertToKebab(name)}'`,
         detail: ['conditions are bare keys beside properties; a shared name would make every rule ambiguous'],
         path: name,
         file,
@@ -606,7 +606,11 @@ function lowerNegatedAst(ast: VanityConditionAst): readonly VanityConditionArm[]
     return [{ container: `${ast.name === undefined ? '' : `${ast.name} `}not ${ast.query}` }]
   if (ast.kind === 'anchor')
     return [{ anchor: ast.anchor, selector: '&:not(&)' }]
-  throw new TypeError('[vanity] @scope conditions cannot be negated; negate an inner selector instead')
+  throwConditionError(
+    '@scope conditions cannot be negated; negate an inner selector instead',
+    'condition',
+    'negate the selector inside the @scope condition',
+  )
 }
 
 function intersectArmSets(
@@ -614,17 +618,23 @@ function intersectArmSets(
   right: readonly VanityConditionArm[],
 ): readonly VanityConditionArm[] {
   if (left.length * right.length > CONDITION_EXPANSION_LIMIT) {
-    throw new TypeError(
-      `[vanity] condition algebra expands to ${left.length * right.length} arms; `
-      + `the supported maximum is ${CONDITION_EXPANSION_LIMIT}`,
+    throwConditionError(
+      `condition algebra expands to ${left.length * right.length} arms; the supported maximum is ${CONDITION_EXPANSION_LIMIT}`,
+      'condition.algebra',
+      'split the condition into smaller selectors or reduce the number of intersections',
     )
   }
   return dedupeArms(left.flatMap(outer => right.map(inner => mergeArms(outer, inner))))
 }
 
 function mergeArms(outer: VanityConditionArm, inner: VanityConditionArm): VanityConditionArm {
-  if (outer.anchor !== undefined && inner.anchor !== undefined && outer.anchor !== inner.anchor)
-    throw new TypeError(`[vanity] a condition cannot combine ${outer.anchor} and ${inner.anchor} anchors`)
+  if (outer.anchor !== undefined && inner.anchor !== undefined && outer.anchor !== inner.anchor) {
+    throwConditionError(
+      `a condition cannot combine ${outer.anchor} and ${inner.anchor} anchors`,
+      'condition.anchor',
+      'use one compatible anchor or compose the conditions in separate rule scopes',
+    )
+  }
   const anchor = outer.anchor ?? inner.anchor
   return {
     ...(outer.media === undefined && inner.media === undefined
@@ -643,20 +653,20 @@ function mergeArms(outer: VanityConditionArm, inner: VanityConditionArm): Vanity
       ? {}
       : { scopes: [...outer.scopes ?? [], ...inner.scopes ?? []] }),
     ...(anchor === undefined ? {} : { anchor }),
-    ...(mergedRuntimeActivation(outer, inner) === undefined
+    ...(mergeRuntimeActivation(outer, inner) === undefined
       ? {}
-      : { runtime: mergedRuntimeActivation(outer, inner) }),
+      : { runtime: mergeRuntimeActivation(outer, inner) }),
   }
 }
 
-function mergedRuntimeActivation(
+function mergeRuntimeActivation(
   left: VanityConditionArm,
   right: VanityConditionArm,
 ): VanityConditionArm['runtime'] {
   if (left.runtime === undefined)
-    return runtimeNeutralArm(left) ? right.runtime : undefined
+    return isRuntimeNeutralArm(left) ? right.runtime : undefined
   if (right.runtime === undefined)
-    return runtimeNeutralArm(right) ? left.runtime : undefined
+    return isRuntimeNeutralArm(right) ? left.runtime : undefined
   return left.runtime.kind === right.runtime.kind
     && left.runtime.name === right.runtime.name
     && left.runtime.value === right.runtime.value
@@ -664,7 +674,7 @@ function mergedRuntimeActivation(
     : undefined
 }
 
-function runtimeNeutralArm(arm: VanityConditionArm): boolean {
+function isRuntimeNeutralArm(arm: VanityConditionArm): boolean {
   return arm.runtime === undefined
     && arm.media === undefined
     && arm.supports === undefined
@@ -735,28 +745,39 @@ function dedupeArms(arms: readonly VanityConditionArm[]): VanityConditionArm[] {
     seen.add(key)
     result.push(arm)
   }
-  if (result.length > CONDITION_EXPANSION_LIMIT)
-    throw new TypeError(`[vanity] condition algebra exceeds the ${CONDITION_EXPANSION_LIMIT}-arm limit`)
+  if (result.length > CONDITION_EXPANSION_LIMIT) {
+    throwConditionError(
+      `condition algebra exceeds the ${CONDITION_EXPANSION_LIMIT}-arm limit`,
+      'condition.algebra',
+      'split the condition into smaller selectors or reduce the number of alternatives',
+    )
+  }
   return result
 }
 
 function compileStructuredQuery(input: VanityStructuredQuery): string {
   const features = Object.entries(input).map(([rawFeature, value]) => {
-    const feature = toKebab(rawFeature)
+    const feature = convertToKebab(rawFeature)
     if (!isRangeQuery(value))
       return `(${feature}: ${String(value)})`
     if (!RANGE_CAPABLE_FEATURES.has(feature)) {
-      throw new TypeError(
-        `[vanity] '${rawFeature}' is not a range-capable media/container feature; `
-        + 'use its scalar form or a raw query string',
+      throwConditionError(
+        `'${rawFeature}' is not a range-capable media/container feature; use its scalar form or a raw query string`,
+        ['condition', 'query', rawFeature],
+        'use the scalar feature form or provide a raw query string',
       )
     }
     const entries = Object.entries(value).filter(([, entry]) => entry !== undefined)
     const lowers = entries.filter(([operator]) => operator === '>' || operator === '>=')
     const uppers = entries.filter(([operator]) => operator === '<' || operator === '<=')
     const equals = entries.filter(([operator]) => operator === '=')
-    if (lowers.length > 1 || uppers.length > 1 || (equals.length > 0 && entries.length > 1))
-      throw new TypeError(`[vanity] '${rawFeature}' has contradictory range operators`)
+    if (lowers.length > 1 || uppers.length > 1 || (equals.length > 0 && entries.length > 1)) {
+      throwConditionError(
+        `'${rawFeature}' has contradictory range operators`,
+        ['condition', 'query', rawFeature],
+        'keep one lower bound, one upper bound, or one equality operator',
+      )
+    }
     if (equals.length === 1)
       return `(${feature} = ${String(equals[0]![1])})`
     const lower = lowers[0]
@@ -771,8 +792,13 @@ function compileStructuredQuery(input: VanityStructuredQuery): string {
       return `(${lowerText} ${upperText.slice(feature.length + 1)})`
     return `(${lowerText ?? upperText})`
   })
-  if (features.length === 0)
-    throw new TypeError('[vanity] a structured query needs at least one feature')
+  if (features.length === 0) {
+    throwConditionError(
+      'a structured query needs at least one feature',
+      'condition.query',
+      'provide at least one media or container feature',
+    )
+  }
   return features.join(' and ')
 }
 
@@ -782,10 +808,20 @@ function isRangeQuery(value: VanityConditionScalar | VanityRangeQuery): value is
 }
 
 function scopeCondition(start: string, limit?: string): VanityScopeCondition {
-  if (checkSelector(start))
-    throw new TypeError(`[vanity] scope('${start}') needs a valid start selector`)
-  if (limit !== undefined && checkSelector(limit))
-    throw new TypeError(`[vanity] scope().to('${limit}') needs a valid limit selector`)
+  if (checkSelector(start)) {
+    throwConditionError(
+      `scope('${start}') needs a valid start selector`,
+      ['condition', 'scope', 'start'],
+      'provide a valid selector for the @scope start',
+    )
+  }
+  if (limit !== undefined && checkSelector(limit)) {
+    throwConditionError(
+      `scope().to('${limit}') needs a valid limit selector`,
+      ['condition', 'scope', 'limit'],
+      'provide a valid selector for the @scope limit',
+    )
+  }
   const ast: VanityConditionAst = {
     kind: 'scope',
     start,
@@ -861,4 +897,17 @@ function createAstFromArms(arms: readonly VanityConditionArm[]): VanityCondition
     return parts.length === 1 ? parts[0]! : { kind: 'and', conditions: parts }
   })
   return conditions.length === 1 ? conditions[0]! : { kind: 'or', conditions }
+}
+
+function throwConditionError(
+  message: string,
+  path: string | readonly string[],
+  fix: string,
+): never {
+  throw new VanityError({
+    code: 'VANITY_SYSTEM_INVALID_CONDITION',
+    message,
+    path,
+    fix,
+  })
 }

@@ -12,6 +12,8 @@ import { createAtomsHandle } from './atoms/handle'
 import { createPortHandle } from './ports/handle'
 import { ports } from './ports/ports'
 import { createAnatomyHandle, createRecipeHandle } from './recipes/handle'
+import { createVanityRuntimeError } from './runtime/contract'
+import { serializeRuntimeCssText } from './runtime/value'
 import { createHandle } from './tokens/handle'
 
 export type { VanityAtomsRuntime } from './atoms/types'
@@ -34,14 +36,15 @@ export type {
   VanityRuntimeReconciliation,
   VanityRuntimeRootContract,
   VanityRuntimeRootProps,
+  VanityRuntimeSnapshot,
   VanityRuntimeSnapshotOverride,
-  VanityRuntimeSnapshotV1,
   VanityRuntimeStyleDeclaration,
   VanityRuntimeStyles,
   VanityRuntimeTarget,
   VanityRuntimeTokens,
   VanitySnapshotFrom,
 } from './runtime/contract'
+export { VanityRuntimeError } from './runtime/contract'
 export {
   restoreRuntimeControllerFactory,
   restoreRuntimeProps,
@@ -61,7 +64,7 @@ export { ports }
  * code. Generated import target — not for hand-written code.
  */
 export function restoreToken(meta: Parameters<typeof createHandle>[0]): VanityInternalTokenHandle {
-  return createHandle(meta)
+  return createHandle(meta, { serializeFallback: serializeRuntimeCssText })
 }
 
 /**
@@ -122,8 +125,11 @@ export function restoreStyleAuthoringStub(meta: { name: string }): () => never {
       ? 'introspect belongs in a system module.'
       : `${meta.name} belongs in a *.css.ts style module.`
 
-    throw new Error(
-      `[vanity] VANITY_STYLE_MODULE_MISUSE: ${location} ${remedy}`,
-    )
+    throw createVanityRuntimeError({
+      code: 'VANITY_STYLE_MODULE_MISUSE',
+      message: `[vanity] VANITY_STYLE_MODULE_MISUSE: ${location} ${remedy}`,
+      path: ['styleModule', meta.name],
+      fix: remedy,
+    })
   }
 }

@@ -11,7 +11,7 @@ describe('application auto-import normalization', () => {
     } as unknown as VanityAppAutoImports
 
     expect(() => normalizeAppAutoImports(value)).toThrow(
-      `[vanity] autoImports.app source './source.ts' cannot use both include and exclude`,
+      /VANITY_AUTO_IMPORT_INVALID[\s\S]*autoImports\.app source '\.\/source\.ts' cannot use both include and exclude/,
     )
   })
 

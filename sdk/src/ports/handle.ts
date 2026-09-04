@@ -9,7 +9,8 @@ import type {
   VanityPortStyle,
   VanityPortValue,
 } from './types'
-import { explainable } from '../introspect/semantic'
+import { attachExplanation } from '../introspect/semantic'
+import { createVanityRuntimeError } from '../runtime/contract'
 import { isHandle } from '../tokens/handle'
 import { isCssValue, isVanityValue } from '../values/types'
 
@@ -36,10 +37,10 @@ export function createPortHandle(meta: VanityPortMeta, context: PortHandleContex
     const value = validate(input, meta, context)
     if (value === OMIT)
       return {}
-    return { [meta.name]: serialize(value, context) }
+    return { [meta.name]: serialize(value, context, meta) }
   }
 
-  return explainable(Object.assign(handle, {
+  return attachExplanation(Object.assign(handle, {
     meta,
     defaultValue: meta.defaultValue,
     type: meta.type,
@@ -74,12 +75,24 @@ function validate(input: unknown, meta: VanityPortMeta, context: PortHandleConte
     return input
 
   const schema = context.schema ?? context.binding?.validators?.[policy.id]
-  if (!schema)
-    throw new TypeError(`[vanity] port ${meta.name} needs the synchronous Standard Schema validator '${policy.id}'`)
+  if (!schema) {
+    throw createVanityRuntimeError({
+      code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
+      message: `port ${meta.name} needs the synchronous Standard Schema validator '${policy.id}'`,
+      path: ['port', meta.name, 'validate'],
+      fix: `register the '${policy.id}' validator when binding the port`,
+    })
+  }
 
   const result = schema['~standard'].validate(input)
-  if (isPromiseLike(result))
-    throw new TypeError(`[vanity] port ${meta.name} validator '${policy.id}' is async; dec() is synchronous`)
+  if (isPromiseLike(result)) {
+    throw createVanityRuntimeError({
+      code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
+      message: `port ${meta.name} validator '${policy.id}' is async; dec() is synchronous`,
+      path: ['port', meta.name, 'validate'],
+      fix: 'provide a synchronous Standard Schema validator for port.dec()',
+    })
+  }
   if ('value' in result)
     return result.value
 
@@ -89,7 +102,13 @@ function validate(input: unknown, meta: VanityPortMeta, context: PortHandleConte
     return policy.fallback
 
   const detail = result.issues.map(issue => issue.message).join('; ')
-  throw new TypeError(`[vanity] port ${meta.name} rejected its value${detail ? `: ${detail}` : ''}`)
+  throw createVanityRuntimeError({
+    code: 'VANITY_RUNTIME_INVALID_VALUE',
+    message: `port ${meta.name} rejected its value`,
+    detail: detail ? [detail] : undefined,
+    path: ['port', meta.name, 'value'],
+    fix: 'provide a value accepted by the port validator, or configure fallback/omit handling',
+  })
 }
 
 function shouldValidate(mode: false | 'dev' | 'always', explicitDev: boolean | undefined): boolean {
@@ -103,7 +122,7 @@ function shouldValidate(mode: false | 'dev' | 'always', explicitDev: boolean | u
   return typeof process === 'undefined' || process.env.NODE_ENV !== 'production'
 }
 
-function serialize(value: unknown, context: PortHandleContext): VanityPortValue {
+function serialize(value: unknown, context: PortHandleContext, meta: VanityPortMeta): VanityPortValue {
   if (context.serialize)
     return context.serialize(value)
   if (isPort(value))
@@ -120,7 +139,12 @@ function serialize(value: unknown, context: PortHandleContext): VanityPortValue 
     return String(value)
   if (typeof value === 'string' || typeof value === 'number')
     return value
-  throw new TypeError('[vanity] a port value must serialize to CSS text or a finite number')
+  throw createVanityRuntimeError({
+    code: 'VANITY_RUNTIME_INVALID_VALUE',
+    message: 'a port value must serialize to CSS text or a finite number',
+    path: ['port', meta.name, 'value'],
+    fix: 'provide CSS text, a finite number, a vanity value, a token, or another port',
+  })
 }
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {

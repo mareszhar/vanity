@@ -20,6 +20,27 @@ const aliases = {
   '@mszr/vanity': local('../index.ts'),
 }
 
+const buildOnlyProjectionNames = [
+  'class',
+  'rules',
+  'raw',
+  'fragment',
+  'tdec',
+  'keyframes',
+  'fontFace',
+  'recipe',
+  'anatomy',
+  'port',
+  'atoms',
+  'inLayer',
+  'tokensOf',
+  'namesOf',
+  'varsOf',
+  'explain',
+  'serialize',
+  'introspect',
+] as const
+
 function outputOf(result: Awaited<ReturnType<typeof build>>): Rollup.OutputAsset[] | Rollup.OutputChunk[] {
   const build = (Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput
   return build.output as Rollup.OutputAsset[] | Rollup.OutputChunk[]
@@ -104,10 +125,8 @@ describe('the permanent plain-system projection canary', () => {
     expect(javascript).not.toContain('@vanilla-extract')
     expect(javascript).not.toContain('node:buffer')
     expect(javascript).not.toContain('child_process')
-    expect(javascript).toContain('class: restoreStyleAuthoringStub({ name: "class" })')
-    expect(javascript).toContain('fragment: restoreStyleAuthoringStub({ name: "fragment" })')
-    expect(javascript).not.toContain('globalCss: restoreStyleAuthoringStub')
-    expect(javascript).toContain('atoms: restoreStyleAuthoringStub({ name: "atoms" })')
+    for (const name of buildOnlyProjectionNames)
+      expect(javascript).toContain(`${name}: restoreStyleAuthoringStub({ name: "${name}" })`)
 
     const html = String(assets.find(item => item.fileName === 'index.html')?.source)
     const prelude = html.indexOf('/assets/vanity-cascade.css')
@@ -135,9 +154,8 @@ describe('the permanent plain-system projection canary', () => {
     expect(chunk!.code).not.toContain('createSystem')
     expect(chunk!.code).not.toContain('@vanilla-extract')
     expect(chunk!.code).not.toContain('node:')
-    expect(chunk!.code).toContain('rules: restoreStyleAuthoringStub({ name: "rules" })')
-    expect(chunk!.code).toContain('atoms: restoreStyleAuthoringStub({ name: "atoms" })')
-    expect(chunk!.code).not.toContain('tokenOverride: restoreStyleAuthoringStub')
+    for (const name of buildOnlyProjectionNames)
+      expect(chunk!.code).toContain(`${name}: restoreStyleAuthoringStub({ name: "${name}" })`)
 
     const module = await import(
       `data:text/javascript;base64,${Buffer.from(chunk!.code).toString('base64')}`,

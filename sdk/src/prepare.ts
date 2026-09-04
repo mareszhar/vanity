@@ -7,6 +7,7 @@ import { createJiti } from 'jiti'
 import { planAutoImportDeclarations as plan } from './compiler/auto-imports/autoImportPlan'
 import { writeAutoImportDeclarations as write } from './compiler/auto-imports/autoImportWriter'
 import { resolveConfiguredModuleSource } from './compiler/projection/exportNames'
+import { VanityError } from './diagnostics'
 
 export type { AutoImportDeclarationSource } from './compiler/auto-imports/autoImportDeclarations'
 export type {
@@ -62,19 +63,24 @@ export async function loadVanityConfig(
   }
   catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-      throw new Error(
-        `[vanity] no Vanity config found at ${configPath}\n`
-        + '  fix: create vanity.config.ts, pass --config <path>, or use the programmatic preparation API',
-      )
+      throw new VanityError({
+        code: 'VANITY_CONFIG_INVALID',
+        message: `no Vanity config found at ${configPath}`,
+        path: ['config'],
+        fix: 'create vanity.config.ts, pass --config <path>, or use the programmatic preparation API',
+      })
     }
     throw error
   }
 
   const loaded = await createJiti(import.meta.url).import<unknown>(configPath, { default: true })
   if (!loaded || typeof loaded !== 'object' || Array.isArray(loaded)) {
-    throw new TypeError(
-      `[vanity] config module '${configPath}' must export a Vanity configuration object`,
-    )
+    throw new VanityError({
+      code: 'VANITY_CONFIG_INVALID',
+      message: `config module '${configPath}' must export a Vanity configuration object`,
+      path: ['config'],
+      fix: 'export one Vanity configuration object from the config module',
+    })
   }
   return loaded as VanityConfig
 }

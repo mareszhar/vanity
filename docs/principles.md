@@ -18,17 +18,8 @@ CSS owns CSS vocabulary. Vanity uses a CSS name only for the platform concept ex
 
 A base term preserves the same useful inference everywhere it appears. Qualifiers may specialize that inference by domain, owner, state, representation, or relation; they may not rescue unrelated meanings. Natural reuse is welcome when the relation transfers—for example, system host and build host.
 
-| Form | Meaning |
-| --- | --- |
-| `create*` | create an API kit |
-| `define*` / `*def` | describe a modular thing |
-| `add*` | register a new name additively |
-| `augment*` | fill an unset slot on registered data |
-| `overwrite*` | explicitly replace existing data values without shrinking shape |
-| `consolidate` | resolve and lock an open system |
-| `expect*` | require externally supplied shape without claiming ownership |
-| `*dec` | produce CSS declaration data |
-| `$*` | Vanity-owned member sharing a namespace with user keys |
+Verb meanings are canonical in [language §0](./language.md#0-house-style-and-naming-law); this
+document states the naming law and its consequences, not a second verb glossary.
 
 `$` is a namespace fence, not decoration. It appears on `ds.t.color.brand.$name`, `rt.t.color.brand.$set`, `$axes`, and fenced path keys such as `'$system'`. It does not appear on wholly Vanity-owned surfaces such as `rt.refreshRoots()` or `port.dec()`.
 

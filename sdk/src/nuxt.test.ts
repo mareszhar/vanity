@@ -84,7 +84,7 @@ describe('nuxt auto-import integration', () => {
     await expect(vanityNuxtModule({
       autoImports: { style: './authoring.ts', app: './runtime.ts' },
     }, nuxt as never)).rejects.toThrow(
-      '[vanity] auto-import \'ds\' is exposed by different autoImports module roles',
+      /VANITY_AUTO_IMPORT_INVALID[\s\S]*auto-import 'ds' is exposed by different autoImports module roles/,
     )
   })
 

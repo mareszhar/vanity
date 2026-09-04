@@ -12,6 +12,7 @@ import type {
   VanityValue,
 } from '../values/types'
 
+/** Whether a contrast value is statically checked or remains live at runtime. */
 export type VanityContrastGuarantee = 'checked' | 'live'
 
 // ─── Authoring color values ──────────────────────────────────────────────────
@@ -24,6 +25,7 @@ export type VanityColorish
     | VanityTokenInput<'color'>
     | string
 
+/** CSS color space names accepted by color interpolation helpers, plus a custom `--name` space. */
 export type VanityColorInterpolationSpace
   = | 'srgb' | 'srgb-linear' | 'display-p3' | 'display-p3-linear' | 'a98-rgb' | 'prophoto-rgb' | 'rec2020'
     | 'lab' | 'oklab' | 'xyz' | 'xyz-d50' | 'xyz-d65' | 'hsl' | 'hwb' | 'lch' | 'oklch'
@@ -58,27 +60,38 @@ export interface VanityAuthoredContrast<G extends VanityContrastGuarantee = Vani
 
 // ─── Canonical token traits ────────────────────────────────────────────────
 
+/** Select a token's direct value or a CSS `var()` reference as its resolved form. */
 export type VanityTokenReference = 'val' | 'var'
 
+/** Per-token reference and emission traits after system defaults are applied. */
 export interface VanityTokenPolicy<
   Reference extends VanityTokenReference = VanityTokenReference,
   Emit extends boolean = boolean,
 > {
+  /** Resolve this token as a direct value or a `var()` reference. */
   readonly reference: Reference
+  /** Emit this token's declaration into the stylesheet. */
   readonly emit: Emit
 }
 
+/** The default token policy: emit a `var()` reference and include its declaration. */
 export type VanityDefaultTokenPolicy = VanityTokenPolicy<'var', true>
 
+/** CSS Properties and Values API registration metadata for a token. */
 export interface VanityTokenRegistration<Val = unknown> {
   /** CSS Properties and Values API syntax; inferred from the token type when omitted. */
   readonly syntax?: string
+  /** Whether descendants inherit the registered custom property. */
   readonly inherits?: boolean
+  /** Initial value used by the browser when the property is unset. */
   readonly initialVal?: Val
 }
 
+/** Deprecation guidance attached to a token handle. */
 export type VanityTokenDeprecation = string | {
+  /** Explain why the token should no longer be used. */
   readonly reason?: string
+  /** Name the preferred replacement token. */
   readonly use?: string
 }
 
@@ -92,16 +105,23 @@ export type VanityTokenMetadataValue
 
 export type VanityTokenMetadata = Readonly<Record<string, VanityTokenMetadataValue>>
 
+/** One issue returned by an implementation of Standard Schema validation. */
 export interface VanityStandardSchemaIssue {
+  /** Human-readable validation failure. */
   readonly message: string
+  /** Structured path to the invalid input member. */
   readonly path?: readonly (PropertyKey | { readonly key: PropertyKey })[]
 }
 
 /** The synchronous portion of Standard Schema v1 used at CSS write boundaries. */
 export interface VanityStandardSchemaV1<Input = unknown, Output = Input> {
+  /** Standard Schema v1 adapter used for portable runtime validation. */
   readonly '~standard': {
+    /** Standard Schema protocol version. */
     readonly version: 1
+    /** Package or library that owns the schema. */
     readonly vendor: string
+    /** Validate an input synchronously or asynchronously. */
     readonly validate: (
       value: Input,
     ) => { readonly value: Output, readonly issues?: undefined }
@@ -110,14 +130,19 @@ export interface VanityStandardSchemaV1<Input = unknown, Output = Input> {
   }
 }
 
+/** Select whether a mutable token validates only in development (`'dev'`) or on every update (`'always'`); `false` disables runtime validation. */
 export type VanityRuntimeValidationMode = false | 'dev' | 'always'
+/** Choose whether an invalid mutable-token value throws, uses its fallback, or is omitted. */
 export type VanityInvalidRuntimeValuePolicy = 'throw' | 'fallback' | 'omit'
 
 export interface VanityTokenValidation<Input = unknown, Output = Input> {
   /** Stable lookup key required when this schema crosses the build/app boundary. */
   readonly id: string
+  /** Standard Schema implementation used when validation runs. */
   readonly schema?: VanityStandardSchemaV1<Input, Output>
+  /** Select development-only, always-on, or type-only validation. */
   readonly runtime?: VanityRuntimeValidationMode
+  /** Choose whether invalid runtime input throws, falls back, or is omitted. */
   readonly onInvalid?: VanityInvalidRuntimeValuePolicy
   /** Required when onInvalid is 'fallback'; it passes universal data-type checks. */
   readonly fallback?: Output
@@ -127,24 +152,37 @@ export interface VanityTokenCase<
   When extends Readonly<Record<string, string>> = Readonly<Record<string, string>>,
   Val = unknown,
 > {
+  /** Axis modes that select this branch. */
   readonly when: When
+  /** Branch value, or `null` to reserve the address without a value. */
   readonly val: Val | null
 }
 
+/** Configure a token's value, policy overrides, axes, metadata, and runtime behavior. */
 export interface VanityTokenConfig<
   Val = unknown,
   Axes extends Readonly<Record<string, Readonly<Record<string, unknown | null>>>> = Readonly<Record<string, Readonly<Record<string, unknown | null>>>>,
   Cases extends readonly VanityTokenCase[] = readonly VanityTokenCase[],
 > {
+  /** Default token value before axis branches are applied. */
   readonly val?: Val
+  /** Override the system token reference policy for this token. */
   readonly reference?: VanityTokenReference
+  /** Override the system token emission policy for this token. */
   readonly emit?: boolean
+  /** Allow runtime updates to the token's base value and branches. */
   readonly mutable?: boolean
+  /** Register this custom property with the browser Properties and Values API. */
   readonly register?: boolean | VanityTokenRegistration<Val>
+  /** Values keyed by environmental axis modes. */
   readonly axes?: Axes
+  /** Explicit semantic branches keyed by axis modes. */
   readonly cases?: Cases
+  /** Human-readable explanation surfaced in introspection and diagnostics. */
   readonly description?: string
+  /** Deprecation guidance shown to authors consuming this token. */
   readonly deprecated?: VanityTokenDeprecation
+  /** JSON-safe metadata copied into introspection and manifests. */
   readonly metadata?: VanityTokenMetadata
   /** Optional synchronous Standard Schema policy for runtime-bound setters. */
   readonly validate?: VanityTokenValidation
@@ -355,8 +393,11 @@ export interface VanityTokenBranchHandle<Val = unknown, Mutable extends boolean 
   readonly [VANITY_BRANCH_MUTABILITY]: Mutable
   /** Authored branch value; undefined denotes an explicit no-default reservation. */
   readonly $val: VanityResolvedTokenVal<Val>
+  /** Human-readable explanation for this branch. */
   readonly $description?: string
+  /** JSON-safe metadata attached to this branch. */
   readonly $metadata?: VanityTokenMetadata
+  /** Serialize the branch's resolved value. */
   toString: () => string
 }
 
@@ -429,13 +470,21 @@ export interface VanityTokenHandle<
   Cases = readonly [],
   Description extends string | undefined = string | undefined,
 > {
+  /** Final `--name` custom-property name; available on consolidated handles. */
   readonly $name: `--${Name}`
+  /** Resolved direct value for this token. */
   readonly $val: VanityResolvedTokenVal<Val>
+  /** Return the token's `var()` reference, optionally with a typed fallback. */
   readonly $var: (fallback?: VanityTokenFallback<Type>) => `var(--${Name})` | `var(--${Name}, ${string})`
+  /** Semantic token path used by introspection, diagnostics, and runtime updates. */
   readonly $path: Path
+  /** CSS data type carried by this token. */
   readonly $type: Type
+  /** Resolved reference mode selected by token and system policy. */
   readonly $reference: Reference
+  /** Resolved decision for emitting this token's declaration. */
   readonly $emit: Emit
+  /** Whether runtime updates are allowed for this token. */
   readonly $mutable: Mutable
   /**
    * Apply this token as a declaration named by its final path segment.
@@ -445,18 +494,27 @@ export interface VanityTokenHandle<
    * custom property, or configured alias.
    */
   readonly $dec: Readonly<Record<string, VanityTokenHandle<any, any, any, any, any, any, any, any, any, any>>>
+  /** Human-readable explanation attached to the token. */
   readonly $description: Description
+  /** Deprecation guidance for consumers of this token. */
   readonly $deprecated?: string
+  /** JSON-safe metadata for tooling and integrations. */
   readonly $metadata?: VanityTokenMetadata
+  /** Browser property registration metadata, when registration is enabled. */
   readonly $register?: boolean | VanityTokenRegistration<Val>
+  /** Runtime validation metadata for mutable updates. */
   readonly $validate?: VanityTokenValidation
+  /** Branch handles grouped by environmental axis and mode. */
   readonly $axes: VanityAxisHandles<Axes, Mutable>
+  /** Resolve the branch selected by a semantic axis-mode address. */
   readonly $case: (
     when: VanityCaseWhen<Cases>,
   ) => VanityTokenBranchHandle<VanityCaseVal<Cases, VanityCaseWhen<Cases>>, Mutable>
+  /** Serialize the token's resolved value. */
   toString: () => string
 }
 
+/** Erased token-handle shape used at dynamic graph and introspection boundaries; prefer the inferred handle type at authoring sites. */
 export type VanityTokenHandleAny = VanityTokenHandle<any, string, string, any, any, any, any, any, any, any>
 export type VanityColorTokenHandle = VanityTokenHandle<any, string, string, 'color', any, any, any, any, any, any>
 
@@ -519,7 +577,7 @@ export type VanityMergeGraph<A, B> = {
 
 /**
  * Collision-checked additive composition is structurally an intersection.
- * The unified builder and open system use this form so one type layer is not
+ * The token builder and open system use this form so one type layer is not
  * added for every module in a large design system. Shared object groups merge
  * naturally; their leaf collisions are rejected before this type is produced.
  */
@@ -556,14 +614,19 @@ export type VanityCompositionGuard<A, B>
       }
 
 /** Semantic requirement carried by an unfinished token module. */
+/** Capability requirement carried by a token module until a system mounts it. */
 export interface VanityTokenModuleRequirement {
+  /** Value protocol revision required by the module. */
   readonly protocol: number
+  /** Exact capability identity required by the module. */
   readonly capabilitySignature: string
+  /** Older compatible capability identities accepted by the module. */
   readonly compatibleCapabilitySignatures: readonly string[]
 }
 
 /** Emission intent retained by a module until one system finalizes it. */
 export interface VanityTokenModuleOptions {
+  /** Root selector or path for module emission. */
   readonly root?: string
   /** Internal lowered `@scope` preludes inherited by every declaration. */
   readonly scopes?: readonly string[]
@@ -571,6 +634,7 @@ export interface VanityTokenModuleOptions {
   readonly runtimeRoot?: string
   /** Resolve this module back to the owning system root at finalization. */
   readonly systemRoot?: true
+  /** Cascade layer used for the module's declarations. */
   readonly layer?: string
 }
 
@@ -580,6 +644,7 @@ export interface VanityTokenModuleOptions {
  */
 declare const VANITY_TOKEN_DEFINITION: unique symbol
 
+/** Type-only token graph carried by a builder until a system resolves it. */
 export interface VanityTokenDefinition<
   G extends object,
   Policy extends VanityTokenPolicy = VanityDefaultTokenPolicy,
@@ -590,6 +655,7 @@ export interface VanityTokenDefinition<
   readonly __vanityTokenPolicy?: Policy
 }
 
+/** Named token module that can be mounted into an open system. */
 export interface VanityTokenModule<
   G extends object,
   Policy extends VanityTokenPolicy = VanityDefaultTokenPolicy,
@@ -799,6 +865,7 @@ export type VanityVarsOf<Selection> = Selection extends { readonly $name: infer 
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
+/** Configure a standalone token graph's prefix and cross-token checks. */
 export interface VanityTokensOptions<T = unknown, Prefix extends string = string> {
   /** The custom-property prefix: `--vanity-*` by default. */
   prefix?: Prefix

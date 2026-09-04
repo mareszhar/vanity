@@ -9,30 +9,56 @@
 import type { VanityOklch } from '../tokens/math'
 import type { VanityManifest, VanityManifestContrast, VanityManifestEscape, VanityManifestStyle } from './manifest'
 import type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel } from './records'
+import type { VanitySystemMap } from './system'
 import { parseBlocks, walkDeclarations } from '../css/compile'
 import { parseColor } from '../tokens/math'
 import { createManifestModules, getManifestTokenUsage } from './manifest'
 
 export type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel }
 
+/** One actionable finding produced by a system- or build-scope audit. */
 export interface VanityAuditFinding {
+  /** Audit category that produced the finding. */
   kind: VanityAuditKind
+  /** Effective severity after defaults and policy promotion. */
   level: 'warn' | 'error'
   /** The headline: what drifted, naming the value and the token it should be. */
   message: string
+  /** Concrete repair guidance for the author. */
   fix?: string
   /** The style module the finding points into, root-relative. */
   file?: string
 }
 
+/** Build evidence supplied for categories a locked system cannot evaluate alone. */
 export interface VanityAuditEvidence {
+  /** Style barrels that were loaded eagerly. */
   readonly eagerStyleBarrels?: readonly { readonly file: string, readonly imports: readonly string[] }[]
+  /** Capability expectations that differ from emitted output. */
   readonly cssParityGaps?: readonly { readonly capability: string, readonly expected: string, readonly actual: string, readonly file?: string }[]
+  /** Artifacts whose content or identity is stale. */
   readonly staleArtifacts?: readonly { readonly artifact: string, readonly expected: string, readonly actual: string, readonly file?: string }[]
+  /** Per-root axis readings that disagree across the build. */
   readonly rootModeDisagreements?: readonly {
     readonly axis: string
     readonly readings: readonly { readonly root: string, readonly mode?: string }[]
   }[]
+}
+
+/** Complete result of a system- or build-scope audit. */
+export interface VanityAuditReport {
+  /** Findings from every category this system can evaluate without a build. */
+  readonly findings: readonly VanityAuditFinding[]
+  /** Categories this system cannot decide, and the evidence each one needs. */
+  readonly unevaluated: readonly VanityUnevaluatedAudit[]
+}
+
+/** One audit category deferred until build evidence is available. */
+export interface VanityUnevaluatedAudit {
+  /** Deferred audit category. */
+  readonly kind: VanityAuditKind
+  /** The evidence this category needs and a locked system does not hold. */
+  readonly requires: 'moduleUsage' | 'emittedCss' | 'buildEvidence'
 }
 
 /** Two colors this close in OKLab read as the same color — the ΔE epsilon. */
@@ -40,6 +66,53 @@ const NEAR_DUPLICATE_EPSILON = 0.02
 
 /** A category speaks only when tokens already carry it: at least this many tokenized declarations… */
 const STRAY_MIN_TOKENIZED = 2
+
+const DEFAULT_AUDIT_LEVELS: Record<VanityAuditKind, VanityAuditLevel> = {
+  unusedTokens: 'warn',
+  nearDuplicates: 'warn',
+  contrast: 'warn',
+  escapes: 'warn',
+  scaleStrays: 'warn',
+  focusVisibility: 'warn',
+  specificityContexts: 'warn',
+  rawAssertions: 'warn',
+  nonportableValues: 'warn',
+  ambiguousAxes: 'warn',
+  mutableRootHazards: 'warn',
+  aliasEscapes: 'warn',
+  overwriteInventory: 'warn',
+  eagerStyleBarrels: 'warn',
+  cssParityGaps: 'warn',
+  staleArtifacts: 'warn',
+  rootModeDisagreements: 'warn',
+}
+
+const SYSTEM_AUDIT_KINDS = [
+  'ambiguousAxes',
+  'mutableRootHazards',
+  'overwriteInventory',
+  'nonportableValues',
+  'specificityContexts',
+] as const
+
+type SystemAuditKind = typeof SYSTEM_AUDIT_KINDS[number]
+type AuditRunner = () => VanityAuditFinding[]
+type SystemAuditCategories = Record<SystemAuditKind, AuditRunner>
+
+const UNEVALUATED_AUDITS: readonly VanityUnevaluatedAudit[] = [
+  { kind: 'unusedTokens', requires: 'moduleUsage' },
+  { kind: 'contrast', requires: 'moduleUsage' },
+  { kind: 'escapes', requires: 'moduleUsage' },
+  { kind: 'aliasEscapes', requires: 'moduleUsage' },
+  { kind: 'rawAssertions', requires: 'moduleUsage' },
+  { kind: 'nearDuplicates', requires: 'emittedCss' },
+  { kind: 'scaleStrays', requires: 'emittedCss' },
+  { kind: 'focusVisibility', requires: 'emittedCss' },
+  { kind: 'eagerStyleBarrels', requires: 'buildEvidence' },
+  { kind: 'cssParityGaps', requires: 'buildEvidence' },
+  { kind: 'staleArtifacts', requires: 'buildEvidence' },
+  { kind: 'rootModeDisagreements', requires: 'buildEvidence' },
+]
 
 // ─── The audit ───────────────────────────────────────────────────────────────
 
@@ -54,45 +127,26 @@ export function audit(
   config?: VanityAuditConfig,
   evidence: VanityAuditEvidence = {},
 ): VanityAuditFinding[] {
-  const levels: Record<VanityAuditKind, VanityAuditLevel> = {
-    unusedTokens: 'warn',
-    nearDuplicates: 'warn',
-    contrast: 'warn',
-    escapes: 'warn',
-    scaleStrays: 'warn',
-    focusVisibility: 'warn',
-    specificityContexts: 'warn',
-    rawAssertions: 'warn',
-    nonportableValues: 'warn',
-    ambiguousAxes: 'warn',
-    mutableRootHazards: 'warn',
-    aliasEscapes: 'warn',
-    overwriteInventory: 'warn',
-    eagerStyleBarrels: 'warn',
-    cssParityGaps: 'warn',
-    staleArtifacts: 'warn',
-    rootModeDisagreements: 'warn',
-    ...Object.fromEntries(Object.entries(manifest.system.audits).map(([name, entry]) => [name, entry.level])),
-    ...config,
-  }
+  const levels = resolveAuditLevels(manifest.system, config)
 
   const findings: VanityAuditFinding[] = []
   const declarations = collectDeclarations(css)
+  const systemCategories = createSystemAuditCategories(manifest.system)
 
-  const categories: Record<VanityAuditKind, () => VanityAuditFinding[]> = {
+  const categories: Record<VanityAuditKind, AuditRunner> = {
     unusedTokens: () => findUnusedTokens(manifest),
     nearDuplicates: () => findNearDuplicates(manifest, declarations),
     contrast: () => findAcceptedContrast(manifest),
     escapes: () => findEscapes(manifest),
     scaleStrays: () => findScaleStrays(manifest, declarations),
     focusVisibility: () => findFocusVisibility(manifest, declarations),
-    specificityContexts: () => findSpecificityContexts(manifest),
+    specificityContexts: systemCategories.specificityContexts,
     rawAssertions: () => findRawAssertions(manifest),
-    nonportableValues: () => findNonportableValues(manifest),
-    ambiguousAxes: () => findAmbiguousAxes(manifest),
-    mutableRootHazards: () => findMutableRootHazards(manifest),
+    nonportableValues: systemCategories.nonportableValues,
+    ambiguousAxes: systemCategories.ambiguousAxes,
+    mutableRootHazards: systemCategories.mutableRootHazards,
     aliasEscapes: () => findAliasEscapes(manifest),
-    overwriteInventory: () => overwriteInventory(manifest),
+    overwriteInventory: systemCategories.overwriteInventory,
     eagerStyleBarrels: () => (evidence.eagerStyleBarrels ?? []).map(entry => ({
       kind: 'eagerStyleBarrels' as const,
       level: 'warn' as const,
@@ -130,6 +184,50 @@ export function audit(
   }
 
   return findings
+}
+
+/** Run the five audit categories that a consolidated semantic map can decide. */
+export function runSystemAudit(
+  system: VanitySystemMap,
+  config?: VanityAuditConfig,
+): VanityAuditReport {
+  const levels = resolveAuditLevels(system, config)
+  const categories = createSystemAuditCategories(system)
+  const findings = SYSTEM_AUDIT_KINDS.flatMap((kind) => {
+    if (levels[kind] === 'off')
+      return []
+
+    return categories[kind]().map(finding => ({
+      ...finding,
+      level: levels[kind] as 'warn' | 'error',
+    }))
+  })
+
+  return {
+    findings,
+    unevaluated: UNEVALUATED_AUDITS,
+  }
+}
+
+function resolveAuditLevels(
+  system: VanitySystemMap,
+  config?: VanityAuditConfig,
+): Record<VanityAuditKind, VanityAuditLevel> {
+  return {
+    ...DEFAULT_AUDIT_LEVELS,
+    ...Object.fromEntries(Object.entries(system.audits).map(([name, entry]) => [name, entry.level])),
+    ...config,
+  }
+}
+
+function createSystemAuditCategories(system: VanitySystemMap): SystemAuditCategories {
+  return {
+    ambiguousAxes: () => findAmbiguousAxes(system),
+    mutableRootHazards: () => findMutableRootHazards(system),
+    overwriteInventory: () => overwriteInventory(system),
+    nonportableValues: () => findNonportableValues(system),
+    specificityContexts: () => findSpecificityContexts(system),
+  }
 }
 
 interface Declaration {
@@ -418,7 +516,7 @@ function findFocusVisibility(manifest: VanityManifest, declarations: Declaration
 
   for (const declaration of declarations) {
     for (const subject of getFocusSubjects(declaration.selector)) {
-      if (removesOutline(declaration))
+      if (removeOutline(declaration))
         removals.set(subject, declaration)
 
       if (declaration.selector.includes(':focus-visible') && hasOutline(declaration))
@@ -453,7 +551,7 @@ function getFocusSubjects(selector: string): string[] {
     .filter((subject): subject is string => subject !== undefined)
 }
 
-function removesOutline({ property, value }: Declaration): boolean {
+function removeOutline({ property, value }: Declaration): boolean {
   return (property === 'outline' && /^(?:none|0(?:px|rem|em)?)$/i.test(value.trim()))
     || (property === 'outline-width' && /^0(?:px|rem|em)?$/i.test(value.trim()))
 }
@@ -465,10 +563,10 @@ function hasOutline({ property, value }: Declaration): boolean {
 
 // ─── Semantic/provenance categories ────────────────────────────────────────
 
-function findSpecificityContexts(manifest: VanityManifest): VanityAuditFinding[] {
+function findSpecificityContexts(system: VanitySystemMap): VanityAuditFinding[] {
   const findings: VanityAuditFinding[] = []
   const seen = new Set<string>()
-  for (const [path, token] of Object.entries(manifest.system.tokens)) {
+  for (const [path, token] of Object.entries(system.tokens)) {
     for (const declaration of token.declarations) {
       const selectors = declaration.context.selectors.length === 0
         ? [declaration.context.root]
@@ -504,8 +602,8 @@ function findRawAssertions(manifest: VanityManifest): VanityAuditFinding[] {
     }))
 }
 
-function findNonportableValues(manifest: VanityManifest): VanityAuditFinding[] {
-  return Object.entries(manifest.system.tokens)
+function findNonportableValues(system: VanitySystemMap): VanityAuditFinding[] {
+  return Object.entries(system.tokens)
     .filter(([, token]) => token.portability.status === 'nonportable')
     .map(([path, token]) => ({
       kind: 'nonportableValues' as const,
@@ -516,9 +614,9 @@ function findNonportableValues(manifest: VanityManifest): VanityAuditFinding[] {
     }))
 }
 
-function findAmbiguousAxes(manifest: VanityManifest): VanityAuditFinding[] {
+function findAmbiguousAxes(system: VanitySystemMap): VanityAuditFinding[] {
   const findings: VanityAuditFinding[] = []
-  for (const [axis, definition] of Object.entries(manifest.system.axes)) {
+  for (const [axis, definition] of Object.entries(system.axes)) {
     for (const [mode, configured] of Object.entries(definition.modes)) {
       const seen = new Map<string, string>()
       for (const arm of configured.arms) {
@@ -539,9 +637,9 @@ function findAmbiguousAxes(manifest: VanityManifest): VanityAuditFinding[] {
   return findings
 }
 
-function findMutableRootHazards(manifest: VanityManifest): VanityAuditFinding[] {
+function findMutableRootHazards(system: VanitySystemMap): VanityAuditFinding[] {
   const findings: VanityAuditFinding[] = []
-  for (const [path, token] of Object.entries(manifest.system.tokens)) {
+  for (const [path, token] of Object.entries(system.tokens)) {
     if (!token.mutable || token.runtime === undefined)
       continue
     const roots = new Set(token.declarations.flatMap(declaration => [
@@ -549,12 +647,12 @@ function findMutableRootHazards(manifest: VanityManifest): VanityAuditFinding[] 
       ...declaration.context.selectors,
     ]))
     for (const root of roots) {
-      if (manifest.system.root === undefined || root === manifest.system.root || root.includes(manifest.system.root))
+      if (root === system.root || root.includes(system.root))
         continue
       findings.push({
         kind: 'mutableRootHazards',
         level: 'warn',
-        message: `${path} has a mutable binding at '${root}', outside system root '${manifest.system.root}'`,
+        message: `${path} has a mutable binding at '${root}', outside system root '${system.root}'`,
         fix: 'bind the runtime at or above every trigger substitution point, or keep mutable conditions under the token root',
         ...(token.declaredAt?.file === undefined ? {} : { file: token.declaredAt.file }),
       })
@@ -575,8 +673,8 @@ function findAliasEscapes(manifest: VanityManifest): VanityAuditFinding[] {
     }))
 }
 
-function overwriteInventory(manifest: VanityManifest): VanityAuditFinding[] {
-  return manifest.system.overwrites.map(entry => ({
+function overwriteInventory(system: VanitySystemMap): VanityAuditFinding[] {
+  return system.overwrites.map(entry => ({
     kind: 'overwriteInventory',
     level: 'warn',
     message: `${entry.operation} ${entry.target}: ${entry.paths.join(', ') || '(whole contribution)'}`,

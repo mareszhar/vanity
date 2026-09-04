@@ -1,5 +1,6 @@
 /** Pure authored token-module composition, derivation, and patch operations. */
 
+import type { VanityDiagnosticCode } from '../diagnostics'
 import type { TokenContribution, TokenDerivation, TokenModule } from './module'
 import type {
   VanityGraphInput,
@@ -7,6 +8,7 @@ import type {
   VanityTokenModule,
   VanityTokenModuleOptions,
 } from './types'
+import { VanityError } from '../diagnostics'
 import {
   createTokenModule,
   freezeTokenGroup,
@@ -15,8 +17,14 @@ import {
 import { assertTokenModulesCompatible } from './requirements'
 
 function requireTokenModule(value: unknown, operation: string): TokenModule {
-  if (!isTokenModule(value))
-    throw new TypeError(`[vanity] ${operation} needs an unfinished token module`)
+  if (!isTokenModule(value)) {
+    throwTokenDeriveError(
+      'VANITY_TOKENS_INVALID_DEFINITION',
+      `${operation} needs an unfinished token module`,
+      operation,
+      'pass the unfinished module returned by defineTokens()',
+    )
+  }
   return value as TokenModule
 }
 
@@ -30,14 +38,6 @@ function appendTokenContribution(
     module.tokenPolicy,
     module.derivationEmission,
   )
-}
-
-/** Append one pure graph operation to an unfinished module. */
-export function addTokenContribution(
-  module: unknown,
-  contribution: TokenContribution,
-): TokenModule {
-  return appendTokenContribution(requireTokenModule(module, 'addTokenContribution'), contribution)
 }
 
 /** Compose two inert modules without materializing either module. */
@@ -56,12 +56,12 @@ export function composeTokenModules(target: unknown, module: unknown): TokenModu
 /** Add a lazy derivation stage; the stage runs only at system finalization. */
 export function deriveTokenModule(
   module: unknown,
-  stage: TokenDerivation,
+  derive: TokenDerivation,
 ): TokenModule {
   const target = requireTokenModule(module, 'deriveTokenModule')
   return appendTokenContribution(target, {
     kind: 'derive',
-    stage,
+    derive,
     emission: target.derivationEmission,
   })
 }
@@ -77,7 +77,7 @@ function applyTokenModulePatch(
         if (contribution.kind === 'seed')
           return Object.freeze({ kind: 'patch' as const, mode, graph: contribution.graph })
         if (contribution.kind === 'derive')
-          return Object.freeze({ kind: 'patch-stage' as const, mode, stage: contribution.stage })
+          return Object.freeze({ kind: 'patch-stage' as const, mode, derive: contribution.derive })
         if (contribution.kind === 'patch-stage')
           return Object.freeze({ ...contribution, mode })
         return Object.freeze({ ...contribution, mode })
@@ -152,15 +152,15 @@ export function prefixTokenModule(module: unknown, path: readonly string[]): Tok
     if (contribution.kind === 'patch-stage') {
       return Object.freeze({
         ...contribution,
-        stage: (tree: Record<string, unknown>) =>
-          wrapTokenGraph(path, contribution.stage(readGraphPath(tree, path))),
+        derive: (tree: Record<string, unknown>) =>
+          wrapTokenGraph(path, contribution.derive(readGraphPath(tree, path))),
       })
     }
     return Object.freeze({
       ...contribution,
       modulePath: Object.freeze([...path, ...(contribution.modulePath ?? [])]),
-      stage: (tree: Record<string, unknown>) =>
-        wrapTokenGraph(path, contribution.stage(readGraphPath(tree, path))),
+      derive: (tree: Record<string, unknown>) =>
+        wrapTokenGraph(path, contribution.derive(readGraphPath(tree, path))),
     })
   })
   return createTokenModule(
@@ -183,8 +183,14 @@ export function applyTokenModuleRoot(
 ): TokenModule {
   const target = requireTokenModule(module, 'applyTokenModuleRoot')
   const options: VanityTokenModuleOptions = typeof root === 'string' ? { root } : root
-  if (options.root !== undefined && options.root.trim().length === 0)
-    throw new TypeError('[vanity] a token module root must be a non-empty selector')
+  if (options.root !== undefined && options.root.trim().length === 0) {
+    throwTokenDeriveError(
+      'VANITY_TOKENS_INVALID_CONFIG',
+      'a token module root must be a non-empty selector',
+      'root',
+      'provide a non-empty selector or use systemRoot()/scope()',
+    )
+  }
   const emission = Object.freeze({ ...options })
   const contributions = target.contributions.map((contribution): TokenContribution =>
     contribution.kind === 'patch' || contribution.kind === 'patch-stage'
@@ -222,4 +228,13 @@ function readGraphPath(tree: Record<string, unknown>, path: readonly string[]): 
       : {}
   }
   return current
+}
+
+function throwTokenDeriveError(
+  code: Extract<VanityDiagnosticCode, `VANITY_TOKENS_${string}`>,
+  message: string,
+  path: string | readonly string[],
+  fix: string,
+): never {
+  throw new VanityError({ code, message, path, fix })
 }

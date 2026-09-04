@@ -2,6 +2,7 @@
 
 import type { VanityExpressionNode, VanityOperationNode } from './protocol'
 import type { VanityCssDataType, VanityCssInput, VanityCssValue, VanityValue } from './types'
+import { throwValueError } from './error'
 import {
   createCompositeNode,
   createFunctionNode,
@@ -143,15 +144,21 @@ class CalcValue<Dimension extends VanityMathDimension> extends ExpressionValue<D
   multiply<const Input extends VanityCssInput>(value: Input): VanityCalc<VanityProductDimension<Dimension, VanityDimensionOf<Input>>> {
     validateFiniteOperand('multiply', value)
     const other = getDimension(value)
-    return createBinaryOperation(this.expression, '*', createMathNode(value), getProductRuntimeDimension(this.dimension, other), requiresTypedArithmetic(this.dimension, other)) as never
+    return createBinaryOperation(this.expression, '*', createMathNode(value), getProductRuntimeDimension(this.dimension, other), requireTypedArithmetic(this.dimension, other)) as never
   }
 
   divide<const Input extends VanityCssInput>(value: Input): VanityCalc<VanityQuotientDimension<Dimension, VanityDimensionOf<Input>>> {
     validateFiniteOperand('divide', value)
-    if (typeof value === 'number' && value === 0)
-      throw new RangeError('[vanity] calc().divide() cannot divide by zero')
+    if (typeof value === 'number' && value === 0) {
+      throwValueError(
+        'VANITY_CSS_INVALID_VALUE',
+        'calc().divide() cannot divide by zero',
+        'calc.divide',
+        'use a non-zero divisor',
+      )
+    }
     const other = getDimension(value)
-    return createBinaryOperation(this.expression, '/', createMathNode(value), getQuotientRuntimeDimension(this.dimension, other), requiresTypedArithmetic(this.dimension, other)) as never
+    return createBinaryOperation(this.expression, '/', createMathNode(value), getQuotientRuntimeDimension(this.dimension, other), requireTypedArithmetic(this.dimension, other)) as never
   }
 
   negate(): VanityCalc<Dimension> {
@@ -319,7 +326,12 @@ function getSumRuntimeDimension(a: VanityMathDimension, b: VanityMathDimension):
     return a
   if (isLengthPercentage(a) && isLengthPercentage(b))
     return 'length-percentage'
-  throw new TypeError(`[vanity] CSS math cannot combine ${a} and ${b} in an additive comparison`)
+  throwValueError(
+    'VANITY_CSS_INVALID_VALUE',
+    `CSS math cannot combine ${a} and ${b} in an additive comparison`,
+    'calc',
+    'combine compatible CSS dimensions or use an explicitly typed value',
+  )
 }
 
 function getProductRuntimeDimension(a: VanityMathDimension, b: VanityMathDimension): VanityMathDimension {
@@ -342,7 +354,7 @@ function getQuotientRuntimeDimension(a: VanityMathDimension, b: VanityMathDimens
   return 'unknown'
 }
 
-function requiresTypedArithmetic(a: VanityMathDimension, b: VanityMathDimension): boolean {
+function requireTypedArithmetic(a: VanityMathDimension, b: VanityMathDimension): boolean {
   return a !== 'unknown' && b !== 'unknown' && a !== 'none' && b !== 'none' && a !== 'number' && b !== 'number'
 }
 
@@ -355,8 +367,14 @@ function getDataType<Dimension extends VanityMathDimension>(dimension: Dimension
 }
 
 function validateFiniteOperand(operation: string, value: VanityCssInput): void {
-  if (typeof value === 'number' && !Number.isFinite(value))
-    throw new RangeError(`[vanity] calc().${operation}() needs a finite number; received ${value}`)
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `calc().${operation}() needs a finite number; received ${value}`,
+      `calc.${operation}`,
+      'pass a finite number',
+    )
+  }
 }
 
 function getValueSource(value: VanityCssInput) {

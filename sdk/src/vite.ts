@@ -54,7 +54,7 @@ import type {
   VanityConfig,
 } from './config'
 import type { VanityInspectRecord } from './introspect/records'
-import type { VanityPortableSystemV2 } from './system/contract'
+import type { VanityPortableSystem } from './system/contract'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, posix, resolve } from 'node:path'
 import { pid } from 'node:process'
@@ -66,12 +66,13 @@ import {
   planStyleAutoImports,
 } from './compiler/auto-imports/autoImportPlan'
 import { writeAutoImportDeclarationFiles, writeAutoImportDeclarations } from './compiler/auto-imports/autoImportWriter'
+import { normalizePath } from './compiler/core/path'
 import {
   assertFreshPortablePair,
   assertNamespaceOwnership,
+  getRuntimeIdentity,
   normalizeSystemSources,
   resolveConfiguredSystemImport,
-  runtimeIdentity,
 } from './compiler/core/systems'
 import { transformStyleModule } from './compiler/core/transform'
 import { resolveCssVirtualAlias } from './compiler/hmr/state'
@@ -82,9 +83,8 @@ import { executeBundle } from './compiler/modules/evaluate'
 import {
   getStyleAutoImportAliases,
 } from './compiler/modules/source'
-import { normalizePath } from './compiler/path'
 import { getExportModuleFilesFromFile } from './compiler/projection/exportNames'
-import { runtimeSystemModule } from './compiler/projection/runtimeModule'
+import { buildRuntimeSystemModule } from './compiler/projection/runtimeModule'
 import { reportDiagnostics, VanityError } from './diagnostics'
 import { renderDevtoolsPage } from './introspect/devtools'
 import { buildManifest } from './introspect/manifest'
@@ -178,7 +178,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   /** Attempted system dependency → configured entries, including failed attempts. */
   const systemDependentsByFile = new Map<string, Set<string>>()
   /** Namespace owner key → last-good systems, recomputed after successful updates. */
-  const namespaceOwners = new Map<string, Map<string, VanityPortableSystemV2>>()
+  const namespaceOwners = new Map<string, Map<string, VanityPortableSystem>>()
   /** `.css.ts` entries claimed by Vanity rather than raw vanilla-extract. */
   const vanityOwnedStyleModules = new Set<string>()
   /** Style module → configured build-time systems it imports. */
@@ -269,7 +269,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     assertNamespaceOwnership(source.entry, evaluated.portable, namespaceOwners)
     systemsByEntry.set(source.entry, evaluated)
 
-    const runtimeId = runtimeIdentity(evaluated.portable)
+    const runtimeId = getRuntimeIdentity(evaluated.portable)
     const duplicate = systemsByRuntimeId.get(runtimeId)
     if (duplicate && duplicate.portable.identities.css !== evaluated.portable.identities.css) {
       // Equal runtime semantics with distinct CSS is valid only while CSS owns
@@ -311,7 +311,8 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     if (source.artifact) {
       const parsed: unknown = JSON.parse(await readFile(source.artifact, 'utf-8'))
       assertPortableSystem(parsed)
-      assertFreshPortablePair(source, inProcess.portable, parsed)
+      const owner = source.packageName ?? substrate.backend.getPackageName(dirname(source.entry)) ?? source.entry
+      assertFreshPortablePair(source, inProcess.portable, parsed, owner)
       portable = parsed
     }
 
@@ -654,7 +655,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       if (systemSource) {
         const evaluated = await ensureConfiguredSystem(systemSource)
         const target = resolveOptions?.ssr || config.build.ssr === true ? 'ssr' : 'browser'
-        const runtimeId = runtimeIdentity(evaluated.portable)
+        const runtimeId = getRuntimeIdentity(evaluated.portable)
         const id = `${runtimeVirtualPrefix}${target}:${runtimeId}`
         systemsByRuntimeId.set(runtimeId, evaluated)
         runtimeVirtualIds.add(id)
@@ -682,9 +683,15 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         const target = payload.slice(0, separator) as 'browser' | 'ssr'
         const runtimeId = payload.slice(separator + 1)
         const system = systemsByRuntimeId.get(runtimeId)
-        if (!system)
-          throw new Error(`[vanity] missing portable runtime system '${runtimeId}'`)
-        return runtimeSystemModule(system, target)
+        if (!system) {
+          throw new VanityError({
+            code: 'VANITY_VITE_BUILD_FAILED',
+            message: `missing portable runtime system '${runtimeId}'`,
+            path: ['runtime', runtimeId],
+            fix: 'build the system entry before requesting its generated runtime module',
+          })
+        }
+        return buildRuntimeSystemModule(system, target)
       }
 
       if (!validId.endsWith(virtualExt))
@@ -710,7 +717,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     },
   }
 
-  const substratePlugins = substrate.modules.createVitePlugins({
+  const substratePlugins = substrate.backend.createVitePlugins({
     identifiers: compiler.identifiers,
     unstable_mode: compiler.unstableMode,
     unstable_pluginFilter: ({ name }: { name: string }) =>
@@ -915,7 +922,7 @@ function renderCascadePrelude(roots: readonly string[]): string {
   return unique.length === 0 ? '' : `@layer ${unique.join(', ')};\n`
 }
 
-function createSystemRecordFromPortable(system: VanityPortableSystemV2): VanityInspectRecord {
+function createSystemRecordFromPortable(system: VanityPortableSystem): VanityInspectRecord {
   return {
     kind: 'system',
     file: system.source,

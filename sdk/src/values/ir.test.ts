@@ -23,7 +23,8 @@ import {
   percent,
   rawValue,
 } from '../index'
-import { createFixtureSystem } from '../test-support/current'
+import { resolvePolicies } from '../system/policies'
+import { createFixtureSystem } from '../test-support/system'
 import { getTokenModule } from '../tokens/builder'
 import { resolveTokenModule } from '../tokens/resolve'
 import { defaultValueKernel } from './defaults'
@@ -33,8 +34,7 @@ import { getNode, VANITY_DEFAULT_CSS_SUPPORT } from './protocol'
 function serialize(value: import('./types').VanitySelfValue): string {
   return serializeValueWithContext({
     values: defaultValueKernel,
-    support: VANITY_DEFAULT_CSS_SUPPORT,
-    policies: {},
+    policies: resolvePolicies({ support: VANITY_DEFAULT_CSS_SUPPORT }),
   }, value)
 }
 

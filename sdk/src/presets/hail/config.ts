@@ -6,8 +6,9 @@ import type {
   HailRange,
   HailRangeName,
 } from './types'
+import { VanityError } from '../../diagnostics'
 
-export const HAIL_PRESET_NAMES = [
+const HAIL_PRESET_NAMES = [
   'reset',
   'palette',
   'roles',
@@ -18,7 +19,7 @@ export const HAIL_PRESET_NAMES = [
   'icons',
 ] as const satisfies readonly HailPresetName[]
 
-export const HAIL_RANGE_NAMES = [
+const HAIL_RANGE_NAMES = [
   'l',
   'c',
   'h',
@@ -70,18 +71,42 @@ export function normalizeHailOptions(options: HailOptions = {}): HailNormalizedO
   const exactName = options.color?.markers?.exact ?? 'exact'
   validateMemberName(spanName, 'color.markers.span')
   validateMemberName(exactName, 'color.markers.exact')
-  if (spanName === exactName)
-    throw new TypeError(`[hail] span and exact markers cannot share the name '${spanName}'`)
+  if (spanName === exactName) {
+    throw new VanityError({
+      code: 'VANITY_HAIL_INVALID_CONFIG',
+      message: `span and exact markers cannot share the name '${spanName}'`,
+      path: ['color', 'markers'],
+      fix: 'Give color.markers.span and color.markers.exact distinct names.',
+    })
+  }
   for (const reserved of ['size', 'bem', 'contrastOf', 'mx']) {
-    if (spanName === reserved || exactName === reserved)
-      throw new TypeError(`[hail] marker name '${reserved}' collides with Hail's '${reserved}' utility`)
+    if (spanName === reserved || exactName === reserved) {
+      throw new VanityError({
+        code: 'VANITY_HAIL_INVALID_CONFIG',
+        message: `marker name '${reserved}' collides with Hail's '${reserved}' utility`,
+        path: ['color', 'markers'],
+        fix: 'Choose marker names that do not collide with Hail utilities.',
+      })
+    }
   }
 
-  const presets = selectedPresets(options)
-  if (presets.has('roles') && !presets.has('palette'))
-    throw new TypeError('[hail] the \'roles\' preset requires \'palette\'; include palette or exclude roles')
-  if (presets.has('theming') && !presets.has('roles'))
-    throw new TypeError('[hail] the \'theming\' preset requires \'roles\'; include roles or exclude theming')
+  const presets = selectPresets(options)
+  if (presets.has('roles') && !presets.has('palette')) {
+    throw new VanityError({
+      code: 'VANITY_HAIL_INVALID_CONFIG',
+      message: 'the \'roles\' preset requires \'palette\'; include palette or exclude roles',
+      path: ['presets'],
+      fix: 'Include \'palette\' when enabling \'roles\', or exclude \'roles\'.',
+    })
+  }
+  if (presets.has('theming') && !presets.has('roles')) {
+    throw new VanityError({
+      code: 'VANITY_HAIL_INVALID_CONFIG',
+      message: 'the \'theming\' preset requires \'roles\'; include roles or exclude theming',
+      path: ['presets'],
+      fix: 'Include \'roles\' when enabling \'theming\', or exclude \'theming\'.',
+    })
+  }
 
   return Object.freeze({
     base,
@@ -96,7 +121,7 @@ export function normalizeHailOptions(options: HailOptions = {}): HailNormalizedO
   })
 }
 
-function selectedPresets(options: HailOptions): ReadonlySet<HailPresetName> {
+function selectPresets(options: HailOptions): ReadonlySet<HailPresetName> {
   if (options.presets === undefined)
     return new Set()
 
@@ -112,31 +137,55 @@ function validateRange(name: HailRangeName, range: HailRange): void {
   validateFinite(maximum, `color.ranges.${name}[1]`)
   if (name === 'h') {
     if (minimum < 0 || minimum > 360 || maximum < 0 || maximum > 360 || minimum === maximum) {
-      throw new RangeError(
-        `[hail] color.ranges.h endpoints must be distinct values within 0..360; received ${minimum}..${maximum}`,
-      )
+      throw new VanityError({
+        code: 'VANITY_HAIL_INVALID_CONFIG',
+        message: `color.ranges.h endpoints must be distinct values within 0..360; received ${minimum}..${maximum}`,
+        path: ['color', 'ranges', name],
+        fix: 'Use distinct hue endpoints between 0 and 360.',
+      })
     }
     return
   }
   if (minimum > maximum) {
-    throw new RangeError(
-      `[hail] color.ranges.${name} must be ordered [minimum, maximum]; received ${minimum}..${maximum}`,
-    )
+    throw new VanityError({
+      code: 'VANITY_HAIL_INVALID_CONFIG',
+      message: `color.ranges.${name} must be ordered [minimum, maximum]; received ${minimum}..${maximum}`,
+      path: ['color', 'ranges', name],
+      fix: 'Order the range as [minimum, maximum].',
+    })
   }
 }
 
 function validateMemberName(name: string, path: string): void {
-  if (!/^[A-Z_]\w*$/i.test(name) || name.startsWith('$'))
-    throw new TypeError(`[hail] ${path} must be a non-$ TypeScript identifier; received '${name}'`)
+  if (!/^[A-Z_]\w*$/i.test(name) || name.startsWith('$')) {
+    throw new VanityError({
+      code: 'VANITY_HAIL_INVALID_CONFIG',
+      message: `${path} must be a non-$ TypeScript identifier; received '${name}'`,
+      path: path.split('.'),
+      fix: 'Use a non-$ TypeScript identifier for the marker name.',
+    })
+  }
 }
 
 function validateFinite(value: number, path: string): void {
-  if (!Number.isFinite(value))
-    throw new RangeError(`[hail] ${path} must be finite; received ${value}`)
+  if (!Number.isFinite(value)) {
+    throw new VanityError({
+      code: 'VANITY_HAIL_INVALID_CONFIG',
+      message: `${path} must be finite; received ${value}`,
+      path: path.split('.'),
+      fix: 'Use a finite numeric value.',
+    })
+  }
 }
 
 function validateFinitePositive(value: number, path: string): void {
   validateFinite(value, path)
-  if (value <= 0)
-    throw new RangeError(`[hail] ${path} must be greater than zero; received ${value}`)
+  if (value <= 0) {
+    throw new VanityError({
+      code: 'VANITY_HAIL_INVALID_CONFIG',
+      message: `${path} must be greater than zero; received ${value}`,
+      path: path.split('.'),
+      fix: 'Use a finite value greater than zero.',
+    })
+  }
 }

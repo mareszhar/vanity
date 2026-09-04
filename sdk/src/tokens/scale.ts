@@ -2,20 +2,26 @@
 
 import type { VanityCssValue } from '../values/types'
 import type { VanityLengthUnit } from '../values/units'
+import { VanityError } from '../diagnostics'
 import { length } from '../values/units'
 
+/** Configure a linear scale's unit size and named steps. */
 export interface VanityLinearScaleOptions<Steps extends Readonly<Record<string, number>>> {
   /** Number of CSS pixels per scale step. */
   readonly unit: number
+  /** Named step values multiplied by `unit`. */
   readonly steps: Steps
 }
 
+/** Configure a ratio-based scale with named exponent steps. */
 export interface VanityModularScaleOptions<Steps extends Readonly<Record<string, number>>> {
   /** Base magnitude in `unit`; defaults to 1. */
   readonly base?: number
+  /** Ratio applied for each step. */
   readonly ratio: number
+  /** Named exponent steps. */
   readonly steps: Steps
-  /** Defaults to rem. */
+  /** Output unit; defaults to rem. */
   readonly unit?: VanityLengthUnit
 }
 
@@ -48,8 +54,14 @@ export const scale = Object.freeze({
     const unit = options.unit ?? 'rem'
     validateFinite(base, 'modular base')
     validateFinite(options.ratio, 'modular ratio')
-    if (options.ratio <= 0)
-      throw new RangeError(`[vanity] modular scale ratio must be greater than zero; received ${options.ratio}`)
+    if (options.ratio <= 0) {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_INVALID_DEFINITION',
+        message: `modular scale ratio must be greater than zero; received ${options.ratio}`,
+        path: ['ratio'],
+        fix: 'provide a modular scale ratio greater than zero',
+      })
+    }
     return createScale(options.steps, step => length[unit](roundNumber(base * options.ratio ** step)))
   },
 })
@@ -63,7 +75,7 @@ function createScale<Steps extends Readonly<Record<string, number>>, Value>(
     validateFinite(step, `step '${name}'`)
 
   const cache = new Map<number, Value>()
-  const at = (step: number): Value => {
+  const resolveStep = (step: number): Value => {
     validateFinite(step, 'step')
     const prior = cache.get(step)
     if (prior !== undefined)
@@ -74,25 +86,37 @@ function createScale<Steps extends Readonly<Record<string, number>>, Value>(
   }
   const callable = ((step: string | number): Value => {
     if (typeof step === 'string') {
-      if (!Object.hasOwn(steps, step))
-        throw new RangeError(`[vanity] this scale has no named step '${step}'`)
-      return at(steps[step]!)
+      if (!Object.hasOwn(steps, step)) {
+        throw new VanityError({
+          code: 'VANITY_TOKENS_INVALID_DEFINITION',
+          message: `this scale has no named step '${step}'`,
+          path: ['steps', step],
+          fix: 'use one of the configured scale step names',
+        })
+      }
+      return resolveStep(steps[step]!)
     }
-    return at(step)
+    return resolveStep(step)
   }) as VanityScale<Steps, Value>
 
   let tokenTable: { readonly [Key in keyof Steps]: Value } | undefined
   return Object.freeze(Object.assign(callable, {
     steps,
     tokens: () => tokenTable ??= Object.freeze(Object.fromEntries(
-      Object.entries(steps).map(([name, step]) => [name, at(step)]),
+      Object.entries(steps).map(([name, step]) => [name, resolveStep(step)]),
     )) as { readonly [Key in keyof Steps]: Value },
   }))
 }
 
 function validateFinite(value: number, role: string): void {
-  if (!Number.isFinite(value))
-    throw new RangeError(`[vanity] scale ${role} must be finite; received ${value}`)
+  if (!Number.isFinite(value)) {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_DEFINITION',
+      message: `scale ${role} must be finite; received ${value}`,
+      path: [role],
+      fix: 'provide a finite scale number',
+    })
+  }
 }
 
 function roundNumber(value: number): number {

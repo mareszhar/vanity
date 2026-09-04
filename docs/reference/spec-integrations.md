@@ -23,7 +23,7 @@ The canonical detailed contract is [spec-recipes.md](./spec-recipes.md).
 
 Every arm accepts the full styling input, including ordered arrays, conditions, fragments, `tdec`, ports, selectors, and raw values.
 
-Layer assignment uses `inLayer` or `.layer()` like every emitter. Recipe-specific `layer:` config is removed.
+Layer assignment uses `inLayer` or `.layer()` like every emitter. Recipe-specific `layer:` config is not accepted.
 
 ## 2. Anatomy
 

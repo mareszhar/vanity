@@ -20,6 +20,7 @@ describe('runtime editor DX', () => {
       void ds.${cursor('system')}
       const runtime = ds.runtime()
       void runtime.t.color.brand.${cursor('mutable')}
+      void runtime.t.color.brand.${cursor('set')}$set
       void runtime.t.color.fixed.${cursor('fixed')}
       void runtime.axes.scheme.${cursor('axis')}
       void runtime.axes.scheme.dark.${cursor('mode')}
@@ -32,6 +33,7 @@ describe('runtime editor DX', () => {
       'reconcileRuntimeSnapshot',
     ])
     expect(result.at('mutable').completions).toContainCompletions(['$set', '$unset', '$axes', '$case'])
+    expect(result.at('set').hover).toContain('Set a mutable token')
     expect(result.at('fixed').completions).not.toContainCompletion('$set')
     expect(result.at('axis').completions).toContainCompletions(['$switchTo', '$cycle', '$current', 'light', 'dark'])
     expect(result.at('mode').completions).toContainCompletion('$activate')

@@ -119,6 +119,15 @@ describe('errors at the cursor', () => {
 })
 
 describe('hovers', () => {
+  it('documents port option keys at the declaration cursor', () => {
+    const result = project.query`${defineSystem}
+      const fraction = port(0, { label${cursor('label')}: 'fraction', validate${cursor('validate')}: { id: 'fraction' } })
+      void fraction
+    `
+    expect(result.at('label').hover).toContain('Human-readable port label')
+    expect(result.at('validate').hover).toContain('Runtime validation policy')
+  })
+
   it('a port hover reads as the public type, not internals', () => {
     const result = project.query`${defineSystem}
       export const fract${cursor}ion = port(0)

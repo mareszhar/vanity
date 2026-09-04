@@ -4,6 +4,7 @@
  * escape inventory, scale strays. Advisory by default, promotable per system.
  */
 
+import type { VanityAuditFinding } from './audit'
 import {
   axis,
   createSystem,
@@ -16,7 +17,7 @@ import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
 import { substrate } from '../substrate'
 import { createAxisCondition } from '../system/axes'
-import { audit, formatAuditFindings } from './audit'
+import { audit, formatAuditFindings, runSystemAudit } from './audit'
 import { buildManifest } from './manifest'
 import { collectInspection } from './records'
 
@@ -265,6 +266,99 @@ describe('focus visibility', () => {
     }, 'button'))
 
     expect(audit(manifest, css).filter(finding => finding.kind === 'focusVisibility')).toEqual([])
+  })
+})
+
+describe('system-scope audit', () => {
+  it('runs specificity, ambiguity, mutable-root, nonportable, and overwrite categories', () => {
+    const specificDs = system({ space: { sm: '8px' } }, { root: '#application#widget' })
+    expect(specificDs.audit().findings).toContainEqual(expect.objectContaining({ kind: 'specificityContexts' }))
+
+    const ambiguousOpen = createSystem().addAxis('state', axis({
+      modes: {
+        on: createAxisCondition({ arms: [{ selector: '&[data-a]' }, { selector: '&[data-b]' }] }),
+      },
+    }))
+    const ambiguousDs = locked(ambiguousOpen.addTokens({
+      color: { brand: ambiguousOpen.tdef({ val: 'red', axes: { state: { on: 'blue' } } }) },
+    }))
+    expect(ambiguousDs.audit().findings).toContainEqual(expect.objectContaining({ kind: 'ambiguousAxes' }))
+
+    const mutableOpen = createSystem()
+    const mutableDs = locked(mutableOpen.addTokens(
+      mutableOpen.defineTokens({
+        color: { brand: mutableOpen.tdef({ val: 'red', mutable: true }) },
+      }).root('#portal'),
+    ))
+    expect(mutableDs.audit().findings).toContainEqual(expect.objectContaining({ kind: 'mutableRootHazards' }))
+
+    const mystery = defineCssValue({
+      type: 'length',
+      extension: { id: 'org.example.audit-system-opaque', version: 1 },
+      create: (value: number) => ({ serialize: () => `${value}px` }),
+    })
+    const opaquePlugin = definePlugin({
+      id: 'org.example.audit-system-opaque',
+      version: 1,
+      setup: ds => ds.addConstructor('mystery', { call: mystery }),
+    })
+    const opaqueOpen = createSystem().addPlugin(opaquePlugin)
+    const opaqueDs = locked(opaqueOpen.addTokens({
+      space: { mystery: opaqueOpen.tdef({ val: opaqueOpen.mystery(7) }) },
+    }))
+    expect(opaqueDs.audit().findings).toContainEqual(expect.objectContaining({ kind: 'nonportableValues' }))
+
+    const overwritten = createSystem()
+      .addTokens({ color: { brand: 'red' } })
+      .overwriteTokens({ color: { brand: 'blue' } })
+    const overwrittenDs = locked(overwritten)
+    expect(overwrittenDs.audit().findings).toContainEqual(expect.objectContaining({ kind: 'overwriteInventory' }))
+  })
+
+  it('reports every category that needs build evidence instead of pretending it ran', () => {
+    const report = system({ color: { brand: 'red' } }).audit()
+
+    expect(report.unevaluated).toEqual([
+      { kind: 'unusedTokens', requires: 'moduleUsage' },
+      { kind: 'contrast', requires: 'moduleUsage' },
+      { kind: 'escapes', requires: 'moduleUsage' },
+      { kind: 'aliasEscapes', requires: 'moduleUsage' },
+      { kind: 'rawAssertions', requires: 'moduleUsage' },
+      { kind: 'nearDuplicates', requires: 'emittedCss' },
+      { kind: 'scaleStrays', requires: 'emittedCss' },
+      { kind: 'focusVisibility', requires: 'emittedCss' },
+      { kind: 'eagerStyleBarrels', requires: 'buildEvidence' },
+      { kind: 'cssParityGaps', requires: 'buildEvidence' },
+      { kind: 'staleArtifacts', requires: 'buildEvidence' },
+      { kind: 'rootModeDisagreements', requires: 'buildEvidence' },
+    ])
+  })
+
+  it('applies consolidated promotion and per-call overrides to findings', () => {
+    const open = createSystem()
+      .addTokens({ color: { brand: 'red' } })
+      .overwriteTokens({ color: { brand: 'blue' } })
+    const ds = locked(open, { audit: { overwriteInventory: 'error' } })
+
+    expect(ds.audit().findings.find((finding: VanityAuditFinding) => finding.kind === 'overwriteInventory')?.level).toBe('error')
+    const warned = ds.audit({ overwriteInventory: 'warn' }).findings.find((finding: VanityAuditFinding) => finding.kind === 'overwriteInventory')
+    const silenced = ds.audit({ overwriteInventory: 'off' }).findings.some((finding: VanityAuditFinding) => finding.kind === 'overwriteInventory')
+    expect(warned?.level).toBe('warn')
+    expect(silenced).toBe(false)
+  })
+
+  it('shares the five system category implementations with the CLI audit', () => {
+    const open = createSystem()
+      .addTokens({ color: { brand: 'red' } })
+      .overwriteTokens({ color: { brand: 'blue' } })
+    const ds = locked(open)
+    const { manifest, css } = built(() => ds.class({ color: ds.t.color.brand }, 'card'))
+    const kinds = new Set(['ambiguousAxes', 'mutableRootHazards', 'overwriteInventory', 'nonportableValues', 'specificityContexts'])
+    const fromSystem = ds.audit().findings.filter((finding: VanityAuditFinding) => kinds.has(finding.kind))
+    const fromCli = audit(manifest, css).filter(finding => kinds.has(finding.kind))
+
+    expect(fromSystem).toEqual(fromCli)
+    expect(runSystemAudit(manifest.system).findings.filter(finding => kinds.has(finding.kind))).toEqual(fromSystem)
   })
 })
 

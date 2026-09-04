@@ -26,6 +26,7 @@ import type {
   HailRgbxChannels,
 } from './types'
 import { defineConstructors } from '@mszr/vanity'
+import { VanityError } from '../../diagnostics'
 import { isHailExact, isHailSpan } from './markers'
 
 type NumericCssInput = VanityCssInput<'number' | 'integer' | 'percentage' | 'number-percentage'>
@@ -55,19 +56,25 @@ export function createHailColorConstructors(
     spec: ChannelSpec,
     input: HailNumericInput | HailHueInput,
   ): VanityNumericColorChannel | VanityHueChannel => {
-    if (isHailSpan(input))
-      throw new TypeError(`[hail] span() is relative and cannot occupy absolute '${spec.name}' position; use exact() or a bare value`)
+    if (isHailSpan(input)) {
+      throw new VanityError({
+        code: 'VANITY_HAIL_INVALID_CONFIG',
+        message: `span() is relative and cannot occupy absolute '${spec.name}' position; use exact() or a bare value`,
+        path: ['color', spec.name],
+        fix: 'Use exact() for an absolute channel value, or pass a bare CSS value.',
+      })
+    }
     if (isHailExact(input))
       return input.input as VanityNumericColorChannel | VanityHueChannel
     if (typeof input !== 'number' || options.ranges[spec.name] === undefined)
       return input
-    const value = normalized(spec.name, input)
+    const value = normalizeNumericInput(spec.name, input)
     return spec.percent && typeof value !== 'number'
       ? ds.calc(value).multiply(ds.percent(1))
       : value as VanityNumericColorChannel
   }
 
-  function normalized(name: HailRangeName, input: NumericCssInput): NumericCssInput {
+  function normalizeNumericInput(name: HailRangeName, input: NumericCssInput): NumericCssInput {
     if (options.ranges[name] === undefined)
       return input
     if (typeof input === 'number' && options.resolution(name) === 'static') {
@@ -128,12 +135,18 @@ export function createHailColorConstructors(
   const getElevationCoordinate = (input: HailNumericInput): NumericCssInput => {
     const coordinate = resolveAbsoluteChannel({ name: 'e' }, input) as NumericCssInput
     const mostElevated = controls.mostElevatedL
-    if (mostElevated === undefined)
-      throw new TypeError('[hail] elevation needs the scheme coordinate installed by color.elevation')
+    if (mostElevated === undefined) {
+      throw new VanityError({
+        code: 'VANITY_HAIL_INVALID_CONFIG',
+        message: 'elevation needs the scheme coordinate installed by color.elevation',
+        path: ['color', 'elevation'],
+        fix: 'Enable color.elevation when using the e channel.',
+      })
+    }
     const schemePosition = ds.calc(1)
       .subtract(coordinate)
       .add(ds.calc(mostElevated).multiply(ds.calc(coordinate).multiply(2).subtract(1)))
-    return normalized('l', schemePosition)
+    return normalizeNumericInput('l', schemePosition)
   }
 
   const resolveRelativeElevation = (
@@ -143,8 +156,14 @@ export function createHailColorConstructors(
       return undefined
     if (isHailSpan(input)) {
       const mostElevated = controls.mostElevatedL
-      if (mostElevated === undefined)
-        throw new TypeError('[hail] elevation needs the scheme coordinate installed by color.elevation')
+      if (mostElevated === undefined) {
+        throw new VanityError({
+          code: 'VANITY_HAIL_INVALID_CONFIG',
+          message: 'elevation needs the scheme coordinate installed by color.elevation',
+          path: ['color', 'elevation'],
+          fix: 'Enable color.elevation when using the e channel.',
+        })
+      }
       const elevationSpan = getStaticSpanDelta('e', input.input)
         ?? (options.ranges.e === undefined
           ? input.input
@@ -215,8 +234,14 @@ export function createHailColorConstructors(
     base: Base,
     channels: HailOklchxChannels<boolean>,
   ): VanityAuthoredColor => {
-    if ('e' in channels && channels.e !== undefined && channels.l !== undefined)
-      throw new TypeError('[hail] oklchx.from() accepts either l or e, never both')
+    if ('e' in channels && channels.e !== undefined && channels.l !== undefined) {
+      throw new VanityError({
+        code: 'VANITY_HAIL_INVALID_CONFIG',
+        message: 'oklchx.from() accepts either l or e, never both',
+        path: ['channels'],
+        fix: 'Choose either the l channel or the e elevation channel.',
+      })
+    }
     return ds.oklch.from(base, {
       l: ('e' in channels && channels.e !== undefined
         ? resolveRelativeElevation(channels.e)

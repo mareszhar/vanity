@@ -5,8 +5,9 @@
 
 import type { DefineProjectConfig } from '@mszr/selenita'
 import { cursor, defineProject, group, snippet } from '@mszr/selenita'
+import { VanityError } from './diagnostics'
 import { substrate } from './substrate'
-import { tokenFoldOf } from './tokens/fold'
+import { readTokenFoldEvidence } from './tokens/fold'
 
 /** Options for one isolated build-time emission capture. */
 export interface VanityEmissionOptions {
@@ -32,12 +33,18 @@ export function captureEmission<T>(
   author: () => T,
   options: VanityEmissionOptions = {},
 ): VanityEmission<T> {
-  if (typeof author !== 'function')
-    throw new TypeError('[vanity] captureEmission() needs an author callback: () => ds.class({ ... })')
+  if (typeof author !== 'function') {
+    throw new VanityError({
+      code: 'VANITY_TESTING_INVALID_INPUT',
+      message: 'captureEmission() needs an author callback: () => ds.class({ ... })',
+      path: ['author'],
+      fix: 'pass a callback that invokes a style authoring operation',
+    })
+  }
 
   const cssObjs: unknown[] = []
   const localClassNames = new Set<string>()
-  substrate.modules.installCapture({
+  substrate.backend.installCapture({
     appendCss: cssObj => void cssObjs.push(cssObj),
     registerClassName: className => void localClassNames.add(className),
     registerComposition: () => {},
@@ -45,7 +52,7 @@ export function captureEmission<T>(
     getIdentOption: () => 'debug',
   })
 
-  substrate.modules.setFileScope({
+  substrate.backend.setFileScope({
     filePath: options.file ?? 'vanity.testing.css.ts',
     packageName: options.package ?? '@vanity/testing-fixture',
   })
@@ -60,8 +67,8 @@ export function captureEmission<T>(
     return Object.freeze({ css, value })
   }
   finally {
-    substrate.modules.endFileScope()
-    substrate.modules.removeCapture()
+    substrate.backend.finishFileScope()
+    substrate.backend.removeCapture()
   }
 }
 
@@ -102,7 +109,7 @@ export interface VanityFoldToken {
  * `expect(foldResultOf(ds.t.space.lg)).toEqual({ status: 'folded', val: '16px' })`
  */
 export function foldResultOf(token: VanityFoldToken): VanityFoldObservation {
-  return Object.freeze({ ...tokenFoldOf(token as any) })
+  return Object.freeze({ ...readTokenFoldEvidence(token as any) })
 }
 
 /**
@@ -158,9 +165,12 @@ export function renderOf<const Properties extends string>(
   ).getComputedStyle
 
   if (typeof getComputedStyle !== 'function') {
-    throw new TypeError(
-      '[vanity] renderOf() needs a DOM with getComputedStyle(); run it in a browser or DOM test environment',
-    )
+    throw new VanityError({
+      code: 'VANITY_TESTING_INVALID_INPUT',
+      message: 'renderOf() needs a DOM with getComputedStyle(); run it in a browser or DOM test environment',
+      path: ['target'],
+      fix: 'run the assertion in a browser or DOM test environment',
+    })
   }
 
   const style = getComputedStyle.call(view, element)
@@ -205,16 +215,22 @@ function resolveRenderTarget(target: VanityRenderTarget): VanityRenderElement {
     }
   ).document
   if (!document) {
-    throw new TypeError(
-      `[vanity] rendersLike() cannot resolve selector '${target}' without a DOM document`,
-    )
+    throw new VanityError({
+      code: 'VANITY_TESTING_INVALID_INPUT',
+      message: `rendersLike() cannot resolve selector '${target}' without a DOM document`,
+      path: ['target'],
+      fix: 'run the assertion in a browser or DOM test environment',
+    })
   }
 
   const element = document.querySelector(target)
   if (!element) {
-    throw new TypeError(
-      `[vanity] rendersLike() could not find '${target}'; mount the fixture before asserting rendered values`,
-    )
+    throw new VanityError({
+      code: 'VANITY_TESTING_INVALID_INPUT',
+      message: `rendersLike() could not find '${target}'; mount the fixture before asserting rendered values`,
+      path: ['target'],
+      fix: 'mount the fixture before asserting rendered values',
+    })
   }
   return element
 }

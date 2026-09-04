@@ -3,22 +3,11 @@
  * shape and plugins; `consolidate()` returns an emission-free locked contract.
  */
 
-import type {
-  VanityClassEmitter,
-  VanityFragmentFactory,
-  VanityPropertyAliasClassEmitter,
-  VanityPropertyAliasFragmentFactory,
-  VanityPropertyAliasRulesEmitter,
-  VanityRulesEmitter,
-  VanityStrictPropertyAliasClassEmitter,
-  VanityStrictPropertyAliasFragmentFactory,
-  VanityStrictPropertyAliasRulesEmitter,
-  VanityTokenDeclarations,
-} from '../css/types'
+import type { VanityTokenDeclarations } from '../css/types'
+import type { VanityDiagnosticCode } from '../diagnostics'
 import type { VanityDtcgCodec } from '../introspect/interchange'
 import type { VanityAuditConfig } from '../introspect/records'
-import type { VanitySystemMapV2 } from '../introspect/system'
-import type { VanityAliasesOf, VanityAliasExposureOf } from '../plugins/propertyAliases'
+import type { VanityAliasesOf } from '../plugins/propertyAliases'
 import type { VanitySystemMember } from '../system/surface'
 import type {
   VanityTdefFactory,
@@ -67,8 +56,11 @@ import type {
 } from './definitions'
 import type {
   VanityDefaultLayers,
-  VanitySystem as VanityDirectSystem,
+  VanityLockedSystem,
+  VanityPublicConsts,
+  VanityRulesOf,
   VanitySystemConditionName,
+  VanityWithRules,
 } from './locked'
 import type {
   VanityAxisModuleInput,
@@ -96,7 +88,7 @@ import type {
 } from './shape'
 import type { OpenSystemState, SystemProvenance } from './state'
 import { createDeferredTokenDeclarations } from '../css/tdec'
-import { getDiagnosticSource } from '../diagnostics'
+import { getDiagnosticSource, VanityError } from '../diagnostics'
 import {
   VANITY_PROPERTY_ALIASES,
 
@@ -158,6 +150,7 @@ export type {
   VanityConstructorPolicy,
   VanityConstructorRestriction,
   VanityPolicies,
+  VanityTokenPolicies,
 } from './policies'
 
 export type {
@@ -166,7 +159,6 @@ export type {
   VanitySystemShape,
 } from './shape'
 
-declare const VANITY_SYSTEM_RULES_SHAPE: unique symbol
 declare const VANITY_OPEN_SYSTEM_TYPE: unique symbol
 interface TokenExpectationLeaf {
   readonly type?: VanityCssDataType
@@ -315,7 +307,38 @@ type PluginConfigurationGuard<Plugin>
     : unknown
 
 type PluginResult<Plugin> = Plugin extends { readonly setup: (...args: any[]) => infer Result } ? Result : never
-type OpenShape<System> = System extends { readonly [VANITY_OPEN_SYSTEM_TYPE]?: infer Shape } ? NonNullable<Shape> : never
+interface OpenSystemTypeMetadata<
+  Shape,
+  Tokens extends object,
+  Conditions extends object,
+  Consts extends object,
+  Utils extends object,
+  Plugins extends string,
+> {
+  readonly shape: Shape
+  readonly tokens: Tokens
+  readonly conditions: Conditions
+  readonly consts: Consts
+  readonly utils: Utils
+  readonly plugins: Plugins
+}
+interface OpenSystemTypeCarrier<
+  Shape,
+  Tokens extends object,
+  Conditions extends object,
+  Consts extends object,
+  Utils extends object,
+  Plugins extends string,
+> {
+  readonly [VANITY_OPEN_SYSTEM_TYPE]?: OpenSystemTypeMetadata<Shape, Tokens, Conditions, Consts, Utils, Plugins>
+}
+type OpenShape<System> = System extends { readonly consolidate: infer Consolidate }
+  ? Consolidate extends (this: infer Carrier, ...args: any[]) => any
+    ? Carrier extends { readonly [VANITY_OPEN_SYSTEM_TYPE]?: infer Metadata }
+      ? NonNullable<Metadata>
+      : never
+    : never
+  : never
 type EmptySystemShape = VanitySystemShape<Record<never, never>, VanityDefaultTokenPolicy, Record<never, never>>
 type PluginSystemShape<Plugin> = [OpenShape<PluginResult<Plugin>>] extends [never]
   ? EmptySystemShape
@@ -392,14 +415,12 @@ type DefinitionShape<
       : never
 
 type RulesOf<Consts extends object>
-  = Consts extends { readonly [VANITY_SYSTEM_RULES_SHAPE]?: infer Rules extends object }
-    ? Rules
-    : Record<never, never>
+  = VanityRulesOf<Consts>
 
 type WithRules<Consts extends object, Rules extends object>
-  = Consts & { readonly [VANITY_SYSTEM_RULES_SHAPE]?: Rules }
+  = VanityWithRules<Consts, Rules>
 
-type PublicConsts<Consts extends object> = Omit<Consts, typeof VANITY_SYSTEM_RULES_SHAPE>
+type PublicConsts<Consts extends object> = VanityPublicConsts<Consts>
 
 type ConstructorFamilies<Definitions extends object> = {
   readonly [Name in keyof Definitions]:
@@ -552,6 +573,7 @@ type ResolvedTokenAt<
   ? ResolvedTokens<Tokens, 'vanity-open', Policy>[Name]
   : never
 
+/** Build-time token handle that exposes semantic metadata before CSS is emitted. */
 export type VanityLogicalTokenHandle<Handle extends VanityTokenHandleAny>
   = Readonly<Pick<
     Handle,
@@ -560,23 +582,32 @@ export type VanityLogicalTokenHandle<Handle extends VanityTokenHandleAny>
   & VanityTokenInput<Handle['$type']>
   & { readonly $phase: 'logical' }
 
+/** Recursively project resolved token handles into the emission-free open-system view. */
 export type VanityLogicalTokens<T> = {
   readonly [Key in keyof T]: T[Key] extends VanityTokenHandleAny
     ? VanityLogicalTokenHandle<T[Key]>
     : T[Key] extends object ? VanityLogicalTokens<T[Key]> : T[Key]
 }
 
+/** Options that finalize an open system into a locked stylesheet contract. */
 export interface VanityConsolidateOptions<
   Layers extends readonly string[] = VanityDefaultLayers,
   Prefix extends string = 'vanity',
   BaseConditions extends boolean = true,
 > {
+  /** Prefix custom-property names and generated class identities with this value. */
   readonly prefix?: Prefix
+  /** Anchor root-scoped output to this selector; defaults to `:root`. */
   readonly root?: string
+  /** Define the complete deterministic cascade-layer order for the system. */
   readonly layerOrder?: Layers
+  /** Place emitted token declarations in one named layer from `layerOrder`. */
   readonly tokenLayer?: Layers[number]
+  /** Include the base condition family generated by the system. */
   readonly baseConditions?: BaseConditions
+  /** Set the environmental-axis order used by generated selectors and runtime metadata. */
   readonly axisOrder?: readonly string[]
+  /** Promote selected audit categories when the locked system runs `audit()`. */
   readonly audit?: VanityAuditConfig
 }
 
@@ -602,12 +633,19 @@ type OpenAxisRecord<Added extends object> = {
 }
 
 export interface VanityAxisPatch {
+  /** Add or replace the axis modes. */
   readonly modes?: Readonly<Record<string, VanityConditionInput | import('./axes').VanityAxisTrigger>>
+  /** Select the default mode after applying the patch. */
   readonly default?: string
+  /** Set the tie-break order for overlapping mode arms. */
   readonly modeOrder?: readonly string[]
+  /** Add value derivations for named modes. */
   readonly derive?: Readonly<Record<string, (modes: Readonly<Record<string, any>>) => unknown>>
+  /** Provide query-free runtime activation for the axis. */
   readonly control?: import('./axes').VanityAxisControl<any>
+  /** Configure native scheme behavior for the axis. */
   readonly native?: import('./axes').VanityNativeSchemePolicy
+  /** Describe the axis in introspection and editor tooling. */
   readonly description?: string
 }
 
@@ -635,113 +673,23 @@ type PatchedAxes<Axes extends VanityAxisDefinitions, Patch extends object> = {
   Name extends keyof Patch ? PatchedAxis<Axes[Name], Patch[Name]> : Axes[Name]
 }
 
-/**
- * The consolidated read surface: resolved tokens, styling, runtime, and inspection.
- *
- * @example
- * `type DesignSystem = ReturnType<typeof open.consolidate>`
- */
-export type VanityLockedSystem<
-  Shape extends VanitySystemShape<any, any, any> = VanitySystemShape,
-  Tokens extends object = Record<never, never>,
-  Conditions extends Record<string, VanityConditionInput> = Record<never, never>,
-  Consts extends object = Record<never, never>,
-  Utils extends object = Record<never, never>,
-  Layers extends readonly string[] = VanityDefaultLayers,
-  Prefix extends string = 'vanity',
-  BaseConditions extends boolean = true,
-> = Omit<VanityDirectSystem<
-  ResolvedTokens<
-    Tokens,
-    Prefix,
-    ShapePolicy<Shape>,
-    VanityConditionKeyName<VanitySystemConditionName<Conditions, BaseConditions>>,
-    keyof VanityAliasesOf<Consts> & string
-  >,
-  VanitySystemConditionName<Conditions, BaseConditions>,
-  Layers[number],
-  ShapeConstructors<Shape>,
-  ShapeAxes<Shape>
->, 'class' | 'explain' | 'fragment' | 'rules' | 'inLayer'> & Readonly<Utils> & {
-  readonly class: LockedClassEmitter<
-    VanitySystemConditionName<Conditions, BaseConditions>,
-    Layers[number],
-    PublicConsts<Consts>
-  >
-  readonly fragment: LockedFragmentFactory<
-    VanitySystemConditionName<Conditions, BaseConditions>,
-    Layers[number],
-    PublicConsts<Consts>
-  >
-  readonly rules: LockedRulesEmitter<
-    VanitySystemConditionName<Conditions, BaseConditions>,
-    Layers[number],
-    PublicConsts<Consts>
-  >
-  readonly inLayer: <Layer extends Layers[number]>(
-    name: Layer,
-  ) => VanityLockedSystem<Shape, Tokens, Conditions, Consts, Utils, Layers, Prefix, BaseConditions>
-  readonly consts: Readonly<PublicConsts<Consts>>
-  readonly policies: Readonly<VanityPolicies & ShapePolicies<Shape>>
-  /** Semantic axis handles; pass one directly to `explain()`. */
-  readonly axes: Readonly<{
-    [Name in keyof ShapeAxes<Shape> & string]: VanitySystemMapV2['axes'][string]
-  }>
-  readonly explain: <Subject>(
-    subject: Subject,
-  ) => import('../introspect/explain').VanityExplanationFor<Subject>
-  /** Canonical, versioned semantic map available to tools and configuration. */
-  readonly introspect: () => VanitySystemMapV2
-}
-
-/**
- * The compact locked empty-system baseline. Every consolidated system is
- * assignable to it by width subtyping.
- */
-export type VanitySystem = Omit<VanityLockedSystem<
-  VanitySystemShape<VanityCanonicalConstructors<VanityLengthUnit>>,
-  Record<never, never>,
-  Record<never, never>,
-  Record<never, never>,
-  Record<never, never>,
-  readonly never[],
-  'vanity',
-  false
->, 'inLayer' | 'layers'>
-
-type LockedClassEmitter<C extends string, L extends string, Consts extends object>
-  = typeof import('../plugins/propertyAliases').VANITY_PROPERTY_ALIASES extends keyof Consts
-    ? VanityAliasExposureOf<Consts> extends 'aliases-only'
-      ? VanityStrictPropertyAliasClassEmitter<C, L, VanityAliasesOf<Consts>>
-      : VanityPropertyAliasClassEmitter<C, L, VanityAliasesOf<Consts>>
-    : VanityClassEmitter<C, L>
-
-type LockedFragmentFactory<C extends string, L extends string, Consts extends object>
-  = typeof import('../plugins/propertyAliases').VANITY_PROPERTY_ALIASES extends keyof Consts
-    ? VanityAliasExposureOf<Consts> extends 'aliases-only'
-      ? VanityStrictPropertyAliasFragmentFactory<C, L, VanityAliasesOf<Consts>>
-      : VanityPropertyAliasFragmentFactory<C, L, VanityAliasesOf<Consts>>
-    : VanityFragmentFactory<C>
-
-type LockedRulesEmitter<C extends string, L extends string, Consts extends object>
-  = typeof import('../plugins/propertyAliases').VANITY_PROPERTY_ALIASES extends keyof Consts
-    ? VanityAliasExposureOf<Consts> extends 'aliases-only'
-      ? VanityStrictPropertyAliasRulesEmitter<C, L, VanityAliasesOf<Consts>>
-      : VanityPropertyAliasRulesEmitter<C, L, VanityAliasesOf<Consts>>
-    : VanityRulesEmitter<C, L>
-
 /** Definition input for one reusable system contribution. */
 export interface VanityPluginDefinition<
   Options,
   Result extends object,
   Id extends string = string,
 > {
+  /** Stable public id used for requirements, ownership, and portable identity. */
   readonly id: Id
+  /** Plugin release version stored in introspection and manifests. */
   readonly version: string | number
+  /** Optional deterministic fingerprint for plugin behavior. */
   readonly fingerprint?: string
+  /** DTCG codecs that make plugin-owned value semantics portable. */
   readonly dtcg?: readonly VanityDtcgCodec[]
   /** Project rich options onto deterministic JSON identity. */
   readonly optionsIdentity?: (options: Options) => unknown
+  /** Extend the receiving system and return the plugin's public contribution. */
   readonly setup: (system: VanityPluginSetupSystem, options: Options) => Result
 }
 
@@ -753,7 +701,7 @@ type VanityPluginConfigure<
   ? (options?: Exclude<Options, undefined>) => VanitySystemPlugin<Options, Result, Id, true>
   : (options: Options) => VanitySystemPlugin<Options, Result, Id, true>
 
-/** Callable unconfigured plugin and the configured immutable copies it makes. */
+/** Callable unconfigured plugin and the configured immutable copies it creates. */
 export type VanitySystemPlugin<
   Options = undefined,
   Result extends object = object,
@@ -769,6 +717,7 @@ export type VanitySystemPlugin<
     readonly __vanityPluginNeedsOptions?: undefined extends Options ? false : true
   }
 
+/** Public operations available while a system accumulates its authoring shape. */
 export interface VanityOpenSystemMethods<
   Shape extends VanitySystemShape<any, any, any>,
   Tokens extends object,
@@ -777,6 +726,7 @@ export interface VanityOpenSystemMethods<
   Utils extends object,
   Plugins extends string,
 > {
+  /** Logical token handles resolve after consolidation; they do not emit CSS here. */
   readonly t: VanityLogicalTokens<ResolvedTokens<
     Tokens,
     'vanity-open',
@@ -784,9 +734,13 @@ export interface VanityOpenSystemMethods<
     keyof Conditions & string | VanityBaseConditionName,
     keyof VanityAliasesOf<Consts> & string
   >>
+  /** Named conditions available to token, recipe, atom, and rule authoring. */
   readonly conditions: Readonly<Conditions>
+  /** Environmental axes accumulated by this open system. */
   readonly axes: Readonly<ShapeAxes<Shape>>
+  /** JSON-safe constants published by this open system. */
   readonly consts: Readonly<PublicConsts<Consts>>
+  /** Authored policies before consolidation resolves their defaults. */
   readonly policies: Readonly<VanityPolicies & ShapePolicies<Shape>>
 
   readonly definePolicies: typeof definePolicies
@@ -862,8 +816,10 @@ export interface VanityOpenSystemMethods<
   readonly tdec: (
     declarations: VanityTokenDeclarations<ResolvedTokens<Tokens, 'vanity-open', ShapePolicy<Shape>>>,
   ) => Record<`--${string}`, string | number>
+  /** Serialize a core value using the open system's current policy context. */
   readonly serialize: <Type extends VanityCssDataType>(value: VanitySelfValue<Type>) => string
 
+  /** Add token values, builders, modules, arrays, or axis-aware token trees. */
   readonly addTokens: {
     <const Inputs extends readonly (
       VanityTokenModule<any, any> | VanityTokenBuilder<any, any, any>
@@ -1658,16 +1614,37 @@ export interface VanityOpenSystemMethods<
     Plugins
   >
 
-  readonly consolidate: <
-    const Layers extends readonly string[] = VanityDefaultLayers,
-    Prefix extends string = 'vanity',
-    BaseConditions extends boolean = true,
-    const AxisOrder extends readonly (keyof ShapeAxes<Shape> & string)[] = readonly (keyof ShapeAxes<Shape> & string)[],
-  >(
-    options?: VanityConsolidateOptions<Layers, Prefix, BaseConditions> & {
-      readonly axisOrder?: VanityAxisOrderGuard<ShapeAxes<Shape>, AxisOrder>
-    },
-  ) => VanityLockedSystem<Shape, Tokens, Conditions, Consts, Utils, Layers, Prefix, BaseConditions>
+  /** Finalize the accumulated shape into an immutable locked system. */
+  readonly consolidate: {
+    <
+      const Layers extends readonly string[] = VanityDefaultLayers,
+      Prefix extends string = 'vanity',
+      BaseConditions extends boolean = true,
+      const AxisOrder extends readonly (keyof ShapeAxes<Shape> & string)[] = readonly (keyof ShapeAxes<Shape> & string)[],
+    >(
+      this: {
+        readonly consolidate: unknown
+      } & OpenSystemTypeCarrier<Shape, Tokens, Conditions, Consts, Utils, Plugins>,
+      options?: VanityConsolidateOptions<Layers, Prefix, BaseConditions> & {
+        readonly axisOrder?: VanityAxisOrderGuard<ShapeAxes<Shape>, AxisOrder>
+      },
+    ): VanityLockedSystem<
+      ResolvedTokens<
+        Tokens,
+        Prefix,
+        ShapePolicy<Shape>,
+        VanityConditionKeyName<VanitySystemConditionName<Conditions, BaseConditions>>,
+        keyof VanityAliasesOf<Consts> & string
+      >,
+      VanitySystemConditionName<Conditions, BaseConditions>,
+      Layers[number],
+      ShapeConstructors<Shape>,
+      ShapeAxes<Shape>,
+      Consts,
+      Utils,
+      VanityPolicies & ShapePolicies<Shape>
+    >
+  }
 }
 
 /**
@@ -1686,16 +1663,6 @@ export type VanityOpenSystem<
 > = Readonly<ShapeConstructors<Shape>>
   & Readonly<Utils>
   & VanityOpenSystemMethods<Shape, Tokens, Conditions, Consts, Utils, Plugins>
-  & {
-    readonly [VANITY_OPEN_SYSTEM_TYPE]?: {
-      readonly shape: Shape
-      readonly tokens: Tokens
-      readonly conditions: Conditions
-      readonly consts: Consts
-      readonly utils: Utils
-      readonly plugins: Plugins
-    }
-  }
 
 /**
  * Compact open-system helper boundary. It deliberately exposes only the
@@ -1754,9 +1721,11 @@ type VanityPluginSetupBase = Omit<
   VanityPluginForbiddenMethod
 >
 
+/** Restricted open-system surface available while a plugin installs its contribution. */
 export type VanityPluginSetupSystem<
   RegisteredPolicy extends object = Record<never, never>,
 > = VanityPluginSetupBase & {
+  /** Type-only record of policy data registered by this plugin. */
   readonly __vanityRegisteredPluginPolicy?: RegisteredPolicy
   /**
    * Publish readable policy data about this plugin's own configuration.
@@ -1777,12 +1746,11 @@ function getValueContext(state: OpenState): VanityValueOperationContext {
   })
   return {
     values: state.values,
-    support: policies.support,
     policies,
   }
 }
 
-function tokenPolicyOfState(state: OpenState): VanityTokenPolicy {
+function getTokenPolicyOfState(state: OpenState): VanityTokenPolicy {
   const policies = resolvePolicies(state.policies, {
     support: state.policies.support ?? VANITY_DEFAULT_CSS_SUPPORT,
   })
@@ -1792,7 +1760,7 @@ function tokenPolicyOfState(state: OpenState): VanityTokenPolicy {
   })
 }
 
-function tokenRequirementOfState(state: OpenState) {
+function getTokenRequirementOfState(state: OpenState) {
   const prior = getTokenModuleRequirement(state.tokens)
   return getSystemTokenModuleRequirement(
     state.values,
@@ -1808,7 +1776,7 @@ function previewTokenModule(state: OpenState, module: object): object {
     prefix: 'vanity-open',
     root: ':root',
     serializeValue: value => serializeValueWithContext(context, value),
-    support: context.support,
+    support: context.policies.support,
     policies: context.policies,
     axes: state.axes,
     dtcgCodecIds: new Set(state.codecs.map(codec => codec.extension)),
@@ -1827,11 +1795,17 @@ export function definePlugin<
 >(
   definition: VanityPluginDefinition<Options, Result, Id>,
 ): VanitySystemPlugin<Options, Result, Id, false> {
-  if (!definition.id || String(definition.version).length === 0)
-    throw new TypeError('[vanity] definePlugin() needs a stable id and version')
+  if (!definition.id || String(definition.version).length === 0) {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      'definePlugin() needs a stable id and version',
+      ['plugin', 'id'],
+      'provide a non-empty string id and version for the plugin definition',
+    )
+  }
 
-  const configured = (options: Options | undefined): VanitySystemPlugin<Options, Result, Id, any> => {
-    const callable = ((next?: Options) => configured(next)) as VanitySystemPlugin<Options, Result, Id, any>
+  const configurePlugin = (options: Options | undefined): VanitySystemPlugin<Options, Result, Id, any> => {
+    const callable = ((next?: Options) => configurePlugin(next)) as VanitySystemPlugin<Options, Result, Id, any>
     const optionFingerprint = options === undefined
       ? undefined
       : getStableOptions(definition.optionsIdentity?.(options) ?? options)
@@ -1848,7 +1822,7 @@ export function definePlugin<
     return Object.freeze(callable)
   }
 
-  return configured(undefined) as VanitySystemPlugin<Options, Result, Id, false>
+  return configurePlugin(undefined) as VanitySystemPlugin<Options, Result, Id, false>
 }
 
 function replaceAxis(
@@ -1907,7 +1881,7 @@ export function materializeOpen(
       : input
     return resolveDefinitionInput(kind, resolved) as Record<string, any>
   }
-  const tokenPatch = (mode: 'augment' | 'overwrite', input: unknown) => {
+  const applyTokenPatch = (mode: 'augment' | 'overwrite', input: unknown) => {
     const patch = typeof input === 'function' ? input(surface) : input
     if (Array.isArray(patch)) {
       return patch.reduce(
@@ -1919,8 +1893,14 @@ export function materializeOpen(
         surface as VanityOpenSystem<any, any, any, any, any, any>,
       )
     }
-    if (!patch || typeof patch !== 'object')
-      throw new TypeError(`[vanity] ${mode}Tokens() needs a token-shaped object, module, module array, or callback`)
+    if (!patch || typeof patch !== 'object') {
+      throwOpenError(
+        'VANITY_TOKENS_INVALID_DEFINITION',
+        `${mode}Tokens() needs a token-shaped object, module, module array, or callback`,
+        `${mode}Tokens`,
+        'pass a token object, unfinished token module, module array, or callback',
+      )
+    }
     const unwrapped = isTokenBuilder(patch)
       ? getTokenModule(patch)
       : patch
@@ -1955,8 +1935,14 @@ export function materializeOpen(
   }
   const applyPolicyPatch = (mode: 'add' | 'overwrite', input: unknown) => {
     const patch = resolveRecordInput('policies', input)
-    if (!isPlainRecord(patch))
-      throw new TypeError(`[vanity] ${mode}Policies() needs one plain policy object or callback`)
+    if (!isPlainRecord(patch)) {
+      throwOpenError(
+        'VANITY_POLICY_INVALID',
+        `${mode}Policies() needs one plain policy object or callback`,
+        `${mode}Policies`,
+        'pass one plain policy object or a callback that returns one',
+      )
+    }
     const policies = mode === 'add'
       ? addPolicies(state.policies, patch as VanityPolicies)
       : overwritePolicies(state.policies, patch as VanityPolicies)
@@ -1979,8 +1965,8 @@ export function materializeOpen(
   const tdef = createTdefFactory(createTokenFactory(axes), axes)
   const defineTokens = (seed: object = {}) => defineSystemTokens({
     defineModule: graph => defineTokenModule(
-      tokenRequirementOfState(state),
-      tokenPolicyOfState(state),
+      getTokenRequirementOfState(state),
+      getTokenPolicyOfState(state),
       graph,
     ),
     tdef: tdef as any,
@@ -1994,13 +1980,31 @@ export function materializeOpen(
     let values = state.values
     const names: string[] = []
     for (const [name, definition] of Object.entries(entries)) {
-      if (!name || name.startsWith('$'))
-        throw new TypeError('[vanity] addConstructor() needs a non-$ constructor name')
+      if (!name || name.startsWith('$')) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_DEFINITION',
+          'addConstructor() needs a non-$ constructor name',
+          ['constructors', name || '<empty>'],
+          'choose a non-empty constructor name that does not begin with \'$\'',
+        )
+      }
       assertSystemNamespaceAvailable([name], 'addConstructor()')
-      if (name in state.utils || name in values.constructors)
-        throw new TypeError(`[vanity] addConstructor() cannot define '${name}' because that system member already exists`)
-      if (!definition || typeof definition.call !== 'function')
-        throw new TypeError(`[vanity] constructor '${name}' needs a call function`)
+      if (Object.hasOwn(state.utils, name) || Object.hasOwn(values.constructors, name)) {
+        throwOpenError(
+          'VANITY_SYSTEM_COLLISION',
+          `addConstructor() cannot define '${name}' because that system member already exists`,
+          ['constructors', name],
+          'choose a constructor name that is not already defined by the system',
+        )
+      }
+      if (!definition || typeof definition.call !== 'function') {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_DEFINITION',
+          `constructor '${name}' needs a call function`,
+          ['constructors', name, 'call'],
+          'provide a callable constructor definition',
+        )
+      }
 
       const createConstructorFamily = function (this: unknown, ...args: unknown[]) {
         return markConstructorUsage(Reflect.apply(definition.call, this, args), name)
@@ -2008,8 +2012,14 @@ export function materializeOpen(
       for (const [member, value] of Object.entries(definition)) {
         if (member === 'call')
           continue
-        if (typeof value !== 'function')
-          throw new TypeError(`[vanity] constructor '${name}.${member}' must be call-like`)
+        if (typeof value !== 'function') {
+          throwOpenError(
+            'VANITY_SYSTEM_INVALID_DEFINITION',
+            `constructor '${name}.${member}' must be call-like`,
+            ['constructors', name, member],
+            'provide a function for every constructor member',
+          )
+        }
         Object.defineProperty(createConstructorFamily, member, {
           enumerable: true,
           value(this: unknown, ...args: unknown[]) {
@@ -2080,14 +2090,26 @@ export function materializeOpen(
       return applyPolicyPatch('overwrite', input)
     },
     expectPolicy(name: string) {
-      if (!(name in state.policies))
-        throw new TypeError(`[vanity] expected policy '${name}' is missing; add it before mounting this plugin`)
+      if (!Object.hasOwn(state.policies, name)) {
+        throwOpenError(
+          'VANITY_POLICY_MISSING',
+          `expected policy '${name}' is missing`,
+          name,
+          'add the policy before mounting this plugin',
+        )
+      }
       return surface
     },
     expectPolicies(names: readonly string[]) {
       for (const name of names) {
-        if (!(name in state.policies))
-          throw new TypeError(`[vanity] expected policy '${name}' is missing; add it before mounting this plugin`)
+        if (!Object.hasOwn(state.policies, name)) {
+          throwOpenError(
+            'VANITY_POLICY_MISSING',
+            `expected policy '${name}' is missing`,
+            name,
+            'add the policy before mounting this plugin',
+          )
+        }
       }
       return surface
     },
@@ -2111,8 +2133,8 @@ export function materializeOpen(
       // state so all ancestor-compatible contributions meet at the current
       // requirement instead of asking an ancestor to accept a child.
       const accumulator = defineTokenModule(
-        tokenRequirementOfState(state),
-        tokenPolicyOfState(state),
+        getTokenRequirementOfState(state),
+        getTokenPolicyOfState(state),
         {},
       )
       const tokens = composeTokenModules(composeTokenModules(accumulator, state.tokens), module)
@@ -2136,8 +2158,14 @@ export function materializeOpen(
       })
     },
     addToken(name: string, input: unknown) {
-      if (!name || name.startsWith('$'))
-        throw new TypeError('[vanity] addToken() needs one non-$ top-level name')
+      if (!name || name.startsWith('$')) {
+        throwOpenError(
+          'VANITY_TOKENS_INVALID_NAME',
+          'addToken() needs one non-$ top-level name',
+          ['tokens', name || '<empty>'],
+          'choose one non-empty top-level token name that does not begin with \'$\'',
+        )
+      }
       const resolved = typeof input === 'function'
         ? Reflect.apply(input as (...args: any[]) => unknown, undefined, [surface])
         : input
@@ -2155,19 +2183,19 @@ export function materializeOpen(
       const patch = typeof input === 'function'
         ? Reflect.apply(input as (...args: any[]) => unknown, undefined, [surface])
         : input
-      return tokenPatch('augment', { [name]: patch })
+      return applyTokenPatch('augment', { [name]: patch })
     },
     augmentTokens(input: unknown) {
-      return tokenPatch('augment', input)
+      return applyTokenPatch('augment', input)
     },
     overwriteToken(name: string, input: unknown) {
       const patch = typeof input === 'function'
         ? Reflect.apply(input as (...args: any[]) => unknown, undefined, [surface])
         : input
-      return tokenPatch('overwrite', { [name]: patch })
+      return applyTokenPatch('overwrite', { [name]: patch })
     },
     overwriteTokens(input: unknown) {
-      return tokenPatch('overwrite', input)
+      return applyTokenPatch('overwrite', input)
     },
     addCondition(name: string, input: unknown) {
       const value = typeof input === 'function'
@@ -2213,8 +2241,14 @@ export function materializeOpen(
     },
     addAxis(name: string, input: unknown) {
       const resolved = typeof input === 'function' ? input(surface) : input
-      if (!name || resolved === undefined)
-        throw new TypeError('[vanity] addAxis() needs a name and an ordered mode definition')
+      if (!name || resolved === undefined) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_AXIS',
+          'addAxis() needs a name and an ordered mode definition',
+          ['axes', name || '<empty>'],
+          'provide an axis name and a mode definition',
+        )
+      }
       const definition = Array.isArray(resolved)
         ? defineOpenAxis(name, {
             modes: Object.fromEntries(resolved.map(mode => [mode, thisMode])),
@@ -2256,8 +2290,14 @@ export function materializeOpen(
         ? Reflect.apply(input as (...args: any[]) => unknown, undefined, [surface])
         : input
       const existing = state.axes.definitions[name]
-      if (!existing)
-        throw new TypeError(`[vanity] augmentAxis() cannot patch unknown axis '${name}'; use addAxis()`)
+      if (!existing) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_AXIS',
+          `augmentAxis() cannot patch unknown axis '${name}'`,
+          ['axes', name],
+          'use addAxis() when introducing a new axis',
+        )
+      }
       const definition = applyOpenAxisPatch(name, existing, patch, 'augment')
       const nextAxes = replaceAxis(state.axes, name, definition)
       return materializeNextOpenSystem({
@@ -2291,8 +2331,14 @@ export function materializeOpen(
         ? Reflect.apply(input as (...args: any[]) => unknown, undefined, [surface])
         : input
       const existing = state.axes.definitions[name]
-      if (!existing)
-        throw new TypeError(`[vanity] overwriteAxis() cannot patch unknown axis '${name}'; use addAxis()`)
+      if (!existing) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_AXIS',
+          `overwriteAxis() cannot patch unknown axis '${name}'`,
+          ['axes', name],
+          'use addAxis() when introducing a new axis',
+        )
+      }
       const definition = applyOpenAxisPatch(name, existing, patch, 'overwrite')
       const nextAxes = replaceAxis(state.axes, name, definition)
       return materializeNextOpenSystem({
@@ -2337,6 +2383,7 @@ export function materializeOpen(
     },
     addConsts(input: unknown) {
       const added = resolveRecordInput('consts', input)
+      assertSystemNamespaceAvailable(Object.keys(added), 'addConsts()')
       assertAdditive('const', state.consts, added)
       assertJson(added, 'addConsts')
       return materializeNextOpenSystem({
@@ -2366,8 +2413,14 @@ export function materializeOpen(
       })
     },
     addUtil(name: string, value: unknown) {
-      if (typeof value !== 'function')
-        throw new TypeError(`[vanity] utility '${name}' must be a function`)
+      if (typeof value !== 'function') {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_DEFINITION',
+          `utility '${name}' must be a function`,
+          ['utils', name],
+          'provide a callable utility value',
+        )
+      }
       const result = Reflect.apply(methods.addUtils as (...args: any[]) => unknown, surface, [{ [name]: value }])
       const resultState = getOpenSystemState(result)!
       return materializeOpen({
@@ -2381,7 +2434,7 @@ export function materializeOpen(
     addUtils(input: unknown) {
       const added = resolveRecordInput('utils', input) as VanityUtilTree
       assertSystemNamespaceAvailable(
-        Object.keys(added).filter(name => !(name in state.utils)),
+        Object.keys(added).filter(name => !Object.hasOwn(state.utils, name)),
         'addUtils()',
       )
       assertRecursiveUtilsAdditive('addUtils()', {
@@ -2449,13 +2502,25 @@ export function materializeOpen(
         )
       }
       const patches = resolveRecordInput('rules', input)
-      if (!isPlainRecord(patches))
-        throw new TypeError('[vanity] overwriteRules() needs a rule patch record, module, module array, or callback')
+      if (!isPlainRecord(patches)) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_DEFINITION',
+          'overwriteRules() needs a rule patch record, module, module array, or callback',
+          'rules',
+          'pass a rule patch record or a callback that returns one',
+        )
+      }
       assertKnown('rule', state.rules, patches)
       const rules = { ...state.rules }
       for (const [name, patch] of Object.entries(patches)) {
-        if (!isPlainRecord(patch))
-          throw new TypeError(`[vanity] overwriteRule('${name}', ...) needs a partial system-rule object`)
+        if (!isPlainRecord(patch)) {
+          throwOpenError(
+            'VANITY_SYSTEM_INVALID_DEFINITION',
+            `overwriteRule('${name}', ...) needs a partial system-rule object`,
+            ['rules', name],
+            'provide a partial system-rule object',
+          )
+        }
         const current = rules[name]!
         const merged = { ...current, ...patch }
         assertSystemRule(name, merged)
@@ -2470,11 +2535,17 @@ export function materializeOpen(
       })
     },
     addPlugin(input: VanitySystemPlugin<any, any> | ((system: object) => VanitySystemPlugin<any, any>)) {
-      const plugin = typeof input === 'function' && !(VANITY_SYSTEM_PLUGIN in input)
+      const plugin = typeof input === 'function' && !Object.hasOwn(input, VANITY_SYSTEM_PLUGIN)
         ? Reflect.apply(input, undefined, [surface])
         : input as VanitySystemPlugin<any, any>
-      if (hasPlugin(state.plugins, plugin.id))
-        throw new TypeError(`[vanity] plugin '${plugin.id}' is already installed`)
+      if (hasPlugin(state.plugins, plugin.id)) {
+        throwOpenError(
+          'VANITY_SYSTEM_COLLISION',
+          `plugin '${plugin.id}' is already installed`,
+          ['plugins', plugin.id],
+          'install each plugin id only once, or choose a different id',
+        )
+      }
 
       const setupSurface = materializeOpen(state, plugin.id)
       const additive = createPluginSetupSurface(setupSurface, plugin.id)
@@ -2487,11 +2558,33 @@ export function materializeOpen(
         const temporal = message.includes('expected ') && message.includes('missing')
           ? ' Requirements are temporal: add the requirement before mounting this plugin.'
           : ''
-        throw new TypeError(`[vanity] plugin '${plugin.id}' setup failed: ${message}${temporal}`)
+        if (error instanceof VanityError) {
+          throw new VanityError(
+            error.diagnostics.map((diagnostic, index) => ({
+              ...diagnostic,
+              message: index === 0
+                ? `plugin '${plugin.id}' setup failed: ${diagnostic.message}${temporal}`
+                : diagnostic.message,
+            })),
+            { cause: error },
+          )
+        }
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_DEFINITION',
+          `plugin '${plugin.id}' setup failed: ${message}${temporal}`,
+          ['plugins', plugin.id, 'setup'],
+          'make setup return the accumulated system and use the additive plugin surface',
+        )
       }
       const resultState = getOpenSystemState(result)
-      if (!resultState || OPEN_STATE_PLUGIN_CONTEXT.get(resultState) !== plugin.id)
-        throw new TypeError(`[vanity] plugin '${plugin.id}' setup must return the accumulated system`)
+      if (!resultState || OPEN_STATE_PLUGIN_CONTEXT.get(resultState) !== plugin.id) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_DEFINITION',
+          `plugin '${plugin.id}' setup must return the accumulated system`,
+          ['plugins', plugin.id, 'setup'],
+          'return the system returned by the final additive operation in setup',
+        )
+      }
 
       const identity = {
         id: plugin.id,
@@ -2500,7 +2593,7 @@ export function materializeOpen(
       }
       const addedConstructors = Object.fromEntries(
         Object.entries(resultState.values.constructors)
-          .filter(([name]) => !(name in state.values.constructors)),
+          .filter(([name]) => !Object.hasOwn(state.values.constructors, name)),
       )
       const values = Object.keys(addedConstructors).length === 0
         ? resultState.values
@@ -2538,11 +2631,23 @@ export function materializeOpen(
     },
     expectAxis(name: string, modes: readonly string[] = []) {
       const definition = state.axes.definitions[name]
-      if (!definition)
-        throw new TypeError(`[vanity] expected axis '${name}' is missing; call addAxis('${name}', ...) earlier`)
+      if (!definition) {
+        throwOpenError(
+          'VANITY_SYSTEM_MISSING',
+          `expected axis '${name}' is missing; call addAxis('${name}', ...) earlier`,
+          ['axes', name],
+          `add axis '${name}' before mounting this plugin`,
+        )
+      }
       for (const mode of modes) {
-        if (!(mode in definition.modes))
-          throw new TypeError(`[vanity] expected axis mode '${name}.${mode}' is missing; add it before mounting this plugin`)
+        if (!Object.hasOwn(definition.modes, mode)) {
+          throwOpenError(
+            'VANITY_SYSTEM_MISSING',
+            `expected axis mode '${name}.${mode}' is missing; add it before mounting this plugin`,
+            ['axes', name, 'modes', mode],
+            `add mode '${name}.${mode}' before mounting this plugin`,
+          )
+        }
       }
       return surface
     },
@@ -2586,13 +2691,25 @@ export function materializeOpen(
       return surface
     },
     expectPlugin(id: string) {
-      if (!hasPlugin(state.plugins, id))
-        throw new TypeError(`[vanity] expected plugin '${id}' is missing; call addPlugin() earlier`)
+      if (!hasPlugin(state.plugins, id)) {
+        throwOpenError(
+          'VANITY_SYSTEM_MISSING',
+          `expected plugin '${id}' is missing; call addPlugin() earlier`,
+          ['plugins', id],
+          `install plugin '${id}' before mounting this plugin`,
+        )
+      }
       return surface
     },
     expectConstructor(name: string) {
-      if (!(name in state.values.constructors))
-        throw new TypeError(`[vanity] expected constructor '${name}' is missing; define it before mounting this plugin`)
+      if (!Object.hasOwn(state.values.constructors, name)) {
+        throwOpenError(
+          'VANITY_SYSTEM_MISSING',
+          `expected constructor '${name}' is missing; define it before mounting this plugin`,
+          ['constructors', name],
+          `define constructor '${name}' before mounting this plugin`,
+        )
+      }
       return surface
     },
     expectConstructors(names: readonly string[]) {
@@ -2623,7 +2740,12 @@ export function materializeOpen(
     get(object, key, receiver) {
       if (typeof key === 'string' && OPEN_ONLY_MISUSE.has(key)) {
         return () => {
-          throw new TypeError(`[vanity] ${key}() is available only after consolidate()`)
+          throwOpenError(
+            'VANITY_SYSTEM_INCOMPATIBLE',
+            `${key}() is available only after consolidate()`,
+            key,
+            'call consolidate() before using the locked-system surface',
+          )
         }
       }
       return Reflect.get(object, key, receiver)
@@ -2712,13 +2834,31 @@ function createPluginSetupSurface(system: object, id: string): object {
           const value = typeof input === 'function'
             ? Reflect.apply(input as (...args: unknown[]) => unknown, undefined, [createPluginSetupSurface(system, id)])
             : input
-          if (!isPlainRecord(value))
-            throw new TypeError(`[vanity] plugin '${id}' registerPluginPolicy() needs one plain policy object or callback`)
+          if (!isPlainRecord(value)) {
+            throwOpenError(
+              'VANITY_POLICY_INVALID',
+              `plugin '${id}' registerPluginPolicy() needs one plain policy object or callback`,
+              ['plugins', id, 'policy'],
+              'return one plain policy object from the registration callback',
+            )
+          }
           const state = getOpenSystemState(system)
-          if (!state)
-            throw new TypeError(`[vanity] plugin '${id}' policy registration lost its open-system context`)
-          if (state.policies.plugins && id in state.policies.plugins)
-            throw new TypeError(`[vanity] plugin '${id}' already registered its policy`)
+          if (!state) {
+            throwOpenError(
+              'VANITY_SYSTEM_INCOMPATIBLE',
+              `plugin '${id}' policy registration lost its open-system context`,
+              ['plugins', id, 'policy'],
+              'register the policy against the open system passed to plugin setup',
+            )
+          }
+          if (state.policies.plugins && Object.hasOwn(state.policies.plugins, id)) {
+            throwOpenError(
+              'VANITY_POLICY_CONFLICT',
+              `plugin '${id}' already registered its policy`,
+              ['policies', 'plugins', id],
+              'register one policy per plugin id',
+            )
+          }
           const next = Reflect.apply((system as any).addPolicies, system, [{
             plugins: { [id]: value },
           }])
@@ -2727,7 +2867,12 @@ function createPluginSetupSurface(system: object, id: string): object {
       }
       if (typeof key === 'string' && forbidden.has(key as PluginForbiddenRuntime)) {
         return () => {
-          throw new TypeError(`plugin '${id}' cannot call ${key}(); plugin setup is additive`)
+          throwOpenError(
+            'VANITY_SYSTEM_INCOMPATIBLE',
+            `plugin '${id}' cannot call ${key}(); plugin setup is additive`,
+            ['plugins', id, 'setup', key],
+            'use the additive API exposed during plugin setup',
+          )
         }
       }
       const value = Reflect.get(system, key, system)
@@ -2780,7 +2925,7 @@ function createLogicalTokenTree(
   grammar: import('../tokens/declarations').VanityTokenDeclarationGrammar,
   path: readonly string[] = [],
 ): object {
-  if (typeof value === 'function' && '$path' in value) {
+  if (typeof value === 'function' && Object.hasOwn(value, '$path')) {
     const token = value as any
     const render = () => token.$reference === 'val' && token.$val !== undefined
       ? String(token.$val)
@@ -2831,16 +2976,34 @@ function applyOpenAxisPatch(
   operation: 'augment' | 'overwrite',
 ): VanityAxisDefinition {
   if (isAxisDefinition(input)) {
-    if (operation === 'augment')
-      throw new TypeError(`[vanity] augmentAxis('${name}', ...) needs a partial patch, not a complete replacement`)
+    if (operation === 'augment') {
+      throwOpenError(
+        'VANITY_SYSTEM_INVALID_AXIS',
+        `augmentAxis('${name}', ...) needs a partial patch, not a complete replacement`,
+        ['axes', name],
+        'pass only the axis fields or modes that should be added',
+      )
+    }
     for (const mode of Object.keys(existing.modes)) {
-      if (!(mode in input.modes))
-        throw new TypeError(`[vanity] overwriteAxis() cannot remove existing mode '${name}.${mode}'`)
+      if (!Object.hasOwn(input.modes, mode)) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_AXIS',
+          `overwriteAxis() cannot remove existing mode '${name}.${mode}'`,
+          ['axes', name, 'modes', mode],
+          'retain every existing mode in an overwrite patch',
+        )
+      }
     }
     return input
   }
-  if (!isPlainRecord(input))
-    throw new TypeError(`[vanity] ${operation}Axis('${name}', ...) needs a partial axis patch or callback`)
+  if (!isPlainRecord(input)) {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_AXIS',
+      `${operation}Axis('${name}', ...) needs a partial axis patch or callback`,
+      ['axes', name],
+      'pass a partial axis object or a callback that returns one',
+    )
+  }
 
   const patch = input as VanityAxisPatch
   const normalizedModes = patch.modes === undefined
@@ -2848,26 +3011,41 @@ function applyOpenAxisPatch(
     : defineOpenAxis(name, { modes: patch.modes }).modes
   if (operation === 'augment') {
     for (const mode of Object.keys(normalizedModes)) {
-      if (mode in existing.modes) {
-        throw new TypeError(
-          `[vanity] augmentAxis() cannot touch existing mode '${name}.${mode}'; use overwriteAxis()`,
+      if (Object.hasOwn(existing.modes, mode)) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_AXIS',
+          `augmentAxis() cannot touch existing mode '${name}.${mode}'; use overwriteAxis()`,
+          ['axes', name, 'modes', mode],
+          'use overwriteAxis() when changing an existing mode',
         )
       }
     }
     for (const key of ['default', 'modeOrder', 'control', 'native', 'description'] as const) {
       const existingKey = key === 'default' ? existing.defaultMode : existing[key]
-      if (patch[key] !== undefined && existingKey !== undefined)
-        throw new TypeError(`[vanity] augmentAxis() cannot touch existing '${name}.${key}'; use overwriteAxis()`)
+      if (patch[key] !== undefined && existingKey !== undefined) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_AXIS',
+          `augmentAxis() cannot touch existing '${name}.${key}'; use overwriteAxis()`,
+          ['axes', name, key],
+          'use overwriteAxis() when changing an existing axis field',
+        )
+      }
     }
     for (const mode of Object.keys(patch.derive ?? {})) {
-      if (mode in existing.derive)
-        throw new TypeError(`[vanity] augmentAxis() cannot touch existing derivation '${name}.${mode}'; use overwriteAxis()`)
+      if (Object.hasOwn(existing.derive, mode)) {
+        throwOpenError(
+          'VANITY_SYSTEM_INVALID_AXIS',
+          `augmentAxis() cannot touch existing derivation '${name}.${mode}'; use overwriteAxis()`,
+          ['axes', name, 'derive', mode],
+          'use overwriteAxis() when changing an existing derivation',
+        )
+      }
     }
   }
 
   const modes = { ...existing.modes, ...normalizedModes }
   const modeOrder = patch.modeOrder
-    ?? [...existing.modeOrder, ...Object.keys(normalizedModes).filter(mode => !(mode in existing.modes))]
+    ?? [...existing.modeOrder, ...Object.keys(normalizedModes).filter(mode => !Object.hasOwn(existing.modes, mode))]
   const derive = { ...existing.derive, ...patch.derive }
   return defineAxis({
     modes,
@@ -2904,7 +3082,7 @@ function assertRecursiveUtilsAdditive(
 ): void {
   for (const [name, value] of Object.entries(added)) {
     const path = [...parent, name]
-    if (!(name in current))
+    if (!Object.hasOwn(current, name))
       continue
     const existing = (current as Record<string, unknown>)[name]
     if (isPlainRecord(existing) && isPlainRecord(value)) {
@@ -2914,7 +3092,14 @@ function assertRecursiveUtilsAdditive(
     const collision = typeof existing === 'function' && typeof value === 'function'
       ? 'duplicate utility leaf'
       : 'namespace/function collision'
-    throw new TypeError(`[vanity] ${owner} ${collision} at '${path.join('.')}'`)
+    throwOpenError(
+      'VANITY_SYSTEM_COLLISION',
+      `${owner} ${collision} at '${path.join('.')}'`,
+      ['utils', ...path],
+      collision === 'duplicate utility leaf'
+        ? 'choose a new utility path; additive registration cannot replace an existing leaf'
+        : 'keep a utility path either as a namespace or as one callable leaf',
+    )
   }
 }
 
@@ -2932,17 +3117,41 @@ function mergeUtilityTrees(
 }
 
 function assertSystemRule(name: string, rule: unknown): asserts rule is VanitySystemRule {
-  if (!isPlainRecord(rule) || !isPlainRecord(rule.css))
-    throw new TypeError(`[vanity] named system rule '${name}' needs a css selector map`)
-  if (rule.layer !== undefined && (typeof rule.layer !== 'string' || rule.layer.length === 0))
-    throw new TypeError(`[vanity] named system rule '${name}.layer' must be a non-empty layer name`)
-  if (rule.order !== undefined && (typeof rule.order !== 'number' || !Number.isFinite(rule.order)))
-    throw new TypeError(`[vanity] named system rule '${name}.order' must be a finite number`)
+  if (!isPlainRecord(rule) || !isPlainRecord(rule.css)) {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      `named system rule '${name}' needs a css selector map`,
+      ['rules', name, 'css'],
+      'provide a plain object mapping selectors to declarations',
+    )
+  }
+  if (rule.layer !== undefined && (typeof rule.layer !== 'string' || rule.layer.length === 0)) {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      `named system rule '${name}.layer' must be a non-empty layer name`,
+      ['rules', name, 'layer'],
+      'provide a non-empty layer name',
+    )
+  }
+  if (rule.order !== undefined && (typeof rule.order !== 'number' || !Number.isFinite(rule.order))) {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      `named system rule '${name}.order' must be a finite number`,
+      ['rules', name, 'order'],
+      'provide a finite numeric order',
+    )
+  }
 }
 
 function assertNamedRequirement(kind: string, current: object, name: string): void {
-  if (!(name in current))
-    throw new TypeError(`[vanity] expected ${kind} '${name}' is missing; add it before mounting this plugin`)
+  if (!Object.hasOwn(current, name)) {
+    throwOpenError(
+      'VANITY_SYSTEM_MISSING',
+      `expected ${kind} '${name}' is missing; add it before mounting this plugin`,
+      [kind, name],
+      `add ${kind} '${name}' before mounting this plugin`,
+    )
+  }
 }
 
 function assertShapeRequirement(
@@ -2957,8 +3166,13 @@ function assertShapeRequirement(
     return
   for (const [name, child] of Object.entries(required)) {
     const path = [...parent, name]
-    if (!current || (typeof current !== 'object' && typeof current !== 'function') || !(name in current)) {
-      throw new TypeError(`[vanity] expected ${kind} '${path.join('.')}' is missing; add it before mounting this plugin`)
+    if (!current || (typeof current !== 'object' && typeof current !== 'function') || !Object.hasOwn(current, name)) {
+      throwOpenError(
+        'VANITY_SYSTEM_MISSING',
+        `expected ${kind} '${path.join('.')}' is missing; add it before mounting this plugin`,
+        [kind, ...path],
+        `add ${kind} '${path.join('.')}' before mounting this plugin`,
+      )
     }
     assertShapeRequirement(kind, (current as any)[name], child, path)
   }
@@ -2967,26 +3181,49 @@ function assertShapeRequirement(
 function assertPathRequirement(kind: string, current: object, path: string): void {
   let value: unknown = current
   for (const part of path.split('.')) {
-    if (!value || (typeof value !== 'object' && typeof value !== 'function') || !(part in value)) {
-      throw new TypeError(`[vanity] expected ${kind} '${path}' is missing; add it before mounting this plugin`)
+    if (!value || (typeof value !== 'object' && typeof value !== 'function') || !Object.hasOwn(value, part)) {
+      throwOpenError(
+        'VANITY_SYSTEM_MISSING',
+        `expected ${kind} '${path}' is missing; add it before mounting this plugin`,
+        [kind, ...path.split('.')],
+        `add ${kind} '${path}' before mounting this plugin`,
+      )
     }
     value = (value as any)[part]
   }
-  if (typeof value !== 'function')
-    throw new TypeError(`[vanity] expected ${kind} '${path}' to be a callable leaf`)
+  if (typeof value !== 'function') {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      `expected ${kind} '${path}' to be a callable leaf`,
+      [kind, ...path.split('.')],
+      `make ${kind} '${path}' a function or choose a callable leaf`,
+    )
+  }
 }
 
 function assertAdditive(kind: string, current: object, added: object): void {
   for (const name of Object.keys(added)) {
-    if (name in current)
-      throw new TypeError(`[vanity] add${capitalizeName(kind)}s() cannot replace existing ${kind} '${name}'`)
+    if (Object.hasOwn(current, name)) {
+      throwOpenError(
+        'VANITY_SYSTEM_COLLISION',
+        `add${capitalizeName(kind)}s() cannot replace existing ${kind} '${name}'`,
+        [kind, name],
+        `use overwrite${capitalizeName(kind)}s() when changing an existing ${kind}`,
+      )
+    }
   }
 }
 
 function assertKnown(kind: string, current: object, patch: object): void {
   for (const name of Object.keys(patch)) {
-    if (!(name in current))
-      throw new TypeError(`[vanity] overwrite${capitalizeName(kind)}s() cannot replace unknown ${kind} '${name}'; use add${capitalizeName(kind)}s()`)
+    if (!Object.hasOwn(current, name)) {
+      throwOpenError(
+        'VANITY_SYSTEM_MISSING',
+        `overwrite${capitalizeName(kind)}s() cannot replace unknown ${kind} '${name}'; use add${capitalizeName(kind)}s()`,
+        [kind, name],
+        `use add${capitalizeName(kind)}s() to introduce '${name}' before overwriting it`,
+      )
+    }
   }
 }
 
@@ -3011,8 +3248,11 @@ function assertTokenExpectation(current: unknown, required: unknown, path: strin
     for (const [trait, expected] of entries) {
       const actual = (current as any)?.[`$${trait}`]
       if (actual !== expected) {
-        throw new TypeError(
-          `[vanity] expected token '${path.join('.')}' to have ${trait}: ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`,
+        throwOpenError(
+          'VANITY_TOKENS_TRAIT_CONFLICT',
+          `expected token '${path.join('.')}' to have ${trait}: ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`,
+          ['tokens', ...path, `$${trait}`],
+          `define token '${path.join('.')}' with ${trait}: ${JSON.stringify(expected)}`,
         )
       }
     }
@@ -3021,8 +3261,13 @@ function assertTokenExpectation(current: unknown, required: unknown, path: strin
 
   for (const [name, child] of entries) {
     const next = [...path, name]
-    if (!current || (typeof current !== 'object' && typeof current !== 'function') || !(name in current)) {
-      throw new TypeError(`[vanity] expected token '${next.join('.')}' is missing; add it earlier in the chain`)
+    if (!current || (typeof current !== 'object' && typeof current !== 'function') || !Object.hasOwn(current, name)) {
+      throwOpenError(
+        'VANITY_TOKENS_MISSING',
+        `expected token '${next.join('.')}' is missing; add it earlier in the chain`,
+        ['tokens', ...next],
+        `add token '${next.join('.')}' earlier in the chain`,
+      )
     }
     assertTokenExpectation((current as any)[name], child, next)
   }
@@ -3033,8 +3278,14 @@ function assertUtilTree(value: VanityUtilTree, path: string[] = []): void {
     const next = [...path, name]
     if (typeof child === 'function')
       continue
-    if (!child || typeof child !== 'object' || Array.isArray(child))
-      throw new TypeError(`[vanity] utility '${next.join('.')}' must be a function or a namespace of functions`)
+    if (!child || typeof child !== 'object' || Array.isArray(child)) {
+      throwOpenError(
+        'VANITY_SYSTEM_INVALID_DEFINITION',
+        `utility '${next.join('.')}' must be a function or a namespace of functions`,
+        ['utils', ...next],
+        'provide a callable utility or a namespace containing callable utilities',
+      )
+    }
     assertUtilTree(child as VanityUtilTree, next)
   }
 }
@@ -3045,12 +3296,24 @@ function getStableOptions(value: unknown): string {
 }
 
 function sort(value: unknown, ancestors: WeakSet<object>): unknown {
-  if (typeof value === 'function')
-    throw new TypeError('[vanity] plugin options cannot use a function as compatibility identity; provide a stable id')
+  if (typeof value === 'function') {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      'plugin options cannot use a function as compatibility identity; provide a stable id',
+      ['plugins', 'options'],
+      'provide a stable primitive/object identity or define an explicit optionsIdentity function',
+    )
+  }
   if (value === null || typeof value !== 'object')
     return value
-  if (ancestors.has(value))
-    throw new TypeError('[vanity] plugin options cannot contain cycles')
+  if (ancestors.has(value)) {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      'plugin options cannot contain cycles',
+      ['plugins', 'options'],
+      'remove the cyclic reference from plugin options',
+    )
+  }
   ancestors.add(value)
   const hasStableId = !Array.isArray(value)
     && typeof (value as Record<string, unknown>).id === 'string'
@@ -3115,12 +3378,29 @@ function assertJson(value: unknown, surface: string, ancestors = new WeakSet<obj
   if (typeof value === 'number') {
     if (Number.isFinite(value))
       return
-    throw new TypeError(`[vanity] ${surface}() consts cannot contain non-finite numbers`)
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      `${surface}() consts cannot contain non-finite numbers`,
+      ['consts'],
+      'replace non-finite numbers with JSON-compatible finite values',
+    )
   }
-  if (typeof value !== 'object')
-    throw new TypeError(`[vanity] ${surface}() consts must be JSON-serializable`)
-  if (ancestors.has(value))
-    throw new TypeError(`[vanity] ${surface}() consts cannot contain cycles`)
+  if (typeof value !== 'object') {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      `${surface}() consts must be JSON-serializable`,
+      ['consts'],
+      'use only JSON-compatible strings, booleans, finite numbers, arrays, and objects',
+    )
+  }
+  if (ancestors.has(value)) {
+    throwOpenError(
+      'VANITY_SYSTEM_INVALID_DEFINITION',
+      `${surface}() consts cannot contain cycles`,
+      ['consts'],
+      'remove the cyclic reference from the const value',
+    )
+  }
   ancestors.add(value)
   for (const child of Array.isArray(value) ? value : Object.values(value))
     assertJson(child, surface, ancestors)
@@ -3161,4 +3441,13 @@ function copyImmutable<T>(value: T, copies = new WeakMap<object, object>()): T {
 
 function capitalizeName(value: string): string {
   return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`
+}
+
+function throwOpenError(
+  code: VanityDiagnosticCode,
+  message: string,
+  path: string | readonly string[],
+  fix: string,
+): never {
+  throw new VanityError({ code, message, path, fix })
 }

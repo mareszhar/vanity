@@ -6,9 +6,12 @@ import type {
   VanityCssValue,
   VanityDataTypeOf,
 } from './types'
+import { throwValueError } from './error'
 import { createInputNode, createVarNode, ExpressionValue } from './protocol'
 
+/** Declare the CSS data type used to validate a custom-property fallback. */
 export interface VanityCustomPropertyOptions<Type extends VanityCssDataType> {
+  /** CSS data type of values accepted by `$var(fallback)`. */
   readonly type: Type
 }
 
@@ -40,8 +43,11 @@ export function customProperty(
     const resultType = declaredType === 'unknown' && fallbackNode ? fallbackNode.type : declaredType
 
     if (fallbackNode && !isCompatibleFallback(declaredType, fallbackNode.type)) {
-      throw new TypeError(
-        `[vanity] fallback for ${name} is <${fallbackNode.type}> but the custom property is <${declaredType}>`,
+      throwValueError(
+        'VANITY_CSS_INVALID_VALUE',
+        `fallback for ${name} is <${fallbackNode.type}> but the custom property is <${declaredType}>`,
+        name,
+        `provide a fallback compatible with <${declaredType}>`,
       )
     }
 
@@ -63,8 +69,11 @@ export function customProperty(
 
 function validateName(name: string): void {
   if (!isDashedIdent(name)) {
-    throw new TypeError(
-      `[vanity] '${name}' is not a valid CSS custom-property name; expected a dashed-ident beginning with --`,
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `'${name}' is not a valid CSS custom-property name; expected a dashed-ident beginning with --`,
+      'customProperty',
+      'use a CSS custom-property name beginning with --',
     )
   }
 }

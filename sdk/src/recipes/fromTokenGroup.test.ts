@@ -1,7 +1,7 @@
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
 import { fromTokenGroup } from '../index'
-import { createFixtureSystem } from '../test-support/current'
+import { createFixtureSystem } from '../test-support/system'
 
 describe('fromTokenGroup()', () => {
   it('proves the repeated recipe case: same-key tone variants from a palette group', () => {

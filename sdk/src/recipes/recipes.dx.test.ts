@@ -142,6 +142,16 @@ describe('errors at the cursor', () => {
 })
 
 describe('hovers', () => {
+  it('documents recipe and anatomy option keys at the authoring cursor', () => {
+    const result = project.query`${defineSystem}
+      void recipe({ base${cursor('recipeBase')}: {}, variants${cursor('recipeVariants')}: {} })
+      void anatomy({ parts: ['root'], base${cursor('anatomyBase')}: { root: {} } })
+    `
+    expect(result.at('recipeBase').hover).toContain('Base rule emitted for every recipe instance')
+    expect(result.at('recipeVariants').hover).toContain('Named variant values and their rules')
+    expect(result.at('anatomyBase').hover).toContain('Base rules keyed by anatomy part')
+  })
+
   it('vanityProps collapses to the plain optional object — no internals wall', () => {
     const result = project.query`${defineButton}
       import type { VanityProps } from '@mszr/vanity'

@@ -1,7 +1,7 @@
 import type { VanityTokenDeclarations } from './types'
 import { VanityError } from '../diagnostics'
-import { substrate } from '../substrate'
 import { isHandle } from '../tokens/handle'
+import { requireStyleModuleFile } from './context'
 import { serializeStyleValue } from './values'
 
 export const VANITY_DEFERRED_TDEC = Symbol.for('vanity.deferredTdec')
@@ -15,11 +15,11 @@ export interface VanityDeferredTokenDeclarations {
  * Registered non-inheriting properties are intentionally excluded because
  * descendant declaration fragments cannot override their semantics.
  */
-export function tokenDeclarations<T extends object>(
+export function createTokenDeclarations<T extends object>(
   tokens: T,
   input: VanityTokenDeclarations<T>,
 ): Record<`--${string}`, string | number> {
-  const file = substrate.modules.requireStyleModule('tdec')
+  const file = requireStyleModuleFile('tdec')
   const declarations: Record<string, string | number> = {}
   collect(tokens, input as object, [], declarations, file)
   return declarations

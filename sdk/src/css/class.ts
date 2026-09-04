@@ -2,8 +2,7 @@ import type { VanitySystemContext } from './context'
 import type { VanityClassEmitter } from './types'
 import { getDiagnosticSource } from '../diagnostics'
 import { record } from '../introspect/records'
-import { substrate } from '../substrate'
-import { createLayerContext } from './context'
+import { createLayerContext, requireStyleModuleFile } from './context'
 import { emitStyle } from './emit'
 import { compileStyleRule } from './rule'
 
@@ -13,7 +12,7 @@ export function createClassEmitter(
   standard = false,
 ): VanityClassEmitter<string, string> {
   const emit = (rule: unknown, debugId?: string, useStandard = false): string => {
-    const file = substrate.modules.requireStyleModule('class')
+    const file = requireStyleModuleFile('class')
     if (useStandard && system.propertyAliases?.expose === 'aliases-only') {
       record({
         kind: 'escape',

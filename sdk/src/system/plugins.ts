@@ -5,6 +5,7 @@
  */
 
 import type { VanityPolicyJson } from './policies'
+import { VanityError } from '../diagnostics'
 
 export interface PluginRegistration {
   readonly id: string
@@ -31,8 +32,14 @@ export function registerPlugin(
   registry: PluginRegistry,
   registration: PluginRegistration,
 ): PluginRegistry {
-  if (hasPlugin(registry, registration.id))
-    throw new TypeError(`[vanity] plugin '${registration.id}' is already installed`)
+  if (hasPlugin(registry, registration.id)) {
+    throw new VanityError({
+      code: 'VANITY_SYSTEM_COLLISION',
+      message: `plugin '${registration.id}' is already installed`,
+      path: ['plugins', registration.id],
+      fix: 'install each plugin id only once, or choose a different id',
+    })
+  }
 
   return Object.freeze({
     ...registry,

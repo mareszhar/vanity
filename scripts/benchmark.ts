@@ -101,6 +101,8 @@ interface BenchmarkResult {
   package: {
     rootBytes: number
     runtimeBytes: number
+    runtimeMinifiedBytes: number
+    runtimeMinGzipBytes: number
   }
   protocol: 1
   scales: ScaleMeasurement[]
@@ -110,6 +112,14 @@ interface PluginModule {
   create: (info: { languageService: LanguageService }) => LanguageService
 }
 
+interface RuntimeMinifier {
+  transformSync: (source: string, options: {
+    format: 'esm'
+    minify: true
+    target: 'es2022'
+  }) => { code: string }
+}
+
 const require = createRequire(import.meta.url)
 const workspaceDir = process.env.VANITY_BENCHMARK_ROOT === undefined
   ? join(fileURLToPath(new URL('.', import.meta.url)), '..')
@@ -117,6 +127,10 @@ const workspaceDir = process.env.VANITY_BENCHMARK_ROOT === undefined
 const fixturesRoot = join(workspaceDir, 'benchmarks/generated')
 const artifactsRoot = join(workspaceDir, '.vanity/benchmarks')
 const declarationsRoot = join(artifactsRoot, 'declarations')
+/** Deliberate min+gzip ceiling with approximately 9.6% headroom over the current receipt. */
+const RUNTIME_ENTRY_MIN_GZIP_BUDGET_BYTES = 12_400
+const sdkRequire = createRequire(resolve(workspaceDir, 'sdk/package.json'))
+const runtimeMinifier = sdkRequire('esbuild') as RuntimeMinifier
 const plugin = (require(resolve(workspaceDir, 'sdk/typescript.cjs')) as (modules: { typescript: typeof ts }) => PluginModule)({ typescript: ts })
 
 function command(command: string, args: string[], cwd = workspaceDir): CommandMeasurement {
@@ -143,6 +157,25 @@ function command(command: string, args: string[], cwd = workspaceDir): CommandMe
 function numeric(output: string, label: string): number | undefined {
   const match = output.match(new RegExp(`^${label}:\\s+([\\d.]+)`, 'm'))
   return match ? Number(match[1]) : undefined
+}
+
+function measureRuntimeEntry(entryPath: string): {
+  rawBytes: number
+  minifiedBytes: number
+  minGzipBytes: number
+} {
+  const source = readFileSync(entryPath, 'utf8')
+  const minified = runtimeMinifier.transformSync(source, {
+    format: 'esm',
+    minify: true,
+    target: 'es2022',
+  })
+
+  return {
+    minGzipBytes: gzipSync(minified.code).byteLength,
+    minifiedBytes: Buffer.byteLength(minified.code),
+    rawBytes: Buffer.byteLength(source),
+  }
 }
 
 function typeScriptMeasurement(config: string, cwd: string): TypeScriptMeasurement {
@@ -350,6 +383,14 @@ const revision = spawnSync('git', ['rev-parse', '--short=8', 'HEAD'], {
   encoding: 'utf8',
 })
 
+const runtimeEntry = measureRuntimeEntry(join(workspaceDir, 'sdk/dist/runtime.mjs'))
+if (runtimeEntry.minGzipBytes > RUNTIME_ENTRY_MIN_GZIP_BUDGET_BYTES) {
+  throw new Error(
+    `Benchmark invariant failed: sdk/dist/runtime.mjs is ${runtimeEntry.minGzipBytes} B min+gzip; `
+    + `the ${RUNTIME_ENTRY_MIN_GZIP_BUDGET_BYTES} B runtime-entry budget needs an explicit review`,
+  )
+}
+
 const result: BenchmarkResult = {
   environment: {
     architecture: arch(),
@@ -362,7 +403,9 @@ const result: BenchmarkResult = {
   },
   package: {
     rootBytes: statSync(join(workspaceDir, 'sdk/dist/index.mjs')).size,
-    runtimeBytes: statSync(join(workspaceDir, 'sdk/dist/runtime.mjs')).size,
+    runtimeBytes: runtimeEntry.rawBytes,
+    runtimeMinifiedBytes: runtimeEntry.minifiedBytes,
+    runtimeMinGzipBytes: runtimeEntry.minGzipBytes,
   },
   protocol: 1,
   scales: benchmarkScales.map(measureScale),

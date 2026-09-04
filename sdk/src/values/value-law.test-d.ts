@@ -49,7 +49,7 @@ describe('the value law — compatible handles are values', () => {
     ds.calc(ds.t.space.md).add(ds.t.channel.hue)
     // @ts-expect-error — CSS light-dark() cannot mix its color and image forms
     ds.lightDark(ds.rawValue.image('url(day.png)'), ds.oklch(0.2, 0, 0))
-    // @ts-expect-error — the old color-pair alias is deliberately absent
-    ds.scheme({ light: 'white', dark: 'black' })
+    // @ts-expect-error — locked value surfaces expose only declared constructors
+    ds.unregisteredColorPair({ light: 'white', dark: 'black' })
   })
 })

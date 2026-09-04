@@ -8,7 +8,7 @@ import type { VanityColorTokenHandle } from '../index'
 import { definePrism, definePrismSystem, emit } from '@test'
 import { describe, expect, it } from 'vitest'
 import { check, defineTokens, legibleOn, oklch, VanityError } from '../index'
-import { createFixtureSystem } from '../test-support/current'
+import { createFixtureSystem } from '../test-support/system'
 import { getTokenModule } from '../tokens/builder'
 import { resolveTokenModule } from '../tokens/resolve'
 

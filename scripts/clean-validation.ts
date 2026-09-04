@@ -25,6 +25,7 @@ const validationPaths = [
   'sandbox/demo-main/.vanity/types',
   'sandbox/demo-main/node_modules/.cache/nuxt/.nuxt',
   'sandbox/demo-main/app/node_modules/.vanity',
+  'sdk/src/test-support/vite-app/.vanity/systems',
 ] as const
 
 async function main(): Promise<void> {

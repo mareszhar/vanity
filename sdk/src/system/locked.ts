@@ -15,12 +15,21 @@ import type {
   VanityFragmentFactory,
   VanityKeyframesFunction,
   VanityOmit,
+  VanityPropertyAliasClassEmitter,
+  VanityPropertyAliasFragmentFactory,
+  VanityPropertyAliasRulesEmitter,
   VanityRawEmitter,
   VanityRulesEmitter,
+  VanityStrictPropertyAliasClassEmitter,
+  VanityStrictPropertyAliasFragmentFactory,
+  VanityStrictPropertyAliasRulesEmitter,
   VanityTokenDeclarations,
 } from '../css/types'
-import type { VanityTokenExplanation } from '../introspect/explain'
+import type { VanityAuditReport } from '../introspect/audit'
+import type { VanityExplanationFor, VanityTokenExplanation } from '../introspect/explain'
 import type { VanityAuditConfig } from '../introspect/records'
+import type { VanitySystemMap } from '../introspect/system'
+import type { VanityAliasesOf, VanityAliasExposureOf } from '../plugins/propertyAliases'
 import type { VanityPortFactory, VanityPortInput } from '../ports/types'
 import type { VanityAnatomyFactory, VanityRecipeFactory } from '../recipes/types'
 import type { VanityRuntimeServices } from '../runtime/contract'
@@ -43,8 +52,10 @@ import type {
   VanityVarsOf,
 } from '../tokens/types'
 import type { DtcgCodecRegistry } from '../values/codecs'
+import type { VanityCanonicalConstructors } from '../values/defaults'
 import type { VanityValueKernel, VanityValueOperationContext } from '../values/kernel'
 import type { VanityCssValue, VanityValue } from '../values/types'
+import type { VanityLengthUnit } from '../values/units'
 import type { VanityAxisDefinitions, VanityAxisRegistry } from './axes'
 import type {
   VanityBaseConditionInputs,
@@ -55,21 +66,22 @@ import type {
 import type {
   VanityCapabilityOrigin,
   VanityOverwriteProvenance,
-  VanityPortableSystemV2,
+  VanityPortableSystem,
 } from './contract'
 import type { VanityUtilTree } from './definitions'
-import type { VanityPolicies, VanityResolvedPolicies } from './policies'
+import type { VanityPolicies } from './policies'
 import type { VanitySystemRule } from './rules'
 import { bindAtoms } from '../atoms/atoms'
 import { createClassEmitter } from '../css/class'
-import { createLayerContext } from '../css/context'
+import { createLayerContext, requireStyleModuleFile } from '../css/context'
 import { createFragmentFactory, omit } from '../css/fragment'
 import { bindFontFace, bindKeyframes } from '../css/keyframes'
 import { createRawEmitter } from '../css/raw'
 import { createRulesEmitter } from '../css/rules'
-import { tokenDeclarations } from '../css/tdec'
+import { createTokenDeclarations } from '../css/tdec'
 import { checkSelector } from '../css/validation'
 import { getDiagnosticSource, VanityError } from '../diagnostics'
+import { runSystemAudit } from '../introspect/audit'
 import { explainFromSystem, explainToken } from '../introspect/explain'
 import { VANITY_SYSTEM_INTERCHANGE } from '../introspect/interchange'
 import { record } from '../introspect/records'
@@ -80,7 +92,11 @@ import { bindAnatomy } from '../recipes/anatomy'
 import { bindRecipe } from '../recipes/recipe'
 import { createRuntimeServices } from '../runtime/controller'
 import { substrate } from '../substrate'
-import { VANITY_BUILTIN_CONSTRUCTOR_NAMES } from '../system/surface'
+import {
+  assertSystemNamespaceAvailable,
+  VANITY_BUILTIN_CONSTRUCTOR_NAMES,
+  VANITY_SYSTEM_SURFACE_VERSION,
+} from '../system/surface'
 import { getTokenModule, isTokenBuilder } from '../tokens/builder'
 import { attachTokenDeclarationGetters } from '../tokens/declarations'
 import { isHandle } from '../tokens/handle'
@@ -196,9 +212,161 @@ export type VanityConditionDescriptions<Conditions extends string> = Readonly<{
   [Key in Conditions as VanityConditionKeyName<Key>]: string
 }>
 
+export declare const VANITY_SYSTEM_RULES_SHAPE: unique symbol
+
+type Simplify<Value> = { [Key in keyof Value]: Value[Key] } & {}
+
+/** Extract the private rule contribution carried alongside authored constants. */
+export type VanityRulesOf<Consts extends object>
+  = Consts extends { readonly [VANITY_SYSTEM_RULES_SHAPE]?: infer Rules extends object }
+    ? Rules
+    : Record<never, never>
+
+/** Carry rule contributions without exposing them as authored constants. */
+export type VanityWithRules<Consts extends object, Rules extends object>
+  = Consts & { readonly [VANITY_SYSTEM_RULES_SHAPE]?: Rules }
+
+/** Remove the private rule carrier from the constants visible on a locked system. */
+export type VanityPublicConsts<Consts extends object> = Simplify<{
+  [Key in keyof Consts as Key extends typeof VANITY_SYSTEM_RULES_SHAPE ? never : Key]: Consts[Key]
+}>
+
+type LockedClassEmitter<C extends string, L extends string, Consts extends object>
+  = typeof import('../plugins/propertyAliases').VANITY_PROPERTY_ALIASES extends keyof Consts
+    ? VanityAliasExposureOf<Consts> extends 'aliases-only'
+      ? VanityStrictPropertyAliasClassEmitter<C, L, VanityAliasesOf<Consts>>
+      : VanityPropertyAliasClassEmitter<C, L, VanityAliasesOf<Consts>>
+    : VanityClassEmitter<C, L>
+
+type LockedFragmentFactory<C extends string, L extends string, Consts extends object>
+  = typeof import('../plugins/propertyAliases').VANITY_PROPERTY_ALIASES extends keyof Consts
+    ? VanityAliasExposureOf<Consts> extends 'aliases-only'
+      ? VanityStrictPropertyAliasFragmentFactory<C, L, VanityAliasesOf<Consts>>
+      : VanityPropertyAliasFragmentFactory<C, L, VanityAliasesOf<Consts>>
+    : VanityFragmentFactory<C>
+
+type LockedRulesEmitter<C extends string, L extends string, Consts extends object>
+  = typeof import('../plugins/propertyAliases').VANITY_PROPERTY_ALIASES extends keyof Consts
+    ? VanityAliasExposureOf<Consts> extends 'aliases-only'
+      ? VanityStrictPropertyAliasRulesEmitter<C, L, VanityAliasesOf<Consts>>
+      : VanityPropertyAliasRulesEmitter<C, L, VanityAliasesOf<Consts>>
+    : VanityRulesEmitter<C, L>
+
+type VanitySystemReadSurface<
+  T,
+  C extends string,
+  L extends string,
+  Axes extends VanityAxisDefinitions,
+  Consts extends object,
+  Policies extends object,
+> = VanityRuntimeServices<T, Axes> & {
+  /** The resolved token module — one import line serves every style file. */
+  readonly t: T
+  readonly class: LockedClassEmitter<C, L, Consts>
+  readonly rules: LockedRulesEmitter<C, L, Consts>
+  readonly raw: VanityRawEmitter<L>
+  readonly fragment: LockedFragmentFactory<C, L, Consts>
+  readonly omit: VanityOmit
+  /** Produce CSS declaration data over resolved tokens without mutating runtime state. */
+  readonly tdec: (declarations: VanityTokenDeclarations<T>) => Record<`--${string}`, string | number>
+  readonly keyframes: VanityKeyframesFunction<L>
+  readonly fontFace: VanityFontFaceFunction<L>
+  /** Variants compress state: props in, classes out ([spec-recipes.md §1]). */
+  readonly recipe: VanityRecipeFactory<C, L>
+  /** The recipe pattern applied to parts ([spec-recipes.md §3]). */
+  readonly anatomy: VanityAnatomyFactory<C, L>
+  /** The typed runtime boundary: declare a port with a default, typed by it. */
+  readonly port: VanityPortFactory
+  /** Finite declared utility selection over your token map ([spec-integrations.md §5]). */
+  readonly atoms: VanityAtomsFactory<C, L>
+  /** Resolve an unfinished module, subtree, or composed selection against this system. */
+  readonly tokensOf: <const Selection extends object>(
+    selection: Selection,
+  ) => VanityTokensFromDefinition<T, Selection>
+  /** Project final custom-property names without emitting CSS. */
+  readonly namesOf: <const Selection extends object>(
+    selection: Selection,
+  ) => VanityNamesOf<VanityTokensFromDefinition<T, Selection>>
+  /** Project final `var()` references without emitting CSS. */
+  readonly varsOf: <const Selection extends object>(
+    selection: Selection,
+  ) => VanityVarsOf<VanityTokensFromDefinition<T, Selection>>
+  /** Serialize a portable value with this system's finalized reference map. */
+  readonly serialize: (value: VanityValue) => string
+  /** Explain one public semantic subject against this system's canonical map. */
+  readonly explain: <Subject>(subject: Subject) => VanityExplanationFor<Subject>
+  /** Read-only normalized authoring context for integrations and inspection. */
+  readonly conditions: VanityConditionDescriptions<C>
+  readonly consts: Readonly<VanityPublicConsts<Consts>>
+  readonly policies: Readonly<Policies>
+  /** Semantic axis handles; pass one directly to `explain()`. */
+  readonly axes: Readonly<{
+    [Name in keyof Axes & string]: VanitySystemMap['axes'][string]
+  }>
+  /** Canonical, versioned semantic map available to tools and configuration. */
+  readonly introspect: () => VanitySystemMap
+  /**
+   * Run every audit this system can evaluate on its own, without a build.
+   *
+   * The report covers ambiguous axes, mutable-root hazards, overwrite history,
+   * nonportable values, and specificity contexts. `unevaluated` explicitly
+   * lists the module-usage, emitted-CSS, and build-evidence audits that require
+   * a compiler manifest or integration evidence. Promotion comes from
+   * `consolidate({ audit })` and can be overridden per call.
+   */
+  readonly audit: (config?: VanityAuditConfig) => VanityAuditReport
+}
+
+/**
+ * The consolidated read surface over the already-resolved token and system
+ * models. The mapped boundary keeps editor hovers readable while preserving
+ * the exact accumulated constructors and utilities.
+ */
+export type VanityLockedSystem<
+  T,
+  C extends string,
+  L extends string,
+  Constructors extends object = Record<never, never>,
+  Axes extends VanityAxisDefinitions = Record<never, never>,
+  Consts extends object = Record<never, never>,
+  Utils extends object = Record<never, never>,
+  Policies extends object = VanityPolicies,
+> = Readonly<Constructors>
+  & Readonly<Utils>
+  & Simplify<VanitySystemReadSurface<T, C, L, Axes, Consts, Policies> & {
+    /** Bind every subsequent style emitter to one declared layer. */
+    readonly inLayer: <Layer extends L>(name: Layer) => VanityLockedSystem<
+      T,
+      C,
+      L,
+      Constructors,
+      Axes,
+      Consts,
+      Utils,
+      Policies
+    >
+    readonly layers: readonly L[]
+  }>
+
+/**
+ * The compact styling baseline. Concrete locked systems are assignable to it
+ * by width subtyping; system-specific tokens and layer vocabulary stay out.
+ */
+export type VanitySystem = Simplify<
+  Readonly<VanityCanonicalConstructors<VanityLengthUnit>>
+  & VanitySystemReadSurface<
+    Record<never, never>,
+    never,
+    never,
+    Record<never, never>,
+    Record<never, never>,
+    VanityPolicies
+  >
+>
+
 // ─── The system ──────────────────────────────────────────────────────────────
 
-export interface VanityLockedSystem<
+interface VanitySystemBindingSurface<
   T,
   C extends string,
   L extends string,
@@ -228,7 +396,7 @@ export interface VanityLockedSystem<
   readonly port: VanityPortFactory
   /** Finite declared utility selection over your token map ([spec-integrations.md §5]). */
   readonly atoms: VanityAtomsFactory<C, L>
-  readonly inLayer: <Layer extends L>(name: Layer) => VanityLockedSystem<T, C, Layer, Axes>
+  readonly inLayer: <Layer extends L>(name: Layer) => VanitySystemBindingSurface<T, C, Layer, Axes>
   /** Resolve an unfinished module, subtree, or composed selection against this system. */
   readonly tokensOf: <const Selection extends object>(
     selection: Selection,
@@ -250,13 +418,13 @@ export interface VanityLockedSystem<
   readonly layers: readonly L[]
 }
 
-export type VanitySystem<
+type VanityMaterializedSystem<
   T,
   C extends string,
   L extends string,
   Constructors extends object = Record<never, never>,
   Axes extends VanityAxisDefinitions = Record<never, never>,
-> = VanityLockedSystem<T, C, L, Axes> & Readonly<Constructors>
+> = VanitySystemBindingSurface<T, C, L, Axes> & Readonly<Constructors>
 
 export interface VanitySystemBinding<
   Constructors extends object,
@@ -276,7 +444,7 @@ export interface VanitySystemContractMetadata {
   readonly source?: string
   readonly consts?: Readonly<Record<string, unknown>>
   readonly utilities?: readonly string[]
-  readonly ruleGroups?: VanityPortableSystemV2['ruleGroups']
+  readonly ruleGroups?: VanityPortableSystem['ruleGroups']
   readonly plugins?: readonly string[]
   readonly owners?: Readonly<Record<string, { readonly kind: 'plugin', readonly id: string }>>
   readonly overwrites?: readonly VanityOverwriteProvenance[]
@@ -384,7 +552,7 @@ export function materializeLockedSystemContract<
   binding: VanitySystemBinding<Constructors, TokenPolicy, Axes>,
   options: VanitySystemBindingOptions<T, C, L, P, B, TokenPolicy>,
   metadata: VanitySystemContractMetadata = {},
-): VanitySystem<VanitySystemTokens<T, P, TokenPolicy, true>, VanitySystemConditionName<C, B>, L[number], Constructors, Axes> {
+): VanityMaterializedSystem<VanitySystemTokens<T, P, TokenPolicy, true>, VanitySystemConditionName<C, B>, L[number], Constructors, Axes> {
   return materializeLockedSystem<Constructors, T, C, L, P, B, TokenPolicy, true, Axes>(
     binding,
     options as VanitySystemOptions<T, C, L, P, B>,
@@ -410,29 +578,30 @@ function materializeLockedSystem<
   binding: VanitySystemBinding<Constructors, TokenPolicy, Axes>,
   options: VanitySystemOptions<T, C, L, P, B>,
   mode: VanitySystemCreationMode,
-): VanitySystem<VanitySystemTokens<T, P, TokenPolicy, Canonical>, VanitySystemConditionName<C, B>, L[number], Constructors, Axes> {
+): VanityMaterializedSystem<VanitySystemTokens<T, P, TokenPolicy, Canonical>, VanitySystemConditionName<C, B>, L[number], Constructors, Axes> {
   const file = mode.requireStyleModule
-    ? substrate.modules.requireStyleModule('createSystem')
+    ? requireStyleModuleFile('createSystem')
     : mode.source ?? getDiagnosticSource()?.file
   const prefix = options.prefix ?? 'vanity'
   const root = options.root ?? ':root'
   const policies = resolvePolicies(
-    mode.policies ?? binding.valueContext.policies as VanityPolicies,
+    mode.policies ?? binding.valueContext.policies,
     {
-      support: binding.valueContext.support,
+      support: binding.valueContext.policies.support,
       layerOrder: options.layerOrder ?? VANITY_DEFAULT_LAYERS,
     },
-  ) as VanityResolvedPolicies
+  )
   const valueContext: VanityValueOperationContext = {
     ...binding.valueContext,
     values: binding.kernel,
-    support: policies.support,
     policies,
   }
-  const tokenPolicy = policies.tokens as TokenPolicy
+  const tokenPolicy = policies.tokens
+  // `resolvePolicies()` has already validated custom policy values as JSON;
+  // this assertion marks the serialization boundary after removing support.
   const contractPolicies = Object.freeze(Object.fromEntries(
     Object.entries(valueContext.policies).filter(([name]) => name !== 'support'),
-  ))
+  )) as VanityPortableSystem['policies']
   const layers = (options.layerOrder ?? policies.layerOrder) as readonly string[]
 
   if (!/^-?(?:[_a-z]|[^\0-\x7F])(?:[-\w]|[^\0-\x7F])*$/i.test(prefix)) {
@@ -530,7 +699,7 @@ function materializeLockedSystem<
       root,
       layers,
       serializeValue: (value: VanityCssValue) => serializeValueWithContext(valueContext, value),
-      support: valueContext.support,
+      support: valueContext.policies.support,
       policies: valueContext.policies,
       axes: binding.axes,
       dtcgCodecIds: new Set(binding.dtcg.map(codec => codec.extension)),
@@ -547,9 +716,9 @@ function materializeLockedSystem<
   }
   const conditions = normalizeConditions(conditionInputs, file)
 
-  const aliasConfig = VANITY_PROPERTY_ALIASES in binding.kernel.constructors
+  const aliasConfig = Object.hasOwn(binding.kernel.constructors, VANITY_PROPERTY_ALIASES)
     ? (binding.kernel.constructors as any)[VANITY_PROPERTY_ALIASES]
-    : mode.consts && VANITY_PROPERTY_ALIASES in mode.consts
+    : mode.consts && Object.hasOwn(mode.consts, VANITY_PROPERTY_ALIASES)
       ? (mode.consts as any)[VANITY_PROPERTY_ALIASES]
       : undefined
   if (aliasConfig) {
@@ -580,12 +749,12 @@ function materializeLockedSystem<
     layerRoot: prefix,
     ...(aliasConfig === undefined ? {} : { propertyAliases: aliasConfig }),
     resolveTokenDeclarations: (input: object) =>
-      tokenDeclarations(tokens as any, input as any),
+      createTokenDeclarations(tokens as any, input as any),
     serializeValue: (value: unknown) => serializeSystemValue(value),
   }
   const runtimeContract = getRuntimeContract(tokens)!
 
-  type Bound = VanitySystem<VanitySystemTokens<T, P, TokenPolicy, Canonical>, VanitySystemConditionName<C, B>, L[number], Constructors, Axes>
+  type Bound = VanityMaterializedSystem<VanitySystemTokens<T, P, TokenPolicy, Canonical>, VanitySystemConditionName<C, B>, L[number], Constructors, Axes>
 
   const describedConditions = Object.freeze(describeConditions(conditions)) as VanityConditionDescriptions<VanitySystemConditionName<C, B>>
   const resolvedGraph = getTokenGraph(tokens)!
@@ -602,18 +771,32 @@ function materializeLockedSystem<
   )
   serializeSystemValue = (value: unknown): string | number => {
     if (typeof value === 'number') {
-      if (!Number.isFinite(value))
-        throw new RangeError(`[vanity] a CSS number must be finite; received ${value}`)
+      if (!Number.isFinite(value)) {
+        throw new VanityError({
+          code: 'VANITY_CSS_INVALID_VALUE',
+          message: `a CSS number must be finite; received ${value}`,
+          path: 'value',
+          file,
+          fix: 'pass a finite number',
+        })
+      }
       return Object.is(value, -0) ? 0 : value
     }
     if (typeof value === 'string') {
-      if (value.trim().length === 0)
-        throw new TypeError('[vanity] a CSS value cannot be empty')
+      if (value.trim().length === 0) {
+        throw new VanityError({
+          code: 'VANITY_CSS_INVALID_VALUE',
+          message: 'a CSS value cannot be empty',
+          path: 'value',
+          file,
+          fix: 'pass non-empty CSS text',
+        })
+      }
       return value
     }
     if (isHandle(value))
       return String(value)
-    if ((typeof value === 'object' || typeof value === 'function') && value !== null && 'var' in value)
+    if ((typeof value === 'object' || typeof value === 'function') && value !== null && Object.hasOwn(value, 'var'))
       return (value as { readonly var: string }).var
     if (isVanityValue(value)) {
       return serializeValueWithContext(valueContext, value, (reference) => {
@@ -624,10 +807,22 @@ function materializeLockedSystem<
           if (node)
             return node.name
         }
-        throw new TypeError(`[vanity] system '${prefix}' cannot resolve ${reference.path ?? 'an unnamed value reference'}`)
+        throw new VanityError({
+          code: 'VANITY_VALUE_INVALID',
+          message: `system '${prefix}' cannot resolve ${reference.path ?? 'an unnamed value reference'}`,
+          path: reference.path ?? 'value',
+          file,
+          fix: 'use a value or token reference that belongs to this system',
+        })
       })
     }
-    throw new TypeError('[vanity] a system value must be CSS text, a finite number, a token, a port, or a vanity value')
+    throw new VanityError({
+      code: 'VANITY_VALUE_INVALID',
+      message: 'a system value must be CSS text, a finite number, a token, a port, or a vanity value',
+      path: 'value',
+      file,
+      fix: 'pass CSS text, a finite number, a token, a port, or a Vanity value',
+    })
   }
   const projectTokens = (selection: object): object => {
     const module = isTokenModule(selection)
@@ -676,7 +871,7 @@ function materializeLockedSystem<
     if (emitted)
       return
 
-    const activeFile = substrate.modules.requireStyleModule('locked system authoring')
+    const activeFile = requireStyleModuleFile('locked system authoring')
     substrate.modules.runInFileScope({ filePath: file ?? activeFile }, () => {
       // Establish the complete layer order before token/style declarations.
       substrate.css.emitLayer({ name: prefix })
@@ -717,31 +912,16 @@ function materializeLockedSystem<
   }
 
   const utilityTree = mode.utilityTree ?? {}
+  assertSystemNamespaceAvailable(Object.keys(utilityTree), 'locked utility tree')
   for (const name of Object.keys(utilityTree)) {
-    if (name in binding.kernel.constructors || name in {
-      t: true,
-      class: true,
-      rules: true,
-      raw: true,
-      fragment: true,
-      tdec: true,
-      keyframes: true,
-      fontFace: true,
-      recipe: true,
-      anatomy: true,
-      port: true,
-      atoms: true,
-      inLayer: true,
-      tokensOf: true,
-      namesOf: true,
-      varsOf: true,
-      serialize: true,
-      conditions: true,
-      layers: true,
-      consts: true,
-      policies: true,
-    }) {
-      throw new TypeError(`[vanity] utility '${name}' collides with a locked-system member`)
+    if (Object.hasOwn(binding.kernel.constructors, name)) {
+      throw new VanityError({
+        code: 'VANITY_SYSTEM_COLLISION',
+        message: `locked utility tree cannot define '${name}' because it is reserved by system surface v${VANITY_SYSTEM_SURFACE_VERSION}`,
+        path: name,
+        file,
+        fix: 'choose a utility name outside the locked system surface; system members cannot be extended or replaced',
+      })
     }
   }
 
@@ -756,7 +936,7 @@ function materializeLockedSystem<
     fragment: buildOnly('fragment', createFragmentFactory()),
     omit,
     tdec: buildOnly('tdec', (declarations: VanityTokenDeclarations<Bound['t']>) =>
-      tokenDeclarations(tokens as Bound['t'], declarations)),
+      createTokenDeclarations(tokens as Bound['t'], declarations)),
     keyframes: buildOnly('keyframes', bindKeyframes(system)),
     fontFace: buildOnly('fontFace', bindFontFace(system)),
     recipe: buildOnly('recipe', bindRecipe(system) as Bound['recipe']),
@@ -806,7 +986,7 @@ function materializeLockedSystem<
     layers: [...layers],
     capabilities: {
       signature: binding.signature,
-      supportTarget: valueContext.support.id,
+      supportTarget: valueContext.policies.support.id,
       constructors: Object.keys(binding.kernel.constructors).map(name => ({
         name,
         origin: getConstructorOrigin(name, binding, mode.owners),
@@ -850,6 +1030,10 @@ function materializeLockedSystem<
       enumerable: true,
       value: () => semantic,
     },
+    audit: {
+      enumerable: true,
+      value: (config?: VanityAuditConfig) => runSystemAudit(semantic, config),
+    },
   })
 
   record({
@@ -860,7 +1044,7 @@ function materializeLockedSystem<
     root,
     ...(qualifiedTokenLayer === undefined ? {} : { tokenLayer: qualifiedTokenLayer }),
     capabilitySignature: binding.signature,
-    supportTarget: valueContext.support.id,
+    supportTarget: valueContext.policies.support.id,
     layers: [...layers],
     conditions: describedConditions as Readonly<Record<string, string>>,
     conditionArms: describedArms,
@@ -886,7 +1070,13 @@ function materializeLockedSystem<
       get(object, key, receiver) {
         if (typeof key === 'string' && LOCKED_ONLY_SYSTEM_MEMBERS.has(key)) {
           return () => {
-            throw new TypeError(`[vanity] ${key}() is unavailable after consolidate(); fork the open system instead`)
+            throw new VanityError({
+              code: 'VANITY_SYSTEM_INCOMPATIBLE',
+              message: `${key}() is unavailable after consolidate(); fork the open system instead`,
+              path: key,
+              file,
+              fix: 'call the method on the open system before consolidate(), or fork the open system',
+            })
           }
         }
         if (typeof key === 'string' && BUILD_SURFACES.has(key)) {
@@ -908,7 +1098,7 @@ function materializeLockedSystem<
     }) as Bound
 }
 
-function recordPortableSystem(portable: VanityPortableSystemV2): void {
+function recordPortableSystem(portable: VanityPortableSystem): void {
   record({
     kind: 'system',
     ...(portable.source === undefined ? {} : { file: portable.source }),
@@ -979,8 +1169,14 @@ function emitSystemRules(
         || left.registration - right.registration
     })
   for (const { name, rule } of ordered) {
-    if (rule.layer !== undefined && !layerIndex.has(rule.layer))
-      throw new TypeError(`[vanity] named system rule '${name}' references undeclared layer '${rule.layer}'`)
+    if (rule.layer !== undefined && !layerIndex.has(rule.layer)) {
+      throw new VanityError({
+        code: 'VANITY_SYSTEM_UNKNOWN_LAYER',
+        message: `named system rule '${name}' references undeclared layer '${rule.layer}'`,
+        path: ['rules', name, 'layer'],
+        fix: 'declare the layer in layerOrder before emitting this rule',
+      })
+    }
     const emitter = rule.layer === undefined
       ? createRulesEmitter(system)
       : createRulesEmitter(createLayerContext(system, rule.layer))
@@ -997,9 +1193,12 @@ function mapTokenProjection(
     return kind === 'name' ? selection.$name : selection.$var()
 
   if (typeof selection !== 'object' || selection === null) {
-    throw new TypeError(
-      `[vanity] ${path.join('.') || 'projection'} is not a resolved token handle or token subtree`,
-    )
+    throw new VanityError({
+      code: 'VANITY_SYSTEM_INCOMPATIBLE',
+      message: `${path.join('.') || 'projection'} is not a resolved token handle or token subtree`,
+      path: path.length === 0 ? 'projection' : path,
+      fix: 'project a resolved token handle or a subtree of resolved token handles',
+    })
   }
 
   return Object.freeze(Object.fromEntries(Object.entries(selection).map(([key, value]) => [

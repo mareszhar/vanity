@@ -34,7 +34,7 @@ export interface VanityTokenRecord extends VanitySourceRecord {
   /** Effective selector and layer where this declaration was finalized. */
   root?: string
   scopes?: readonly string[]
-  /** Nearest unified-module mount path, when authored through a module builder. */
+  /** Nearest module mount path, when authored through a module builder. */
   module?: readonly string[]
   layer?: string
   /** The built value per scheme — equal strings when the token is scheme-blind. */
@@ -177,7 +177,7 @@ export interface VanitySystemRecord extends VanitySourceRecord {
   capabilitySignature?: string
   supportTarget?: string
   layers: string[]
-  ruleGroups?: import('../system/contract').VanityPortableSystemV2['ruleGroups']
+  ruleGroups?: import('../system/contract').VanityPortableSystem['ruleGroups']
   /** Condition name → its compiled arms, serialized readably. */
   conditions: Record<string, string>
   /** Condition name → every exact lowered selector/query arm. */
@@ -194,7 +194,7 @@ export interface VanitySystemRecord extends VanitySourceRecord {
   /** Projection identities derived from normalized semantic records. */
   identities?: import('../system/contract').VanitySystemIdentities
   /** Validated data-only compiler projection. Never contains build closures. */
-  portable?: import('../system/contract').VanityPortableSystemV2
+  portable?: import('../system/contract').VanityPortableSystem
 }
 
 export interface VanityRecipeRecord extends VanitySourceRecord {
@@ -269,6 +269,27 @@ export type VanityInspectRecord
 
 // ─── Audit configuration (recorded by the system, applied by the audit) ──────
 
+/**
+ * Stable categories emitted by `ds.audit()` and configurable in `consolidate({ audit })`.
+ *
+ * - `unusedTokens`: tokens declared but never consumed by a style or semantic record.
+ * - `nearDuplicates`: colors whose resolved values fall within the configured similarity threshold.
+ * - `contrast`: authored contrast checks that do not meet their requested guarantee.
+ * - `escapes`: token references that escape the intended ownership or portability boundary.
+ * - `scaleStrays`: scale values that sit outside the declared scale vocabulary.
+ * - `focusVisibility`: focus treatments that do not provide the required visible indication.
+ * - `specificityContexts`: selectors whose specificity context can change unexpectedly.
+ * - `rawAssertions`: raw CSS assertions that bypass a typed capability without an explicit reason.
+ * - `nonportableValues`: values that cannot cross the portable value boundary.
+ * - `ambiguousAxes`: axis declarations whose defaults or branches do not select one meaning.
+ * - `mutableRootHazards`: mutable root tokens whose lifetime can make updates unsafe.
+ * - `aliasEscapes`: aliases that resolve outside their declared token ownership.
+ * - `overwriteInventory`: overwrite operations whose affected declarations are not fully accounted for.
+ * - `eagerStyleBarrels`: style barrels loaded eagerly when a lazy module boundary is expected.
+ * - `cssParityGaps`: declared CSS capability rows missing from emitted or adapter evidence.
+ * - `staleArtifacts`: generated artifacts whose content or identity no longer matches their source.
+ * - `rootModeDisagreements`: root mode readings that disagree across the build evidence.
+ */
 export type VanityAuditKind
   = | 'unusedTokens'
     | 'nearDuplicates'
@@ -288,6 +309,7 @@ export type VanityAuditKind
     | 'staleArtifacts'
     | 'rootModeDisagreements'
 
+/** Per-category audit behavior: `'off'` silences, `'warn'` reports, and `'error'` promotes a finding to a failure. */
 export type VanityAuditLevel = 'off' | 'warn' | 'error'
 
 /**
@@ -316,7 +338,7 @@ export function record(entry: VanityInspectRecord): void {
 }
 
 /** Whether a collector is open — guards record preparation that isn't free. */
-export function inspecting(): boolean {
+export function isInspecting(): boolean {
   return channel().current !== undefined
 }
 

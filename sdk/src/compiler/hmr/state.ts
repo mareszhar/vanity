@@ -1,9 +1,9 @@
 /** Stable virtual-CSS ownership and dependency state used by compiler HMR. */
 
-import type { VanityPortableSystemV2 } from '../../system/contract'
+import type { VanityPortableSystem } from '../../system/contract'
 import { join } from 'node:path'
+import { normalizePath } from '../core/path'
 import { isSameAuthoredFile } from '../core/systems'
-import { normalizePath } from '../path'
 
 /** Replace one entry's virtual stylesheet set and remove no-longer-used CSS. */
 export function replaceEntryVirtualIds(
@@ -30,7 +30,7 @@ export function resolveCssVirtualAlias(
   root: string,
   virtualExtension: string,
   css: ReadonlyMap<string, string>,
-  namespaces: ReadonlyMap<string, ReadonlyMap<string, VanityPortableSystemV2>>,
+  namespaces: ReadonlyMap<string, ReadonlyMap<string, VanityPortableSystem>>,
 ): string | undefined {
   if (css.has(requested))
     return requested

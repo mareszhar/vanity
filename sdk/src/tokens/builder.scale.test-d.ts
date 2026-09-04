@@ -1,11 +1,11 @@
 /**
- * Product-side depth guard: a realistic 60-link unified builder,
+ * Product-side depth guard: a realistic 60-link token builder,
  * followed by system registration and two independently consolidated forks.
  */
 import { createSystem } from '@mszr/vanity'
 import { describe, expectTypeOf, it } from 'vitest'
 
-describe('unified token builder depth', () => {
+describe('token builder depth', () => {
   it('keeps a long additive chain below TS2589', () => {
     const open = createSystem()
     const tokens = open.defineTokens()

@@ -17,7 +17,7 @@ export function emitStyle(compiled: VanityCompiled, debugId?: string): string {
   const layer = getQualifiedLayer(compiled)
   const [baseUnit, rest] = splitBase(compiled.units)
   const className = substrate.css.emitClassRule({
-    rule: applyLayer(layer, toSubstrateRule(baseUnit?.declarations ?? {})),
+    rule: applyLayer(layer, convertToSubstrateRule(baseUnit?.declarations ?? {})),
     debugId,
   })
 
@@ -28,7 +28,7 @@ export function emitStyle(compiled: VanityCompiled, debugId?: string): string {
 
     substrate.css.emitGlobalRule({
       selector,
-      rule: applyLayer(layer, applyAtRules(unit.arm, toSubstrateRule(unit.declarations))),
+      rule: applyLayer(layer, applyAtRules(unit.arm, convertToSubstrateRule(unit.declarations))),
     })
   }
 
@@ -50,7 +50,7 @@ export function emitOnto(className: string, compiled: VanityCompiled): void {
 
     substrate.css.emitGlobalRule({
       selector,
-      rule: applyLayer(layer, applyAtRules(unit.arm, toSubstrateRule(unit.declarations))),
+      rule: applyLayer(layer, applyAtRules(unit.arm, convertToSubstrateRule(unit.declarations))),
     })
   }
 }
@@ -65,7 +65,7 @@ export function emitGlobal(selector: string, compiled: VanityCompiled): void {
 
     substrate.css.emitGlobalRule({
       selector: resolved,
-      rule: applyLayer(layer, applyAtRules(unit.arm, toSubstrateRule(unit.declarations))),
+      rule: applyLayer(layer, applyAtRules(unit.arm, convertToSubstrateRule(unit.declarations))),
     })
   }
 }
@@ -87,7 +87,7 @@ function isBaseArm(arm: VanityArm): boolean {
 }
 
 /** Custom-property keys ride the substrate's `vars`; everything else is a declaration. */
-export function toSubstrateRule(declarations: Record<string, string | number | Array<string | number>>): SubstrateRule {
+function convertToSubstrateRule(declarations: Record<string, string | number | Array<string | number>>): SubstrateRule {
   const rule: SubstrateRule = {}
   let vars: Record<string, string> | undefined
 
@@ -104,7 +104,7 @@ export function toSubstrateRule(declarations: Record<string, string | number | A
   return vars === undefined ? rule : { ...rule, vars }
 }
 
-export function applyAtRules(arm: VanityArm, rule: SubstrateRule): SubstrateRule {
+function applyAtRules(arm: VanityArm, rule: SubstrateRule): SubstrateRule {
   let wrapped = rule
 
   if (arm.startingStyle)
@@ -125,7 +125,7 @@ export function applyAtRules(arm: VanityArm, rule: SubstrateRule): SubstrateRule
   return wrapped
 }
 
-export function applyLayer(layer: string, rule: SubstrateRule): SubstrateRule {
+function applyLayer(layer: string, rule: SubstrateRule): SubstrateRule {
   return { '@layer': { [layer]: rule } }
 }
 

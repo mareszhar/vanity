@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { angle, number as cssNumber, fluid, interpolate, length } from '../index'
+import { resolvePolicies } from '../system/policies'
 import { defaultValueKernel } from './defaults'
 import { serializeValueWithContext } from './kernel'
 import { VANITY_DEFAULT_CSS_SUPPORT } from './protocol'
@@ -7,8 +8,7 @@ import { VANITY_DEFAULT_CSS_SUPPORT } from './protocol'
 function serialize(value: import('./types').VanitySelfValue): string {
   return serializeValueWithContext({
     values: defaultValueKernel,
-    support: VANITY_DEFAULT_CSS_SUPPORT,
-    policies: {},
+    policies: resolvePolicies({ support: VANITY_DEFAULT_CSS_SUPPORT }),
   }, value)
 }
 

@@ -23,8 +23,8 @@ export const unsafe = {
   },
 }
 
-export function isUnsafeValue(value: unknown): value is VanityUnsafeValue {
-  return typeof value === 'object' && value !== null && UNSAFE in value
+function isUnsafeValue(value: unknown): value is VanityUnsafeValue {
+  return typeof value === 'object' && value !== null && Object.hasOwn(value, UNSAFE)
 }
 
 /**
@@ -71,7 +71,7 @@ export function createAtomsHandle(runtime: VanityAtomsRuntime, emitUnsafe?: Vani
       if (raw === undefined || raw === null || raw === false)
         continue
 
-      if (key in runtime.toggles) {
+      if (Object.hasOwn(runtime.toggles, key)) {
         if (raw === true)
           classes.push(runtime.toggles[key])
         continue
@@ -79,7 +79,7 @@ export function createAtomsHandle(runtime: VanityAtomsRuntime, emitUnsafe?: Vani
 
       const property = runtime.shorthands[key] ?? key
 
-      if (!(property in runtime.classes)) {
+      if (!Object.hasOwn(runtime.classes, property)) {
         warn(warned, key, `${getRuntimeName(runtime)}: '${key}' is not a declared property, shorthand, or toggle`)
         continue
       }

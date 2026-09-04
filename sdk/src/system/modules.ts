@@ -10,9 +10,11 @@ import type { VanityConditionInput } from './conditions'
 import type { VanityConstructorDefinition, VanityUtilTree } from './definitions'
 import type { VanityPolicies } from './policies'
 import type { VanitySystemRule } from './rules'
+import { VanityError } from '../diagnostics'
 
 export const VANITY_DEFINITION_MODULE = Symbol.for('vanity.definitionModule')
 
+/** Definition-module categories accepted by the shared composition machinery. */
 export type VanityDefinitionKind
   = | 'axes'
     | 'conditions'
@@ -194,12 +196,21 @@ export function defineRecordModule<
       if (args.length === 1)
         return materialize(mergeEntries(kind, entries, requireRecord(kind, first)))
       if (args.length !== 2 || typeof first !== 'string' || first.startsWith('$')) {
-        throw new TypeError(
-          `[vanity] ${getDefinitionName(kind)}.add() needs (name, value/callback), a tree/callback, or one or more matching modules`,
-        )
+        throw new VanityError({
+          code: 'VANITY_SYSTEM_INVALID_DEFINITION',
+          message: `${getDefinitionName(kind)}.add() needs (name, value/callback), a tree/callback, or one or more matching modules`,
+          path: ['definitions', kind],
+          fix: 'pass a valid entry name and value, an entry tree, a callback, or matching modules',
+        })
       }
-      if (first in entries)
-        throw new TypeError(`[vanity] ${getDefinitionName(kind)}.add() cannot replace existing '${first}'`)
+      if (Object.hasOwn(entries, first)) {
+        throw new VanityError({
+          code: 'VANITY_SYSTEM_COLLISION',
+          message: `${getDefinitionName(kind)}.add() cannot replace existing '${first}'`,
+          path: [kind, first],
+          fix: 'choose a new entry name; additive modules cannot replace an existing entry',
+        })
+      }
       // Utility leaves are themselves functions, so `(name, fn)` must mean a
       // direct leaf. A utility that needs module context uses the unambiguous
       // plural callback form: `.add(m => ({ name: ... }))`.
@@ -240,13 +251,13 @@ export function definePolicies<const Seed extends VanityPolicies = Record<never,
   return defineRecordModule('policies', seed)
 }
 
-export function isDefinitionModule<
+function isDefinitionModule<
   Kind extends VanityDefinitionKind,
 >(
   value: unknown,
   kind?: Kind,
 ): value is VanityDefinitionModule<Kind, object> {
-  if (!value || typeof value !== 'object' || !(VANITY_DEFINITION_MODULE in value))
+  if (!value || typeof value !== 'object' || !Object.hasOwn(value, VANITY_DEFINITION_MODULE))
     return false
   return kind === undefined || (value as VanityDefinitionModule<any>)[VANITY_DEFINITION_MODULE] === kind
 }
@@ -294,9 +305,12 @@ function mergeEntries(
       result[name] = mergeEntries(kind, existing, value, path)
       continue
     }
-    throw new TypeError(
-      `[vanity] ${getDefinitionName(kind)} cannot replace existing '${path.join('.')}'; use an overwrite method where that kind supports one`,
-    )
+    throw new VanityError({
+      code: 'VANITY_SYSTEM_COLLISION',
+      message: `${getDefinitionName(kind)} cannot replace existing '${path.join('.')}'; use an overwrite method where that kind supports one`,
+      path: [kind, ...path],
+      fix: 'use the corresponding overwrite method on the open system, or choose a new entry name',
+    })
   }
   return result
 }
@@ -306,8 +320,14 @@ function isNamespace(value: unknown): value is Record<string, unknown> {
 }
 
 function requireRecord(kind: VanityDefinitionKind, value: unknown): object {
-  if (!isNamespace(value))
-    throw new TypeError(`[vanity] ${getDefinitionName(kind)} needs a plain entry tree`)
+  if (!isNamespace(value)) {
+    throw new VanityError({
+      code: 'VANITY_SYSTEM_INVALID_DEFINITION',
+      message: `${getDefinitionName(kind)} needs a plain entry tree`,
+      path: ['definitions', kind],
+      fix: 'pass a plain object containing the definition entries',
+    })
+  }
   return value
 }
 

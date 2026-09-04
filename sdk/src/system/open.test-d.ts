@@ -1,7 +1,15 @@
+import type { VanityPortableSystem } from '@mszr/vanity'
 import { createSystem, definePlugin } from '@mszr/vanity'
 import { describe, expectTypeOf, it } from 'vitest'
 
 describe('open and locked system types', () => {
+  it('keeps portable policy groups precise at the consumer boundary', () => {
+    expectTypeOf<VanityPortableSystem['policies']['tokens']['reference']>()
+      .toEqualTypeOf<'var' | 'val'>()
+    expectTypeOf<VanityPortableSystem['policies']['tokens']['emit']>()
+      .toEqualTypeOf<boolean>()
+  })
+
   it('accumulates exact shape and narrows at consolidation', () => {
     const open = createSystem({ constructors: { length: { unitless: 'rem' } } })
       .addTokens({ color: { brand: '#635bff' } })
@@ -22,8 +30,8 @@ describe('open and locked system types', () => {
     expectTypeOf(ds.twice(2)).toEqualTypeOf<number>()
     // @ts-expect-error — registration is absent from the locked surface
     void ds.addTokens
-    // @ts-expect-error — the removed nested capability surface has no output alias
-    void ds.createSystem
+    // @ts-expect-error — locked systems expose only their documented members
+    void ds.undocumentedMember
   })
 
   it('rejects duplicate additive keys at their inputs', () => {

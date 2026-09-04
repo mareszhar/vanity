@@ -1,7 +1,7 @@
 /** Token and branch handles shared across build and application contexts. */
 
 import type { VanityCssDataType } from '../values/types'
-import { serializeCssText } from '../values/types'
+import { createVanityRuntimeError } from '../runtime/contract'
 
 export type VanityHandleReference = 'val' | 'var'
 type VanityHandleMetadataValue = string | number | boolean | null | readonly VanityHandleMetadataValue[] | { readonly [key: string]: VanityHandleMetadataValue }
@@ -75,6 +75,17 @@ export interface VanityHandleMeta {
   }[]
 }
 
+export interface VanityHandleErrorInput {
+  readonly message: string
+  readonly path: string | readonly string[]
+  readonly fix: string
+}
+
+export interface VanityHandleOptions {
+  readonly serializeFallback?: (value: unknown) => string
+  readonly handleError?: (input: VanityHandleErrorInput) => never
+}
+
 export interface VanityInternalTokenBranchHandle {
   (): string
   readonly [VANITY_BRANCH_HANDLE]: true
@@ -114,7 +125,7 @@ export interface VanityInternalTokenHandle {
  * fields use getters over mutable restoration state; all non-$ metadata stays
  * behind a private symbol and is read through the accessors below.
  */
-export function createHandle(meta: VanityHandleMeta): VanityInternalTokenHandle {
+export function createHandle(meta: VanityHandleMeta, options: VanityHandleOptions = {}): VanityInternalTokenHandle {
   const state: VanityHandleMeta = {
     ...meta,
     reference: meta.reference ?? 'var',
@@ -141,7 +152,7 @@ export function createHandle(meta: VanityHandleMeta): VanityInternalTokenHandle 
   defineGetter(handle, '$var', () => (fallback?: unknown) => {
     if (fallback === undefined)
       return variable
-    const serialized = serializeFallback(fallback)
+    const serialized = serializeFallback(fallback, options.serializeFallback)
     return `var(${state.name}, ${serialized})` as `var(--${string}, ${string})`
   })
   defineGetter(handle, '$path', () => state.path)
@@ -163,15 +174,20 @@ export function createHandle(meta: VanityHandleMeta): VanityInternalTokenHandle 
   defineGetter(handle, '$validate', () => state.validate)
   defineGetter(handle, '$axes', () => axes)
   defineGetter(handle, '$case', () => (when: Readonly<Record<string, string>>) => {
-    const branch = cases.get(addressKey(when))
-    if (!branch)
-      throw new TypeError(`[vanity] ${state.path} has no authored case for ${JSON.stringify(when)}`)
+    const branch = cases.get(getAddressKey(when))
+    if (!branch) {
+      return throwHandleError(options.handleError, {
+        message: `${state.path} has no authored case for ${JSON.stringify(when)}`,
+        path: state.path,
+        fix: 'use an authored case address',
+      })
+    }
     return branch
   })
   defineGetter(handle, 'toString', () => render)
 
   if (meta.axes || meta.cases) {
-    attachCaseBranches(handle)
+    attachCaseBranches(handle, options)
     for (const [axis, modes] of Object.entries(meta.axes ?? {})) {
       for (const [mode, branch] of Object.entries(modes))
         attachAxisBranch(handle, axis, mode, createBranchHandle(branch.value, branch))
@@ -197,8 +213,15 @@ export function updateHandle(handle: VanityInternalTokenHandle, update: Partial<
 /** Read the private metadata used by graph and runtime internals. */
 export function readHandleMeta(handle: VanityInternalTokenHandle): VanityHandleMeta {
   const meta = (handle as unknown as Record<symbol, VanityHandleMeta | undefined>)[handleMetadataSymbol()]
-  if (!meta)
-    throw new TypeError('[vanity] value is not a canonical token handle')
+  if (!meta) {
+    // Internal invariant: all canonical handles are created by createHandle().
+    throw createVanityRuntimeError({
+      code: 'VANITY_RUNTIME_INVALID_HANDLE',
+      message: 'the value is not a canonical token handle',
+      path: ['handle'],
+      fix: 'pass a token handle created by Vanity',
+    })
+  }
   return meta
 }
 
@@ -210,36 +233,8 @@ export function readHandlePath(handle: VanityInternalTokenHandle): string {
   return readHandleMeta(handle).path
 }
 
-export function readHandleReference(handle: VanityInternalTokenHandle): VanityHandleReference {
-  return readHandleMeta(handle).reference ?? 'var'
-}
-
-export function readHandleEmit(handle: VanityInternalTokenHandle): boolean {
-  return readHandleMeta(handle).emit ?? true
-}
-
-export function readHandleMutable(handle: VanityInternalTokenHandle): boolean {
-  return readHandleMeta(handle).mutable ?? false
-}
-
-export function readHandleValue(handle: VanityInternalTokenHandle): string | number | undefined {
-  return readHandleMeta(handle).value
-}
-
 export function readHandleVar(handle: VanityInternalTokenHandle): `var(--${string})` {
   return `var(${readHandleName(handle)})` as `var(--${string})`
-}
-
-export function readHandleType(handle: VanityInternalTokenHandle): VanityCssDataType {
-  return readHandleMeta(handle).type ?? 'unknown'
-}
-
-export function readHandleDescription(handle: VanityInternalTokenHandle): string | undefined {
-  return readHandleMeta(handle).description
-}
-
-export function readHandleDeprecated(handle: VanityInternalTokenHandle): string | undefined {
-  return readHandleMeta(handle).deprecated
 }
 
 function handleMetadataSymbol(): symbol {
@@ -289,11 +284,11 @@ export function attachCaseBranch(
     cases = new Map()
     Object.defineProperty(owner, symbol, { value: cases })
   }
-  cases.set(addressKey(when), branch)
+  cases.set(getAddressKey(when), branch)
 }
 
 /** Called immediately after creation so `$case` and attachment share storage. */
-export function attachCaseBranches(handle: VanityInternalTokenHandle): void {
+export function attachCaseBranches(handle: VanityInternalTokenHandle, options: VanityHandleOptions = {}): void {
   const symbol = getCaseBranchesSymbol()
   const owner = handle as VanityInternalTokenHandle & Record<symbol, Map<string, VanityInternalTokenBranchHandle> | undefined>
   const cases = owner[symbol] ?? new Map<string, VanityInternalTokenBranchHandle>()
@@ -302,9 +297,14 @@ export function attachCaseBranches(handle: VanityInternalTokenHandle): void {
   Object.defineProperty(handle, '$case', {
     configurable: true,
     get: () => (when: Readonly<Record<string, string>>) => {
-      const branch = cases.get(addressKey(when))
-      if (!branch)
-        throw new TypeError(`[vanity] ${readHandlePath(handle)} has no authored case for ${JSON.stringify(when)}`)
+      const branch = cases.get(getAddressKey(when))
+      if (!branch) {
+        return throwHandleError(options.handleError, {
+          message: `${readHandlePath(handle)} has no authored case for ${JSON.stringify(when)}`,
+          path: readHandlePath(handle),
+          fix: 'use an authored case address',
+        })
+      }
       return branch
     },
   })
@@ -320,7 +320,7 @@ export function isBranchHandle(value: unknown): value is VanityInternalTokenBran
     && (value as unknown as Record<symbol, unknown>)[getVanityBranchHandleSymbol()] === true
 }
 
-export function runtimeAddressOf(value: unknown): VanityHandleRuntimeAddress | undefined {
+export function getRuntimeAddress(value: unknown): VanityHandleRuntimeAddress | undefined {
   if (!isHandle(value) && !isBranchHandle(value))
     return undefined
   return (value as unknown as Record<symbol, VanityHandleRuntimeAddress | undefined>)[getVanityRuntimeAddressSymbol()]
@@ -333,13 +333,28 @@ export function setRuntimeAddress(
   Object.defineProperty(value, getVanityRuntimeAddressSymbol(), { configurable: true, value: runtime })
 }
 
-function serializeFallback(value: unknown): string {
+function serializeFallback(value: unknown, serialize?: (value: unknown) => string): string {
   if (isHandle(value) || isBranchHandle(value))
     return String(value)
-  return serializeCssText(value as Parameters<typeof serializeCssText>[0])
+  return serialize ? serialize(value) : String(value)
 }
 
-function addressKey(when: Readonly<Record<string, string>>): string {
+function throwHandleError(
+  handleError: VanityHandleOptions['handleError'],
+  input: VanityHandleErrorInput,
+): never {
+  if (handleError)
+    return handleError(input)
+
+  throw createVanityRuntimeError({
+    code: 'VANITY_RUNTIME_INVALID_HANDLE',
+    message: input.message,
+    path: typeof input.path === 'string' ? [input.path] : input.path,
+    fix: input.fix,
+  })
+}
+
+function getAddressKey(when: Readonly<Record<string, string>>): string {
   return Object.entries(when).sort(([left], [right]) => left.localeCompare(right)).map(([axis, mode]) => `${axis}\0${mode}`).join('\x01')
 }
 

@@ -22,7 +22,7 @@ export function createSystem(): VanityOpenSystem
 export function createSystem<
   const Config extends VanityPolicies,
 >(
-  policies: Config,
+  policies: Config & VanityPolicies,
 ): VanityOpenSystem<ProjectSystemShape<VanitySystemShape, Config>>
 export function createSystem(
   policies?: VanityPolicies,
@@ -46,7 +46,6 @@ export function createSystem(
   const resolvedPolicies = resolvePolicies(authoredPolicies)
   const valueContext = {
     values: initialState.values,
-    support: resolvedPolicies.support,
     policies: resolvedPolicies,
   } satisfies VanityValueOperationContext
   const tokenPolicy = Object.freeze({

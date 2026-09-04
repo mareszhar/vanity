@@ -1,5 +1,11 @@
 import type { VanityPluginSetupSystem } from '@mszr/vanity'
-import { createSystem, data, definePlugin, VanityError } from '@mszr/vanity'
+import {
+  createSystem,
+  data,
+  definePlugin,
+  VANITY_SYSTEM_MEMBERS,
+  VanityError,
+} from '@mszr/vanity'
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
 import { assertPortableSystem, getSystemContract } from './contract'
@@ -35,9 +41,6 @@ describe('open and locked systems', () => {
     expect(ds.consts).toEqual({ density: { compact: 0.875 } })
     expect(ds.twice(4)).toBe(8)
     expect('addTokens' in ds).toBe(false)
-    expect('css' in ds).toBe(false)
-    expect('globalCss' in ds).toBe(false)
-    expect('tokenOverride' in ds).toBe(false)
   })
 
   it('emits only when a locked build surface is used', () => {
@@ -334,6 +337,68 @@ describe('open and locked systems', () => {
       .toThrow(/plugin 'org\.vanity\.test\.reserved-util'.*reserved by system surface/)
   })
 
+  it('reserves every locked-system namespace with one structured collision diagnostic', () => {
+    const reserved = ['introspect', 'axes', 'consts', 'policies', 'class'] as const
+
+    for (const name of reserved) {
+      let utilityError: unknown
+      try {
+        ;(createSystem() as any).addUtils({ [name]: () => true })
+      }
+      catch (error) {
+        utilityError = error
+      }
+      expect(utilityError).toBeInstanceOf(VanityError)
+      expect((utilityError as VanityError).diagnostics[0]).toMatchObject({
+        code: 'VANITY_SYSTEM_COLLISION',
+        path: [name],
+        fix: { message: expect.stringContaining('locked system surface') },
+      })
+
+      let constError: unknown
+      try {
+        ;(createSystem() as any).addConsts({ [name]: true })
+      }
+      catch (error) {
+        constError = error
+      }
+      expect(constError).toBeInstanceOf(VanityError)
+      expect((constError as VanityError).diagnostics[0]).toMatchObject({
+        code: 'VANITY_SYSTEM_COLLISION',
+        path: [name],
+        fix: { message: expect.stringContaining('locked system surface') },
+      })
+    }
+
+    const locked = createSystem().consolidate()
+    for (const name of reserved)
+      expect(Object.hasOwn(locked, name)).toBe(true)
+    expect(VANITY_SYSTEM_MEMBERS).toContain('introspect')
+  })
+
+  it('rejects Object.prototype names in authored utilities and constants', () => {
+    for (const name of ['toString', 'constructor', 'hasOwnProperty']) {
+      for (const author of [
+        () => (createSystem() as any).addUtils({ [name]: () => 'utility' }),
+        () => (createSystem() as any).addConsts({ [name]: 'constant' }),
+      ]) {
+        let failure: unknown
+        try {
+          author()
+        }
+        catch (error) {
+          failure = error
+        }
+        expect(failure).toBeInstanceOf(VanityError)
+        expect((failure as VanityError).diagnostics[0]).toMatchObject({
+          code: 'VANITY_SYSTEM_COLLISION',
+          path: [name],
+          message: expect.stringContaining('Object.prototype'),
+        })
+      }
+    }
+  })
+
   it('invalidates only the identity projections affected by a change', () => {
     const contract = (val: string, description: string) => {
       const open = createSystem()
@@ -379,7 +444,7 @@ describe('open and locked systems', () => {
     })).toThrow(/function values/)
   })
 
-  it('rejects truncated, legacy, unknown, and semantically invalid portable artifacts at the boundary', () => {
+  it('rejects truncated, unknown, and semantically invalid portable artifacts at the boundary', () => {
     const portable = getSystemContract(createSystem()
       .addTokens({ color: { brand: 'red' } })
       .consolidate())!.portable
@@ -387,7 +452,7 @@ describe('open and locked systems', () => {
     const { tokens: _runtimeTokens, ...withoutRuntimeTokens } = portable.runtime
 
     expect(() => assertPortableSystem(withoutRuleGroups)).toThrow(/ruleGroups.*required/)
-    expect(() => assertPortableSystem({ ...portable, engine: {} })).toThrow(/engine.*not a property/)
+    expect(() => assertPortableSystem({ ...portable, unexpected: {} })).toThrow(/unexpected.*not a property/)
     expect(() => assertPortableSystem({
       ...portable,
       ruleGroups: [{ name: 'base', selectors: [], fingerprint: 'x', stale: true }],
@@ -403,6 +468,8 @@ describe('open and locked systems', () => {
       ...portable,
       policies: { ...portable.policies, tokens: { reference: 'inline' } },
     })).toThrow(/policies\.tokens\.reference.*var or val/)
+    const { plugins: _plugins, ...withoutPlugins } = portable.policies
+    expect(() => assertPortableSystem({ ...portable, policies: withoutPlugins })).toThrow(/policies\.plugins.*required/)
     expect(() => assertPortableSystem({
       ...portable,
       runtime: withoutRuntimeTokens,

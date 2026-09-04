@@ -1,6 +1,7 @@
 /** CSS Grid value functions, composed through the shared value protocol. */
 
 import type { VanityCssInput, VanityCssValue } from './types'
+import { throwValueError } from './error'
 import { defineCssOperation } from './extensions'
 import { createCompositeNode, createInputNode, ExpressionValue } from './protocol'
 
@@ -27,8 +28,14 @@ function createMinmax(minimum: VanityCssInput, maximum: VanityCssInput): VanityC
 
 /** Repeat one or more tracks by count or auto-placement mode. */
 function createRepeat(count: VanityGridRepeat, ...tracks: [VanityCssInput, ...VanityCssInput[]]): VanityCssValue<string, 'declaration'> {
-  if (typeof count === 'number' && (!Number.isInteger(count) || count < 1))
-    throw new RangeError(`[vanity] grid.repeat() count must be a positive integer; received ${count}`)
+  if (typeof count === 'number' && (!Number.isInteger(count) || count < 1)) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `grid.repeat() count must be a positive integer; received ${count}`,
+      'grid.repeat.count',
+      'pass a positive integer repeat count',
+    )
+  }
 
   const parts: Array<string | ReturnType<typeof createInputNode>> = [`repeat(${count}, `]
   tracks.forEach((track, index) => {
@@ -58,8 +65,14 @@ function createTemplate(...tracks: [VanityCssInput, ...VanityCssInput[]]): Vanit
 /** Quote rows for `grid-template-areas`, rejecting ambiguous embedded quotes. */
 function createAreas(...rows: [string, ...string[]]): VanityCssValue<string, 'declaration'> {
   for (const row of rows) {
-    if (row.includes('"'))
-      throw new TypeError('[vanity] grid.areas() rows cannot contain double quotes')
+    if (row.includes('"')) {
+      throwValueError(
+        'VANITY_CSS_INVALID_VALUE',
+        'grid.areas() rows cannot contain double quotes',
+        'grid.areas.rows',
+        'remove double quotes from the grid area names',
+      )
+    }
   }
   return new ExpressionValue(createCompositeNode({
     type: 'declaration',

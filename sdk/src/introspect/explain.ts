@@ -4,15 +4,16 @@ import type { VanityTokenRecord } from './records'
 import type {
   VanityIntrospectedToken,
   VanitySemanticEntry,
-  VanitySystemMapV2,
+  VanitySystemMap,
 } from './system'
+import { VanityError } from '../diagnostics'
 import { getTokenInspection } from '../tokens/module'
 import { VANITY_EXPLAINABLE } from './semantic'
 
 export { formatExplanation, VANITY_EXPLAINABLE } from './semantic'
 
 export type VanityExplanation
-  = VanitySystemMapV2
+  = VanitySystemMap
     | VanitySemanticEntry
     | Readonly<Record<string, unknown>>
 
@@ -26,7 +27,7 @@ export type VanityExplanationFor<Subject>
 
 /** Resolve any public semantic handle or semantic path against one system map. */
 export function explainFromSystem<Subject>(
-  map: VanitySystemMapV2,
+  map: VanitySystemMap,
   subject: Subject,
 ): VanityExplanationFor<Subject> {
   if (subject === map || subject === map.id)
@@ -59,10 +60,15 @@ export function explainFromSystem<Subject>(
       return direct as VanityExplanationFor<Subject>
   }
 
-  throw new TypeError('[vanity] explain() needs a public token, axis, condition, recipe, anatomy, port, or semantic path')
+  throw new VanityError({
+    code: 'VANITY_TOKENS_UNKNOWN_REF',
+    message: 'explain() needs a public token, axis, condition, recipe, anatomy, port, or semantic path',
+    path: ['subject'],
+    fix: 'pass a public Vanity handle or semantic path present in the system',
+  })
 }
 
-function getSemanticEntries(map: VanitySystemMapV2): VanitySemanticEntry[] {
+function getSemanticEntries(map: VanitySystemMap): VanitySemanticEntry[] {
   return [
     map.capabilities,
     ...map.layers,

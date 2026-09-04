@@ -2,12 +2,12 @@
 
 import type { ModuleNode, ViteDevServer } from 'vite'
 import type { VanityInspectRecord } from '../../introspect/records'
-import type { VanityPortableSystemV2 } from '../../system/contract'
+import type { VanityPortableSystem } from '../../system/contract'
 import type { EvaluatedSystem, NormalizedSystemSource } from '../core/systems'
 import { readFile } from 'node:fs/promises'
 import { posix } from 'node:path'
-import { runtimeIdentity } from '../core/systems'
-import { normalizePath } from '../path'
+import { normalizePath } from '../core/path'
+import { getRuntimeIdentity } from '../core/systems'
 import { replaceEntryVirtualIds as replaceVirtualIds } from './state'
 
 export interface StyleHotUpdateContext {
@@ -29,7 +29,7 @@ export interface StyleHotUpdateState {
   readonly failedStyleEntries: Set<string>
   readonly refreshAppAutoImports?: () => Promise<void>
   readonly evaluateConfiguredSystem: (source: NormalizedSystemSource) => Promise<EvaluatedSystem>
-  readonly createSystemRecord: (system: VanityPortableSystemV2) => VanityInspectRecord
+  readonly createSystemRecord: (system: VanityPortableSystem) => VanityInspectRecord
 }
 
 /** Recompile affected style entries and invalidate dependent runtime modules. */
@@ -54,9 +54,9 @@ export async function handleHotUpdate(
       state.recordsByFile.set(source.entry, [state.createSystemRecord(system.portable)])
       if (
         previous !== undefined
-        && runtimeIdentity(previous.portable) !== runtimeIdentity(system.portable)
+        && getRuntimeIdentity(previous.portable) !== getRuntimeIdentity(system.portable)
       ) {
-        invalidatedRuntimeIdentities.add(runtimeIdentity(previous.portable))
+        invalidatedRuntimeIdentities.add(getRuntimeIdentity(previous.portable))
       }
     }
     catch (error) {

@@ -8,7 +8,7 @@ import { projectRuntimeToken } from '../../system/contract'
  * The generated module contains only serialized data and runtime restoration
  * calls; it never executes the build-time authoring implementation.
  */
-export function runtimeSystemModule(system: EvaluatedSystem, target: 'browser' | 'ssr'): string {
+export function buildRuntimeSystemModule(system: EvaluatedSystem, target: 'browser' | 'ssr'): string {
   const portable = system.portable
   const tokens = portable.tokens.map(projectRuntimeToken)
   const runtimeContract = {

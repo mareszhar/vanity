@@ -1,5 +1,5 @@
 import type {
-  VanityRuntimeSnapshotV1,
+  VanityRuntimeSnapshot,
   VanityRuntimeStyleDeclaration,
   VanityRuntimeTarget,
 } from '../index'
@@ -13,7 +13,7 @@ import {
   systemRoot,
   thisMode,
 } from '@mszr/vanity'
-import { setCustomProperties, setCustomProperty } from '@mszr/vanity/runtime'
+import { setCustomProperties, setCustomProperty, VanityRuntimeError } from '@mszr/vanity/runtime'
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
 import { customProperty } from '../index'
@@ -171,6 +171,45 @@ function createFixture(extra = false) {
 }
 
 describe('mutable runtime', () => {
+  it('throws small structured runtime diagnostics with stable codes and fixes', () => {
+    const { ds } = createFixture()
+
+    let invalidOptions: unknown
+    try {
+      ;(ds.runtime as any)('#app')
+    }
+    catch (error) {
+      invalidOptions = error
+    }
+    expect(invalidOptions).toBeInstanceOf(VanityRuntimeError)
+    expect(invalidOptions).toMatchObject({
+      code: 'VANITY_RUNTIME_INVALID_OPTIONS',
+      diagnostic: {
+        code: 'VANITY_RUNTIME_INVALID_OPTIONS',
+        path: ['options'],
+        fix: expect.stringContaining('options object'),
+      },
+    })
+
+    let unknownMode: unknown
+    try {
+      ds.runtime({ within: new MemoryRoot() }).axes.scheme.$switchTo('missing' as never)
+    }
+    catch (error) {
+      unknownMode = error
+    }
+    expect(unknownMode).toBeInstanceOf(VanityRuntimeError)
+    expect(unknownMode).toMatchObject({
+      code: 'VANITY_RUNTIME_UNKNOWN_MODE',
+      diagnostic: {
+        code: 'VANITY_RUNTIME_UNKNOWN_MODE',
+        axis: 'scheme',
+        mode: 'missing',
+        fix: expect.stringContaining('declared modes'),
+      },
+    })
+  })
+
   it('resolves declared roots lazily, owns writes, binds ambiguity, and broadcasts unanimous axes', () => {
     const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
     const widget = open.defineTokens({
@@ -611,7 +650,7 @@ describe('mutable runtime', () => {
     expect(result.snapshot.system).not.toBe(prior.system)
     expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_SCHEMA_MISMATCH' }))
 
-    const removed: VanityRuntimeSnapshotV1 = {
+    const removed: VanityRuntimeSnapshot = {
       ...prior,
       overrides: [...prior.overrides, {
         token: ['gone'],
@@ -621,7 +660,7 @@ describe('mutable runtime', () => {
     }
     expect(next.reconcileRuntimeSnapshot(removed).diagnostics)
       .toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_UNKNOWN_TOKEN', token: ['gone'] }))
-    const incompatible: VanityRuntimeSnapshotV1 = {
+    const incompatible: VanityRuntimeSnapshot = {
       ...prior,
       overrides: [...prior.overrides, {
         token: ['color', 'brand'],
@@ -689,7 +728,7 @@ describe('mutable runtime', () => {
     ])
     expect(rebound.snapshot().modes).toEqual({ scheme: 'dark' })
     expect(rebound.diagnostics).toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_SCHEMA_MISMATCH' }))
-    expect(() => first.t.color.brand.$set('red')).toThrow(/superseded/)
+    expect(() => first.t.color.brand.$set('red')).toThrow(/runtime binding .* same root/)
   })
 
   it('records runtime schema identity and opaque address provenance in inspection data', () => {

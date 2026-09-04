@@ -1,10 +1,10 @@
-import type { VanityManifest } from './manifest'
+import type { VanityManifest } from './introspect/manifest'
 import { createSystem } from '@mszr/vanity'
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { explainManifestPath, inspectManifest } from '../cli'
-import { buildManifest } from './manifest'
-import { collectInspection } from './records'
+import { explainManifestPath, inspectManifest } from './cli'
+import { buildManifest } from './introspect/manifest'
+import { collectInspection } from './introspect/records'
 
 function manifest(): VanityManifest {
   const ds = createSystem().addTokens({ color: { brand: 'red' } }).consolidate({ prefix: 'cli' })

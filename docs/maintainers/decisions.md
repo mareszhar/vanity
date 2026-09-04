@@ -23,6 +23,13 @@ This register records choices that cross more than one specification. Domain spe
 | Accumulated types use intersections and simplify at read boundaries. | Large systems retain readable hovers and practical type-checking cost. |
 | A package boundary is a read boundary. | Published declarations expose a legible locked surface without builder machinery. |
 
+## Public contract vocabulary
+
+| Decision | Why it matters |
+| --- | --- |
+| Public portable and runtime type names use the current unsuffixed concept; wire-format discriminators and external protocol versions retain their versions. | A type name describes the API surface while serialized data remains explicit about the format it carries. |
+| `value IR` is the canonical name for the portable authored-value intermediate representation. | Protocol, parity, diagnostics, and documentation use one term for the same boundary. |
+
 ## Projection and ownership
 
 | Decision | Why it matters |
@@ -64,3 +71,5 @@ This register records choices that cross more than one specification. Domain spe
 | No generic middleware/hooks. | Add one only when two real emission-transform consumers cannot use existing extension seams. |
 | No whole-system composition API. | Add one only when plugins and module handoff cannot express a real multi-package compatibility problem. |
 | No built-in SVG/Iconify product API. | Add one only for an external-content consumer with a clear ownership boundary. |
+| CSS-rule payloads crossing the substrate remain opaque `unknown` values, and the CSS backend remains an implementation detail rather than a selectable public surface. | Re-enter this decision if Vanity must inspect or transform a rule payload between authoring and registration, or if a backend replacement is actually underway. |
+| Style-module file-scope questions belong to Vanity's CSS authoring context; genuine backend lifecycle stays behind the substrate adapter. | Re-enter this boundary if a caller outside the CSS authoring/compiler boundary needs backend lifecycle behavior or if the adapter no longer provides the required file-scope operations. |

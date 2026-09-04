@@ -33,8 +33,8 @@ import type {
   VanityRuntimeReconciliation,
   VanityRuntimeRootContract,
   VanityRuntimeServices,
+  VanityRuntimeSnapshot,
   VanityRuntimeSnapshotOverride,
-  VanityRuntimeSnapshotV1,
   VanityRuntimeStyleDeclaration,
   VanityRuntimeStyles,
   VanityRuntimeTarget,
@@ -45,14 +45,16 @@ import type {
 } from './contract'
 import {
   createHandle,
+  getRuntimeAddress,
   isBranchHandle,
   isHandle,
-  runtimeAddressOf,
 } from '../tokens/handle'
 import { isCssValue, isVanityValue } from '../values/types'
 import {
+  createVanityRuntimeError,
   VANITY_RUNTIME_SNAPSHOT_VERSION,
 } from './contract'
+import { serializeRuntimeCssText } from './value'
 
 interface RuntimeSchemaStore {
   readonly [id: string]: VanityStandardSchemaV1 | undefined
@@ -143,8 +145,14 @@ export function createRuntimeServices<T, Axes extends VanityAxisDefinitions = Va
       )
     }) as VanityRuntimeControllerFactory<T, Axes>,
     snapshotFrom: ((configure: (runtime: VanityRuntimeController<T, Axes>) => void, options: VanityRuntimeOptions = {}) => {
-      if (typeof configure !== 'function')
-        throw new TypeError('[vanity] snapshotFrom() needs a callback that configures the seed runtime')
+      if (typeof configure !== 'function') {
+        throwRuntimeDiagnostic({
+          code: 'VANITY_RUNTIME_INVALID_OPTIONS',
+          message: 'snapshotFrom() needs a callback that configures the seed runtime',
+          path: ['snapshotFrom'],
+          fix: 'pass a callback such as snapshotFrom(runtime => runtime.t.color.$set(...))',
+        })
+      }
 
       const runtime = bindRuntime<T, Axes>(
         contract,
@@ -163,12 +171,21 @@ export function createRuntimeServices<T, Axes extends VanityAxisDefinitions = Va
 
 function assertRuntimeOptions(options: unknown): asserts options is VanityRuntimeOptions {
   if (isRuntimeTarget(options)) {
-    throw new TypeError(
-      '[vanity] ds.runtime() resolves declared roots; use runtime({ within: element }) or runtime().bindRoot(path, element)',
-    )
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_INVALID_OPTIONS',
+      message: 'ds.runtime() resolves declared roots; use runtime({ within: element }) or runtime().bindRoot(path, element)',
+      path: ['within'],
+      fix: 'pass the target as runtime({ within }) or bind it with runtime().bindRoot(path, element)',
+    })
   }
-  if (!isPlainObject(options))
-    throw new TypeError('[vanity] ds.runtime() accepts only an options object; selector strings are not accepted')
+  if (!isPlainObject(options)) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_INVALID_OPTIONS',
+      message: 'ds.runtime() accepts only an options object; selector strings are not accepted',
+      path: ['options'],
+      fix: 'pass an options object, for example runtime({ within: document })',
+    })
+  }
 }
 
 /** Generated application-module restoration target for `ds.runtime()`. */
@@ -312,8 +329,8 @@ function createRuntimeController<T, Axes extends VanityAxisDefinitions>(
     else
       applyMutations(state, [mutation])
   }
-  const t = runtimeTree(contract, state, schemas, emit) as VanityRuntimeTokens<T>
-  const axes = runtimeAxes<Axes>(contract, state, emit)
+  const t = createRuntimeTree(contract, state, schemas, emit) as VanityRuntimeTokens<T>
+  const axes = createRuntimeAxes<Axes>(contract, state, emit)
 
   const controller = {
     t,
@@ -330,14 +347,14 @@ function createRuntimeController<T, Axes extends VanityAxisDefinitions>(
         }
         return
       }
-      const root = runtimeRoot(state, path)
+      const root = getRuntimeRoot(state, path)
       resolveRuntimeRoot(state, root, true)
       applyStateToRoot(state, root)
     },
     bindRoot(path: string, element: VanityRuntimeTarget) {
       assertActive(state)
       assertRuntimeTarget(element)
-      const root = runtimeRoot(state, path)
+      const root = getRuntimeRoot(state, path)
       root.targets = [element]
       root.resolved = true
       root.bound = true
@@ -345,8 +362,14 @@ function createRuntimeController<T, Axes extends VanityAxisDefinitions>(
     },
     transaction(configure: (runtime: VanityRuntimeController<T, Axes>) => void) {
       assertActive(state)
-      if (typeof configure !== 'function')
-        throw new TypeError('[vanity] runtime.transaction() needs a callback')
+      if (typeof configure !== 'function') {
+        throwRuntimeDiagnostic({
+          code: 'VANITY_RUNTIME_INVALID_OPTIONS',
+          message: 'runtime.transaction() needs a callback',
+          path: ['transaction'],
+          fix: 'pass a callback that performs the runtime operations',
+        })
+      }
       const mutations: RuntimeMutation[] = []
       configure(createRuntimeController<T, Axes>(contract, state, schemas, mutations))
       applyMutations(state, mutations)
@@ -364,7 +387,7 @@ function createRuntimeController<T, Axes extends VanityAxisDefinitions>(
   return Object.freeze(controller) as unknown as VanityRuntimeController<T, Axes>
 }
 
-function runtimeAxes<Axes extends VanityAxisDefinitions>(
+function createRuntimeAxes<Axes extends VanityAxisDefinitions>(
   contract: VanityRuntimeContract,
   state: RuntimeState,
   emit: (mutation: RuntimeMutation) => void,
@@ -380,8 +403,14 @@ function runtimeAxes<Axes extends VanityAxisDefinitions>(
         const modes = definition.modes.filter(mode =>
           definition.control !== undefined || definition.attribute?.values[mode] !== undefined)
           .filter(mode => !options.exclude?.includes(mode))
-        if (modes.length === 0)
-          throw new TypeError(`[vanity] runtime axis '${axis}' has no activatable modes left to cycle`)
+        if (modes.length === 0) {
+          throwRuntimeDiagnostic({
+            code: 'VANITY_RUNTIME_UNSELECTABLE_AXIS',
+            message: `runtime axis '${axis}' has no activatable modes left to cycle`,
+            axis,
+            fix: 'leave at least one activatable mode in the cycle or remove it from exclude',
+          })
+        }
         const current = getCurrentMode(contract, state, axis)
         const next = current === undefined
           ? (definition.defaultMode && modes.includes(definition.defaultMode) ? definition.defaultMode : modes[0]!)
@@ -406,15 +435,41 @@ function prepareMode(
 ): RuntimeMutation {
   assertActive(state)
   const definition = contract.axes[axis]
-  if (!definition || !definition.modes.includes(mode))
-    throw new TypeError(`[vanity] runtime axis '${axis}' has no mode '${mode}'`)
+  if (!definition) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_UNKNOWN_AXIS',
+      message: `runtime has no axis '${axis}'`,
+      axis,
+      fix: 'use one of the axes declared by the system runtime contract',
+    })
+  }
+  if (!definition.modes.includes(mode)) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_UNKNOWN_MODE',
+      message: `runtime axis '${axis}' has no mode '${mode}'`,
+      axis,
+      mode,
+      fix: `use one of the declared modes: ${definition.modes.join(', ')}`,
+    })
+  }
   const value = definition.attribute?.values[mode]
-  if ((!definition.attribute || value === undefined) && !definition.control)
-    throw new TypeError(`[vanity] runtime axis '${axis}' cannot activate mode '${mode}'`)
+  if ((!definition.attribute || value === undefined) && !definition.control) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_UNSELECTABLE_AXIS',
+      message: `runtime axis '${axis}' cannot activate mode '${mode}'`,
+      axis,
+      mode,
+      fix: 'declare an attribute mapping or provide the control implementation for this axis',
+    })
+  }
   if (definition.control && !state.options.controls?.[definition.control.id]) {
-    throw new TypeError(
-      `[vanity] runtime axis '${axis}' needs control '${definition.control.id}' in runtime({ controls })`,
-    )
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_UNSELECTABLE_AXIS',
+      message: `runtime axis '${axis}' needs control '${definition.control.id}' in runtime({ controls })`,
+      axis,
+      mode,
+      fix: `provide controls: { ${definition.control.id}: ... } when creating the runtime`,
+    })
   }
   return {
     kind: 'mode',
@@ -433,8 +488,14 @@ function getCurrentMode(
 ): string | undefined {
   assertActive(state)
   const definition = contract.axes[axis]
-  if (!definition)
-    throw new TypeError(`[vanity] runtime has no axis '${axis}'`)
+  if (!definition) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_UNKNOWN_AXIS',
+      message: `runtime has no axis '${axis}'`,
+      axis,
+      fix: 'use one of the axes declared by the system runtime contract',
+    })
+  }
   const control = definition.control && state.options.controls?.[definition.control.id]
   if (!definition.attribute && !control)
     return undefined
@@ -503,7 +564,7 @@ function inspectRuntime(contract: VanityRuntimeContract, state: RuntimeState): V
     }))),
     modes: snapshot.modes,
     overrides: Object.freeze(snapshot.overrides.flatMap((override) => {
-      const token = tokenByPath(contract, override.token)
+      const token = getTokenByPath(contract, override.token)
       if (!token)
         return []
       const slot = getTokenSlot(token, override.address)
@@ -528,7 +589,7 @@ function inspectRuntime(contract: VanityRuntimeContract, state: RuntimeState): V
   })
 }
 
-function runtimeTree(
+function createRuntimeTree(
   contract: VanityRuntimeContract,
   state: RuntimeState,
   schemas: RuntimeSchemaStore,
@@ -543,7 +604,7 @@ function runtimeTree(
         ...(branch.value === undefined ? {} : { value: branch.value }),
         ...(token.mutable && branch.slot
           ? {
-              runtime: runtimeMeta(contract, token, branch.address, branch.slot),
+              runtime: createRuntimeMeta(contract, token, branch.address, branch.slot),
             }
           : {}),
       }
@@ -569,12 +630,12 @@ function runtimeTree(
       ...(token.validation === undefined ? {} : { validate: token.validation }),
       ...(token.mutable && token.baseSlot
         ? {
-            runtime: runtimeMeta(contract, token, { kind: 'base' }, token.baseSlot),
+            runtime: createRuntimeMeta(contract, token, { kind: 'base' }, token.baseSlot),
           }
         : {}),
       ...(Object.keys(axes).length === 0 ? {} : { axes }),
       ...(cases.length === 0 ? {} : { cases }),
-    })
+    }, { serializeFallback: serializeRuntimeCssText })
     decorateMutableHandle(handle, contract, state, schemas, emit)
     for (const modes of Object.values(handle.$axes)) {
       for (const branch of Object.values(modes))
@@ -596,7 +657,7 @@ function decorateMutableHandle(
   schemas: RuntimeSchemaStore,
   emit: (mutation: RuntimeMutation) => void,
 ): void {
-  const runtime = runtimeAddressOf(handle)
+  const runtime = getRuntimeAddress(handle)
   if (!runtime)
     return
   defineAction(handle, '$set', (input: unknown) => emit(prepareOverride(contract, state, schemas, runtime, input)))
@@ -610,7 +671,7 @@ function decorateMutableBranch(
   schemas: RuntimeSchemaStore,
   emit: (mutation: RuntimeMutation) => void,
 ): void {
-  const runtime = runtimeAddressOf(handle)
+  const runtime = getRuntimeAddress(handle)
   if (!runtime)
     return
   defineAction(handle, '$set', (input: unknown) => emit(prepareOverride(contract, state, schemas, runtime, input)))
@@ -625,12 +686,25 @@ function prepareOverride(
   input: unknown,
 ): RuntimeMutation {
   assertActive(state)
-  const token = tokenByPath(contract, runtime.token)
-  if (!token || !token.mutable)
-    throw new TypeError(`[vanity] ${runtime.token.join('.')} is not a mutable token in this runtime`)
+  const token = getTokenByPath(contract, runtime.token)
+  if (!token || !token.mutable) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_IMMUTABLE_TOKEN',
+      message: `${runtime.token.join('.')} is not a mutable token in this runtime`,
+      token: runtime.token,
+      fix: 'set only a token declared with mutable: true',
+    })
+  }
   const slot = getTokenSlot(token, runtime.address)
-  if (!slot)
-    throw new TypeError(`[vanity] ${formatAddress(runtime.token, runtime.address)} is not an authored runtime address`)
+  if (!slot) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_UNKNOWN_ADDRESS',
+      message: `${formatAddress(runtime.token, runtime.address)} is not an authored runtime address`,
+      token: runtime.token,
+      address: runtime.address,
+      fix: 'set the base or branch address emitted by this runtime contract',
+    })
+  }
   const value = validateAndSerialize(token, input, schemas, state.options)
   if (value === undefined) {
     return {
@@ -649,9 +723,16 @@ function prepareUnset(
   runtime: VanityHandleRuntimeAddress,
 ): RuntimeMutation {
   assertActive(state)
-  const token = tokenByPath(contract, runtime.token)
-  if (!token || !token.mutable || !getTokenSlot(token, runtime.address))
-    throw new TypeError(`[vanity] ${formatAddress(runtime.token, runtime.address)} is not an authored mutable runtime address`)
+  const token = getTokenByPath(contract, runtime.token)
+  if (!token || !token.mutable || !getTokenSlot(token, runtime.address)) {
+    throwRuntimeDiagnostic({
+      code: !token || !token.mutable ? 'VANITY_RUNTIME_IMMUTABLE_TOKEN' : 'VANITY_RUNTIME_UNKNOWN_ADDRESS',
+      message: `${formatAddress(runtime.token, runtime.address)} is not an authored mutable runtime address`,
+      token: runtime.token,
+      address: runtime.address,
+      fix: 'unset a base or branch address emitted for a mutable token by this runtime contract',
+    })
+  }
   return { kind: 'unset', token, runtime }
 }
 
@@ -660,7 +741,7 @@ function applyMutations(state: RuntimeState, mutations: readonly RuntimeMutation
   const targets = new Map<RuntimeMutation, readonly VanityRuntimeTarget[]>()
   for (const mutation of mutations) {
     if (mutation.kind === 'set' || mutation.kind === 'unset') {
-      const root = runtimeRoot(state, mutation.token.rootPath)
+      const root = getRuntimeRoot(state, mutation.token.rootPath)
       targets.set(mutation, getTargetsForRoot(state, root, true))
     }
     else {
@@ -698,9 +779,13 @@ function applyMutations(state: RuntimeState, mutations: readonly RuntimeMutation
           writeAttribute(target, mutation.name, mutation.value)
         }
         else {
-          throw new TypeError(
-            `[vanity] runtime axis '${mutation.axis}' needs control '${definition.control?.id}' in runtime({ controls })`,
-          )
+          throwRuntimeDiagnostic({
+            code: 'VANITY_RUNTIME_UNSELECTABLE_AXIS',
+            message: `runtime axis '${mutation.axis}' needs control '${definition.control?.id}' in runtime({ controls })`,
+            axis: mutation.axis,
+            mode: mutation.mode,
+            fix: `provide controls: { ${definition.control?.id ?? 'axis'}: ... } when creating the runtime`,
+          })
         }
       }
       state.modes.set(mutation.axis, mutation.mode)
@@ -755,7 +840,7 @@ function reconcileSnapshot(
       diagnostics.push({ code: 'VANITY_RUNTIME_UNKNOWN_ADDRESS', message: 'skipped a malformed runtime override record' })
       continue
     }
-    const token = tokenByPath(contract, entry.token)
+    const token = getTokenByPath(contract, entry.token)
     if (!token) {
       diagnostics.push({
         code: 'VANITY_RUNTIME_UNKNOWN_TOKEN',
@@ -844,19 +929,34 @@ function reconcileSnapshot(
   })
 }
 
-function parseSnapshot(input: unknown): VanityRuntimeSnapshotV1 {
+function parseSnapshot(input: unknown): VanityRuntimeSnapshot {
   if (!isPlainObject(input) || input.version !== VANITY_RUNTIME_SNAPSHOT_VERSION) {
-    throw new TypeError(
-      `[vanity] unsupported runtime snapshot protocol '${isPlainObject(input) ? String(input.version) : 'unreadable'}'; expected version ${VANITY_RUNTIME_SNAPSHOT_VERSION}`,
-    )
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
+      message: `unsupported runtime snapshot protocol '${isPlainObject(input) ? String(input.version) : 'unreadable'}'; expected version ${VANITY_RUNTIME_SNAPSHOT_VERSION}`,
+      path: ['snapshot', 'version'],
+      fix: `provide a runtime snapshot with version ${VANITY_RUNTIME_SNAPSHOT_VERSION}`,
+    })
   }
-  if (typeof input.system !== 'string' || !Array.isArray(input.overrides) || !isPlainObject(input.modes))
-    throw new TypeError('[vanity] runtime snapshot v1 is unreadable: expected system, overrides, and modes fields')
+  if (typeof input.system !== 'string' || !Array.isArray(input.overrides) || !isPlainObject(input.modes)) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
+      message: 'runtime snapshot v1 is unreadable: expected system, overrides, and modes fields',
+      path: ['snapshot'],
+      fix: 'provide system, overrides, and modes fields using the runtime snapshot protocol',
+    })
+  }
   for (const mode of Object.values(input.modes)) {
-    if (typeof mode !== 'string')
-      throw new TypeError('[vanity] runtime snapshot v1 modes must be strings')
+    if (typeof mode !== 'string') {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
+        message: 'runtime snapshot v1 modes must be strings',
+        path: ['snapshot', 'modes'],
+        fix: 'serialize each active axis mode as a string',
+      })
+    }
   }
-  return input as unknown as VanityRuntimeSnapshotV1
+  return input as unknown as VanityRuntimeSnapshot
 }
 
 function isSnapshotOverride(input: unknown): input is VanityRuntimeSnapshotOverride {
@@ -892,18 +992,41 @@ function validateAndSerialize(
   let output = input
   if (policy && shouldValidate(policy.runtime, options)) {
     const schema = schemas[policy.id]
-    if (!schema)
-      throw new TypeError(`validation schema '${policy.id}' is not registered on this application runtime controller`)
+    if (!schema) {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
+        message: `validation schema '${policy.id}' is not registered on this application runtime controller`,
+        token: token.token,
+        path: [...token.token, 'validate'],
+        fix: `register the '${policy.id}' Standard Schema validator in runtime({ validators })`,
+      })
+    }
     const result = schema['~standard'].validate(input)
-    if (isPromiseLike(result))
-      throw new TypeError(`validation schema '${policy.id}' is async; runtime setters are synchronous`)
+    if (isPromiseLike(result)) {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
+        message: `validation schema '${policy.id}' is async; runtime setters are synchronous`,
+        token: token.token,
+        path: [...token.token, 'validate'],
+        fix: 'provide a synchronous Standard Schema validator for runtime setters',
+      })
+    }
     if ('issues' in result && result.issues !== undefined) {
       if (policy.onInvalid === 'omit')
         return undefined
-      if (policy.onInvalid === 'fallback' && policy.fallback !== undefined)
+      if (policy.onInvalid === 'fallback' && policy.fallback !== undefined) {
         output = policy.fallback
-      else
-        throw new TypeError(result.issues.map(issue => issue.message).join('; ') || `validation schema '${policy.id}' rejected the value`)
+      }
+      else {
+        throwRuntimeDiagnostic({
+          code: 'VANITY_RUNTIME_INVALID_VALUE',
+          message: `validation schema '${policy.id}' rejected the value`,
+          detail: result.issues.map(issue => issue.message),
+          token: token.token,
+          path: [...token.token, 'value'],
+          fix: 'set a value accepted by the registered validator, or configure onInvalid: fallback/omit',
+        })
+      }
     }
     else {
       output = result.value
@@ -914,24 +1037,60 @@ function validateAndSerialize(
 }
 
 function assertUniversalInput(type: VanityCssDataType, input: unknown): void {
-  if (isVanityValue(input) && type !== 'unknown' && input.type !== 'unknown' && !isCompatibleType(type, input.type))
-    throw new TypeError(`expected <${type}> but received a <${input.type}> vanity value`)
+  if (isVanityValue(input) && type !== 'unknown' && input.type !== 'unknown' && !isCompatibleType(type, input.type)) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_INVALID_VALUE',
+      message: `expected <${type}> but received a <${input.type}> vanity value`,
+      path: ['value'],
+      fix: `provide a value compatible with <${type}>`,
+    })
+  }
   if (typeof input === 'number') {
-    if (!Number.isFinite(input))
-      throw new TypeError('a runtime CSS number must be finite')
-    if (type === 'integer' && !Number.isInteger(input))
-      throw new TypeError(`expected <integer> but received ${input}`)
-    if (!['unknown', 'number', 'integer', 'percentage', 'number-percentage'].includes(type))
-      throw new TypeError(`a bare number is not a <${type}> runtime input`)
+    if (!Number.isFinite(input)) {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_INVALID_VALUE',
+        message: 'a runtime CSS number must be finite',
+        path: ['value'],
+        fix: 'pass a finite number',
+      })
+    }
+    if (type === 'integer' && !Number.isInteger(input)) {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_INVALID_VALUE',
+        message: `expected <integer> but received ${input}`,
+        path: ['value'],
+        fix: 'pass a whole number',
+      })
+    }
+    if (!['unknown', 'number', 'integer', 'percentage', 'number-percentage'].includes(type)) {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_INVALID_VALUE',
+        message: `a bare number is not a <${type}> runtime input`,
+        path: ['value'],
+        fix: `pass a typed value or a compatible token for <${type}>`,
+      })
+    }
     return
   }
   if (typeof input === 'string') {
-    if (input.trim().length === 0)
-      throw new TypeError('a runtime CSS value cannot be empty')
+    if (input.trim().length === 0) {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_INVALID_VALUE',
+        message: 'a runtime CSS value cannot be empty',
+        path: ['value'],
+        fix: 'provide non-empty CSS text',
+      })
+    }
     return
   }
-  if (!isVanityValue(input) && !isHandle(input) && !isBranchHandle(input))
-    throw new TypeError('runtime CSS values must be strings, finite numbers, vanity values, or token handles')
+  if (!isVanityValue(input) && !isHandle(input) && !isBranchHandle(input)) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_INVALID_VALUE',
+      message: 'runtime CSS values must be strings, finite numbers, vanity values, or token handles',
+      path: ['value'],
+      fix: 'pass a string, finite number, vanity value, or token handle',
+    })
+  }
 }
 
 function parseSnapshotInput(type: VanityCssDataType, val: string): unknown {
@@ -953,19 +1112,36 @@ function serializeRuntimeValue(input: unknown): string {
   if (typeof input === 'number')
     return String(Object.is(input, -0) ? 0 : input)
   if (typeof input === 'string') {
-    if (input.trim().length === 0)
-      throw new TypeError('[vanity] a runtime CSS value cannot be empty')
+    if (input.trim().length === 0) {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_INVALID_VALUE',
+        message: 'a runtime CSS value cannot be empty',
+        path: ['value'],
+        fix: 'provide non-empty CSS text',
+      })
+    }
     return input
   }
   if (isCssValue(input))
     return input.css
   if (isHandle(input) || isBranchHandle(input) || isVanityValue(input)) {
     const serialized = String(input)
-    if (serialized.trim().length === 0)
-      throw new TypeError('[vanity] a runtime CSS value cannot serialize to an empty string')
+    if (serialized.trim().length === 0) {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_INVALID_VALUE',
+        message: 'a runtime CSS value cannot serialize to an empty string',
+        path: ['value'],
+        fix: 'provide a serializable CSS value or token reference',
+      })
+    }
     return serialized
   }
-  throw new TypeError('[vanity] cannot serialize this runtime CSS value')
+  throwRuntimeDiagnostic({
+    code: 'VANITY_RUNTIME_INVALID_VALUE',
+    message: 'cannot serialize this runtime CSS value',
+    path: ['value'],
+    fix: 'pass a string, finite number, vanity value, or token handle',
+  })
 }
 
 function shouldValidate(mode: VanityRuntimeValidationContract['runtime'], options: VanityRuntimeOptions): boolean {
@@ -983,14 +1159,14 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
 
 function projectStyles(
   contract: VanityRuntimeContract,
-  snapshot: VanityRuntimeSnapshotV1,
+  snapshot: VanityRuntimeSnapshot,
 ): VanityRuntimeStyles {
   const styles = Object.fromEntries(contract.roots.map(root => [
     root.path,
     {} as Record<`--${string}`, string>,
   ])) as Record<string, Record<`--${string}`, string>>
   for (const entry of snapshot.overrides) {
-    const token = tokenByPath(contract, entry.token)
+    const token = getTokenByPath(contract, entry.token)
     const slot = token && getTokenSlot(token, entry.address)
     if (token && slot)
       styles[token.rootPath]![slot as `--${string}`] = entry.val
@@ -1011,7 +1187,7 @@ function projectStyles(
 
 function projectAttributesForRoot(
   contract: VanityRuntimeContract,
-  snapshot: VanityRuntimeSnapshotV1,
+  snapshot: VanityRuntimeSnapshot,
   root: VanityRuntimeRootContract,
 ): Readonly<Record<string, string>> {
   const attributes: Record<string, string> = {}
@@ -1029,7 +1205,7 @@ function projectAttributesForRoot(
 
 function projectProps(
   contract: VanityRuntimeContract,
-  snapshot: VanityRuntimeSnapshotV1,
+  snapshot: VanityRuntimeSnapshot,
 ): VanityRuntimeProps {
   const styles = projectStyles(contract, snapshot)
   return Object.freeze(Object.fromEntries(contract.roots.map(root => [
@@ -1041,17 +1217,17 @@ function projectProps(
   ])))
 }
 
-function restoreRuntimeState(contract: VanityRuntimeContract, state: RuntimeState, snapshot: VanityRuntimeSnapshotV1): void {
+function restoreRuntimeState(contract: VanityRuntimeContract, state: RuntimeState, snapshot: VanityRuntimeSnapshot): void {
   const props = projectProps(contract, snapshot)
   const targets = new Map<string, readonly VanityRuntimeTarget[]>()
   for (const root of contract.roots) {
     const rootProps = props[root.path]!
     const needsUniqueOwner = Object.keys(rootProps.style).length > 0
-    targets.set(root.path, getTargetsForRoot(state, runtimeRoot(state, root.path), needsUniqueOwner))
+    targets.set(root.path, getTargetsForRoot(state, getRuntimeRoot(state, root.path), needsUniqueOwner))
   }
 
   for (const previous of state.overrides.values()) {
-    const token = tokenByPath(contract, previous.token)
+    const token = getTokenByPath(contract, previous.token)
     const slot = token && getTokenSlot(token, previous.address)
     if (token && slot && !snapshot.overrides.some(entry =>
       recordKey(entry.token, entry.address) === recordKey(previous.token, previous.address))) {
@@ -1062,7 +1238,7 @@ function restoreRuntimeState(contract: VanityRuntimeContract, state: RuntimeStat
   }
 
   for (const entry of snapshot.overrides) {
-    const token = tokenByPath(contract, entry.token)!
+    const token = getTokenByPath(contract, entry.token)!
     const slot = getTokenSlot(token, entry.address)!
     writeStyle(targets.get(token.rootPath)![0]!.style, slot, entry.val)
   }
@@ -1083,9 +1259,13 @@ function restoreRuntimeState(contract: VanityRuntimeContract, state: RuntimeStat
     const value = adapter?.values[mode]
     const control = definition.control && state.options.controls?.[definition.control.id]
     if (definition.control && !control) {
-      throw new TypeError(
-        `[vanity] runtime axis '${axis}' needs control '${definition.control.id}' in runtime({ controls })`,
-      )
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_UNSELECTABLE_AXIS',
+        message: `runtime axis '${axis}' needs control '${definition.control.id}' in runtime({ controls })`,
+        axis,
+        mode,
+        fix: `provide controls: { ${definition.control.id}: ... } when creating the runtime`,
+      })
     }
     for (const root of getRootsForAxis(state, axis)) {
       for (const target of targets.get(root.contract.path) ?? []) {
@@ -1105,7 +1285,7 @@ function restoreRuntimeState(contract: VanityRuntimeContract, state: RuntimeStat
   Object.entries(snapshot.modes).forEach(([axis, mode]) => state.modes.set(axis, mode))
 }
 
-function getRuntimeSnapshot(contract: VanityRuntimeContract, state: RuntimeState): VanityRuntimeSnapshotV1 {
+function getRuntimeSnapshot(contract: VanityRuntimeContract, state: RuntimeState): VanityRuntimeSnapshot {
   return Object.freeze({
     version: VANITY_RUNTIME_SNAPSHOT_VERSION,
     system: contract.system,
@@ -1114,11 +1294,11 @@ function getRuntimeSnapshot(contract: VanityRuntimeContract, state: RuntimeState
   })
 }
 
-function createEmptySnapshot(contract: VanityRuntimeContract): VanityRuntimeSnapshotV1 {
+function createEmptySnapshot(contract: VanityRuntimeContract): VanityRuntimeSnapshot {
   return Object.freeze({ version: 1, system: contract.system, overrides: Object.freeze([]), modes: Object.freeze({}) })
 }
 
-function runtimeMeta(
+function createRuntimeMeta(
   contract: VanityRuntimeContract,
   token: VanityRuntimeTokenContract,
   address: VanitySemanticTokenAddress,
@@ -1146,7 +1326,7 @@ function isSameTokenAddress(left: VanitySemanticTokenAddress, right: VanitySeman
 
 const tokenIndexes = new WeakMap<VanityRuntimeContract, ReadonlyMap<string, VanityRuntimeTokenContract>>()
 
-function tokenByPath(contract: VanityRuntimeContract, token: readonly string[]): VanityRuntimeTokenContract | undefined {
+function getTokenByPath(contract: VanityRuntimeContract, token: readonly string[]): VanityRuntimeTokenContract | undefined {
   let index = tokenIndexes.get(contract)
   if (index === undefined) {
     index = new Map(contract.tokens.map(entry => [entry.token.join('.'), entry]))
@@ -1156,10 +1336,10 @@ function tokenByPath(contract: VanityRuntimeContract, token: readonly string[]):
 }
 
 function recordKey(token: readonly string[], address: VanitySemanticTokenAddress): string {
-  return `${token.join('.')}\0${addressKey(address)}`
+  return `${token.join('.')}\0${getAddressKey(address)}`
 }
 
-function addressKey(address: VanitySemanticTokenAddress, axisOrder: readonly string[] = []): string {
+function getAddressKey(address: VanitySemanticTokenAddress, axisOrder: readonly string[] = []): string {
   if (address.kind === 'base')
     return '0:base'
   if (address.kind === 'axis')
@@ -1176,7 +1356,7 @@ function normalizeAddress(address: VanitySemanticTokenAddress, axisOrder: readon
 function sortOverrides(entries: VanityRuntimeSnapshotOverride[], axisOrder: readonly string[]): VanityRuntimeSnapshotOverride[] {
   return entries.sort((left, right) => {
     const token = left.token.join('.').localeCompare(right.token.join('.'))
-    return token || addressKey(left.address, axisOrder).localeCompare(addressKey(right.address, axisOrder))
+    return token || getAddressKey(left.address, axisOrder).localeCompare(getAddressKey(right.address, axisOrder))
   })
 }
 
@@ -1199,20 +1379,29 @@ function formatAddress(token: readonly string[], address: VanitySemanticTokenAdd
 
 function getResolutionScope(options: VanityRuntimeOptions): object | undefined {
   if (options.within !== undefined) {
-    if ((typeof options.within !== 'object' && typeof options.within !== 'function') || options.within === null)
-      throw new TypeError('[vanity] runtime({ within }) needs a document, shadow root, element, or query adapter')
+    if ((typeof options.within !== 'object' && typeof options.within !== 'function') || options.within === null) {
+      throwRuntimeDiagnostic({
+        code: 'VANITY_RUNTIME_INVALID_TARGET',
+        message: 'runtime({ within }) needs a document, shadow root, element, or query adapter',
+        path: ['within'],
+        fix: 'pass a document, shadow root, element, or query adapter with the required lookup methods',
+      })
+    }
     return options.within
   }
   const document = (globalThis as { document?: object }).document
   return document
 }
 
-function runtimeRoot(state: RuntimeState, path: string): RuntimeRootState {
+function getRuntimeRoot(state: RuntimeState, path: string): RuntimeRootState {
   const root = state.roots.get(path)
   if (!root) {
-    throw new TypeError(
-      `[vanity] runtime has no root '${path}'; expected '$system' or one of: ${[...state.roots.keys()].filter(key => key !== '$system').join(', ') || '(none)'}`,
-    )
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_ROOT_NOT_FOUND',
+      message: `runtime has no root '${path}'; expected '$system' or one of: ${[...state.roots.keys()].filter(key => key !== '$system').join(', ') || '(none)'}`,
+      rootPath: path,
+      fix: `use '$system' or one of the declared runtime roots`,
+    })
   }
   return root
 }
@@ -1243,7 +1432,12 @@ function getTargetsForRoot(
         rootPath: root.contract.path,
       }
   appendRuntimeDiagnostic(state, diagnostic)
-  throw new TypeError(`[vanity] ${diagnostic.message}`)
+  throw createVanityRuntimeError({
+    ...diagnostic,
+    fix: diagnostic.code === 'VANITY_RUNTIME_ROOT_NOT_FOUND'
+      ? `mount the root and call refreshRoots('${root.contract.path}') or bindRoot('${root.contract.path}', element)`
+      : 'narrow runtime({ within }) to one matching root or bind the intended root explicitly',
+  })
 }
 
 function resolveRuntimeRoot(state: RuntimeState, root: RuntimeRootState, force = false): void {
@@ -1284,9 +1478,12 @@ function resolveRuntimeRoot(state: RuntimeState, root: RuntimeRootState, force =
 
 function assertRuntimeTarget(value: unknown): asserts value is VanityRuntimeTarget {
   if (!isRuntimeTarget(value)) {
-    throw new TypeError(
-      '[vanity] bindRoot() needs one concrete HTML/SVG inline-style target; selector strings are not accepted',
-    )
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_INVALID_TARGET',
+      message: 'bindRoot() needs one concrete HTML/SVG inline-style target; selector strings are not accepted',
+      path: ['bindRoot', 'element'],
+      fix: 'pass an element or adapter with style, setAttribute, and removeAttribute methods',
+    })
   }
 }
 
@@ -1327,9 +1524,12 @@ function removeAttribute(target: VanityRuntimeTarget, name: string): void {
 
 function assertActive(state: RuntimeState): void {
   if (!state.active) {
-    throw new TypeError(
-      '[vanity] this runtime binding was superseded on the same root; use the current ds.runtime() instance after HMR/rebind',
-    )
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_INVALID_TARGET',
+      message: 'this runtime binding was superseded on the same root; use the current ds.runtime() instance after HMR/rebind',
+      path: ['runtime'],
+      fix: 'create or use the current ds.runtime() instance for this root',
+    })
   }
 }
 
@@ -1340,7 +1540,12 @@ function getRuntimeStyleDeclaration(target: VanityCustomPropertyTarget): VanityR
     && 'style' in target && isStyleDeclaration(target.style)) {
     return target.style
   }
-  throw new TypeError('[vanity] custom-property writes need an explicit element or CSSStyleDeclaration-like target')
+  throwRuntimeDiagnostic({
+    code: 'VANITY_RUNTIME_INVALID_TARGET',
+    message: 'custom-property writes need an explicit element or CSSStyleDeclaration-like target',
+    path: ['target'],
+    fix: 'pass a style declaration or an element/adapter with a style declaration',
+  })
 }
 
 function isStyleDeclaration(value: unknown): value is VanityRuntimeStyleDeclaration {
@@ -1351,8 +1556,14 @@ function isStyleDeclaration(value: unknown): value is VanityRuntimeStyleDeclarat
 
 function getRuntimeCustomPropertyName(property: VanityCustomPropertyReference): `--${string}` {
   const name = typeof property === 'string' ? property : '$name' in property ? property.$name : property.name
-  if (!/^--(?:[-_a-z\u0080-\uFFFF]|\\.)[-\w\u0080-\uFFFF\\.]*$/i.test(name))
-    throw new TypeError(`[vanity] '${name}' is not a valid CSS custom-property name`)
+  if (!/^--(?:[-_a-z\u0080-\uFFFF]|\\.)[-\w\u0080-\uFFFF\\.]*$/i.test(name)) {
+    throwRuntimeDiagnostic({
+      code: 'VANITY_RUNTIME_INVALID_VALUE',
+      message: `'${name}' is not a valid CSS custom-property name`,
+      path: ['property'],
+      fix: 'use a CSS custom-property name beginning with --',
+    })
+  }
   return name
 }
 
@@ -1376,6 +1587,10 @@ function setPath(tree: Record<string, unknown>, path: readonly string[], value: 
       target = target[key] as Record<string, unknown>
     }
   }
+}
+
+function throwRuntimeDiagnostic(diagnostic: VanityRuntimeDiagnostic): never {
+  throw createVanityRuntimeError(diagnostic)
 }
 
 function defineAction(target: object, name: string, value: (...args: any[]) => unknown): void {

@@ -167,7 +167,7 @@ const CORE_CANONICAL_TYPES = [
   'VanityRuleInput',
   'VanityRuntimeControllerFactory',
   'VanityStyleValue',
-  'VanitySystemMapV2',
+  'VanitySystemMap',
   'VanitySystemPlugin',
   'VanityTokenHandle',
   'VanityTokenInput',

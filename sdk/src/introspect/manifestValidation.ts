@@ -1,5 +1,6 @@
 import type { VanityManifest } from './manifest'
-import type { VanitySystemMapV2 } from './system'
+import type { VanitySystemMap } from './system'
+import { VanityError } from '../diagnostics'
 import {
   assertConditionArmShape,
   assertConditionAstShape,
@@ -16,12 +17,18 @@ import {
   assertSemanticAddressShape,
   assertTokenRecordRuntimeShape,
 } from '../system/contractValidation'
+import {
+  VANITY_MANIFEST_FORMAT,
+  VANITY_MANIFEST_SCHEMA,
+  VANITY_MANIFEST_VERSION,
+} from './manifest'
+import {
+  VANITY_INTROSPECTION_FORMAT,
+  VANITY_INTROSPECTION_VERSION,
+} from './system'
 
 type RecordValue = Record<string, unknown>
 
-const MANIFEST_SCHEMA = 'https://schemas.mszr.dev/vanity/manifest-4.schema.json'
-const MANIFEST_FORMAT = 'vanity.manifest/4'
-const SYSTEM_FORMAT = 'vanity.introspection/2'
 const SYSTEM_IDENTITIES = ['compatibility', 'css', 'runtime', 'docs'] as const
 
 /** Validate Manifest v4 as a closed recursive boundary contract. */
@@ -29,9 +36,9 @@ export function assertManifestShape(value: unknown): asserts value is VanityMani
   assertJsonValueShape(value, 'manifest')
   const manifest = requireRecord(value, 'manifest')
   assertKeys(manifest, ['$schema', 'format', 'version', 'system', 'systems', 'modules'], [], 'manifest')
-  assertExactString(manifest.$schema, MANIFEST_SCHEMA, 'manifest.$schema')
-  assertExactString(manifest.format, MANIFEST_FORMAT, 'manifest.format')
-  assertExactNumber(manifest.version, 4, 'manifest.version')
+  assertExactString(manifest.$schema, VANITY_MANIFEST_SCHEMA, 'manifest.$schema')
+  assertExactString(manifest.format, VANITY_MANIFEST_FORMAT, 'manifest.format')
+  assertExactNumber(manifest.version, VANITY_MANIFEST_VERSION, 'manifest.version')
   assertSystemMap(manifest.system, 'manifest.system')
   assertRecord(manifest.systems, 'manifest.systems')
   for (const [id, system] of Object.entries(manifest.systems))
@@ -41,7 +48,7 @@ export function assertManifestShape(value: unknown): asserts value is VanityMani
     assertModule(module, `manifest.modules.${id}`)
 }
 
-function assertSystemMap(value: unknown, path: string): asserts value is VanitySystemMapV2 {
+function assertSystemMap(value: unknown, path: string): asserts value is VanitySystemMap {
   const system = requireRecord(value, path)
   assertKeys(system, [
     'format',
@@ -69,8 +76,8 @@ function assertSystemMap(value: unknown, path: string): asserts value is VanityS
     'overwrites',
     'audits',
   ], ['declaredAt', 'tokenLayer'], path)
-  assertExactString(system.format, SYSTEM_FORMAT, `${path}.format`)
-  assertExactNumber(system.version, 2, `${path}.version`)
+  assertExactString(system.format, VANITY_INTROSPECTION_FORMAT, `${path}.format`)
+  assertExactNumber(system.version, VANITY_INTROSPECTION_VERSION, `${path}.version`)
   assertExactString(system.kind, 'system', `${path}.kind`)
   assertNonEmptyString(system.id, `${path}.id`)
   assertIdentities(system.identities, `${path}.identities`)
@@ -635,5 +642,10 @@ function assertOptionalPositiveInteger(value: unknown, path: string): void {
 }
 
 function fail(path: string, message: string): never {
-  throw new TypeError(`[vanity] invalid Manifest v4 at ${path}: ${message}`)
+  throw new VanityError({
+    code: 'VANITY_MANIFEST_INVALID',
+    message: `invalid Manifest v4 at ${path}: ${message}`,
+    path: [path],
+    fix: 'regenerate the manifest with Vanity or correct the reported field',
+  })
 }

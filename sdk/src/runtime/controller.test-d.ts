@@ -60,7 +60,7 @@ describe('runtime types', () => {
     runtime.t.color.fixed.$set('red')
     // @ts-expect-error — color setters preserve the token's data type
     runtime.t.color.brand.$set(length.rem(1))
-    // @ts-expect-error — the superseded batch API is absent
+    // @ts-expect-error — batch operations are not part of the runtime controller surface
     runtime.applyTokenOverrides({ color: { brand: 'red' } })
   })
 
@@ -151,7 +151,7 @@ describe('runtime types', () => {
       runtime.axes.scheme.$switchTo('dark')
     })
 
-    expectTypeOf(snapshot).toEqualTypeOf<import('@mszr/vanity').VanityRuntimeSnapshotV1>()
+    expectTypeOf(snapshot).toEqualTypeOf<import('@mszr/vanity').VanityRuntimeSnapshot>()
     // @ts-expect-error — callback tokens retain their runtime data types
     ds.snapshotFrom(runtime => runtime.t.color.brand.$set(length.rem(1)))
   })

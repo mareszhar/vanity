@@ -70,21 +70,29 @@ export type VanityRecipeProps<V, G> = VanityPrettify<VanityRecipeSelection<V, G>
 /** The typed variant map a recipe publishes: axis → its declared values. */
 export type VanityVariantValues<V> = VanityPrettify<{ readonly [K in keyof V]: readonly (keyof V[K] & string)[] }>
 
+/** One variant/toggle combination and the rule emitted when it matches. */
 export interface VanityCompoundEntry<C extends string, V, G> {
   /** Typed against the declared variants and toggles — an impossible combination errors at the key. */
   when: VanityRecipeSelection<V, G>
+  /** Rule applied for this combination. */
   style: VanityRecipeArm<C>
 }
 
+/** Options that declare a recipe's base rule, variants, toggles, compounds, and ports. */
 export interface VanityRecipeOptions<C extends string, _L extends string, V, G, P> {
   /** Publication, not declaration: module-scope port handles become `button.ports.*` ([spec-recipes.md §2]). */
   ports?: P
+  /** Base rule emitted for every recipe instance. */
   base?: VanityRecipeArm<C>
+  /** Named variant values and their rules. */
   variants?: VanityVariantsOf<C, V>
+  /** Boolean toggles and their rules. */
   toggles?: VanityTogglesOf<C, G>
   // `when` and `defaults` are checked against the declared space, never
   // inferred from — NoInfer keeps a typo'd key an error there, not a new axis.
+  /** Rules for specific variant/toggle combinations, evaluated after base rules. */
   compound?: readonly VanityCompoundEntry<C, NoInfer<V>, NoInfer<G>>[]
+  /** Variant and toggle values selected when callers omit props. */
   defaults?: NoInfer<VanityRecipeSelection<V, G>>
 }
 
@@ -186,11 +194,15 @@ export type VanityAnatomyTogglesOf<C extends string, TPart extends string, G> = 
   [K in keyof G]: VanityAnatomyArms<C, TPart>
 }
 
+/** One anatomy variant/toggle combination and its per-part rules. */
 export interface VanityAnatomyCompoundEntry<C extends string, TPart extends string, V, G> {
+  /** Variant and toggle values that select this compound arm. */
   when: VanityRecipeSelection<V, G>
+  /** Rules keyed by the anatomy part they style. */
   style: VanityAnatomyArms<C, TPart>
 }
 
+/** Options that declare named anatomy parts plus their shared variants and rules. */
 export interface VanityAnatomyOptions<
   C extends string,
   _L extends string,
@@ -201,11 +213,17 @@ export interface VanityAnatomyOptions<
 > {
   /** The named parts, styled as one unit — *parts*, never "slots" ([language.md §3]). */
   parts: TParts
+  /** Publish component-owned ports on the anatomy handle. */
   ports?: P
+  /** Base rules keyed by anatomy part. */
   base?: VanityAnatomyArms<C, TParts[number]>
+  /** Variant values whose rules are keyed by anatomy part. */
   variants?: VanityAnatomyVariantsOf<C, TParts[number], V>
+  /** Boolean toggles whose rules are keyed by anatomy part. */
   toggles?: VanityAnatomyTogglesOf<C, TParts[number], G>
+  /** Compound rules keyed by anatomy part. */
   compound?: readonly VanityAnatomyCompoundEntry<C, TParts[number], NoInfer<V>, NoInfer<G>>[]
+  /** Variant and toggle values selected by default. */
   defaults?: NoInfer<VanityRecipeSelection<V, G>>
 }
 

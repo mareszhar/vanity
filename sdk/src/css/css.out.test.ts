@@ -6,7 +6,7 @@
 
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { createFixtureSystem } from '../test-support/current'
+import { createFixtureSystem } from '../test-support/system'
 
 /** A tiny system: inline tokens, spec-shaped conditions, default layers. */
 function miniSystem() {

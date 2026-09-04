@@ -72,7 +72,7 @@ function applyTo(rt: Runtime, s: StudioSettings): void {
 
 /**
  * A DOM-free snapshot for SSR and live reconciliation. Automatic/default modes
- * stay absent, so hydrating the snapshot also removes a previously pinned
+ * stay absent, so hydrating the snapshot also removes a pinned
  * attribute when a control returns to its authored default.
  */
 function buildSnapshot(s: StudioSettings) {

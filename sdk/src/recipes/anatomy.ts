@@ -11,13 +11,13 @@ import type { VanitySystemContext } from '../css/context'
 import type { VanityCompiled, VanityScopedConditionResult } from '../css/rule'
 import type { VanityConditionArm } from '../system/conditions'
 import type { VanityAnatomy, VanityAnatomyRuntime } from './types'
-import { createLayerContext } from '../css/context'
+import { createLayerContext, requireStyleModuleFile } from '../css/context'
 import { emitOnto, emitStyle } from '../css/emit'
 import { isPlainObject, splitTopLevel } from '../css/rule'
 import { didYouMean, getDiagnosticSource, VanityError } from '../diagnostics'
 import { record } from '../introspect/records'
 import { substrate } from '../substrate'
-import { checkPorts, checkSelection, compileRecipeArm, covers, finishBuild, getDebugName, mergeCompiled, recordVariantShape, startBuild } from './compile'
+import { checkPorts, checkSelection, compileRecipeArm, finishBuild, getDebugName, isCovered, mergeCompiled, recordVariantShape, startBuild } from './compile'
 import { createAnatomyHandle } from './handle'
 
 interface VanityAnatomyOptionsLoose {
@@ -35,7 +35,7 @@ type PartArms = Record<string, VanityCompiled>
 
 export function bindAnatomy(system: VanitySystemContext) {
   const anatomy = (options: VanityAnatomyOptionsLoose, debugId?: string): VanityAnatomy<string, Record<string, unknown>> => {
-    const file = substrate.modules.requireStyleModule('anatomy')
+    const file = requireStyleModuleFile('anatomy')
     const parts = checkParts(options.parts, file)
 
     // ── Pass 1: every part gets its stable class before any rule compiles ──
@@ -121,7 +121,7 @@ export function bindAnatomy(system: VanitySystemContext) {
         .map(([, arms]) => arms)
 
       const sound = Object.entries(target).every(([part, compiled]) =>
-        siblings.every(sibling => covers(sibling[part] ?? { layer: compiled.layer, layerRoot: compiled.layerRoot, units: [] }, compiled)))
+        siblings.every(sibling => isCovered(sibling[part] ?? { layer: compiled.layer, layerRoot: compiled.layerRoot, units: [] }, compiled)))
 
       if (sound) {
         for (const [part, compiled] of Object.entries(target))

@@ -16,7 +16,7 @@ import { VanityError } from '../diagnostics'
 import { record } from '../introspect/records'
 import { substrate } from '../substrate'
 import { parseBlocks } from './compile'
-import { createLayerContext } from './context'
+import { createLayerContext, getStyleModuleFile, requireStyleModuleFile } from './context'
 import { emitGlobal } from './emit'
 import { checkDeclaration } from './validation'
 import { serializeStyleValue } from './values'
@@ -28,24 +28,16 @@ export interface VanityRawCssBlock {
   readonly css: string
 }
 
-export function appendLayeredCss(system: VanitySystemContext, css: string): void {
-  appendRawCss(`@layer ${system.layerRoot}.${system.defaultLayer} {\n${indent(css)}\n}`)
-}
-
 function appendRawCss(css: string): void {
   substrate.css.emitRawCss({
     css,
-    fileScope: substrate.modules.getFileScope(),
+    fileScope: getStyleModuleFile(),
   })
-}
-
-function indent(css: string): string {
-  return css.trim().split('\n').map(line => `  ${line}`).join('\n')
 }
 
 export function createRawEmitter(system: VanitySystemContext): VanityRawEmitter<string> {
   const emitRaw = (input: string | TemplateStringsArray, ...values: VanityRawValue[]): string => {
-    const file = substrate.modules.requireStyleModule('raw')
+    const file = requireStyleModuleFile('raw')
     const text = typeof input === 'string' ? input : interpolate(input, values, file)
     const className = substrate.css.emitClassRule({ rule: {} })
     const scopedText = extractPropertyRegistrations(text)
@@ -114,7 +106,7 @@ function flatten(text: string, file: string): string {
  * generated class and leave the remaining CSS to the scoped nesting pass.
  */
 function extractPropertyRegistrations(css: string): string {
-  const blocks = topLevelBlocks(css)
+  const blocks = collectTopLevelBlocks(css)
   if (!blocks.some(block => block.prelude.startsWith('@property ')))
     return css
 
@@ -128,7 +120,7 @@ function extractPropertyRegistrations(css: string): string {
   return scoped.join('\n')
 }
 
-function topLevelBlocks(css: string): Array<{ prelude: string, css: string }> {
+function collectTopLevelBlocks(css: string): Array<{ prelude: string, css: string }> {
   const blocks: Array<{ prelude: string, css: string }> = []
   let start = 0
   let depth = 0

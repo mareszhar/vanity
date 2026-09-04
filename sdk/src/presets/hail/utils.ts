@@ -13,6 +13,7 @@ import type {
   HailSize,
 } from './types'
 import { defineUtils } from '@mszr/vanity'
+import { VanityError } from '../../diagnostics'
 import { hailExact, hailSpan } from './markers'
 
 export function createHailUtils(
@@ -54,8 +55,14 @@ export function createHailUtils(
       borderRadius: '50%',
     }),
     truncate: (lines = 1) => {
-      if (!Number.isInteger(lines) || lines < 1)
-        throw new RangeError(`[hail] mx.truncate() lines must be a positive integer; received ${lines}`)
+      if (!Number.isInteger(lines) || lines < 1) {
+        throw new VanityError({
+          code: 'VANITY_HAIL_INVALID_CONFIG',
+          message: `mx.truncate() lines must be a positive integer; received ${lines}`,
+          path: ['mx', 'truncate', 'lines'],
+          fix: 'Use a positive integer for the number of lines.',
+        })
+      }
       return lines === 1
         ? fragment({
             overflow: 'hidden',

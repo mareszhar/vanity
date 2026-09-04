@@ -6,12 +6,12 @@ import { createValueKernel, isValueKernelCompatible } from './values/kernel'
 
 function locked(open: { readonly consolidate: () => object }) {
   return substrate.modules.runInFileScope({
-    filePath: 'src/realignment-goldens.system.ts',
+    filePath: 'src/identity-goldens.system.ts',
     packageName: '@vanity/fixture',
   }, () => open.consolidate()) as any
 }
 
-describe('realignment evidence goldens', () => {
+describe('stable emitted and runtime identities', () => {
   it('freezes emitted CSS and runtime address semantics', () => {
     const open = createSystem()
     const system = locked(open.addTokens({
@@ -22,7 +22,7 @@ describe('realignment evidence goldens', () => {
       const className = system.class({
         color: system.t.color.brand,
         padding: system.t.space.md,
-      }, 'realignmentGolden')
+      }, 'identityGolden')
       const seed = system.snapshotFrom((runtime: any) => {
         runtime.t.space.md.$set('2rem')
       })
@@ -36,7 +36,7 @@ describe('realignment evidence goldens', () => {
 
     expect(returned).toMatchInlineSnapshot(`
       {
-        "className": "prism_realignmentGolden__76x8e40",
+        "className": "prism_identityGolden__76x8e40",
         "names": {
           "brand": "--vanity-color-brand",
         },
@@ -78,7 +78,7 @@ describe('realignment evidence goldens', () => {
         }
       }
       @layer vanity.recipes {
-        .prism_realignmentGolden__76x8e40 {
+        .prism_identityGolden__76x8e40 {
           color: var(--vanity-color-brand);
           padding: var(--vanity-space-md);
         }

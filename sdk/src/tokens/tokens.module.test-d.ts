@@ -68,10 +68,10 @@ describe('canonical token-module types', () => {
     void ds.t.color.accent.$axes.scheme.dark.$name
     // @ts-expect-error — only the authored case address is accepted
     ds.t.color.accent.$case({ scheme: 'light', density: 'compact' })
-    // @ts-expect-error — the obsolete public token name is not on canonical handles
-    void ds.t.color.brand.name
-    // @ts-expect-error — removed token modes are not on the canonical handle model
-    void ds.t.color.brand.mode
+    // @ts-expect-error — token handles expose metadata through `$`-prefixed members
+    void ds.t.color.brand.label
+    // @ts-expect-error — token handles expose metadata through `$`-prefixed members
+    void ds.t.color.brand.variant
     // @ts-expect-error — branded fallbacks retain CSS data-type compatibility
     ds.t.color.brand.$var(length.rem(1))
   })

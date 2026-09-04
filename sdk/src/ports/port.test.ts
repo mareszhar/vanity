@@ -8,7 +8,7 @@ import { restorePort } from '@mszr/vanity/runtime'
 import { definePrismSystem, emit } from '@test'
 import { describe, expect, it } from 'vitest'
 import { angle as cssAngle, oklch, ports, VanityError } from '../index'
-import { createFixtureSystem } from '../test-support/current'
+import { createFixtureSystem } from '../test-support/system'
 
 describe('port() declaration', () => {
   it('creates a handle with a hashed name under the system prefix', () => {

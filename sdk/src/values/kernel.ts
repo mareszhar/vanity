@@ -5,8 +5,10 @@
  * receives a `VanityValueOperationContext` from the owning system instead.
  */
 
-import type { VanityCssSupportTarget, VanityExtensionIdentity, VanitySerializeContext } from './protocol'
+import type { VanityResolvedPolicies } from './policies'
+import type { VanityExtensionIdentity, VanitySerializeContext } from './protocol'
 import type { VanityValue } from './types'
+import { throwValueError } from './error'
 import {
   createSerializeContext,
   isNodeValue,
@@ -17,7 +19,9 @@ import {
 
 export const VANITY_VALUE_PROTOCOL_VERSION = 1 as const
 
+/** Optional extension capabilities used to create an immutable value kernel. */
 export interface VanityValueKernelOptions {
+  /** Value extensions available to the kernel. */
   readonly extensions?: readonly VanityExtensionIdentity[]
   /** Compatible parent revisions retained by an immutable extension link. */
   readonly compatibleSignatures?: readonly string[]
@@ -25,26 +29,36 @@ export interface VanityValueKernelOptions {
   readonly constructorExtensions?: Readonly<Record<string, VanityExtensionIdentity>>
 }
 
+/** Immutable extension lookup registry carried by a value kernel. */
 export interface VanityValueExtensionRegistry extends ReadonlyArray<VanityExtensionIdentity> {
+  /** All normalized extension identities in registration order. */
   readonly all: readonly VanityExtensionIdentity[]
+  /** Find one installed extension by stable id. */
   get: (id: string) => VanityExtensionIdentity | undefined
+  /** Test whether an extension id is installed. */
   has: (id: string) => boolean
 }
 
+/** Immutable value capabilities shared by system resolution and portable modules. */
 export interface VanityValueKernel<Constructors extends object = object> {
+  /** Value expression protocol revision. */
   readonly protocol: typeof VANITY_VALUE_PROTOCOL_VERSION
+  /** Deterministic constructor/extension capability signature. */
   readonly signature: string
+  /** Compatible signatures retained across immutable extension links. */
   readonly compatibleSignatures: ReadonlySet<string>
+  /** Value constructors available to this kernel. */
   readonly constructors: Constructors
+  /** Installed extension identities and lookup helpers. */
   readonly extensions: VanityValueExtensionRegistry
+  /** Constructor ownership records for portable contracts. */
   readonly constructorExtensions: Readonly<Record<string, VanityExtensionIdentity>>
 }
 
 /** Inputs required when a value operation depends on system policy. */
 export interface VanityValueOperationContext {
   readonly values: VanityValueKernel
-  readonly support: VanityCssSupportTarget
-  readonly policies: Readonly<Record<string, unknown>>
+  readonly policies: VanityResolvedPolicies
 }
 
 export function createValueKernel<const Constructors extends object>(
@@ -79,14 +93,20 @@ export function extendValueKernel<Constructors extends object, Added extends obj
   const normalized = normalizeExtension(identity)
   const collision = Object.keys(added).find(key => key in kernel.constructors)
   if (collision) {
-    throw new TypeError(
-      `[vanity] extension "${normalized.id}" cannot define '${collision}' because that value constructor already exists`,
+    throwValueError(
+      'VANITY_VALUE_INVALID',
+      `extension "${normalized.id}" cannot define '${collision}' because that value constructor already exists`,
+      ['extension', collision],
+      'choose a constructor name that is not already installed',
     )
   }
   if (kernel.extensions.has(normalized.id)) {
     const existing = kernel.extensions.get(normalized.id)!
-    throw new TypeError(
-      `[vanity] extension id "${normalized.id}" is already installed at version ${existing.version}`,
+    throwValueError(
+      'VANITY_VALUE_INVALID',
+      `extension id "${normalized.id}" is already installed at version ${existing.version}`,
+      ['extension', normalized.id],
+      'install each extension id only once, or use a distinct id for a different capability',
     )
   }
 
@@ -117,12 +137,18 @@ export function serializeValueWithContext(
   value: VanityValue,
   resolveReference?: VanitySerializeContext['resolveReference'],
 ): string {
-  if (!isNodeValue(value))
-    throw new TypeError('[vanity] this value does not belong to the portable vanity expression protocol')
+  if (!isNodeValue(value)) {
+    throwValueError(
+      'VANITY_VALUE_INVALID',
+      'this value does not belong to the portable vanity expression protocol',
+      ['value'],
+      'pass a value created by the portable expression protocol',
+    )
+  }
   assertValueExtensions(value[VANITY_NODE], context.values.extensions.all)
   return serializeNode(
     value[VANITY_NODE],
-    createSerializeContext(context.support, resolveReference, undefined, context.policies),
+    createSerializeContext(context.policies.support, resolveReference, undefined, context.policies),
   )
 }
 
@@ -132,8 +158,14 @@ function createValueExtensionRegistry(
   const normalized = identities.map(normalizeExtension)
   const byId = new Map<string, VanityExtensionIdentity>()
   for (const identity of normalized) {
-    if (byId.has(identity.id))
-      throw new TypeError(`[vanity] extension id "${identity.id}" is installed more than once`)
+    if (byId.has(identity.id)) {
+      throwValueError(
+        'VANITY_VALUE_INVALID',
+        `extension id "${identity.id}" is installed more than once`,
+        ['extensions', identity.id],
+        'register each extension id only once',
+      )
+    }
     byId.set(identity.id, identity)
   }
   const all = [...byId.values()]
@@ -178,8 +210,11 @@ function assertValueExtensions(
     const installed = extensions.find(extension => extension.id === node.extension!.id)
     if (!installed || String(installed.version) !== String(node.extension.version)
       || (installed.fingerprint ?? '') !== (node.extension.fingerprint ?? '')) {
-      throw new TypeError(
-        `[vanity] value requires extension ${node.extension.id}@${node.extension.version}, which is not compatible with this value capability set`,
+      throwValueError(
+        'VANITY_VALUE_INVALID',
+        `value requires extension ${node.extension.id}@${node.extension.version}, which is not compatible with this value capability set`,
+        ['value', 'extension'],
+        'install the matching extension or provide a compatible fallback value',
       )
     }
   }

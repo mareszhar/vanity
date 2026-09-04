@@ -6,9 +6,10 @@ import type { NormalizedSystemSource } from '../core/systems'
 import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { build as esbuild } from 'esbuild'
+import { VanityError } from '../../diagnostics'
 import { substrate } from '../../substrate'
+import { normalizePath } from '../core/path'
 import { resolveConfiguredSystemImport } from '../core/systems'
-import { normalizePath } from '../path'
 import {
   applyDebugNamesWithAliases,
   applySourceLocations,
@@ -18,7 +19,7 @@ const styleSourceFilter = /\.css\.(?:js|cjs|mjs|jsx|ts|tsx)$/
 const authoringSourceFilter = /\.[cm]?[jt]sx?$/
 
 /** Pin one substrate module family before any style-module bundle is run. */
-substrate.modules.initialize()
+substrate.backend.initialize()
 
 export interface BundleExternalModule {
   readonly id: string
@@ -59,7 +60,7 @@ export async function buildStyleModule({
   ambientAliases,
   externalModules = [],
 }: BundleStyleModuleParams): Promise<BuiltStyleModule> {
-  const packageName = substrate.modules.getPackageName(root)
+  const packageName = substrate.backend.getPackageName(root)
   const usedExternalEntries = new Set<string>()
 
   const result = await esbuild({
@@ -99,7 +100,7 @@ export async function buildStyleModule({
         name: 'vanity-substrate-externals',
         setup(build) {
           build.onResolve({ filter: /^(?:@vanilla-extract\/|lightningcss$)/ }, args => ({
-            path: substrate.modules.resolveModule(args.path),
+            path: substrate.backend.resolveModule(args.path),
             external: true,
           }))
         },
@@ -125,7 +126,7 @@ export async function buildStyleModule({
             const located = applySourceLocations(named, path, root, ambientAliases)
 
             const source = isStyleModule
-              ? substrate.modules.addFileScope({
+              ? substrate.backend.addFileScope({
                   source: located,
                   filePath: path,
                   rootPath: root,
@@ -146,8 +147,14 @@ export async function buildStyleModule({
 
   const { outputFiles, metafile } = result
 
-  if (!outputFiles || outputFiles.length !== 1)
-    throw new Error(`Invalid style-module compilation for ${filePath}`)
+  if (!outputFiles || outputFiles.length !== 1) {
+    throw new VanityError({
+      code: 'VANITY_COMPILER_INVALID_INPUT',
+      message: `invalid style-module compilation for ${filePath}`,
+      path: [filePath],
+      fix: 'check the style-module source and compiler configuration, then rebuild it',
+    })
+  }
 
   return {
     source: outputFiles[0].text,

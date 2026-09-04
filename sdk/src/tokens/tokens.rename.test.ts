@@ -45,7 +45,7 @@ function systemModularFixture(cursorFile: 'colors.ts' | 'consumer.ts'): RenameFi
   return fixtureFromSources(marked, cursorFile)
 }
 
-function unifiedFixture(cursorFile: 'tokens.ts' | 'consumer.ts'): RenameFixture {
+function builderFixture(cursorFile: 'tokens.ts' | 'consumer.ts'): RenameFixture {
   const marked = {
     'tokens.ts': `
       import { defineTokens } from '@mszr/vanity'
@@ -136,14 +136,14 @@ describe('token rename-symbol', () => {
     }
   })
 
-  it('preserves rename identity through unified add() definitions, refs, and consumers', () => {
+  it('preserves rename identity through builder add() definitions, refs, and consumers', () => {
     const expected = [
       'consumer.ts:brand',
       'tokens.ts:brand',
       'tokens.ts:brand',
     ]
-    const fromDefinition = unifiedFixture('tokens.ts')
-    const fromConsumer = unifiedFixture('consumer.ts')
+    const fromDefinition = builderFixture('tokens.ts')
+    const fromConsumer = builderFixture('consumer.ts')
 
     try {
       expect(renamed(fromDefinition)).toEqual(expected)

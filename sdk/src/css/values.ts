@@ -86,7 +86,7 @@ function resolveValue(path: string, ctx: VanityValueContext): VanityResolver {
     ...(ctx.serializeValue === undefined
       ? {}
       : { serializeValue: value => String(ctx.serializeValue!(value)) }),
-    refTraits: handle => ({
+    getRefTraits: handle => ({
       cssLive: handle.$reference === 'var',
       volatile: handle.$mutable,
       conditional: false,

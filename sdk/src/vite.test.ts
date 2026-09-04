@@ -142,7 +142,7 @@ describe('the vite build', () => {
       ? compiler.transform.handler
       : compiler.transform
 
-    await expect(transform!.call({} as never, 'export const untouched = true', '/fixture/legacy.style.ts'))
+    await expect(transform!.call({} as never, 'export const untouched = true', '/fixture/plain.style.ts'))
       .resolves
       .toBeNull()
   })

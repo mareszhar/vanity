@@ -8,7 +8,7 @@
  */
 
 import type { VanityAnatomy, VanityAnatomyRuntime, VanityRecipe, VanityRecipeRuntime } from './types'
-import { explainable } from '../introspect/semantic'
+import { attachExplanation } from '../introspect/semantic'
 
 /**
  * Resolve one axis choice. Unknown values arriving through an untyped edge
@@ -29,7 +29,7 @@ function choose(
 
   const value = raw as string
 
-  if (value in values)
+  if (Object.hasOwn(values, value))
     return value
 
   // The literal `process.env.NODE_ENV` is what bundlers statically replace,
@@ -69,7 +69,7 @@ function selectVariantValues(
   return selected
 }
 
-function matches(when: Record<string, string | boolean>, selected: Record<string, string | boolean>): boolean {
+function matchSelection(when: Record<string, string | boolean>, selected: Record<string, string | boolean>): boolean {
   return Object.entries(when).every(([key, value]) => selected[key] === value)
 }
 
@@ -112,14 +112,14 @@ export function createRecipeHandle(runtime: VanityRecipeRuntime): VanityRecipe<R
     }
 
     for (const entry of runtime.compound) {
-      if (entry.class && matches(entry.when, selected))
+      if (entry.class && matchSelection(entry.when, selected))
         classes.push(entry.class)
     }
 
     return classes.join(' ')
   }
 
-  return explainable(Object.assign(resolve, describe(runtime), {
+  return attachExplanation(Object.assign(resolve, describe(runtime), {
     toString: () => runtime.base,
   }) as unknown as VanityRecipe<Record<string, unknown>>, {
     id: `recipe:${runtime.name ?? runtime.base}`,
@@ -164,14 +164,14 @@ export function createAnatomyHandle(runtime: VanityAnatomyRuntime): VanityAnatom
     }
 
     for (const entry of runtime.compound) {
-      if (matches(entry.when, selected))
+      if (matchSelection(entry.when, selected))
         add(entry.classes)
     }
 
     return Object.fromEntries(Object.entries(out).map(([part, classes]) => [part, classes.join(' ')]))
   }
 
-  return explainable(Object.assign(resolve, describe(runtime), {
+  return attachExplanation(Object.assign(resolve, describe(runtime), {
     parts: runtime.parts,
   }) as unknown as VanityAnatomy<string, Record<string, unknown>>, {
     id: `anatomy:${runtime.name ?? Object.values(runtime.parts)[0]}`,

@@ -3,8 +3,8 @@
 import type { VanityValueOperationContext } from '../values/kernel'
 import type { VanityConsolidateOptions } from './open'
 import type { OpenSystemState } from './state'
+import { getStyleModuleFile, hasStyleModuleFile } from '../css/context'
 import { getDiagnosticSource, VanityError } from '../diagnostics'
-import { substrate } from '../substrate'
 import { getConstructorUsages } from '../tokens/module'
 import { getTokenModuleRequirement } from '../tokens/requirements'
 import { resolveTokenModule } from '../tokens/resolve'
@@ -32,10 +32,14 @@ export function consolidateSystem(
   const declaredLayers = options.layerOrder ?? state.policies.layerOrder ?? VANITY_DEFAULT_LAYERS
   for (const [name, group] of Object.entries(state.rules)) {
     if (group.layer !== undefined && !declaredLayers.includes(group.layer)) {
-      throw new TypeError(
-        `[vanity] named system rule '${name}' references undeclared layer '${group.layer}'; `
-        + `declare it in policies.layerOrder or consolidate({ layerOrder })`,
-      )
+      throw new VanityError({
+        code: 'VANITY_SYSTEM_UNKNOWN_LAYER',
+        message: `named system rule '${name}' references undeclared layer '${group.layer}'; `
+          + 'declare it in policies.layerOrder or consolidate({ layerOrder })',
+        path: ['rules', name, 'layer'],
+        file: source,
+        fix: 'declare the layer in policies.layerOrder or consolidate({ layerOrder })',
+      })
     }
   }
   if (state.revisions.singularAdds > 40) {
@@ -46,14 +50,14 @@ export function consolidateSystem(
   }
   const { axisOrder: _axisOrder, ...systemOptions } = options
   const valueContext = getValueContext(finalState)
-  const requirement = tokenRequirementOfState(finalState, valueContext)
+  const requirement = getTokenRequirementOfState(finalState, valueContext)
   return materializeLockedSystemContract(
     {
       kernel: finalState.values,
       valueContext,
       signature: requirement.capabilitySignature,
       requirement,
-      tokenPolicy: tokenPolicyOfState(finalState),
+      tokenPolicy: getTokenPolicyOfState(finalState),
       axes: finalState.axes,
       dtcg: finalState.codecs,
     },
@@ -70,7 +74,7 @@ export function consolidateSystem(
       consts: finalState.consts,
       utilities: getFlattenedPaths(finalState.utils),
       utilityTree: finalState.utils,
-      ruleGroups: describeSystemRules(finalState.rules),
+      ruleGroups: describeSystemRules(finalState.rules, source),
       systemRules: finalState.rules,
       policies: finalState.policies,
       plugins: getPluginIds(finalState.plugins),
@@ -86,12 +90,11 @@ function getValueContext(state: OpenState): VanityValueOperationContext {
   })
   return {
     values: state.values,
-    support: policies.support,
     policies,
   }
 }
 
-function tokenPolicyOfState(state: OpenState) {
+function getTokenPolicyOfState(state: OpenState) {
   const policies = resolvePolicies(state.policies, {
     support: state.policies.support ?? VANITY_DEFAULT_CSS_SUPPORT,
   })
@@ -101,7 +104,7 @@ function tokenPolicyOfState(state: OpenState) {
   })
 }
 
-function tokenRequirementOfState(
+function getTokenRequirementOfState(
   state: OpenState,
   context: VanityValueOperationContext,
 ) {
@@ -120,7 +123,7 @@ function previewTokenModule(state: OpenState, module: object): object {
     prefix: 'vanity-open',
     root: ':root',
     serializeValue: value => serializeValueWithContext(context, value),
-    support: context.support,
+    support: context.policies.support,
     policies: context.policies,
     axes: state.axes,
     dtcgCodecIds: new Set(state.codecs.map(codec => codec.extension)),
@@ -163,7 +166,10 @@ function enforceConstructorPolicies(state: OpenState, tokens: object): void {
     throw new VanityError(errors)
 }
 
-function describeSystemRules(rules: Readonly<Record<string, OpenSystemState['rules'][string]>>): readonly {
+function describeSystemRules(
+  rules: Readonly<Record<string, OpenSystemState['rules'][string]>>,
+  file?: string,
+): readonly {
   readonly name: string
   readonly description?: string
   readonly layer?: string
@@ -177,11 +183,11 @@ function describeSystemRules(rules: Readonly<Record<string, OpenSystemState['rul
     ...(rule.layer === undefined ? {} : { layer: rule.layer }),
     ...(rule.order === undefined ? {} : { order: rule.order }),
     selectors: Object.keys(rule.css),
-    fingerprint: getRuleFingerprint(rule.css),
+    fingerprint: getRuleFingerprint(rule.css, file),
   }))
 }
 
-function getRuleFingerprint(value: unknown): string {
+function getRuleFingerprint(value: unknown, file?: string): string {
   const seen = new WeakSet<object>()
   const normalize = (input: unknown): unknown => {
     if (input === null || typeof input === 'string' || typeof input === 'number' || typeof input === 'boolean')
@@ -193,8 +199,15 @@ function getRuleFingerprint(value: unknown): string {
     }
     if (typeof input !== 'object')
       return String(input)
-    if (seen.has(input))
-      throw new TypeError('[vanity] a named system rule cannot contain cycles')
+    if (seen.has(input)) {
+      throw new VanityError({
+        code: 'VANITY_SYSTEM_INVALID_DEFINITION',
+        message: 'a named system rule cannot contain cycles',
+        path: 'rules',
+        file,
+        fix: 'remove the cyclic reference from the system rule',
+      })
+    }
     seen.add(input)
     if ('$path' in input)
       return { token: String((input as any).$path) }
@@ -227,9 +240,9 @@ function getFlattenedPaths(value: object, parent: string[] = []): string[] {
 }
 
 function assertPlainSystemModule(): void {
-  if (!substrate.modules.hasFileScope())
+  if (!hasStyleModuleFile())
     return
-  const file = getDiagnosticSource()?.file ?? substrate.modules.getFileScope()!.filePath
+  const file = getDiagnosticSource()?.file ?? getStyleModuleFile()!.filePath
   if (!/\.css\.[cm]?[jt]sx?$/.test(file))
     return
   throw new VanityError({

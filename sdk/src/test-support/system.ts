@@ -2,7 +2,7 @@ import { createSystem } from '../index'
 import { substrate } from '../substrate'
 
 /**
- * Small test fixture convenience over the current open-system verbs.
+ * Small test fixture convenience over the open-system verbs.
  * Production code has no options-in-createSystem shortcut; fixtures keep the
  * setup readable while still exercising addTokens/addConditions/consolidate.
  */
@@ -14,7 +14,7 @@ export function createFixtureSystem(options: {
   readonly conditions?: Record<string, unknown>
 } = {}) {
   return substrate.modules.runInFileScope({
-    filePath: 'src/test-support/current.system.ts',
+    filePath: 'src/test-support/system.ts',
     packageName: '@vanity/fixture',
   }, () => {
     let open: any = createSystem()

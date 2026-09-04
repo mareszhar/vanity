@@ -27,7 +27,7 @@ export function startBuild(
   options: { layer?: unknown },
   system: VanitySystemContext,
   file: string,
-  scopedConditions?: VanityRuleContext['scopedConditions'],
+  resolveScopedConditions?: VanityRuleContext['resolveScopedConditions'],
 ): VanityRecipeBuild {
   const diagnostics: VanityDiagnostic[] = []
   if (options.layer !== undefined) {
@@ -41,7 +41,7 @@ export function startBuild(
   }
 
   return {
-    ctx: { ...system, file, scopedConditions },
+    ctx: { ...system, file, resolveScopedConditions },
     diagnostics,
     layer: system.defaultLayer,
   }
@@ -103,7 +103,7 @@ export function checkSelection(
 
     const at = `${path}.${key}`
 
-    if (key in variants) {
+    if (Object.hasOwn(variants, key)) {
       const values = Object.keys(variants[key])
 
       if (typeof value === 'string' && values.includes(value)) {
@@ -120,7 +120,7 @@ export function checkSelection(
       continue
     }
 
-    if (key in toggles) {
+    if (Object.hasOwn(toggles, key)) {
       if (typeof value === 'boolean') {
         checked[key] = value
       }
@@ -186,7 +186,7 @@ export function finishBuild(build: VanityRecipeBuild): void {
  * the soundness condition for folding a default value into base: any other
  * choice must overwrite every folded declaration, or the fold would leak.
  */
-export function covers(sibling: VanityCompiled, target: VanityCompiled): boolean {
+export function isCovered(sibling: VanityCompiled, target: VanityCompiled): boolean {
   for (const unit of target.units) {
     const key = getArmKey(unit.arm)
     const matches = sibling.units.filter(candidate => getArmKey(candidate.arm) === key)
@@ -195,7 +195,7 @@ export function covers(sibling: VanityCompiled, target: VanityCompiled): boolean
       return false
 
     for (const property of Object.keys(unit.declarations)) {
-      if (!matches.some(match => property in match.declarations))
+      if (!matches.some(match => Object.hasOwn(match.declarations, property)))
         return false
     }
   }

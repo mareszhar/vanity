@@ -18,8 +18,6 @@ pnpm run depth                    # the naive-vs-lean depth comparison
 
 ## The patterns
 
-| id | claim | where |
-| --- | --- | --- |
 | Claim | Evidence |
 | --- | --- |
 | An immutable chain accumulates shape quickly and exposes it to later callbacks. | `src/builder.ts` |
@@ -32,7 +30,7 @@ The branched (R1) shape does **not** compound the depth problem: an 80-link chai
 
 ## Product guard
 
-An equivalent guard runs in the product's own type tests: 80 immutable open-system links, two independently consolidated forks, first/last accumulated reads, and no TS2589 — alongside 32 locked forks materialized from one base, holding their names and constants isolated.
+An equivalent guard runs in the product's own [type test](../../sdk/src/system/open.scale.test-d.ts): 80 immutable open-system links, two independently consolidated forks, first/last accumulated reads, and no TS2589 — alongside 32 locked forks materialized from one base, holding their names and constants isolated.
 
 ## The two properties that make it work
 

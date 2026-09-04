@@ -13,12 +13,12 @@
 import type { VanitySystemContext } from '../css/context'
 import type { VanityCompiled } from '../css/rule'
 import type { VanityRecipe, VanityRecipeRuntime } from './types'
-import { createLayerContext } from '../css/context'
+import { createLayerContext, requireStyleModuleFile } from '../css/context'
 import { emitStyle } from '../css/emit'
 import { getDiagnosticSource } from '../diagnostics'
 import { record } from '../introspect/records'
 import { substrate } from '../substrate'
-import { checkPorts, checkSelection, compileRecipeArm, covers, finishBuild, getDebugName, mergeCompiled, recordVariantShape, startBuild } from './compile'
+import { checkPorts, checkSelection, compileRecipeArm, finishBuild, getDebugName, isCovered, mergeCompiled, recordVariantShape, startBuild } from './compile'
 import { createRecipeHandle } from './handle'
 
 interface VanityRecipeOptionsLoose {
@@ -33,7 +33,7 @@ interface VanityRecipeOptionsLoose {
 
 export function bindRecipe(system: VanitySystemContext) {
   const recipe = (options: VanityRecipeOptionsLoose, debugId?: string): VanityRecipe<Record<string, unknown>> => {
-    const file = substrate.modules.requireStyleModule('recipe')
+    const file = requireStyleModuleFile('recipe')
     const build = startBuild(options, system, file)
 
     const variants = options.variants ?? {}
@@ -77,7 +77,7 @@ export function bindRecipe(system: VanitySystemContext) {
         .filter(([sibling]) => sibling !== value)
         .map(([, compiled]) => compiled)
 
-      if (siblings.every(sibling => covers(sibling, target))) {
+      if (siblings.every(sibling => isCovered(sibling, target))) {
         base = mergeCompiled(base, target)
         folded.add(`${axis}.${value}`)
       }

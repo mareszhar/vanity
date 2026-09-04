@@ -17,7 +17,7 @@ import {
 } from '@mszr/vanity'
 import { describe, expect, it } from 'vitest'
 
-describe('unified token builder', () => {
+describe('token builder', () => {
   it('supports all four additive forms, portable handoff, nested mounting, and rebinding refs', () => {
     const portable = defineTokens({ seed: 'red' })
     const palette = portable
@@ -30,13 +30,13 @@ describe('unified token builder', () => {
         space: { sm: '4px' },
       })
       .add('radius', '6px')
-    const ds = createSystem().addTokens(nested).consolidate({ prefix: 'unified' })
+    const ds = createSystem().addTokens(nested).consolidate({ prefix: 'builder' })
 
     expect(ds.t.color.seed.$val).toBe('red')
-    expect(ds.t.color.alias.$val).toBe('var(--unified-color-seed)')
-    expect(ds.t.color.accent.$val).toBe('var(--unified-color-alias)')
-    expect(ds.t.color.contrast.$val).toBe('var(--unified-color-seed)')
-    expect(ds.t.radius.$name).toBe('--unified-radius')
+    expect(ds.t.color.alias.$val).toBe('var(--builder-color-seed)')
+    expect(ds.t.color.accent.$val).toBe('var(--builder-color-alias)')
+    expect(ds.t.color.contrast.$val).toBe('var(--builder-color-seed)')
+    expect(ds.t.radius.$name).toBe('--builder-radius')
   })
 
   it('rebinds expressions authored from lazy refs, not only direct aliases', () => {
@@ -66,8 +66,25 @@ describe('unified token builder', () => {
       mutable: true,
     } as any)).toThrow(/plain values and callbacks/)
     expect(() => open.defineTokens({
-      $root: '#legacy',
+      $root: '#app',
     } as any)).toThrow(/cannot begin with '\$'/)
+  })
+
+  it('does not treat inherited names as declared axis modes', () => {
+    const open = createSystem().addAxis('state', {
+      modes: { rest: '&' },
+      default: 'rest',
+    })
+
+    expect(() => open.addTokens({
+      invalid: open.tdef({
+        axes: {
+          state: {
+            toString: 'red',
+          },
+        },
+      } as any),
+    })).toThrow(/state.*has no mode 'toString'/)
   })
 
   it('authors raw named config, tdef reservations, axis methods, and group $axes', () => {
@@ -208,7 +225,7 @@ describe('unified token builder', () => {
     expect(ds.t.control.$mutable).toBe(true)
   })
 
-  it('preserves authored unified modules through DTCG projection', () => {
+  it('preserves authored builder modules through DTCG projection', () => {
     const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
     const module = open.defineTokens({
       color: {
@@ -220,7 +237,7 @@ describe('unified token builder', () => {
         }),
       },
     }).add('alias', m => m.color.brand)
-    const ds = open.addTokens(module).consolidate({ prefix: 'dtcg-unified' })
+    const ds = open.addTokens(module).consolidate({ prefix: 'dtcg-builder' })
     const document = exportDesignTokens(ds, { mode: 'authored' }) as any
 
     expect(document.$extensions['com.mszr.vanity']).toMatchObject({

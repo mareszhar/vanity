@@ -13,6 +13,7 @@ import type {
   VanityPortValue,
   VanityPortWiden,
 } from './types'
+import { requireStyleModuleFile } from '../css/context'
 import { getDiagnosticSource, VanityError } from '../diagnostics'
 import { record } from '../introspect/records'
 import { substrate } from '../substrate'
@@ -33,7 +34,7 @@ export function createPort<
   options: VanityPortOptions<Value, Output> | undefined,
   ctx: VanityPortContext,
 ): VanityPort<VanityPortWiden<Value>, VanityPortDataTypeOf<Value>> {
-  const file = substrate.modules.requireStyleModule('port')
+  const file = requireStyleModuleFile('port')
   const definition = isDefinition(input) ? input : undefined
   const defaultValue = (definition?.val ?? input) as Value
   const config = definition ?? options
@@ -100,16 +101,40 @@ function normalizeValidation(
 ): VanityPortValidationMeta | undefined {
   if (!validate)
     return undefined
-  if (validate.id.trim().length === 0)
-    throw new TypeError('[vanity] port.validate.id must be non-empty')
+  if (validate.id.trim().length === 0) {
+    throw new VanityError({
+      code: 'VANITY_PORT_INVALID_CONFIG',
+      message: 'port.validate.id must be non-empty',
+      path: ['validate', 'id'],
+      fix: 'provide a stable non-empty validation id',
+    })
+  }
   const runtime = validate.runtime ?? 'dev'
   const onInvalid = validate.onInvalid ?? 'throw'
-  if (runtime !== false && runtime !== 'dev' && runtime !== 'always')
-    throw new TypeError('[vanity] port.validate.runtime must be false, \'dev\', or \'always\'')
-  if (onInvalid !== 'throw' && onInvalid !== 'fallback' && onInvalid !== 'omit')
-    throw new TypeError('[vanity] port.validate.onInvalid must be \'throw\', \'fallback\', or \'omit\'')
-  if (onInvalid === 'fallback' && !Object.hasOwn(validate, 'fallback'))
-    throw new TypeError('[vanity] port.validate with onInvalid: \'fallback\' needs a fallback value')
+  if (runtime !== false && runtime !== 'dev' && runtime !== 'always') {
+    throw new VanityError({
+      code: 'VANITY_PORT_INVALID_CONFIG',
+      message: 'port.validate.runtime must be false, \'dev\', or \'always\'',
+      path: ['validate', 'runtime'],
+      fix: 'use false, \'dev\', or \'always\'',
+    })
+  }
+  if (onInvalid !== 'throw' && onInvalid !== 'fallback' && onInvalid !== 'omit') {
+    throw new VanityError({
+      code: 'VANITY_PORT_INVALID_CONFIG',
+      message: 'port.validate.onInvalid must be \'throw\', \'fallback\', or \'omit\'',
+      path: ['validate', 'onInvalid'],
+      fix: 'use \'throw\', \'fallback\', or \'omit\'',
+    })
+  }
+  if (onInvalid === 'fallback' && !Object.hasOwn(validate, 'fallback')) {
+    throw new VanityError({
+      code: 'VANITY_PORT_INVALID_CONFIG',
+      message: 'port.validate with onInvalid: \'fallback\' needs a fallback value',
+      path: ['validate', 'fallback'],
+      fix: 'provide fallback when onInvalid is \'fallback\'',
+    })
+  }
 
   const fallback = validate.fallback === undefined ? undefined : ctx.serialize(validate.fallback)
   return Object.freeze({

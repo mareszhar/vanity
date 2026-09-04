@@ -1,17 +1,24 @@
 import type { VanityCssInput } from '@mszr/vanity'
 import type { HailExact, HailExactFactory, HailSpan, HailSpanFactory } from './types'
+import { VanityError } from '../../diagnostics'
 
 const HAIL_MARKER = Symbol('vanity.hail.marker')
 
 type HailMarker = HailExact | HailSpan
 type RuntimeHailMarker = HailMarker & { readonly [HAIL_MARKER]: true }
 
-function marker<const Kind extends HailMarker['kind'], const Input extends VanityCssInput>(
+function createMarker<const Kind extends HailMarker['kind'], const Input extends VanityCssInput>(
   kind: Kind,
   input: Input,
 ): (Kind extends 'span' ? HailSpan<Input> : HailExact<Input>) {
-  if (input === undefined || input === null)
-    throw new TypeError(`[hail] ${kind}() needs a CSS numeric input`)
+  if (input === undefined || input === null) {
+    throw new VanityError({
+      code: 'VANITY_HAIL_INVALID_CONFIG',
+      message: `${kind}() needs a CSS numeric input`,
+      path: [kind],
+      fix: 'Pass a numeric CSS value, percentage, or CSS expression.',
+    })
+  }
 
   return Object.freeze({
     kind,
@@ -20,10 +27,10 @@ function marker<const Kind extends HailMarker['kind'], const Input extends Vanit
   }) as unknown as Kind extends 'span' ? HailSpan<Input> : HailExact<Input>
 }
 
-export const hailSpan: HailSpanFactory = input => marker('span', input)
-export const hailExact: HailExactFactory = input => marker('exact', input)
+export const hailSpan: HailSpanFactory = input => createMarker('span', input)
+export const hailExact: HailExactFactory = input => createMarker('exact', input)
 
-export function isHailMarker(value: unknown): value is RuntimeHailMarker {
+function isHailMarker(value: unknown): value is RuntimeHailMarker {
   return typeof value === 'object'
     && value !== null
     && HAIL_MARKER in value

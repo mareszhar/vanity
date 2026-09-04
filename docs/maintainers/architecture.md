@@ -102,6 +102,8 @@ A precompiled design-system package ships:
 
 A package boundary is a read site: simplify accumulated intersection types there so consumer hovers show one public object and builder internals never leak. The emitted declarations must not require `type-fest`.
 
+The two published command-line/tooling entries remain JavaScript by host contract: `sdk/typescript.cjs` is loaded by TypeScript as a CommonJS language-service plugin, and `sdk/bin/vanity.mjs` is the executable ESM wrapper around the built CLI. They are intentionally exempt from the SDK TypeScript program because their host APIs are runtime-injected and their implementation is shipped as source; the naming-law audit includes both files explicitly so the repository-wide naming rule still applies to them.
+
 The compiler validates that build JavaScript and adjacent portable data agree. A stale pair fails with package name, both identities, and a rebuild fix.
 
 ## 5. CSS ownership
@@ -228,16 +230,25 @@ The source tree follows the mental model of the system:
 | --- | --- |
 | values | `kernel.ts` for immutable value capabilities and compatibility; `defaults.ts` for package bindings; `protocol.ts`, `extensions.ts`, and `codecs.ts` for portable value, extension, and DTCG codec contracts |
 | tokens | `builder.ts` for the one `.add()` authoring grammar; `module.ts` for inert graph assembly and graph projections; `requirements.ts`, `derive.ts`, `resolve.ts`, `expressions.ts`, `fold.ts`, and `handle.ts` for their named semantic operations |
-| system | `createSystem.ts`, `state.ts`, `open.ts`, `consolidate.ts`, and `locked.ts` for lifecycle and surfaces; `policies.ts`, `plugins.ts`, `axes.ts`, `definitions.ts`, `rules.ts`, `conditions.ts`, and `surface.ts` for their respective registries and models |
+| system | `createSystem.ts`, `state.ts`, `open.ts`, `consolidate.ts`, `locked.ts`, `modules.ts`, and `shape.ts` for lifecycle, surfaces, and system-shape projections; `policies.ts`, `plugins.ts`, `axes.ts`, `definitions.ts`, `rules.ts`, `conditions.ts`, and `surface.ts` for their respective registries and models |
 | CSS | `context.ts`, `class.ts`, `rules.ts`, `raw.ts`, `tokens.ts`, `compile.ts`, `emit.ts`, `validation.ts`, and the focused value/rule modules for neutral styling semantics and emission |
 | runtime | `contract.ts` for serializable runtime data; `controller.ts` for roots, axes, snapshots, hydration, reconciliation, HMR, and inspection |
 | introspection | `system.ts` for the canonical semantic map; `manifest.ts` and `manifestValidation.ts` for manifest production and reading; `dtcg.ts` and `interchange.ts` for DTCG orchestration and codec contracts |
 | compiler | `core/` for host-neutral system/source transforms, `modules/` for style-source bundling and evaluation, `projection/` for system-to-artifact source, `hmr/` for invalidation, `auto-imports/` for routing, and `hosts/` for host integration |
-| substrate | `types.ts` and `index.ts` for the neutral port and selection; `vanilla-extract/adapter.ts` for all backend-specific integration |
+| substrate | `types.ts` for the portable module contract and explicitly Vanilla Extract-bound lifecycle contract; `index.ts` for selection; `vanilla-extract/adapter.ts` for all backend-specific integration |
 | styling domains | `recipes/`, `atoms/`, and `ports/` remain separate because their authoring and projection semantics differ; `plugins/` and `presets/` likewise retain their domain boundaries |
 
 Package entrypoints expose capabilities or select adapters. They do not become alternate homes for
 domain implementations.
+
+The substrate keeps its portability boundary explicit. `VanityPortableModuleSubstrate` contains the
+scope, function-serialization, and style-module transformation operations that Vanity can preserve
+across implementations. `VanityVanillaExtractModuleLifecycle` contains the current backend's
+file-scope, module-serialization, package-resolution, initialization, and Vite-plugin operations;
+it is deliberately not a portable contract. `vanilla-extract/adapter.ts` is the sole translation
+point for that backend lifecycle and for capture/identifier shapes that mirror Vanilla Extract.
+The cross-specification substrate boundaries and their re-entry conditions live in
+[decisions.md](./decisions.md); this section records the ownership and implementation seam.
 
 ### Compiler and Vite boundaries
 

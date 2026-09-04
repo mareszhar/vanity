@@ -6,6 +6,7 @@ import { readFile as readFileAsync } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { argv, cwd, exitCode } from 'node:process'
 import { pathToFileURL } from 'node:url'
+import { VanityError } from './diagnostics'
 import { diffManifests, formatManifestDiff } from './introspect/diff'
 import { assertManifestShape } from './introspect/manifestValidation'
 import { formatExplanation } from './introspect/semantic'
@@ -52,8 +53,14 @@ export function explainManifestPath(manifest: VanityManifest, rawPath: string, j
         break
     }
   }
-  if (!value)
-    throw new TypeError(`[vanity] no semantic entry matches '${rawPath}'`)
+  if (!value) {
+    throw new VanityError({
+      code: 'VANITY_CLI_INVALID_USAGE',
+      message: `no semantic entry matches '${rawPath}'`,
+      path: ['path'],
+      fix: 'pass a token, axis, condition, recipe, anatomy, port, or semantic path present in the manifest',
+    })
+  }
   return json ? JSON.stringify(value, null, 2) : formatExplanation(value as Readonly<Record<string, unknown>>)
 }
 
@@ -75,7 +82,12 @@ export async function runVanityCli(args: readonly string[] = argv.slice(2)): Pro
       printPrepareUsage()
       return
     }
-    throw new TypeError(`[vanity] ${command} does not accept --help`)
+    throw new VanityError({
+      code: 'VANITY_CLI_INVALID_USAGE',
+      message: `${command} does not accept --help`,
+      path: ['arguments'],
+      fix: 'use --help with the top-level command or prepare command',
+    })
   }
 
   if (command === 'prepare') {
@@ -103,19 +115,36 @@ export async function runVanityCli(args: readonly string[] = argv.slice(2)): Pro
     return
   }
   if (command === 'explain') {
-    if (!positional[0])
-      throw new TypeError('[vanity] usage: vanity explain <semantic-path> [manifest] [--json]')
+    if (!positional[0]) {
+      throw new VanityError({
+        code: 'VANITY_CLI_INVALID_USAGE',
+        message: 'usage: vanity explain <semantic-path> [manifest] [--json]',
+        path: ['arguments'],
+        fix: 'provide the semantic path to explain',
+      })
+    }
     console.log(explainManifestPath(await readManifest(positional[1]), positional[0], json))
     return
   }
   if (command === 'diff') {
-    if (!positional[0] || !positional[1])
-      throw new TypeError('[vanity] usage: vanity diff <before.json> <after.json> [--json]')
+    if (!positional[0] || !positional[1]) {
+      throw new VanityError({
+        code: 'VANITY_CLI_INVALID_USAGE',
+        message: 'usage: vanity diff <before.json> <after.json> [--json]',
+        path: ['arguments'],
+        fix: 'provide both the before and after manifest paths',
+      })
+    }
     const diff = diffManifests(await readManifest(positional[0]), await readManifest(positional[1]))
     console.log(json ? JSON.stringify(diff, null, 2) : formatManifestDiff(diff))
     return
   }
-  throw new TypeError(`[vanity] unknown command '${command}'; use inspect, explain, diff, or prepare`)
+  throw new VanityError({
+    code: 'VANITY_CLI_INVALID_USAGE',
+    message: `unknown command '${command}'; use inspect, explain, diff, or prepare`,
+    path: ['command'],
+    fix: 'use inspect, explain, diff, or prepare',
+  })
 }
 
 function printUsage(): void {
@@ -149,12 +178,24 @@ function parsePrepareOptions(args: readonly string[]): { config?: string, root: 
       continue
     }
 
-    if (argument !== '--config' && argument !== '--root')
-      throw new TypeError(`[vanity] unknown prepare option '${argument}'`)
+    if (argument !== '--config' && argument !== '--root') {
+      throw new VanityError({
+        code: 'VANITY_CLI_INVALID_USAGE',
+        message: `unknown prepare option '${argument}'`,
+        path: ['prepare', 'options'],
+        fix: 'use --config <path> or --root <path>',
+      })
+    }
 
     const value = args[++index]
-    if (value === undefined || value.startsWith('-'))
-      throw new TypeError(`[vanity] ${argument} requires a path`)
+    if (value === undefined || value.startsWith('-')) {
+      throw new VanityError({
+        code: 'VANITY_CLI_INVALID_USAGE',
+        message: `${argument} requires a path`,
+        path: ['prepare', argument.slice(2)],
+        fix: `provide a path after ${argument}`,
+      })
+    }
 
     if (argument === '--config')
       config = value

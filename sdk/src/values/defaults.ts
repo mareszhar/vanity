@@ -39,7 +39,7 @@ import { calc as calcImplementation, clamp as clampImplementation, max as maxImp
 import { rawValue } from './raw'
 import { angle, createLengthConstructor, cssNumber, flex, frequency, integer, percent, resolution, time } from './units'
 
-export const VANITY_CORE_EXTENSION_IDENTITIES = Object.freeze([
+const VANITY_CORE_EXTENSION_IDENTITIES = Object.freeze([
   { id: 'org.vanity.core.adaptive-length', version: 1 },
   { id: 'org.vanity.core.color', version: 1 },
   { id: 'org.vanity.core.color-function', version: 1 },
@@ -164,7 +164,7 @@ export type VanityConstructors<DefaultLengthUnit extends VanityLengthUnit = Vani
   = VanityCanonicalConstructors<DefaultLengthUnit>
 
 /** Construct the core value capabilities once per configured system revision. */
-export function createCoreConstructors<const DefaultLengthUnit extends VanityLengthUnit>(
+function createCoreConstructors<const DefaultLengthUnit extends VanityLengthUnit>(
   defaultLengthUnit: DefaultLengthUnit,
 ): VanityPortableConstructors<DefaultLengthUnit> {
   return Object.freeze({

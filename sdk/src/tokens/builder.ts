@@ -1,5 +1,6 @@
-/** Unified additive token builder and system-bound `tdef` authoring surface. */
+/** Additive token builder and system-bound `tdef` authoring surface. */
 
+import type { VanityDiagnosticCode } from '../diagnostics'
 import type { VanityAxisDefinitions, VanityAxisModeName, VanityAxisRegistry } from '../system/axes'
 import type { VanityCondition } from '../system/conditions'
 import type { VanityCssDataType, VanityDataTypeOf } from '../values/types'
@@ -21,6 +22,7 @@ import type {
   VanityTokenPolicy,
   VanityTokenTraitDiagnostic,
 } from './types'
+import { VanityError } from '../diagnostics'
 import { isVanityValue } from '../values/types'
 import { isColorValue, isContrastValue } from './color'
 import { isConfiguredToken } from './config'
@@ -129,7 +131,7 @@ export interface VanityPortableTokenTreeContext {
 
 /**
  * Reverse-mapped vocabulary guard. `$axes` is the sole metadata key accepted
- * by the unified tree language; all other `$` names fail at their own field.
+ * by the token tree language; all other `$` names fail at their own field.
  */
 export type VanityTokenTreeInputGuard<
   Input extends object,
@@ -175,11 +177,11 @@ type VanityPortableTokenInput
 type VanityBuilderTokenInput<Bound extends boolean>
   = Bound extends true ? VanityNamedTokenInput : VanityPortableTokenInput
 
-type VanityPortableStageGuard<Input>
+type VanityPortableContributionGuard<Input>
   = Input extends VanityPortableTokenInput ? unknown
     : Input extends object ? {
       readonly [Key in keyof Input as Key extends `$${string}` ? never : Key]:
-      VanityPortableStageGuard<Input[Key]>
+      VanityPortableContributionGuard<Input[Key]>
     }
       : never
 
@@ -367,33 +369,57 @@ interface TypedTdef<
   ): VanityTokenDefinitionValue<FinalizeTdefConfig<Config, Axes>, Type, Axes>
 }
 
+/** Typed token-definition factory available on an open system. */
 export interface VanityTdefFactory<
   Axes extends VanityAxisDefinitions = Record<never, never>,
 > {
+  /** Create an advanced token definition with inferred value traits. */
   <const Config extends VanityTdefConfig<Axes>>(
     config: Config & NoInfer<TdefVocabularyGuard<Config, Axes>>,
   ): TdefResult<Config, Axes>
+  /** Create an unconstrained token definition whose data type is known. */
   readonly unknown: TypedTdef<'unknown', Axes>
+  /** Create a number token definition. */
   readonly number: TypedTdef<'number', Axes>
+  /** Create an integer token definition. */
   readonly integer: TypedTdef<'integer', Axes>
+  /** Create a percentage token definition. */
   readonly percentage: TypedTdef<'percentage', Axes>
+  /** Create a number-or-percentage token definition. */
   readonly numberPercentage: TypedTdef<'number-percentage', Axes>
+  /** Create a length token definition. */
   readonly length: TypedTdef<'length', Axes>
+  /** Create a length-or-percentage token definition. */
   readonly lengthPercentage: TypedTdef<'length-percentage', Axes>
+  /** Create an angle token definition. */
   readonly angle: TypedTdef<'angle', Axes>
+  /** Create a time token definition. */
   readonly time: TypedTdef<'time', Axes>
+  /** Create a frequency token definition. */
   readonly frequency: TypedTdef<'frequency', Axes>
+  /** Create a resolution token definition. */
   readonly resolution: TypedTdef<'resolution', Axes>
+  /** Create a flex token definition. */
   readonly flex: TypedTdef<'flex', Axes>
+  /** Create a color token definition. */
   readonly color: TypedTdef<'color', Axes>
+  /** Create an image token definition. */
   readonly image: TypedTdef<'image', Axes>
+  /** Create a position token definition. */
   readonly position: TypedTdef<'position', Axes>
+  /** Create an easing-function token definition. */
   readonly easingFunction: TypedTdef<'easing-function', Axes>
+  /** Create a transform-function token definition. */
   readonly transformFunction: TypedTdef<'transform-function', Axes>
+  /** Create a transform-list token definition. */
   readonly transformList: TypedTdef<'transform-list', Axes>
+  /** Create a custom-ident token definition. */
   readonly customIdent: TypedTdef<'custom-ident', Axes>
+  /** Create a dashed-ident token definition. */
   readonly dashedIdent: TypedTdef<'dashed-ident', Axes>
+  /** Create a string token definition. */
   readonly string: TypedTdef<'string', Axes>
+  /** Create a URL token definition. */
   readonly url: TypedTdef<'url', Axes>
 }
 
@@ -422,6 +448,7 @@ const TYPED_FACTORY_NAMES = [
   'url',
 ] as const
 
+/** Immutable token builder with cursor-local graph inference and six additive forms. */
 export interface VanityTokenBuilder<
   Graph extends object = Record<never, never>,
   Policy extends VanityTokenPolicy = VanityDefaultTokenPolicy,
@@ -429,9 +456,11 @@ export interface VanityTokenBuilder<
   Bound extends boolean = true,
 > extends VanityTokenDefinition<Graph, Policy> {
   readonly [VANITY_TOKEN_BUILDER]: true
-  /** Lazy module-relative handles. Direct aliases rebind at every mount. */
+  /** Lazy module-relative handles; direct aliases rebind at every mount. */
   readonly refs: VanityCanonicalTokens<Graph, 'module', Policy>
+  /** Add a named value, callback, batch, module, array, or token-tree contribution. */
   readonly add: {
+    /** Add one named leaf value or configured token definition. */
     <const Name extends string, const Input extends VanityBuilderTokenInput<Bound>>(
       name: AdditiveName<Graph, Name>,
       input: Input,
@@ -441,6 +470,7 @@ export interface VanityTokenBuilder<
       Axes,
       Bound
     >
+    /** Add one named derived leaf from a callback over the current module. */
     <const Name extends string, const Result extends VanityBuilderTokenInput<Bound>>(
       name: AdditiveName<Graph, Name>,
       factory: (m: VanityCanonicalTokens<Graph, 'module', Policy>) => Result,
@@ -450,15 +480,17 @@ export interface VanityTokenBuilder<
       Axes,
       Bound
     >
-    <const Stage extends object>(
+    /** Add a derived batch returned by a callback over the current module. */
+    <const Contribution extends object>(
       factory: (m: VanityCanonicalTokens<Graph, 'module', Policy>) =>
-      Stage & (Bound extends true ? unknown : VanityPortableStageGuard<Stage>),
+      Contribution & (Bound extends true ? unknown : VanityPortableContributionGuard<Contribution>),
     ): VanityTokenBuilder<
-      VanityAdditiveGraph<Graph, MarkDerivedTree<Stage>>,
+      VanityAdditiveGraph<Graph, MarkDerivedTree<Contribution>>,
       Policy,
       Axes,
       Bound
     >
+    /** Add another token builder or module and merge its graph. */
     <const Builder extends VanityTokenDefinition<any, Policy>>(
       builder: Builder,
     ): VanityTokenBuilder<
@@ -467,6 +499,7 @@ export interface VanityTokenBuilder<
       Axes,
       Bound
     >
+    /** Add an array of token builders or modules as one composition. */
     <const Builders extends readonly VanityTokenDefinition<any, Policy>[]>(
       builders: Builders,
     ): VanityTokenBuilder<
@@ -475,19 +508,22 @@ export interface VanityTokenBuilder<
       Axes,
       Bound
     >
-    <const Stage extends VanityTokenTreeContext<Axes>>(
-      stage: Stage & VanityTokenTreeInputGuard<Stage, Axes>,
+    /** Add a token tree with axis-aware values and derived modes. */
+    <const Contribution extends VanityTokenTreeContext<Axes>>(
+      contribution: Contribution & VanityTokenTreeInputGuard<Contribution, Axes>,
     ): VanityTokenBuilder<
-      VanityAdditiveGraph<Graph, VanityTokenTreeGraph<Stage>>,
+      VanityAdditiveGraph<Graph, VanityTokenTreeGraph<Contribution>>,
       Policy,
       Axes,
       Bound
     >
   }
+  /** Set the root selector or condition under which this token module is emitted. */
   readonly root: (root: string | VanityCondition) =>
   VanityTokenBuilder<Graph, Policy, Axes, Bound>
 }
 
+/** Portable token builder returned by `defineTokens`, before a system binds it. */
 export type VanityPortableTokenBuilder<Graph extends object = Record<never, never>>
   = VanityTokenBuilder<Graph, VanityDefaultTokenPolicy, Record<never, never>, false>
 
@@ -641,10 +677,22 @@ function createTokenBuilder(context: TokenBuilderContext, id = Symbol('vanity.to
           return prepareSeed(result as object, context.tdef, context.axes).graph
         }) as object)
       }
-      if (typeof first !== 'string' || args.length !== 2)
-        throw new TypeError('[vanity] add() needs (name, value/callback), a tree/callback, or one or more token builders')
-      if (first.startsWith('$'))
-        throw new TypeError(`[vanity] token name '${first}' cannot begin with '$'`)
+      if (typeof first !== 'string' || args.length !== 2) {
+        throwTokenAuthoringError(
+          'VANITY_TOKENS_INVALID_DEFINITION',
+          'add() needs (name, value/callback), a tree/callback, or one or more token builders',
+          'tokens.add',
+          'pass one supported add() form: a named value, callback, tree, or token builder',
+        )
+      }
+      if (first.startsWith('$')) {
+        throwTokenAuthoringError(
+          'VANITY_TOKENS_INVALID_NAME',
+          `token name '${first}' cannot begin with '$'`,
+          ['tokens', first],
+          'choose a token name that does not begin with \'$\'',
+        )
+      }
       const moduleRef = getModuleRef(second)
       if (moduleRef?.module === id) {
         return createNextBuilder(deriveTokenModule(context.module, (m: Record<string, unknown>) => ({
@@ -671,9 +719,11 @@ function createTokenBuilder(context: TokenBuilderContext, id = Symbol('vanity.to
       if (ast?.kind === 'anchor') {
         if (ast.anchor === 'system-root')
           return createNextBuilder(applyTokenModuleRoot(context.module, { systemRoot: true }) as object)
-        throw new TypeError(
-          `[vanity] ${ast.anchor === 'module-root' ? 'moduleRoot' : 'thisMode'} `
-          + 'has no enclosing root in this token-module position',
+        throwTokenAuthoringError(
+          'VANITY_TOKENS_INVALID_DEFINITION',
+          `${ast.anchor === 'module-root' ? 'moduleRoot' : 'thisMode'} has no enclosing root in this token-module position`,
+          'tokens.root',
+          'use systemRoot(), scope(), or a concrete selector at this module boundary',
         )
       }
       if (ast?.kind === 'scope') {
@@ -690,8 +740,14 @@ function createTokenBuilder(context: TokenBuilderContext, id = Symbol('vanity.to
           ? [arm.selector]
           : [],
       )
-      if (selectors.length !== 1)
-        throw new TypeError('[vanity] a token module root needs one concrete selector, systemRoot, or scope()')
+      if (selectors.length !== 1) {
+        throwTokenAuthoringError(
+          'VANITY_TOKENS_INVALID_DEFINITION',
+          'a token module root needs one concrete selector, systemRoot, or scope()',
+          'tokens.root',
+          'pass one concrete selector, systemRoot(), or scope()',
+        )
+      }
       return createNextBuilder(applyTokenModuleRoot(context.module, selectors[0]!) as object)
     },
   }
@@ -711,12 +767,29 @@ function createTokenBuilder(context: TokenBuilderContext, id = Symbol('vanity.to
 
 function normalizeNamedToken(value: unknown, tdef: VanityTokenFactory<any> | undefined): unknown {
   if (isConfiguredToken(value)) {
-    if (!tdef)
-      throw new TypeError('[vanity] portable defineTokens() cannot use system-bound tdef(); use open.defineTokens()')
-    throw new TypeError('[vanity] add(name, config) accepts the raw config; remove the unnecessary tdef() wrapper')
+    if (!tdef) {
+      throwTokenAuthoringError(
+        'VANITY_TOKENS_INVALID_DEFINITION',
+        'portable defineTokens() cannot use system-bound tdef()',
+        'tokens.add',
+        'use open.defineTokens() for system-bound token traits',
+      )
+    }
+    throwTokenAuthoringError(
+      'VANITY_TOKENS_INVALID_DEFINITION',
+      'add(name, config) accepts the raw config; remove the unnecessary tdef() wrapper',
+      'tokens.add',
+      'pass the raw token config to add(name, config)',
+    )
   }
-  if (!tdef && isRawTokenConfig(value))
-    throw new TypeError('[vanity] portable defineTokens() accepts plain values and callbacks; use open.defineTokens() for token traits')
+  if (!tdef && isRawTokenConfig(value)) {
+    throwTokenAuthoringError(
+      'VANITY_TOKENS_INVALID_DEFINITION',
+      'portable defineTokens() accepts plain values and callbacks; use open.defineTokens() for token traits',
+      'tokens.add',
+      'use plain values/callbacks in defineTokens(), or use open.defineTokens() for token traits',
+    )
+  }
   if (tdef && isRawTokenConfig(value))
     return (tdef as any)(value)
   return value
@@ -736,14 +809,26 @@ function prepareSeed(
     for (const [name, value] of Object.entries(group)) {
       if (name === '$axes')
         continue
-      if (name.startsWith('$'))
-        throw new TypeError(`[vanity] token name '${[...path, name].join('.')}' cannot begin with '$'`)
+      if (name.startsWith('$')) {
+        throwTokenAuthoringError(
+          'VANITY_TOKENS_INVALID_NAME',
+          `token name '${[...path, name].join('.')}' cannot begin with '$'`,
+          [...path, name],
+          'choose a token name that does not begin with \'$\'',
+        )
+      }
       if (isTokenBuilder(value)) {
         mounts.push({ path: [...path, name], module: getTokenModule(value)! })
         continue
       }
-      if (!tdef && isConfiguredToken(value))
-        throw new TypeError('[vanity] portable defineTokens() cannot use system-bound tdef(); use open.defineTokens()')
+      if (!tdef && isConfiguredToken(value)) {
+        throwTokenAuthoringError(
+          'VANITY_TOKENS_INVALID_DEFINITION',
+          'portable defineTokens() cannot use system-bound tdef()',
+          [...path, name],
+          'use open.defineTokens() for system-bound token traits',
+        )
+      }
       if (isPlainGroup(value))
         result[name] = visit(value, [...path, name])
       else
@@ -751,8 +836,14 @@ function prepareSeed(
     }
     const bulk = (group as { readonly $axes?: unknown }).$axes
     if (bulk !== undefined) {
-      if (!tdef || !axes)
-        throw new TypeError('[vanity] $axes requires the system-bound defineTokens() builder')
+      if (!tdef || !axes) {
+        throwTokenAuthoringError(
+          'VANITY_TOKENS_INVALID_AXES',
+          '$axes requires the system-bound defineTokens() builder',
+          [...path, '$axes'],
+          'use open.defineTokens() before adding group-level axis branches',
+        )
+      }
       applyBulkAxes(result, bulk, tdef, axes, path)
     }
     return result
@@ -767,18 +858,42 @@ function applyBulkAxes(
   axes: VanityAxisRegistry<any>,
   path: readonly string[],
 ): void {
-  if (!bulk || typeof bulk !== 'object')
-    throw new TypeError(`[vanity] ${[...path, '$axes'].join('.')} must be keyed by axis`)
+  if (!bulk || typeof bulk !== 'object') {
+    throwTokenAuthoringError(
+      'VANITY_TOKENS_INVALID_AXES',
+      `${[...path, '$axes'].join('.')} must be keyed by axis`,
+      [...path, '$axes'],
+      'provide an object keyed by declared axis names',
+    )
+  }
   for (const [axis, producer] of Object.entries(bulk)) {
     const definition = axes.definitions[axis]
-    if (!definition)
-      throw new TypeError(`[vanity] $axes references unknown axis '${axis}'`)
-    if (typeof producer !== 'function')
-      throw new TypeError(`[vanity] $axes.${axis} must be a callback over the mode name`)
+    if (!definition) {
+      throwTokenAuthoringError(
+        'VANITY_TOKENS_UNKNOWN_AXIS',
+        `$axes references unknown axis '${axis}'`,
+        [...path, '$axes', axis],
+        `declare '${axis}' with addAxis() before using it in $axes`,
+      )
+    }
+    if (typeof producer !== 'function') {
+      throwTokenAuthoringError(
+        'VANITY_TOKENS_INVALID_AXES',
+        `$axes.${axis} must be a callback over the mode name`,
+        [...path, '$axes', axis],
+        'provide a callback that returns a token-shaped value tree for each mode',
+      )
+    }
     for (const mode of definition.modeOrder) {
       const values = producer(mode)
-      if (!values || typeof values !== 'object')
-        throw new TypeError(`[vanity] $axes.${axis}('${mode}') must return a token-shaped value tree`)
+      if (!values || typeof values !== 'object') {
+        throwTokenAuthoringError(
+          'VANITY_TOKENS_INVALID_AXES',
+          `$axes.${axis}('${mode}') must return a token-shaped value tree`,
+          [...path, '$axes', axis, mode],
+          'return an object containing the token values for that mode',
+        )
+      }
       applyBulkMode(group, values, axis, mode, tdef, [])
     }
   }
@@ -795,13 +910,25 @@ function applyBulkMode(
   for (const [name, value] of Object.entries(values)) {
     const current = target[name]
     if (isPlainGroup(value)) {
-      if (!isPlainGroup(current))
-        throw new TypeError(`[vanity] $axes cannot find token group '${[...path, name].join('.')}'`)
+      if (!isPlainGroup(current)) {
+        throwTokenAuthoringError(
+          'VANITY_TOKENS_INVALID_AXES',
+          `$axes cannot find token group '${[...path, name].join('.')}'`,
+          [...path, name],
+          'make the bulk-axis tree match the declared token group shape',
+        )
+      }
       applyBulkMode(current, value, axis, mode, tdef, [...path, name])
       continue
     }
-    if (!isConfiguredToken(current))
-      throw new TypeError(`[vanity] $axes token '${[...path, name].join('.')}' must use tdef() so traits stay explicit`)
+    if (!isConfiguredToken(current)) {
+      throwTokenAuthoringError(
+        'VANITY_TOKENS_INVALID_AXES',
+        `$axes token '${[...path, name].join('.')}' must use tdef() so traits stay explicit`,
+        [...path, name],
+        'wrap the token with system-bound tdef() before applying group-level axes',
+      )
+    }
     target[name] = (tdef as any)({
       ...current.config,
       axes: {
@@ -824,8 +951,14 @@ function normalizeAxisCallbacks(
   const normalized: Record<string, Record<string, unknown | null>> = {}
   for (const [axis, input] of Object.entries(config.axes) as [string, any][]) {
     const definition = axes.definitions[axis]
-    if (!definition)
-      throw new TypeError(`[vanity] tdef() references unknown axis '${axis}'`)
+    if (!definition) {
+      throwTokenAuthoringError(
+        'VANITY_TOKENS_UNKNOWN_AXIS',
+        `tdef() references unknown axis '${axis}'`,
+        ['axes', axis],
+        `declare '${axis}' with addAxis() before using it in tdef()`,
+      )
+    }
     normalized[axis] = typeof input === 'function'
       ? Object.fromEntries(definition.modeOrder.map((mode: string) => [mode, input(mode)]))
       : { ...input }
@@ -888,4 +1021,13 @@ function readPath(tree: Record<string, unknown>, path: readonly string[]): unkno
   for (const name of path)
     value = (value as Record<string, unknown>)[name]
   return value
+}
+
+function throwTokenAuthoringError(
+  code: Extract<VanityDiagnosticCode, `VANITY_TOKENS_${string}`>,
+  message: string,
+  path: string | readonly string[],
+  fix: string,
+): never {
+  throw new VanityError({ code, message, path, fix })
 }

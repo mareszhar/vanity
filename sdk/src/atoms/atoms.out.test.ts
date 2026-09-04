@@ -6,7 +6,7 @@
 
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { createFixtureSystem } from '../test-support/current'
+import { createFixtureSystem } from '../test-support/system'
 
 describe('atoms, emitted', () => {
   it('pre-generates value × condition classes in the utilities layer', () => {

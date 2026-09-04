@@ -3,118 +3,192 @@
 import type { VanityTokenRecord } from '../introspect/records'
 import type { VanityRuntimeContract } from '../runtime/contract'
 import type { VanityHandleMeta } from '../tokens/handle'
+import type {
+  VanityPolicyJson,
+  VanityResolvedPolicies,
+} from '../values/policies'
 import type { VanityAxisRegistryDescription } from './axes'
 import type { VanityConditionArm, VanityConditionAst } from './conditions'
+import { VanityError } from '../diagnostics'
 import { assertPortableSystemShape } from './contractValidation'
 
 export const VANITY_PORTABLE_SYSTEM_FORMAT = 'vanity.system/2' as const
 export const VANITY_IN_PROCESS_SYSTEM = Symbol.for('vanity.inProcessSystem')
 
+/** Deterministic identities for the contract's compatibility, CSS, runtime, and docs projections. */
 export interface VanitySystemIdentities {
+  /** Identity of the authoring capability and policy projection. */
   readonly compatibility: `vanity-compatibility-1-${string}`
+  /** Identity of the emitted CSS projection. */
   readonly css: `vanity-css-1-${string}`
+  /** Identity of the runtime projection. */
   readonly runtime: `vanity-runtime-schema-1-${string}`
+  /** Identity of the introspection and documentation projection. */
   readonly docs: `vanity-docs-1-${string}`
 }
 
+/** Provenance for an additive refinement or replacement of named system data. */
 export interface VanityOverwriteProvenance {
+  /** System facet that received the operation. */
   readonly kind: 'tokens' | 'axis' | 'conditions' | 'consts' | 'rules'
   /** Additive token refinements remain distinguishable from intentional replacement. */
   readonly operation: 'augment' | 'overwrite'
+  /** Paths affected by the operation. */
   readonly paths: readonly string[]
+  /** Optional source label supplied by the authoring integration. */
   readonly source?: string
 }
 
+/** Identifies which built-in, system, plugin, or extension owns a capability. */
 export type VanityCapabilityOrigin
   = | { readonly kind: 'builtin' }
     | { readonly kind: 'system' }
     | { readonly kind: 'plugin', readonly id: string }
     | { readonly kind: 'extension', readonly id: string, readonly version: string }
 
-export type VanityPortableCapabilityOriginV2 = VanityCapabilityOrigin
-
-export interface VanityPortableConstructorV2 {
+/** Constructor capability recorded in the portable contract. */
+export interface VanityPortableConstructor {
+  /** Public constructor name. */
   readonly name: string
-  readonly origin: VanityPortableCapabilityOriginV2
+  /** Capability owner used for diagnostics and portability checks. */
+  readonly origin: VanityCapabilityOrigin
 }
 
-export interface VanityPortableExtensionV2 {
+/** Extension identity carried by a portable system contract. */
+export interface VanityPortableExtension {
+  /** Stable extension id. */
   readonly id: string
+  /** Extension release version. */
   readonly version: string
+  /** Optional deterministic extension fingerprint. */
   readonly fingerprint?: string
 }
 
-export interface VanityPortableCapabilitiesV2 {
+/** Value and constructor capabilities required to interpret a portable system. */
+export interface VanityPortableCapabilities {
+  /** Deterministic capability signature. */
   readonly signature: string
+  /** CSS feature target used when serializing values. */
   readonly supportTarget: string
-  readonly constructors: readonly VanityPortableConstructorV2[]
-  readonly extensions: readonly VanityPortableExtensionV2[]
+  /** Constructors available to the system. */
+  readonly constructors: readonly VanityPortableConstructor[]
+  /** Extensions available to the system. */
+  readonly extensions: readonly VanityPortableExtension[]
 }
 
-export type VanityPortablePoliciesV2 = Readonly<Record<string, unknown>>
+type VanityJsonify<Value> = Value extends readonly (infer Item)[]
+  ? readonly VanityJsonify<Item>[]
+  : Value extends object
+    ? { readonly [Key in keyof Value]: VanityJsonify<Value[Key]> }
+    : Value
 
-export interface VanityPortableSystemV2 {
+/**
+ * JSON-normalized policy projection carried by the portable system contract.
+ * The support target is runtime capability data and is represented by
+ * `capabilities.supportTarget`, so it is intentionally not serialized here.
+ */
+export interface VanityPortablePolicies {
+  /** Constructor restrictions and unit defaults. */
+  readonly constructors: VanityJsonify<VanityResolvedPolicies['constructors']>
+  /** Deterministic cascade-layer order. */
+  readonly layerOrder: VanityJsonify<VanityResolvedPolicies['layerOrder']>
+  /** Token reference and emission defaults. */
+  readonly tokens: VanityJsonify<VanityResolvedPolicies['tokens']>
+  /** JSON-safe plugin policies keyed by plugin id. */
+  readonly plugins: VanityJsonify<VanityResolvedPolicies['plugins']>
+  /** Extension policy values owned outside the core groups. */
+  readonly [customPolicy: string]: VanityPolicyJson
+}
+
+/** JSON-safe compiler contract consumed by introspection, runtimes, and integrations. */
+export interface VanityPortableSystem {
+  /** Portable wire-format discriminator. */
   readonly format: typeof VANITY_PORTABLE_SYSTEM_FORMAT
+  /** Optional source file or package that declared the system. */
   readonly source?: string
+  /** Custom-property and class-name prefix. */
   readonly prefix: string
+  /** Root selector for root-scoped output. */
   readonly root: string
+  /** Layer receiving token declarations when configured. */
   readonly tokenLayer?: string
+  /** Root layer name derived from the prefix. */
   readonly layerRoot: string
+  /** Complete deterministic cascade-layer order. */
   readonly layers: readonly string[]
-  readonly capabilities: VanityPortableCapabilitiesV2
-  readonly policies: VanityPortablePoliciesV2
+  /** Value and constructor capabilities needed to read this contract. */
+  readonly capabilities: VanityPortableCapabilities
+  /** JSON-normalized system policies. */
+  readonly policies: VanityPortablePolicies
+  /** Readable condition strings keyed by condition name. */
   readonly conditions: Readonly<Record<string, string>>
+  /** Condition trigger arms keyed by condition name. */
   readonly conditionArms: Readonly<Record<string, readonly VanityConditionArm[]>>
+  /** Condition ASTs keyed by condition name. */
   readonly conditionAsts: Readonly<Record<string, VanityConditionAst>>
+  /** Environmental-axis metadata, when the system declares axes. */
   readonly axes?: VanityAxisRegistryDescription
+  /** Resolved token handle metadata. */
   readonly tokens: readonly VanityHandleMeta[]
+  /** Semantic token records used by introspection and diagnostics. */
   readonly tokenRecords: readonly VanityTokenRecord[]
+  /** Runtime root, axis, and mutable-token contract. */
   readonly runtime: VanityRuntimeContract
+  /** JSON-safe constants exposed by the system. */
   readonly consts: Readonly<Record<string, unknown>>
+  /** Dot paths of public utilities exposed by the system. */
   readonly utilities: readonly string[]
+  /** Named rule groups and their selector fingerprints. */
   readonly ruleGroups: readonly {
+    /** Stable rule-group name. */
     readonly name: string
+    /** Optional human-readable rule-group description. */
     readonly description?: string
+    /** Cascade layer receiving the group's rules. */
     readonly layer?: string
+    /** Deterministic order within its layer. */
     readonly order?: number
+    /** Selectors emitted by the rule group. */
     readonly selectors: readonly string[]
+    /** Fingerprint of the group's normalized rules. */
     readonly fingerprint: string
   }[]
+  /** Plugin ids mounted into the system. */
   readonly plugins: readonly string[]
+  /** Ownership records for plugin-defined members. */
   readonly owners: Readonly<Record<string, { readonly kind: 'plugin', readonly id: string }>>
+  /** Resolved audit level for each audit category. */
   readonly audits: Readonly<Record<string, 'off' | 'warn' | 'error'>>
+  /** Ordered overwrite and augmentation provenance. */
   readonly overwrites: readonly VanityOverwriteProvenance[]
+  /** Deterministic projection identities for consumers and cache keys. */
   readonly identities: VanitySystemIdentities
 }
 
+/** In-process contract pairing the portable data with its emission closure. */
 export interface VanityInProcessSystemContract {
-  readonly portable: VanityPortableSystemV2
+  /** Data-only contract safe to serialize or hand to another consumer. */
+  readonly portable: VanityPortableSystem
   /** Compiler-only emission closure. Never copied into portable data. */
   readonly emit: () => void
 }
 
-export interface VanitySystemContractInput {
-  readonly source?: string
-  readonly prefix: string
-  readonly root: string
-  readonly tokenLayer?: string
-  readonly layers: readonly string[]
-  readonly capabilities: VanityPortableCapabilitiesV2
-  readonly policies: VanityPortablePoliciesV2
-  readonly conditions: Readonly<Record<string, string>>
-  readonly conditionArms: Readonly<Record<string, readonly VanityConditionArm[]>>
-  readonly conditionAsts: Readonly<Record<string, VanityConditionAst>>
-  readonly axes?: VanityAxisRegistryDescription
-  readonly tokens: readonly VanityHandleMeta[]
-  readonly tokenRecords: readonly VanityTokenRecord[]
-  readonly runtime: VanityRuntimeContract
-  readonly consts?: Readonly<Record<string, unknown>>
-  readonly utilities?: readonly string[]
-  readonly ruleGroups?: VanityPortableSystemV2['ruleGroups']
-  readonly plugins?: readonly string[]
-  readonly owners?: Readonly<Record<string, { readonly kind: 'plugin', readonly id: string }>>
-  readonly audits?: Readonly<Record<string, 'off' | 'warn' | 'error'>>
-  readonly overwrites?: readonly VanityOverwriteProvenance[]
+type VanitySystemContractOptionalKey
+  = | 'source'
+    | 'tokenLayer'
+    | 'axes'
+    | 'consts'
+    | 'utilities'
+    | 'ruleGroups'
+    | 'plugins'
+    | 'owners'
+    | 'audits'
+    | 'overwrites'
+
+export type VanitySystemContractInput = Omit<
+  VanityPortableSystem,
+  'format' | 'layerRoot' | 'identities' | VanitySystemContractOptionalKey
+> & Partial<Pick<VanityPortableSystem, VanitySystemContractOptionalKey>> & {
   readonly emit: () => void
 }
 
@@ -143,13 +217,13 @@ export function createSystemContract(input: VanitySystemContractInput): VanityIn
     owners: input.owners ?? {},
     audits: input.audits ?? {},
     overwrites: input.overwrites ?? [],
-  }) as Omit<VanityPortableSystemV2, 'identities'>
+  }) as Omit<VanityPortableSystem, 'identities'>
 
   const identities = getSystemIdentities(normalized)
   const portable = freezeDeep({
     ...normalized,
     identities,
-  }) as VanityPortableSystemV2
+  }) as VanityPortableSystem
 
   // This object was normalized from the typed in-process input immediately
   // above and its identities were derived from those exact normalized bytes.
@@ -164,40 +238,53 @@ export function getSystemContract(value: unknown): VanityInProcessSystemContract
   return (value as { readonly [VANITY_IN_PROCESS_SYSTEM]?: VanityInProcessSystemContract })[VANITY_IN_PROCESS_SYSTEM]
 }
 
-export function assertPortableSystem(value: unknown): asserts value is VanityPortableSystemV2 {
-  assertPortableSystemShape(value)
+export function assertPortableSystem(value: unknown): asserts value is VanityPortableSystem {
+  assertPortableSystemShape(value, VANITY_PORTABLE_SYSTEM_FORMAT)
   const normalized = normalizeJson(value)
-  const candidate = normalized as VanityPortableSystemV2
-  if (candidate.format !== VANITY_PORTABLE_SYSTEM_FORMAT)
-    throw new TypeError(`[vanity] unsupported portable system format '${String(candidate.format)}'`)
+  const candidate = normalized as VanityPortableSystem
   const identityKinds = ['compatibility', 'css', 'runtime', 'docs'] as const
-  if (Object.keys(candidate.identities).sort().join('\0') !== [...identityKinds].sort().join('\0'))
-    throw new TypeError('[vanity] portable system artifact must contain exactly four projection identities')
+  if (Object.keys(candidate.identities).sort().join('\0') !== [...identityKinds].sort().join('\0')) {
+    throw new VanityError({
+      code: 'VANITY_SYSTEM_INCOMPATIBLE',
+      message: 'portable system artifact must contain exactly four projection identities',
+      path: ['identities'],
+      fix: 'regenerate the portable system artifact with the current Vanity version',
+    })
+  }
   for (const kind of identityKinds) {
     const id = candidate.identities[kind]
-    if (typeof id !== 'string' || !id.startsWith(`vanity-${kind === 'runtime' ? 'runtime-schema' : kind}-1-`))
-      throw new TypeError(`[vanity] portable system artifact has an invalid ${kind} identity`)
+    if (typeof id !== 'string' || !id.startsWith(`vanity-${kind === 'runtime' ? 'runtime-schema' : kind}-1-`)) {
+      throw new VanityError({
+        code: 'VANITY_SYSTEM_INCOMPATIBLE',
+        message: `portable system artifact has an invalid ${kind} identity`,
+        path: ['identities', kind],
+        fix: 'regenerate the portable system artifact with the current Vanity version',
+      })
+    }
   }
 
-  const portable = normalized as VanityPortableSystemV2
+  const portable = normalized as VanityPortableSystem
   const { identities: actual, ...body } = portable
   const expected = getSystemIdentities(body)
   for (const kind of identityKinds) {
     if (actual[kind] !== expected[kind]) {
-      throw new TypeError(
-        `[vanity] portable system artifact ${kind} identity does not match its normalized projection`,
-      )
+      throw new VanityError({
+        code: 'VANITY_SYSTEM_INCOMPATIBLE',
+        message: `portable system artifact ${kind} identity does not match its normalized projection`,
+        path: ['identities', kind],
+        fix: 'regenerate the portable system artifact without editing its identity fields',
+      })
     }
   }
 }
 
-export function serializePortableSystem(value: VanityPortableSystemV2): string {
+export function serializePortableSystem(value: VanityPortableSystem): string {
   assertPortableSystem(value)
   return `${JSON.stringify(value, null, 2)}\n`
 }
 
 function getSystemIdentities(
-  normalized: Omit<VanityPortableSystemV2, 'identities'>,
+  normalized: Omit<VanityPortableSystem, 'identities'>,
 ): VanitySystemIdentities {
   const compatibilityProjection = {
     capabilities: normalized.capabilities,
@@ -362,15 +449,33 @@ function normalizeJson(value: unknown, ancestors = new WeakSet<object>()): any {
   if (value === null || typeof value === 'string' || typeof value === 'boolean')
     return value
   if (typeof value === 'number') {
-    if (!Number.isFinite(value))
-      throw new TypeError('[vanity] portable system data cannot contain non-finite numbers')
+    if (!Number.isFinite(value)) {
+      throw new VanityError({
+        code: 'VANITY_SYSTEM_INVALID_DEFINITION',
+        message: 'portable system data cannot contain non-finite numbers',
+        path: ['portable'],
+        fix: 'replace NaN and Infinity with finite JSON numbers',
+      })
+    }
     return Object.is(value, -0) ? 0 : value
   }
-  if (typeof value === 'bigint' || typeof value === 'symbol' || typeof value === 'function')
-    throw new TypeError(`[vanity] portable system data cannot contain ${typeof value} values`)
+  if (typeof value === 'bigint' || typeof value === 'symbol' || typeof value === 'function') {
+    throw new VanityError({
+      code: 'VANITY_SYSTEM_INVALID_DEFINITION',
+      message: `portable system data cannot contain ${typeof value} values`,
+      path: ['portable'],
+      fix: 'keep portable system data JSON-compatible',
+    })
+  }
   if (Array.isArray(value)) {
-    if (ancestors.has(value))
-      throw new TypeError('[vanity] portable system data cannot contain cycles')
+    if (ancestors.has(value)) {
+      throw new VanityError({
+        code: 'VANITY_SYSTEM_INVALID_DEFINITION',
+        message: 'portable system data cannot contain cycles',
+        path: ['portable'],
+        fix: 'remove the cyclic reference before serializing the portable system',
+      })
+    }
     ancestors.add(value)
     const result = value.map(child => normalizeJson(child, ancestors))
     ancestors.delete(value)
@@ -379,10 +484,22 @@ function normalizeJson(value: unknown, ancestors = new WeakSet<object>()): any {
 
   const object = value as Record<string, unknown>
   const prototype = Object.getPrototypeOf(object)
-  if (prototype !== Object.prototype && prototype !== null)
-    throw new TypeError('[vanity] portable system data must contain only plain objects and arrays')
-  if (ancestors.has(object))
-    throw new TypeError('[vanity] portable system data cannot contain cycles')
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new VanityError({
+      code: 'VANITY_SYSTEM_INVALID_DEFINITION',
+      message: 'portable system data must contain only plain objects and arrays',
+      path: ['portable'],
+      fix: 'copy class instances into plain objects before serializing the portable system',
+    })
+  }
+  if (ancestors.has(object)) {
+    throw new VanityError({
+      code: 'VANITY_SYSTEM_INVALID_DEFINITION',
+      message: 'portable system data cannot contain cycles',
+      path: ['portable'],
+      fix: 'remove the cyclic reference before serializing the portable system',
+    })
+  }
   ancestors.add(object)
   const result = Object.fromEntries(Object.entries(object)
     .filter(([, child]) => child !== undefined)

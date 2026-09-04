@@ -2,13 +2,13 @@
 
 import type { VanityIdentifierMode } from '../../config'
 import type { VanityInspectRecord } from '../../introspect/records'
-import type { VanityCssCapture } from '../../substrate'
+import type { VanityVanillaExtractCapture } from '../../substrate'
 import { createRequire } from 'node:module'
 import { dirname, posix } from 'node:path'
 import { clearDiagnosticSources } from '../../diagnostics'
 import { collectInspection } from '../../introspect/records'
 import { substrate } from '../../substrate'
-import { normalizePath } from '../path'
+import { normalizePath } from '../core/path'
 
 // ─── Evaluation ──────────────────────────────────────────────────────────────
 
@@ -38,9 +38,9 @@ export function evaluateStyleModule(
   const composedClassLists: Array<{ identifier: string, classList: string }> = []
   const usedCompositions = new Set<string>()
 
-  const capture: VanityCssCapture = {
+  const capture: VanityVanillaExtractCapture = {
     appendCss: (css, fileScope) => {
-      const serializedFileScope = substrate.modules.stringifyFileScope(fileScope)
+      const serializedFileScope = substrate.backend.serializeFileScope(fileScope)
       const cssObjs = cssObjsByFileScope.get(serializedFileScope) ?? []
       cssObjs.push(css)
       cssObjsByFileScope.set(serializedFileScope, cssObjs)
@@ -69,7 +69,7 @@ export function evaluateStyleModule(
         },
   }
 
-  substrate.modules.installCapture(capture)
+  substrate.backend.installCapture(capture)
 
   const cssByFileScope = new Map<string, string>()
 
@@ -105,7 +105,7 @@ export function evaluateStyleModule(
     }
   }
   finally {
-    substrate.modules.removeCapture()
+    substrate.backend.removeCapture()
   }
 }
 

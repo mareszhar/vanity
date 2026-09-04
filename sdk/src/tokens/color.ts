@@ -23,6 +23,7 @@ import type {
   VanityHueInterpolation,
   VanityPolarColorSpace,
 } from './types'
+import { VanityError } from '../diagnostics'
 import {
   createCompositeNode,
   createInputNode,
@@ -171,21 +172,31 @@ const CONTRAST_VALUE = Symbol.for('vanity.contrastValue')
 
 const standaloneResolver = {
   foldRef(handle: VanityInternalTokenHandle): never {
-    throw new TypeError(`[vanity] cannot fold ${readHandlePath(handle)} without its token module`)
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: `cannot fold ${readHandlePath(handle)} without its token module`,
+      path: readHandlePath(handle),
+      fix: 'resolve the color expression through its owning token module',
+    })
   },
-  refTraits: (handle: VanityInternalTokenHandle) => ({
+  getRefTraits: (handle: VanityInternalTokenHandle) => ({
     cssLive: handle.$reference === 'var',
     volatile: handle.$mutable,
     conditional: false,
   }),
   invalidColor(detail: string): never {
-    throw new TypeError(`[vanity] cannot resolve color expression: ${detail}`)
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: `cannot resolve color expression: ${detail}`,
+      path: ['color'],
+      fix: 'provide a valid color value or reference a color token',
+    })
   },
 }
 
 // ─── Color values ────────────────────────────────────────────────────────────
 
-export class ColorValue {
+class ColorValue {
   readonly type = 'color' as const
   declare readonly [VANITY_VALUE]: { readonly resolution: 'self' }
   readonly [VANITY_NODE]: import('../values/protocol').VanityExpressionNode<'color'>
@@ -221,7 +232,7 @@ export class ColorValue {
   }
 
   mix(other: VanityColorish, amount: number): ColorValue {
-    return createInterpolatedColor(copyColorValue(this, { kind: 'mix', input: this.expr, other: toExpr(other), amount, space: 'oklab' }))
+    return createInterpolatedColor(copyColorValue(this, { kind: 'mix', input: this.expr, other: convertToExpression(other), amount, space: 'oklab' }))
   }
 }
 
@@ -229,7 +240,7 @@ function copyColorValue(value: ColorValue, expr: VanityColorExpr = value.expr): 
   return new ColorValue(expr)
 }
 
-export class ContrastValue {
+class ContrastValue {
   constructor(readonly expr: Extract<VanityColorExpr, { kind: 'contrast' }>) {
     Object.defineProperty(this, CONTRAST_VALUE, { value: true })
   }
@@ -244,7 +255,7 @@ export function isContrastValue(value: unknown): value is ContrastValue {
 }
 
 /** A colorish input, normalized to an expression: values unwrap, handles become graph edges, strings parse. */
-export function toExpr(color: VanityColorish | ColorValue | ContrastValue): VanityColorExpr {
+export function convertToExpression(color: VanityColorish | ColorValue | ContrastValue): VanityColorExpr {
   if (isColorValue(color) || isContrastValue(color))
     return color.expr
 
@@ -401,7 +412,7 @@ export type VanityPredefinedColorSpace
 export type VanityCssColorSpace = VanityPredefinedColorSpace | `--${string}`
 
 /** CSS `color(<predefined-space> …)` with typed channel expressions. */
-export function createColorSpace(
+function createColorSpace(
   space: VanityCssColorSpace,
   c1: VanityNumericColorChannel,
   c2: VanityNumericColorChannel,
@@ -412,7 +423,7 @@ export function createColorSpace(
 }
 
 /** Custom profiles may define a channel count other than three. */
-export function createProfiledColor(
+function createProfiledColor(
   space: VanityCssColorSpace,
   channels: readonly [VanityNumericColorChannel, ...VanityNumericColorChannel[]],
   alpha?: VanityNumericColorChannel,
@@ -501,8 +512,14 @@ function createChannelExpression<const Value extends VanityColorChannel>(
   if (typeof value === 'number')
     validateFiniteChannels(`channel.${kind}`, [value])
 
-  if (kind === 'divide' && typeof value === 'number' && value === 0)
-    throw new RangeError('[vanity] channel.divide() cannot divide by zero')
+  if (kind === 'divide' && typeof value === 'number' && value === 0) {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: 'channel.divide() cannot divide by zero',
+      path: ['channel', 'divide'],
+      fix: 'divide by a non-zero channel value',
+    })
+  }
 
   const append = <const Next extends VanityColorChannel>(
     nextKind: VanityChannelOperationKind,
@@ -611,8 +628,14 @@ export function lightDark(
   dark: VanityColorish | VanityLightDarkImage,
 ): VanityAuthoredColor | VanityCssValue<string, 'image'> {
   if (isImageInput(light) || isImageInput(dark)) {
-    if (!isImageInput(light) || !isImageInput(dark))
-      throw new TypeError('[vanity] lightDark() cannot mix <color> and <image> inputs')
+    if (!isImageInput(light) || !isImageInput(dark)) {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_INVALID_COLOR',
+        message: 'lightDark() cannot mix <color> and <image> inputs',
+        path: ['lightDark'],
+        fix: 'pass two colors, or pass two images/none values',
+      })
+    }
 
     return new ExpressionValue(createCompositeNode({
       type: 'image',
@@ -622,7 +645,7 @@ export function lightDark(
     }))
   }
 
-  return new ColorValue({ kind: 'scheme', light: toExpr(light), dark: toExpr(dark) }) as unknown as VanityAuthoredColor
+  return new ColorValue({ kind: 'scheme', light: convertToExpression(light), dark: convertToExpression(dark) }) as unknown as VanityAuthoredColor
 }
 
 function isImageValue(value: unknown): value is VanityImage {
@@ -640,6 +663,7 @@ function createImageNode(value: VanityLightDarkImage) {
     : createInputNode(value, 'image')
 }
 
+/** Configure the minimum APCA contrast score required by `legibleOn()`. */
 export interface VanityLegibleOptions {
   /** Minimum APCA Lc contrast score; defaults to 60. */
   contrast?: number
@@ -658,7 +682,7 @@ export function legibleOn<S extends VanityColorish>(
 ): VanityAuthoredContrast {
   return new ContrastValue({
     kind: 'contrast',
-    target: toExpr(target),
+    target: convertToExpression(target),
     contrast: options.contrast ?? 60,
     explicitContrast: options.contrast !== undefined,
   }) as unknown as VanityAuthoredContrast
@@ -669,7 +693,7 @@ export function legibleOn<S extends VanityColorish>(
 type SameColor = VanityAuthoredColor
 
 function applyColorExpression(input: VanityColorish, expr: (input: VanityColorExpr) => VanityColorExpr): ColorValue {
-  const value = new ColorValue(expr(toExpr(input)))
+  const value = new ColorValue(expr(convertToExpression(input)))
 
   return value
 }
@@ -703,14 +727,17 @@ export function mix<A extends VanityColorish, B extends VanityColorish>(
   other: B,
   amount: number,
 ): VanityAuthoredInterpolatedColor {
-  const value = applyColorExpression(color, input => ({ kind: 'mix', input, other: toExpr(other), amount, space: 'oklab' }))
+  const value = applyColorExpression(color, input => ({ kind: 'mix', input, other: convertToExpression(other), amount, space: 'oklab' }))
   return createInterpolatedColor(value) as unknown as VanityAuthoredInterpolatedColor
 }
 
 export type VanityColorMixPercentage = number | VanityCssValue<string, 'percentage'>
 export type VanityColorMixItem = VanityColorish | readonly [VanityColorish, VanityColorMixPercentage]
+/** Configure interpolation space and hue path for `colorMix()`. */
 export interface VanityColorMixOptions {
+  /** Interpolation color space; defaults to the CSS color-mix default. */
   in?: VanityColorInterpolationSpace
+  /** Hue interpolation path; only valid for polar color spaces. */
   hue?: VanityHueInterpolation
 }
 
@@ -720,14 +747,26 @@ export function colorMix(
   options: VanityColorMixOptions = {},
 ): VanityAuthoredColor {
   const space = options.in
-  if (options.hue && (!space || !isPolarSpace(space)))
-    throw new TypeError(`[vanity] ${space ?? 'the default color space'} has no hue interpolation path`)
+  if (options.hue && (!space || !isPolarSpace(space))) {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: `${space ?? 'the default color space'} has no hue interpolation path`,
+      path: ['colorMix', 'in'],
+      fix: 'choose a polar interpolation space before selecting a hue path',
+    })
+  }
 
   const normalized = items.map((item) => {
     const [color, percentage] = Array.isArray(item) ? item : [item, undefined] as const
-    if (typeof percentage === 'number' && (percentage < 0 || percentage > 100 || !Number.isFinite(percentage)))
-      throw new RangeError(`[vanity] colorMix() percentages must be finite and between 0 and 100; received ${percentage}`)
-    return { color: toExpr(color as VanityColorish), percentage: percentage as VanityColorMixPercentage | undefined }
+    if (typeof percentage === 'number' && (percentage < 0 || percentage > 100 || !Number.isFinite(percentage))) {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_INVALID_COLOR',
+        message: `colorMix() percentages must be finite and between 0 and 100; received ${percentage}`,
+        path: ['colorMix', 'percentage'],
+        fix: 'pass a finite percentage from 0 through 100',
+      })
+    }
+    return { color: convertToExpression(color as VanityColorish), percentage: percentage as VanityColorMixPercentage | undefined }
   })
 
   const dependencies = normalized.flatMap(item => [
@@ -765,7 +804,7 @@ export function handleColorMethods(handle: VanityInternalTokenHandle): Record<st
     saturate: (amount: number) => new ColorValue({ kind: 'adjust', input: getColorReference(), channel: 'c', delta: amount }),
     desaturate: (amount: number) => new ColorValue({ kind: 'adjust', input: getColorReference(), channel: 'c', delta: -amount }),
     rotate: (degrees: number) => new ColorValue({ kind: 'adjust', input: getColorReference(), channel: 'h', delta: degrees }),
-    mix: (other: VanityColorish, amount: number) => createInterpolatedColor(new ColorValue({ kind: 'mix', input: getColorReference(), other: toExpr(other), amount, space: 'oklab' })),
+    mix: (other: VanityColorish, amount: number) => createInterpolatedColor(new ColorValue({ kind: 'mix', input: getColorReference(), other: convertToExpression(other), amount, space: 'oklab' })),
   }
 }
 
@@ -774,10 +813,22 @@ function createInterpolatedColor(value: ColorValue): ColorValue & VanityAuthored
     space: VanityColorInterpolationSpace,
     options?: { hue: VanityHueInterpolation },
   ): ColorValue & VanityAuthoredInterpolatedColor => {
-    if (value.expr.kind !== 'mix')
-      throw new TypeError('[vanity] .in() is available only on an interpolation operation')
-    if (options && !isPolarSpace(space))
-      throw new TypeError(`[vanity] ${space} has no hue interpolation path`)
+    if (value.expr.kind !== 'mix') {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_INVALID_COLOR',
+        message: '.in() is available only on an interpolation operation',
+        path: ['color', 'in'],
+        fix: 'call .in() on the result of a color interpolation',
+      })
+    }
+    if (options && !isPolarSpace(space)) {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_INVALID_COLOR',
+        message: `${space} has no hue interpolation path`,
+        path: ['color', 'in'],
+        fix: 'choose a polar interpolation space before selecting a hue path',
+      })
+    }
     const next = copyColorValue(value, { ...value.expr, space, ...(options ? { hue: options.hue } : { hue: undefined }) })
     return createInterpolatedColor(next)
   }
@@ -858,14 +909,26 @@ function createColorChannelNode(
     return createRawNode('unknown', 'none', { helper: label })
   if ((typeof value === 'object' || typeof value === 'function') && value !== null && ('var' in value || '$var' in value))
     return createInputNode(value)
-  if (!isNodeValue(value))
-    throw new TypeError(`[vanity] ${label} is not a number, percentage, angle, calc(), var(), or none`)
+  if (!isNodeValue(value)) {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: `${label} is not a number, percentage, angle, calc(), var(), or none`,
+      path: [label],
+      fix: 'provide a compatible CSS numeric value, token, var(), or none',
+    })
+  }
   const node = getNode(value)
   const compatible = accepted === 'hue'
     ? ['unknown', 'number', 'integer', 'angle'].includes(node.type)
     : ['unknown', 'number', 'integer', 'percentage', 'number-percentage'].includes(node.type)
-  if (!compatible)
-    throw new TypeError(`[vanity] ${label} cannot use a <${node.type}> value in a ${accepted} color component`)
+  if (!compatible) {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: `${label} cannot use a <${node.type}> value in a ${accepted} color component`,
+      path: [label],
+      fix: `provide a ${accepted} color component value`,
+    })
+  }
   return node
 }
 
@@ -1046,8 +1109,14 @@ function validateChannels(channels: VanityOklchChannels): void {
         )
       }
 
-      if (operation.kind === 'divide' && typeof channelValue === 'number' && channelValue === 0)
-        throw new RangeError(`[vanity] oklch.from ${name} cannot divide by zero`)
+      if (operation.kind === 'divide' && typeof channelValue === 'number' && channelValue === 0) {
+        throw new VanityError({
+          code: 'VANITY_TOKENS_INVALID_COLOR',
+          message: `oklch.from ${name} cannot divide by zero`,
+          path: ['oklch', 'from', name],
+          fix: 'divide by a non-zero channel value',
+        })
+      }
     }
   }
 }
@@ -1064,15 +1133,27 @@ function validateRelativeChannel(
     if (operation.value === undefined)
       continue
     createColorChannelNode(operation.value, false, label, hue ? 'hue' : 'numeric')
-    if (operation.kind === 'divide' && operation.value === 0)
-      throw new RangeError(`[vanity] ${label} cannot divide by zero`)
+    if (operation.kind === 'divide' && operation.value === 0) {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_INVALID_COLOR',
+        message: `${label} cannot divide by zero`,
+        path: [label],
+        fix: 'divide by a non-zero channel value',
+      })
+    }
   }
 }
 
 function validateFiniteChannels(name: string, values: Array<number | undefined>): void {
   for (const value of values) {
-    if (value !== undefined && !Number.isFinite(value))
-      throw new RangeError(`[vanity] ${name} channels must be finite; received ${value}`)
+    if (value !== undefined && !Number.isFinite(value)) {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_INVALID_COLOR',
+        message: `${name} channels must be finite; received ${value}`,
+        path: [name],
+        fix: 'pass finite channel values',
+      })
+    }
   }
 }
 

@@ -1,7 +1,7 @@
 /** Context-shared marker used by semantic handles and the build-time explainer. */
 export const VANITY_EXPLAINABLE = Symbol.for('vanity.explainable')
 
-export function explainable<T extends object>(value: T, explanation: Readonly<Record<string, unknown>>): T {
+export function attachExplanation<T extends object>(value: T, explanation: Readonly<Record<string, unknown>>): T {
   Object.defineProperty(value, VANITY_EXPLAINABLE, {
     configurable: true,
     value: Object.freeze(explanation),

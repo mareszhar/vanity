@@ -8,7 +8,7 @@ import {
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
 
-describe('unified token output', () => {
+describe('token builder output', () => {
   it('preserves logical token values and chained relative-channel expressions', () => {
     const open = createSystem()
       .addTokens(current => ({

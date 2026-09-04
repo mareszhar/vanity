@@ -1,9 +1,9 @@
-// Exports are ordered by source module. Each heading names the public domain;
-// the order itself stays alphabetical so lint makes accidental drift visible.
+// Exports are ordered by source module. Each heading describes the source-module
+// group that follows it; the order stays alphabetical so drift remains visible.
 
 export { unsafe } from './atoms/handle'
 
-// ─── Atoms: finite declared utility selection ───────────────────────────────
+// ─── Atoms and collection helpers ───────────────────────────────────────────
 
 export type {
   VanityAtomInput,
@@ -69,8 +69,9 @@ export type {
   VanityDiagnosticSink,
 } from './diagnostics'
 
-// ─── Open system: the canonical authoring environment ────────────────────────
+// ─── Introspection and design-token interchange ─────────────────────────────
 
+export type { VanityAuditFinding, VanityAuditReport, VanityUnevaluatedAudit } from './introspect/audit'
 export { exportDesignTokens, importDesignTokens, VANITY_DTCG_EXTENSION, VANITY_DTCG_EXTENSION_VERSION } from './introspect/dtcg'
 export type {
   VanityDtcgAuthoredExtension,
@@ -99,7 +100,7 @@ export type {
   VanityIntrospectedToken,
   VanitySemanticEntry,
   VanitySemanticOwner,
-  VanitySystemMapV2,
+  VanitySystemMap,
 } from './introspect/system'
 export { propertyAliases } from './plugins/propertyAliases'
 export type {
@@ -108,7 +109,7 @@ export type {
   VanityPropertyAliasOptions,
 } from './plugins/propertyAliases'
 
-// ─── Introspection and design-token interchange ─────────────────────────────
+// ─── Ports and token-group projections ───────────────────────────────────────
 
 export { ports } from './ports/ports'
 export type {
@@ -134,7 +135,7 @@ export { fromTokenGroup } from './recipes/fromTokenGroup'
 
 export type { VanityTokenGroup } from './recipes/fromTokenGroup'
 
-// ─── Ports: the typed runtime boundary ───────────────────────────────────────
+// ─── Recipes and runtime ─────────────────────────────────────────────────────
 
 export type {
   VanityAnatomy,
@@ -171,8 +172,8 @@ export type {
   VanityRuntimeReconciliation,
   VanityRuntimeRootContract,
   VanityRuntimeRootProps,
+  VanityRuntimeSnapshot,
   VanityRuntimeSnapshotOverride,
-  VanityRuntimeSnapshotV1,
   VanityRuntimeStyleDeclaration,
   VanityRuntimeStyles,
   VanityRuntimeTarget,
@@ -180,7 +181,7 @@ export type {
   VanitySnapshotFrom,
 } from './runtime/contract'
 
-// ─── Recipes: variants, toggles, anatomy, published ports ────────────────────
+// ─── System authoring, conditions, and contracts ─────────────────────────────
 
 export type {
   VanityAbsoluteAxisConditionOptions,
@@ -243,16 +244,15 @@ export type {
   VanityCapabilityOrigin,
   VanityInProcessSystemContract,
   VanityOverwriteProvenance,
-  VanityPortableCapabilitiesV2,
-  VanityPortableCapabilityOriginV2,
-  VanityPortableConstructorV2,
-  VanityPortableExtensionV2,
-  VanityPortablePoliciesV2,
-  VanityPortableSystemV2,
+  VanityPortableCapabilities,
+  VanityPortableConstructor,
+  VanityPortableExtension,
+  VanityPortablePolicies,
+  VanityPortableSystem,
   VanitySystemIdentities,
 } from './system/contract'
 
-// ─── The system: createSystem, conditions, layers ────────────────────────────
+// ─── System factories, definitions, and locked surface ───────────────────────
 
 export { createSystem, definePlugin } from './system/createSystem'
 
@@ -272,6 +272,8 @@ export type {
 export { VANITY_DEFAULT_LAYERS } from './system/locked'
 export type {
   VanityDefaultLayers,
+  VanityLockedSystem,
+  VanitySystem,
   VanitySystemConditionName,
 } from './system/locked'
 
@@ -291,7 +293,6 @@ export type {
   VanityConstructorPolicies,
   VanityConstructorPolicy,
   VanityConstructorRestriction,
-  VanityLockedSystem,
   VanityLogicalTokenHandle,
   VanityLogicalTokens,
   VanityOpenSystem,
@@ -301,9 +302,9 @@ export type {
   VanityPluginRequirements,
   VanityPluginSetupSystem,
   VanityPolicies,
-  VanitySystem,
   VanitySystemPlugin,
   VanitySystemShape,
+  VanityTokenPolicies,
 } from './system/open'
 
 export type { VanitySystemRule } from './system/rules'

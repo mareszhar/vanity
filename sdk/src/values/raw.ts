@@ -1,6 +1,7 @@
 /** Typed escape for future CSS syntax Vanity does not yet understand. */
 
 import type { VanityCssDataType, VanityCssValue } from './types'
+import { throwValueError } from './error'
 import { createRawNode, ExpressionValue } from './protocol'
 
 export interface VanityRawValueConstructors {
@@ -60,18 +61,36 @@ export const rawValue: VanityRawValueConstructors = Object.freeze({
   string: (syntax: string) => createTypedRawValue('string', syntax),
   url: (syntax: string) => createTypedRawValue('url', syntax),
   plugin: <const Name extends string>(name: Name, syntax: string) => {
-    if (name.trim().length === 0)
-      throw new TypeError('[vanity] a raw plugin value needs a non-empty data-type name')
+    if (name.trim().length === 0) {
+      throwValueError(
+        'VANITY_CSS_INVALID_VALUE',
+        'a raw plugin value needs a non-empty data-type name',
+        'rawValue.plugin',
+        'provide a stable data-type name',
+      )
+    }
     return createTypedRawValue(`plugin:${name}` as const, syntax)
   },
 })
 
 /** Broad token/balance safety without pretending to parse future grammar. */
 function validateRawSyntax(syntax: string): void {
-  if (syntax.trim().length === 0)
-    throw new TypeError('[vanity] a raw CSS value cannot be empty')
-  if (syntax.includes('\0'))
-    throw new TypeError('[vanity] a raw CSS value cannot contain U+0000')
+  if (syntax.trim().length === 0) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      'a raw CSS value cannot be empty',
+      'rawValue',
+      'provide non-empty CSS syntax',
+    )
+  }
+  if (syntax.includes('\0')) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      'a raw CSS value cannot contain U+0000',
+      'rawValue',
+      'remove the null character from the CSS syntax',
+    )
+  }
 
   const stack: string[] = []
   let quote: '"' | '\'' | undefined
@@ -94,8 +113,14 @@ function validateRawSyntax(syntax: string): void {
     }
     if (char === '/' && syntax[index + 1] === '*') {
       const end = syntax.indexOf('*/', index + 2)
-      if (end < 0)
-        throw new TypeError('[vanity] raw CSS has an unterminated comment')
+      if (end < 0) {
+        throwValueError(
+          'VANITY_CSS_INVALID_VALUE',
+          'raw CSS has an unterminated comment',
+          'rawValue',
+          'close the comment with */',
+        )
+      }
       index = end + 1
       continue
     }
@@ -108,20 +133,44 @@ function validateRawSyntax(syntax: string): void {
     }
     else if (char === ')' || char === ']' || char === '}') {
       const opening = stack.pop()
-      if (!opening || !matches(opening, char))
-        throw new TypeError(`[vanity] raw CSS has an unmatched '${char}'`)
+      if (!opening || !isMatchingDelimiter(opening, char)) {
+        throwValueError(
+          'VANITY_CSS_INVALID_VALUE',
+          `raw CSS has an unmatched '${char}'`,
+          'rawValue',
+          'balance the CSS delimiters',
+        )
+      }
     }
   }
 
-  if (quote)
-    throw new TypeError('[vanity] raw CSS has an unterminated string')
-  if (escaped)
-    throw new TypeError('[vanity] raw CSS has a dangling escape')
-  if (stack.length > 0)
-    throw new TypeError(`[vanity] raw CSS has an unmatched '${stack.at(-1)}'`)
+  if (quote) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      'raw CSS has an unterminated string',
+      'rawValue',
+      'close the quoted CSS string',
+    )
+  }
+  if (escaped) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      'raw CSS has a dangling escape',
+      'rawValue',
+      'complete or remove the final escape character',
+    )
+  }
+  if (stack.length > 0) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `raw CSS has an unmatched '${stack.at(-1)}'`,
+      'rawValue',
+      'balance the CSS delimiters',
+    )
+  }
 }
 
-function matches(opening: string, closing: string): boolean {
+function isMatchingDelimiter(opening: string, closing: string): boolean {
   return (opening === '(' && closing === ')')
     || (opening === '[' && closing === ']')
     || (opening === '{' && closing === '}')

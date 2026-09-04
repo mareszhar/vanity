@@ -15,7 +15,7 @@ import {
   VANITY_DEFAULT_CSS_SUPPORT,
 } from '../values/protocol'
 import { TextContrastCheck } from './checks'
-import { getColorRequirements, toExpr } from './color'
+import { convertToExpression, getColorRequirements } from './color'
 import { foldExpr, getExpressionTraits, serializeContrastPick, serializeExpr } from './expressions'
 import { readHandleVar } from './handle'
 import { formatNumber, formatOklch, measureApcaContrast, measureWcagContrast, parseColor, pickLegible } from './math'
@@ -47,8 +47,14 @@ export function resolveTokenModule(
   module: unknown,
   options: TokenResolutionOptions = {},
 ): VanityTokens<object, string> {
-  if (!isTokenModule(module))
-    throw new TypeError('[vanity] only an unfinished token module can be resolved')
+  if (!isTokenModule(module)) {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_DEFINITION',
+      message: 'only an unfinished token module can be resolved',
+      path: ['module'],
+      fix: 'pass the result of an unfinished token-module authoring call',
+    })
+  }
   const tokenModule = module as TokenModule
   return buildTokens(tokenModule.contributions, tokenModule.tokenPolicy, options)
 }
@@ -70,7 +76,7 @@ export function resolveGraph(
     foldRef: (handle, scheme) => foldNode(requireNode(handle), scheme),
     foldValue: (value, scheme) => authoredValues.foldValue(value, scheme),
     serializeValue: value => authoredValues.serializeValue(value),
-    refTraits: (handle) => {
+    getRefTraits: (handle) => {
       const referenced = requireNode(handle)
       const traits = resolveNode(referenced).traits
       return {
@@ -284,7 +290,7 @@ export function resolveGraph(
 }
 
 /** Build-time representative projection shared by derivation fallback and checks. */
-export function createAuthoredValueFolder(
+function createAuthoredValueFolder(
   graph: TokenGraph,
   resolver: () => VanityResolver,
   getDefinition: (node: TokenNode) => VanityOverride,
@@ -476,8 +482,8 @@ export function runTokenChecks(checks: readonly unknown[], graph: TokenGraph): V
     if (!(entry instanceof TextContrastCheck))
       continue
 
-    const text = toExpr(entry.text)
-    const background = toExpr(entry.background)
+    const text = convertToExpression(entry.text)
+    const background = convertToExpression(entry.background)
 
     for (const scheme of ['light', 'dark'] as const) {
       const resolver = createTokenCheckResolver(graph, scheme)
@@ -532,7 +538,7 @@ export function createTokenCheckResolver(graph: TokenGraph, scheme: VanityScheme
     },
     foldValue: value => authoredValues.foldValue(value, scheme),
     serializeValue: value => authoredValues.serializeValue(value),
-    refTraits: (handle) => {
+    getRefTraits: (handle) => {
       const node = getNode(handle)
       const result = node === undefined ? undefined : graph.results.get(node.key)
       return result?.traits ?? { cssLive: false, volatile: false, conditional: false }

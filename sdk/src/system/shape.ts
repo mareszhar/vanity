@@ -16,15 +16,25 @@ import { EMPTY_AXIS_REGISTRY } from './axes'
 
 export declare const VANITY_SYSTEM_SHAPE: unique symbol
 
+/** Shape requirements a plugin expects the host system to satisfy. */
 export interface VanityPluginRequirements {
+  /** Token paths the plugin expects to read. */
   readonly tokens?: object
+  /** Axis names and mode names the plugin expects. */
   readonly axes?: Readonly<Record<string, readonly string[]>>
+  /** Condition names the plugin expects. */
   readonly conditions?: object
+  /** Constant names the plugin expects. */
   readonly consts?: object
+  /** Utility paths the plugin expects. */
   readonly utils?: string
+  /** Rule names the plugin expects. */
   readonly rules?: string
+  /** Plugin ids the plugin expects. */
   readonly plugins?: string
+  /** Constructor names the plugin expects. */
   readonly constructors?: object
+  /** Policy names the plugin expects. */
   readonly policies?: string
 }
 
@@ -113,6 +123,7 @@ export type ProjectSystemShape<Shape, Policies>
     >
     : never
 
+/** Type-only capability shape accumulated by an open system. */
 export interface VanitySystemShape<
   Constructors extends object = VanityCanonicalConstructors<'px'>,
   Policy extends VanityTokenPolicy = VanityDefaultTokenPolicy,
@@ -120,6 +131,7 @@ export interface VanitySystemShape<
   Requirements extends VanityPluginRequirements = Record<never, never>,
   Policies extends object = Record<never, never>,
 > {
+  /** Type-only carriers for constructors, token policy, axes, requirements, and policies. */
   readonly [VANITY_SYSTEM_SHAPE]?: {
     readonly constructors: Constructors
     readonly policy: Policy
@@ -155,8 +167,8 @@ export function getSystemCapabilitySignature(
     values: kernel.signature,
     parent: parent ?? null,
     support: {
-      id: context.support.id,
-      features: [...context.support.features].sort(),
+      id: context.policies.support.id,
+      features: [...context.policies.support.features].sort(),
     },
     policies: serializeStableIdentity(context.policies),
     axes: {

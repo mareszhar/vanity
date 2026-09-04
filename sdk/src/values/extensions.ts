@@ -14,6 +14,7 @@ import type {
   VanityCssValue,
   VanityValue,
 } from './types'
+import { throwValueError } from './error'
 import {
   createInputNode,
   createPluginNode,
@@ -26,23 +27,32 @@ export type VanityExtensionInput<Type extends VanityCssDataType = VanityCssDataT
   = Type extends 'number' | 'integer' ? number | VanityValue<Type>
     : VanityCssInput | VanityValue<Type>
 
+/** Serializer recipe for a value that remains opaque to the core value protocol. */
 export interface VanityCssValueRecipe<Type extends VanityCssDataType = VanityCssDataType> {
   /** Values whose references/resolution requirements this node carries. */
   readonly dependencies?: readonly (VanityValue | string | number)[]
+  /** CSS features required to serialize this value. */
   readonly requirements?: readonly VanityCssFeature[]
+  /** Source location or authoring label for diagnostics. */
   readonly source?: VanitySource
+  /** Portable fallback value used when the extension cannot serialize. */
   readonly fallback?: VanityValue<Type>
+  /** Serialize this value with the owning system's policy and reference context. */
   serialize: (context: VanitySerializeContext) => string
+  /** Fold this value to core semantics when the target supports it. */
   fold?: (context: VanityFoldContext) => VanityValue<Type> | { readonly preserve: VanityFoldRefusal }
 }
 
+/** Definition used by an extension author to create one typed CSS value. */
 export interface VanityCssValueDefinition<
   Type extends VanityCssDataType,
   Args extends readonly unknown[],
 > {
+  /** CSS data type produced by the constructor. */
   readonly type: Type
   /** Required only when `create` returns extension-owned opaque semantics. */
   readonly extension?: VanityExtensionIdentity
+  /** Create a core value or an extension-owned serializer recipe. */
   create: (...args: Args) => VanityValue<Type> | VanityCssValueRecipe<Type>
 }
 
@@ -65,13 +75,21 @@ export function defineCssValue<
       return new ExpressionValue(node as never)
     }
 
-    if (!isRecipe(result))
-      throw new TypeError('[vanity] defineCssValue().create() must return a vanity value or serializer recipe')
+    if (!isRecipe(result)) {
+      throwValueError(
+        'VANITY_CSS_INVALID_VALUE',
+        'defineCssValue().create() must return a vanity value or serializer recipe',
+        'definition.create',
+        'return a Vanity value or an object with a serialize() function',
+      )
+    }
 
     if (!definition.extension) {
-      throw new TypeError(
-        '[vanity] an anonymous CSS value extension cannot own opaque serialization; '
-        + 'return a value lowered to core IR or provide a stable extension { id, version }',
+      throwValueError(
+        'VANITY_VALUE_INVALID',
+        'an anonymous CSS value extension cannot own opaque serialization',
+        'definition.extension',
+        'return a value lowered to core IR or provide a stable extension { id, version }',
       )
     }
 
@@ -101,17 +119,26 @@ type OperationInputs<Types extends readonly VanityCssDataType[]> = {
   readonly [K in keyof Types]: Types[K] extends VanityCssDataType ? VanityExtensionInput<Types[K]> : never
 }
 
+/** Definition used by an extension author to create a typed multi-input CSS operation. */
 export interface VanityCssOperationDefinition<
   Inputs extends readonly VanityCssDataType[],
   Output extends VanityCssDataType,
 > {
+  /** CSS data types accepted by the operation, in argument order. */
   readonly inputs: Inputs
+  /** CSS data type produced by the operation. */
   readonly output: Output
+  /** Stable extension identity that owns the operation's serializer. */
   readonly extension: VanityExtensionIdentity
+  /** CSS features required to serialize this operation. */
   readonly requirements?: readonly VanityCssFeature[]
+  /** Source location or authoring label for diagnostics. */
   readonly source?: VanitySource
+  /** Core fallback used when the extension cannot serialize. */
   readonly fallback?: (...inputs: OperationInputs<Inputs>) => VanityValue<Output>
+  /** Serialize the operation with its typed inputs. */
   serialize: (context: VanitySerializeContext, ...inputs: OperationInputs<Inputs>) => string
+  /** Fold the operation to core semantics when supported by the target. */
   fold?: (context: VanityFoldContext, ...inputs: OperationInputs<Inputs>) => VanityValue<Output> | { readonly preserve: VanityFoldRefusal }
 }
 
@@ -167,5 +194,10 @@ function isCompatibleType(expected: VanityCssDataType, actual: VanityCssDataType
 }
 
 function throwTypeMismatch(where: string, expected: VanityCssDataType, actual: VanityCssDataType): never {
-  throw new TypeError(`[vanity] ${where} expected <${expected}> but received <${actual}>`)
+  throwValueError(
+    'VANITY_CSS_INVALID_VALUE',
+    `${where} expected <${expected}> but received <${actual}>`,
+    'value',
+    `provide a value compatible with <${expected}>`,
+  )
 }

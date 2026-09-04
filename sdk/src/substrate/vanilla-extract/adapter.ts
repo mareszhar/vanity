@@ -1,20 +1,21 @@
 import type { Adapter, FileScope } from '@vanilla-extract/css'
 import type {
   VanityClassEmission,
-  VanityCssCapture,
   VanityCustomPropertyEmission,
   VanityFileScope,
   VanityFontFaceEmission,
   VanityFunctionSerialization,
   VanityGlobalRuleEmission,
-  VanityIdentOption,
   VanityKeyframesEmission,
   VanityLayerEmission,
-  VanityModuleSubstrate,
+  VanityPortableModuleSubstrate,
   VanityRawEmission,
   VanityStyleModuleResult,
   VanityStyleModuleTransform,
   VanitySubstrate,
+  VanityVanillaExtractCapture,
+  VanityVanillaExtractIdentOption,
+  VanityVanillaExtractModuleLifecycle,
 } from '../types'
 import { createRequire } from 'node:module'
 import { cwd } from 'node:process'
@@ -52,8 +53,8 @@ let substrateRequire: ReturnType<typeof createRequire> | undefined
 
 export function createVanillaExtractSubstrate(): VanitySubstrate {
   const css = createCssSubstrate()
-  const modules = createModuleSubstrate()
-  return Object.freeze({ css, modules })
+  const { modules, backend } = createModuleSubstrate()
+  return Object.freeze({ css, modules, backend })
 }
 
 function createCssSubstrate() {
@@ -64,7 +65,7 @@ function createCssSubstrate() {
   }
 
   const emitRawCss = (input: VanityRawEmission): void => {
-    appendCss({ type: 'vanityRaw', css: input.css } satisfies VanityRawCssBlock, toVanillaFileScope(input.fileScope ?? getCurrentFileScopeValue()))
+    appendCss({ type: 'vanityRaw', css: input.css } satisfies VanityRawCssBlock, convertToVanillaFileScope(input.fileScope ?? getCurrentFileScopeValue()))
   }
 
   const emitKeyframes = (input: VanityKeyframesEmission): string => {
@@ -104,10 +105,15 @@ function createCssSubstrate() {
     emitLayer,
     createCustomProperty,
     registerCustomProperty,
+    getStyleModuleFile,
+    hasStyleModuleFile,
   })
 }
 
-function createModuleSubstrate(): VanityModuleSubstrate {
+function createModuleSubstrate(): {
+  readonly modules: VanityPortableModuleSubstrate
+  readonly backend: VanityVanillaExtractModuleLifecycle
+} {
   const runInFileScope = <Result>(scope: VanityFileScope, operation: () => Result): Result => {
     const previous = hasFileScope() ? createVanityFileScope(getFileScope()) : undefined
 
@@ -163,13 +169,13 @@ function createModuleSubstrate(): VanityModuleSubstrate {
     return { css: output.join('\n') }
   }
 
-  const installCapture = (capture: VanityCssCapture): void => {
+  const installCapture = (capture: VanityVanillaExtractCapture): void => {
     const adapter: Adapter = {
       appendCss: (css, fileScope) => capture.appendCss(css, createVanityFileScope(fileScope)),
       registerClassName: (className, fileScope) => capture.registerClassName(className, createVanityFileScope(fileScope)),
       registerComposition: (composition, fileScope) => capture.registerComposition(composition, createVanityFileScope(fileScope)),
       markCompositionUsed: capture.markCompositionUsed,
-      onEndFileScope: fileScope => capture.onEndFileScope?.(createVanityFileScope(fileScope)),
+      onEndFileScope: fileScope => capture.finishFileScope?.(createVanityFileScope(fileScope)),
       getIdentOption: capture.getIdentOption,
     }
     setAdapter(adapter)
@@ -177,22 +183,7 @@ function createModuleSubstrate(): VanityModuleSubstrate {
 
   const removeCapture = (): void => removeAdapter()
   const setCurrentFileScope = (scope: VanityFileScope): void => setFileScope(scope.filePath, scope.packageName)
-  const endCurrentFileScope = (): void => endFileScope()
-  const getCurrentFileScope = (): VanityFileScope | undefined => hasFileScope() ? createVanityFileScope(getFileScope()) : undefined
-  const requireStyleModule = (surface: string): string => {
-    const scope = getCurrentFileScope()
-    if (scope === undefined) {
-      throw new VanityError({
-        code: 'VANITY_VITE_PLUGIN_MISSING',
-        message: `${surface} ran outside a style-module build — the vanity plugin is not wired up`,
-        detail: [
-          'Style modules are evaluated at build time; nothing here can run as ordinary app code.',
-        ],
-        fix: 'add vanityPlugin() from \'@mszr/vanity/vite\' to vite plugins (or the \'@mszr/vanity/nuxt\' module), and keep this call inside a *.css.ts file',
-      })
-    }
-    return scope.filePath
-  }
+  const finishCurrentFileScope = (): void => endFileScope()
 
   const initialize = (): void => {
     const require = substrateRequire ??= createRequire(`${cwd()}/package.json`)
@@ -200,18 +191,18 @@ function createModuleSubstrate(): VanityModuleSubstrate {
       require(entry)
   }
 
-  return {
+  const modules: VanityPortableModuleSubstrate = Object.freeze({
     runInFileScope,
     registerFunctionSerialization,
     transformStyleModule,
-    getFileScope: getCurrentFileScope,
-    hasFileScope,
-    requireStyleModule,
+  })
+
+  const backend: VanityVanillaExtractModuleLifecycle = {
     installCapture,
     removeCapture,
     setFileScope: setCurrentFileScope,
-    endFileScope: endCurrentFileScope,
-    stringifyFileScope: scope => stringifyFileScope(toVanillaFileScope(scope)),
+    finishFileScope: finishCurrentFileScope,
+    serializeFileScope: scope => stringifyFileScope(convertToVanillaFileScope(scope)),
     parseFileScope: serialized => createVanityFileScope(parseFileScope(serialized)),
     serializeStyleModule: (cssImports, exports, unusedCompositionRegex) => serializeVanillaModule([...cssImports], exports, unusedCompositionRegex),
     addFileScope,
@@ -220,6 +211,16 @@ function createModuleSubstrate(): VanityModuleSubstrate {
     initialize,
     createVitePlugins: options => vanillaExtractPlugin(options as never),
   }
+
+  return { modules, backend: Object.freeze(backend) }
+}
+
+function getStyleModuleFile(): VanityFileScope | undefined {
+  return hasFileScope() ? createVanityFileScope(getFileScope()) : undefined
+}
+
+function hasStyleModuleFile(): boolean {
+  return hasFileScope()
 }
 
 function appendCss(css: VanillaCss | VanityRawCssBlock, fileScope: FileScope): void {
@@ -227,12 +228,18 @@ function appendCss(css: VanillaCss | VanityRawCssBlock, fileScope: FileScope): v
 }
 
 function getCurrentFileScopeValue(): VanityFileScope {
-  if (!hasFileScope())
-    throw new Error('[vanity] CSS emission requires an active file scope')
+  if (!hasFileScope()) {
+    throw new VanityError({
+      code: 'VANITY_SUBSTRATE_INVALID_STATE',
+      message: 'CSS emission requires an active file scope',
+      path: ['fileScope'],
+      fix: 'run CSS emission from within an active style-module evaluation',
+    })
+  }
   return createVanityFileScope(getFileScope())
 }
 
-function toVanillaFileScope(scope: VanityFileScope): FileScope {
+function convertToVanillaFileScope(scope: VanityFileScope): FileScope {
   return scope.packageName === undefined
     ? { filePath: scope.filePath }
     : { filePath: scope.filePath, packageName: scope.packageName }
@@ -244,4 +251,4 @@ function createVanityFileScope(scope: FileScope): VanityFileScope {
     : { filePath: scope.filePath, packageName: scope.packageName }
 }
 
-export type { VanityIdentOption }
+export type { VanityVanillaExtractIdentOption }

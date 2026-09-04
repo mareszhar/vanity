@@ -2,6 +2,7 @@
 
 import type { VanityCalc, VanityDimensionOf, VanityMathDimension, VanitySumDimension } from './math'
 import type { VanityCssInput } from './types'
+import { throwValueError } from './error'
 import { calc, clamp } from './math'
 import { length } from './units'
 
@@ -27,6 +28,7 @@ export function interpolate<
   return calc(from).add(calc(to).subtract(from as any).multiply(progress) as any) as never
 }
 
+/** Configure the bounded viewport interpolation emitted by `fluid()`. */
 export interface VanityFluidOptions {
   /** Lower value in CSS pixels. */
   readonly min: number
@@ -45,10 +47,22 @@ export function fluid(options: VanityFluidOptions): ReturnType<typeof clamp> {
   validateFinite(max, 'fluid max')
   validateFinite(minVw, 'fluid minVw')
   validateFinite(maxVw, 'fluid maxVw')
-  if (max < min)
-    throw new RangeError(`[vanity] fluid max must be greater than or equal to min; received ${min} → ${max}`)
-  if (maxVw <= minVw)
-    throw new RangeError(`[vanity] fluid maxVw must be greater than minVw; received ${minVw} → ${maxVw}`)
+  if (max < min) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `fluid max must be greater than or equal to min; received ${min} → ${max}`,
+      'fluid.max',
+      'set max to a value greater than or equal to min',
+    )
+  }
+  if (maxVw <= minVw) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `fluid maxVw must be greater than minVw; received ${minVw} → ${maxVw}`,
+      'fluid.maxVw',
+      'set maxVw greater than minVw',
+    )
+  }
 
   const slope = (max - min) / (maxVw - minVw)
   const intercept = min - slope * minVw
@@ -57,8 +71,14 @@ export function fluid(options: VanityFluidOptions): ReturnType<typeof clamp> {
 }
 
 function validateFinite(value: number, role: string): void {
-  if (!Number.isFinite(value))
-    throw new RangeError(`[vanity] ${role} must be finite; received ${value}`)
+  if (!Number.isFinite(value)) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `${role} must be finite; received ${value}`,
+      role,
+      'pass a finite number',
+    )
+  }
 }
 
 function roundNumber(value: number): number {

@@ -1,6 +1,7 @@
 /** CSS units are constructors of data types, not data types themselves. */
 
 import type { VanityCssDataType, VanityCssValue } from './types'
+import { throwValueError } from './error'
 import { defineCssValue } from './extensions'
 import { createLiteralNode, createPluginNode, ExpressionValue } from './protocol'
 
@@ -89,7 +90,7 @@ const lengthUnits: readonly VanityLengthUnit[] = [
   'vw',
 ]
 
-function unitFactory<Type extends VanityCssDataType, Unit extends string>(type: Type, unit: Unit) {
+function createUnitFactory<Type extends VanityCssDataType, Unit extends string>(type: Type, unit: Unit) {
   // This simple built-in intentionally dogfoods the public lowering contract:
   // `defineCssValue` sees only another public value, so no opaque identity is
   // required and extension authors have the same route.
@@ -102,24 +103,24 @@ function unitFactory<Type extends VanityCssDataType, Unit extends string>(type: 
   }) as <const Value extends number>(value: Value) => VanityUnitValue<Type, Unit, Value>
 }
 
-function unitGroup<Type extends VanityCssDataType, Unit extends string>(
+function createUnitGroup<Type extends VanityCssDataType, Unit extends string>(
   type: Type,
   units: readonly Unit[],
 ): UnitMethods<Type, Unit> {
-  return Object.freeze(Object.fromEntries(units.map(unit => [unit, unitFactory(type, unit)]))) as UnitMethods<Type, Unit>
+  return Object.freeze(Object.fromEntries(units.map(unit => [unit, createUnitFactory(type, unit)]))) as UnitMethods<Type, Unit>
 }
 
-const explicitLength = unitGroup('length', lengthUnits)
+const explicitLength = createUnitGroup('length', lengthUnits)
 export function createLengthConstructor<const DefaultUnit extends VanityLengthUnit>(
   defaultUnit: DefaultUnit,
 ): VanityLengthConstructor<DefaultUnit> {
   return Object.freeze(Object.assign(
-    <const Value extends number>(value: Value) => adaptiveLength(value, defaultUnit),
+    <const Value extends number>(value: Value) => createAdaptiveLength(value, defaultUnit),
     explicitLength,
   )) as VanityLengthConstructor<DefaultUnit>
 }
 
-function adaptiveLength<const Unit extends VanityLengthUnit, const Value extends number>(
+function createAdaptiveLength<const Unit extends VanityLengthUnit, const Value extends number>(
   value: Value,
   fallbackUnit: Unit,
 ): VanityUnitValue<'length', Unit, Value> {
@@ -130,30 +131,19 @@ function adaptiveLength<const Unit extends VanityLengthUnit, const Value extends
     dependencies: [],
     source: { helper: 'length' },
     serialize(context) {
-      const constructors = context.policies.constructors
-      const length = constructors && typeof constructors === 'object'
-        ? (constructors as Record<string, unknown>).length
-        : undefined
-      const configured = length && typeof length === 'object'
-        ? (length as Record<string, unknown>).unitless
-        : undefined
-      const configuredLengthPolicy = context.policies.length && typeof context.policies.length === 'object'
-        ? (context.policies.length as Record<string, unknown>).unitless
-        : undefined
-      const unit = typeof configured === 'string'
-        ? configured
-        : typeof configuredLengthPolicy === 'string' ? configuredLengthPolicy : fallbackUnit
+      const configured = context.policies.constructors.length?.unitless
+      const unit = configured ?? fallbackUnit
       return `${format(value)}${unit}`
     },
   })) as VanityUnitValue<'length', Unit, Value>
 }
 
 export const length: VanityLengthConstructor<VanityLengthUnit> = createLengthConstructor('px')
-export const angle: VanityAngleConstructor = unitGroup('angle', ['deg', 'grad', 'rad', 'turn'])
-export const time: VanityTimeConstructor = unitGroup('time', ['ms', 's'])
-export const frequency: VanityFrequencyConstructor = unitGroup('frequency', ['Hz', 'kHz'])
-export const resolution: VanityResolutionConstructor = unitGroup('resolution', ['dpcm', 'dpi', 'dppx', 'x'])
-export const flex: VanityFlexConstructor = unitGroup('flex', ['fr'])
+export const angle: VanityAngleConstructor = createUnitGroup('angle', ['deg', 'grad', 'rad', 'turn'])
+export const time: VanityTimeConstructor = createUnitGroup('time', ['ms', 's'])
+export const frequency: VanityFrequencyConstructor = createUnitGroup('frequency', ['Hz', 'kHz'])
+export const resolution: VanityResolutionConstructor = createUnitGroup('resolution', ['dpcm', 'dpi', 'dppx', 'x'])
+export const flex: VanityFlexConstructor = createUnitGroup('flex', ['fr'])
 
 export function percent<const Value extends number>(value: Value): VanityUnitValue<'percentage', '%', Value> {
   validateFinite(value, 'percent')
@@ -167,14 +157,26 @@ export function cssNumber<const Value extends number>(value: Value): VanityCssVa
 
 export function integer<const Value extends number>(value: Value): VanityCssValue<`${Value}`, 'integer'> {
   validateFinite(value, 'integer')
-  if (!Number.isInteger(value))
-    throw new TypeError(`[vanity] integer() needs an integer; received ${value}`)
+  if (!Number.isInteger(value)) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `integer() needs an integer; received ${value}`,
+      'integer',
+      'pass a whole number to integer()',
+    )
+  }
   return new ExpressionValue(createLiteralNode('integer', value, { helper: 'integer' })) as VanityCssValue<`${Value}`, 'integer'>
 }
 
 function validateFinite(value: number, helper: string): void {
-  if (!Number.isFinite(value))
-    throw new RangeError(`[vanity] ${helper}() needs a finite number; received ${value}`)
+  if (!Number.isFinite(value)) {
+    throwValueError(
+      'VANITY_CSS_INVALID_VALUE',
+      `${helper}() needs a finite number; received ${value}`,
+      helper,
+      'pass a finite number',
+    )
+  }
 }
 
 function format(value: number): string {

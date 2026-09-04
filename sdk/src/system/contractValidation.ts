@@ -10,10 +10,11 @@ import type { VanityHandleMeta, VanitySemanticTokenAddress } from '../tokens/han
 import type { VanityAxisRegistryDescription } from './axes'
 import type { VanityConditionArm, VanityConditionAst } from './conditions'
 import type {
-  VanityPortableCapabilitiesV2,
-  VanityPortableSystemV2,
+  VanityPortableCapabilities,
+  VanityPortableSystem,
   VanitySystemIdentities,
 } from './contract'
+import { VanityError } from '../diagnostics'
 
 type RecordValue = Record<string, unknown>
 
@@ -44,7 +45,10 @@ const CSS_DATA_TYPES = new Set([
 ])
 
 /** Validate the complete current portable-system shape before projection hashing. */
-export function assertPortableSystemShape(value: unknown): asserts value is VanityPortableSystemV2 {
+export function assertPortableSystemShape(
+  value: unknown,
+  expectedFormat: string,
+): asserts value is VanityPortableSystem {
   assertJsonValue(value, 'portable system')
   const system = requireRecord(value, 'portable system')
   assertExactKeys(system, [
@@ -70,7 +74,8 @@ export function assertPortableSystemShape(value: unknown): asserts value is Vani
     'overwrites',
     'identities',
   ], ['source', 'tokenLayer', 'axes'], 'portable system')
-  assertString(system.format, 'portable system.format')
+  if (system.format !== expectedFormat)
+    fail('portable system.format', `unsupported portable system format '${String(system.format)}'`)
   assertString(system.prefix, 'portable system.prefix')
   assertString(system.root, 'portable system.root')
   assertString(system.layerRoot, 'portable system.layerRoot')
@@ -101,7 +106,7 @@ export function assertPortableSystemShape(value: unknown): asserts value is Vani
   assertOptionalString(system.tokenLayer, 'portable system.tokenLayer')
 }
 
-function assertPortableCapabilities(value: unknown): asserts value is VanityPortableCapabilitiesV2 {
+function assertPortableCapabilities(value: unknown): asserts value is VanityPortableCapabilities {
   const capabilities = requireRecord(value, 'portable system.capabilities')
   assertExactKeys(capabilities, ['signature', 'supportTarget', 'constructors', 'extensions'], [], 'portable system.capabilities')
   assertString(capabilities.signature, 'portable system.capabilities.signature')
@@ -153,6 +158,10 @@ function assertPortablePolicies(value: unknown): void {
   const policies = requireRecord(value, 'portable system.policies')
   if (Object.hasOwn(policies, 'support'))
     fail('portable system.policies.support', 'is not part of the portable policy contract')
+  for (const name of ['constructors', 'layerOrder', 'tokens', 'plugins']) {
+    if (!Object.hasOwn(policies, name))
+      fail(`portable system.policies.${name}`, 'is required')
+  }
   for (const [name, policy] of Object.entries(policies)) {
     switch (name) {
       case 'constructors':
@@ -1047,7 +1056,12 @@ function assertRuntimeMode(value: unknown, path: string): void {
 }
 
 function fail(path: string, message: string): never {
-  throw new TypeError(`[vanity] invalid contract data at ${path}: ${message}`)
+  throw new VanityError({
+    code: 'VANITY_SYSTEM_INCOMPATIBLE',
+    message: `invalid contract data at ${path}: ${message}`,
+    path: [path],
+    fix: 'regenerate the portable system contract from the current Vanity version',
+  })
 }
 
 // These shape helpers are shared by the Manifest v4 reader. Keeping the

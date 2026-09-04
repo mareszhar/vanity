@@ -125,7 +125,7 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
     // but preserve these standards-valid expressions byte-for-byte.
     protectRelativeColorSyntax(nuxt.options.postcss)
 
-    addVitePlugin(toVitePlugins(vanityPlugin(configureVanityViteHost(
+    addVitePlugin(createVitePlugins(vanityPlugin(configureVanityViteHost(
       resolveRootedViteOptions(options, nuxt.options.rootDir),
       'nuxt',
     ))))
@@ -259,7 +259,7 @@ function resolveRootedSource(source: string, root: string): string {
   return resolve(root, source)
 }
 
-function toVitePlugins(options: PluginOption[]): Plugin[] {
+function createVitePlugins(options: PluginOption[]): Plugin[] {
   const plugins: Plugin[] = []
 
   for (const option of options) {

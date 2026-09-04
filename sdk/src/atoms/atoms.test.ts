@@ -9,7 +9,7 @@ import { restoreAtoms } from '@mszr/vanity/runtime'
 import { emit } from '@test'
 import { describe, expect, it, vi } from 'vitest'
 import { unsafe, VanityError } from '../index'
-import { createFixtureSystem } from '../test-support/current'
+import { createFixtureSystem } from '../test-support/system'
 
 function miniAtoms() {
   return emit(() => {

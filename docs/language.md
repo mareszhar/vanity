@@ -23,6 +23,8 @@ The test is predictive: after learning a term once, a reader should correctly in
 
 Names carry no history. Vanity keeps one canonical spelling per concept and ships no deprecated aliases, so a renamed concept leaves no trace of its former name in code, types, or documentation.
 
+Apply that rule to repository names, comments, assertions, and fixtures: describe the behavior a reader can use today and remove labels that only explain where a shape came from.
+
 CSS owns CSS vocabulary. Vanity uses a CSS name only for the platform concept exactly. Vanity-specific behavior receives Vanity-specific language.
 
 ### Verb-first implementation names
@@ -34,7 +36,7 @@ Implementation functions, methods, and callable constants begin with a verb. The
 | `create*` | Construct a fresh instance or factory. |
 | `define*` | Author portable, system-independent definition data. |
 | `add*` / `augment*` / `overwrite*` | Add absent data, refine existing identity, or replace definition data. |
-| `expect*` | Throw immediately unless a named structural element already exists; this is a stateless, order-sensitive existence guard that checks presence, not a particular value. |
+| `expect*` | Throw immediately at the call site unless a named structural element already exists; this is a stateless, order-sensitive existence guard that checks presence, not a particular value. |
 | `get*` / `read*` | Retrieve in-memory data / cross an I/O, process, filesystem, or evaluated-module boundary. |
 | `is*` / `has*` / `can*` / `should*` | Return a boolean predicate. |
 | `assert*` / `require*` / `validate*` | Assert an existing invariant / require a value / produce validation evidence. |
@@ -69,15 +71,32 @@ the layer callable `inLayer`, and the color authoring operations `legibleOn`,
 The public DSL intentionally retains result-named callables such as `class`, `rules`, `raw`, `recipe`, `anatomy`, `atoms`, `fragment`, `port`, `keyframes`, `fontFace`, and `runtime`, plus CSS-standard constructors and the established relational family `propsOf`, `fromTokenGroup`, `tokensOf`, `namesOf`, `varsOf`, and `snapshotFrom`. These exceptions do not authorize new noun-shaped implementation helpers.
 
 The naming audit also records a small closed set of names whose spelling is owned by another
-contract: token-builder `root`, scale methods `linear` and `modular`, color-relative `from`,
+contract. Token-builder `root`, scale methods `linear` and `modular`, color-relative `from`,
 contrast-check thresholds `aa`, `aaa`, and `lc`, and the token declaration shorthand `tdec` are
 public authoring vocabulary. `invalidColor` is the resolver protocol callback, `transaction` is
-the runtime batching protocol, `forEach` is the standard `ReadonlySet` protocol method, `ownKeys`
-is the JavaScript `Proxy` trap, and `config` /
-`configResolved` are Vite lifecycle hooks. `value`, `VariableDeclarator`, `ImportSpecifier`,
-`CallExpression`, and `Declaration` retain their public escape or parser/transform visitor
-spellings. Every other production function, method, and callable constant is checked for a
-verb-first name by `scripts/audit.ts`.
+the runtime batching protocol, `forEach`, `entries`, `keys`, and `values` are standard collection
+protocol methods, `toString` is the JavaScript string protocol, and `ownKeys` is the JavaScript
+`Proxy` trap. `config`, `configResolved`, `handler`, `unstable_pluginFilter`, and
+`onEndFileScope` are Vite or Vanilla Extract lifecycle spellings; `fallback`, `deprecated`, and
+`optionsIdentity` belong to public extension/plugin contracts. The public cascade and condition
+algebra uses `layer`, `and`, `or`, `not`, `to`, `activate`, `absoluteCondition`, `scheme`, `val`,
+`tokens`, and `textContrast`; the runtime contract owns `matches`, `contains`, `snapshot`,
+`runtimeStyle`, and `runtimeProps`. Hail's established vocabulary includes `inE`, `circle`,
+`square`, `truncate`, and `contrastOf`, while `rawValue` exposes the CSS data-type vocabulary
+(`unknown`, `declaration`, `percentage`, `length`, `numberPercentage`, `lengthPercentage`,
+`image`, `position`, `easingFunction`, `transformFunction`, `transformList`, `customIdent`,
+`dashedIdent`, `string`, `url`, and `plugin`). The audit category ids — `unusedTokens`,
+`nearDuplicates`, `contrast`, `escapes`, `scaleStrays`, `focusVisibility`, `rawAssertions`,
+`aliasEscapes`, `eagerStyleBarrels`, `cssParityGaps`, `staleArtifacts`, `rootModeDisagreements`,
+`ambiguousAxes`, `mutableRootHazards`, `nonportableValues`, and `specificityContexts` — are a
+stable introspection taxonomy, not implementation helpers. `value`, `VariableDeclarator`,
+`ImportSpecifier`, `CallExpression`, and `Declaration` retain their public escape or
+parser/transform visitor spellings. Every other production function, method, and callable
+constant is checked for a verb-first name by `scripts/audit.ts`.
+
+`expect*` is never deferred to consolidation. A plugin may expect a shape and use it in the next
+statement because the guard has already thrown or returned; recording a requirement for a later
+check would not provide that guarantee.
 
 ### Module names and load-bearing nouns
 
@@ -130,6 +149,9 @@ an explicit execution point:
 Keep the sense visible at the use site. Do not introduce a bare `validate` or `validation`
 identifier whose meaning is unclear from its module, and do not route these mechanisms through a
 new generic validation switch.
+
+Author-facing failures use `VanityError`, with a stable code and structured path/fix guidance;
+`TypeError` is reserved for a genuine internal invariant violation that indicates a Vanity bug.
 
 ## 1. Behavioral spine
 
@@ -204,7 +226,7 @@ No single lifecycle word classifies all of Vanity. Ask the exact question:
 | What guarantees apply? | guarantee profile | typed, validated, raw standards, audited unsafe |
 | What independent proof is required? | evidence dimension | runtime, type, editor, output, browser, integration, packaging, performance |
 
-Use the facet name instead of a generic umbrella such as plane, lane, destination, phase, or stage. Those ordinary words remain valid when they name a precise local concept.
+Use the facet name instead of a generic umbrella such as plane, lane, destination, phase, or stage. Those ordinary words remain valid when they name a precise local concept. In the token graph, `stage` names a private per-axis custom-property address used to preserve mutable fallback order; it is not a public lifecycle state.
 
 ## 3. Actors, hosts, and mounting
 
@@ -247,19 +269,8 @@ Vite, Nuxt, and WXT are build hosts. `/vite`, `/nuxt`, and `/wxt` are Vanity-own
 | plugin | Identified reusable contribution that can add shape and declare external requirements. |
 | named system rule | Metadata-bearing system-owned rule contribution emitted once by the compiler; it may contain nested selector rules and at-rules. |
 
-Composition verbs form an algebra:
-
-| Form | Meaning |
-| --- | --- |
-| `create*` | create an identity-bearing API environment |
-| `define*` / `*def` | describe a detached reusable definition |
-| `add*` | register absent shape additively |
-| `augment*` | fill an unset slot on existing shape |
-| `overwrite*` | explicitly replace existing value-data without shrinking shape |
-| `expect*` | require shape/capability supplied outside this definition without claiming ownership |
-| `consolidate` | resolve deferred context and return a locked system |
-| `*dec` | produce CSS declaration data |
-| `$*` | fence Vanity-owned members beside user-owned names |
+Composition uses the canonical verb meanings in [§0](#0-house-style-and-naming-law):
+composition verbs form an algebra, but their definitions live in the house-style table.
 
 `defineRules`, `addRule(s)`, `overwriteRule(s)`, and `expectRule(s)` remain the symmetric system-composition family. `ds.rules()` authors selector rules inside a style module; receiver and context make the distinction.
 
@@ -332,6 +343,7 @@ Inside a runtime controller, a mutable token leaf is a token control, not a gene
 | --- | --- |
 | CSS data type | Platform category such as `<color>`, `<length>`, or `<image>`. |
 | expression | CSS-producing literal, function, calculation, reference, operation, composite, or raw value. |
+| value IR | Portable normalized representation of a CSS value expression that preserves its semantics, dependencies, and lowering requirements across system and build boundaries. |
 | token | Named design decision, not necessarily a custom property. |
 | token definition | Value, traits, axis values, registration, validation, and metadata before final name resolution. |
 | token module | Definition module with graph references, axes, roots, and token-definition grammar. |
@@ -516,6 +528,8 @@ inLayer / omit / serialize
 runtime / snapshotFrom / reconcileRuntimeSnapshot / runtimeStyle / runtimeProps
 introspect / explain / audit
 ```
+
+`ds.audit(config?)` is the locked system's truthful, build-free audit surface. It reports findings for `ambiguousAxes`, `mutableRootHazards`, `overwriteInventory`, `nonportableValues`, and `specificityContexts`, and returns an explicit `unevaluated` list for categories that need module-usage data, emitted CSS, or build evidence. Every category is `warn` by default; `consolidate({ audit: { ... } })` records system policy and the per-call config overrides it.
 
 ### Runtime controller
 

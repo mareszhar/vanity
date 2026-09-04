@@ -7,7 +7,7 @@ const ds = open
   .addConditions({ hover: '&:hover' })
   .consolidate()
 
-describe('target styling types', () => {
+describe('class and rules types', () => {
   it('keeps fragments, arrays, omission, token declarations, and helpers exact', () => {
     const fragment = ds.fragment({ display: 'flex', hover: { color: 'red' } })
     expectTypeOf(ds.class([fragment, false, ds.omit, { color: 'blue' }])).toEqualTypeOf<string>()
@@ -18,10 +18,6 @@ describe('target styling types', () => {
     ds.tdec({ color: { missing: 'red' } })
     // @ts-expect-error — layer names retain the consolidated order
     ds.class.layer('missing')({ color: 'red' })
-    // @ts-expect-error — the locked surface has no legacy class-emitter alias
-    void ds.css
-    // @ts-expect-error — selector maps use the output-named rules emitter
-    void ds.globalCss
     void ds.atoms
 
     const built = fromEntries([['sm', 4], ['md', 8]] as const)

@@ -24,7 +24,7 @@ function fixture(value = 'red', description = 'Brand color') {
     })
     .addConsts({ release: 'next' })
     .addUtils({ double: (value: number) => value * 2 })
-    .consolidate({ prefix: 'phase10', audit: { overwriteInventory: 'warn' } })
+    .consolidate({ prefix: 'manifest', audit: { overwriteInventory: 'warn' } })
 }
 
 function manifestOf(ds: ReturnType<typeof fixture>) {
@@ -43,7 +43,7 @@ describe('canonical introspection', () => {
     expect(manifest.system).toMatchObject({
       format: 'vanity.introspection/2',
       version: 2,
-      prefix: 'phase10',
+      prefix: 'manifest',
       tokens: { 'color.brand': { id: 'token:color.brand', owner: { kind: 'system' } } },
       axes: { density: { id: 'axis:density', description: 'Layout density.' } },
       consts: { release: { value: 'next' } },
@@ -89,7 +89,7 @@ describe('canonical introspection', () => {
     expect(validate.errors).toBeNull()
   })
 
-  it('rejects malformed, legacy, unknown, and semantically invalid Manifest v4 data at the CLI boundary', () => {
+  it('rejects malformed, unknown, and semantically invalid Manifest v4 data at the CLI boundary', () => {
     const manifest = manifestOf(fixture())
     expect(() => assertManifest(manifest)).not.toThrow()
     const { modules: _modules, ...withoutModules } = manifest
@@ -97,7 +97,7 @@ describe('canonical introspection', () => {
     const moduleId = Object.keys(manifest.modules)[0]!
 
     expect(() => assertManifest(withoutModules)).toThrow(/modules.*required/)
-    expect(() => assertManifest({ ...manifest, engine: {} })).toThrow(/engine.*not a property/)
+    expect(() => assertManifest({ ...manifest, unexpected: {} })).toThrow(/unexpected.*not a property/)
     expect(() => assertManifest({ ...manifest, version: 3 })).toThrow(/version.*must be 4/)
     expect(() => assertManifest({ ...manifest, format: 'vanity.manifest/3', version: 3 })).toThrow(/format.*must be/)
     expect(() => assertManifest({

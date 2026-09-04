@@ -1,5 +1,7 @@
 /** Small, pure helpers that keep ordinary TypeScript collection work literal. */
 
+import { VanityError } from './diagnostics'
+
 type Entry = readonly [PropertyKey, unknown]
 
 type ObjectFromEntries<Entries extends readonly Entry[]> = {
@@ -33,7 +35,13 @@ export function mapRecord<
 
 /** The integers `[0, length)`, ready for `map`/`flatMap`. */
 export function range(length: number): number[] {
-  if (!Number.isSafeInteger(length) || length < 0)
-    throw new RangeError(`[vanity] range() needs a non-negative safe integer; received ${length}`)
+  if (!Number.isSafeInteger(length) || length < 0) {
+    throw new VanityError({
+      code: 'VANITY_COLLECTION_INVALID',
+      message: `range() needs a non-negative safe integer; received ${length}`,
+      path: ['length'],
+      fix: 'pass a non-negative safe integer',
+    })
+  }
   return Array.from({ length }, (_, index) => index)
 }

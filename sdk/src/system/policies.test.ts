@@ -67,6 +67,31 @@ describe('policy as system law', () => {
     expect(css).toContain('--policy-space-explicit: 8px')
   })
 
+  it('reads adaptive length units only from the constructor policy', () => {
+    const tokens = {
+      space: { adaptive: length(2) },
+    }
+    const defaultSystem = createSystem()
+      .addTokens(tokens)
+      .consolidate({ prefix: 'default-length' })
+    const customSystem = createSystem({ length: { unitless: 'em' } })
+      .addTokens(tokens)
+      .consolidate({ prefix: 'custom-length' })
+    const configuredSystem = createSystem({ constructors: { length: { unitless: 'rem' } } })
+      .addTokens(tokens)
+      .consolidate({ prefix: 'configured-length' })
+
+    expect(emit(() => defaultSystem.class({ padding: defaultSystem.t.space.adaptive })).css)
+      .toContain('--default-length-space-adaptive: 2px')
+    expect(emit(() => customSystem.class({ padding: customSystem.t.space.adaptive })).css)
+      .toContain('--custom-length-space-adaptive: 2px')
+    expect(emit(() => configuredSystem.class({ padding: configuredSystem.t.space.adaptive })).css)
+      .toContain('--configured-length-space-adaptive: 2rem')
+
+    expect(customSystem.introspect().capabilities.signature).not.toBe(defaultSystem.introspect().capabilities.signature)
+    expect(configuredSystem.introspect().capabilities.signature).not.toBe(defaultSystem.introspect().capabilities.signature)
+  })
+
   it('distinguishes prospective and retroactive restriction reach', () => {
     const before = createSystem().addTokens({ prior: oklch(0.6, 0.2, 280) })
     expect(() => before.addPolicies({

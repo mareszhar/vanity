@@ -62,7 +62,7 @@ The semantic map is query data. Calling `introspect()` does not emit CSS.
 
 ## 3. Two truthful scopes
 
-`ds.introspect()` knows the consolidated system synchronously. It cannot know style modules the compiler has not evaluated.
+`ds.introspect()` knows the consolidated system synchronously. It cannot know style modules the compiler has not evaluated. `ds.audit(config?)` follows the same boundary: it reports only findings that can be decided from the semantic map already held by the locked system.
 
 Manifest v4 therefore has two scopes:
 
@@ -72,6 +72,24 @@ modules    classes, recipes, anatomy, ports, escapes, contrast, token usage
 ```
 
 No global registry pretends the locked system knows future style output.
+
+The locked-system audit evaluates exactly these five system-scope categories:
+
+- `ambiguousAxes`;
+- `mutableRootHazards`;
+- `overwriteInventory`;
+- `nonportableValues`; and
+- `specificityContexts`.
+
+It returns a `VanityAuditReport` with `findings` and an explicit `unevaluated` list. The latter is deliberately not an empty-success signal: it names the twelve categories that require information outside a locked system and the missing evidence kind:
+
+| Categories | Required evidence |
+| --- | --- |
+| `unusedTokens`, `contrast`, `escapes`, `aliasEscapes`, `rawAssertions` | `moduleUsage` |
+| `nearDuplicates`, `scaleStrays`, `focusVisibility` | `emittedCss` |
+| `eagerStyleBarrels`, `cssParityGaps`, `staleArtifacts`, `rootModeDisagreements` | `buildEvidence` |
+
+The complete build-scope `audit(manifest, css, config?, evidence?)` continues to evaluate the same five system categories alongside the twelve evidence-dependent categories. Consolidation-time `audit` policy establishes the default level for each category; a call-time config can override it for that audit call.
 
 ## 4. Structured explanation
 
@@ -98,8 +116,8 @@ interface VanityManifest {
   $schema: 'https://schemas.mszr.dev/vanity/manifest-4.schema.json'
   format: 'vanity.manifest/4'
   version: 4
-  system: VanitySystemMapV2
-  systems: Readonly<Record<string, VanitySystemMapV2>>
+  system: VanitySystemMap
+  systems: Readonly<Record<string, VanitySystemMap>>
   modules: Readonly<Record<string, VanityManifestModule>>
 }
 ```
@@ -108,7 +126,7 @@ interface VanityManifest {
 
 The published schema ships as `@mszr/vanity/manifest.schema.json`. Objects use sorted keys, unordered record arrays use semantic-ID order, and semantic arrays such as layer/axis/overwrite order retain authored meaning. Documentation-only edits change the docs identity and manifest while leaving the CSS identity and CSS artifact stable.
 
-The normalized model carries the full manifest meaning without duplicate portable/system/token projections do not.
+The normalized model carries the full manifest meaning; portable, system, and token projections are not duplicated.
 
 ## 6. CLI
 

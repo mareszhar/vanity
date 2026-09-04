@@ -11,7 +11,7 @@ import type { VanityConditionArm } from '../system/conditions'
 import type { VanityCssPropertyName, VanityPropertyAliasMap, VanityPropertyAliasMode } from './types'
 import type { VanityValueContext } from './values'
 import { didYouMean, VanityError } from '../diagnostics'
-import { toKebab } from '../tokens/names'
+import { convertToKebab } from '../tokens/names'
 import { isOmit } from './fragment'
 import { resolveDeferredTokenDeclarationInput } from './tdec'
 import { checkDeclaration, checkPropertyName, checkQuery, checkSelector, isCssProperty } from './validation'
@@ -31,7 +31,7 @@ export interface VanityRuleContext extends VanityValueContext {
    * malformed scoped key, or `undefined` to fall through to ordinary
    * classification.
    */
-  scopedConditions?: (key: string) => VanityScopedConditionResult | undefined
+  resolveScopedConditions?: (key: string) => VanityScopedConditionResult | undefined
   propertyAliases?: {
     aliases: VanityPropertyAliasMap
     expose: VanityPropertyAliasMode
@@ -140,8 +140,8 @@ class RuleWalker {
       if (key === 'layer') {
         this.report({
           code: 'VANITY_CSS_INVALID_KEY',
-          message: `${this.at(path, key)} — layer placement is emitter configuration, not rule data`,
-          path: this.at(path, key),
+          message: `${this.joinPath(path, key)} — layer placement is emitter configuration, not rule data`,
+          path: this.joinPath(path, key),
           fix: `use the emitter's .layer(name) method or ds.inLayer(name)`,
         })
         continue
@@ -154,7 +154,7 @@ class RuleWalker {
         continue
       }
 
-      const scoped = this.ctx.scopedConditions?.(key)
+      const scoped = this.ctx.resolveScopedConditions?.(key)
 
       if (scoped !== undefined) {
         if ('diagnostic' in scoped)
@@ -170,7 +170,7 @@ class RuleWalker {
       }
 
       if (key.startsWith('@')) {
-        this.atRule(key, value, arm, path)
+        this.visitAtRule(key, value, arm, path)
         continue
       }
 
@@ -184,8 +184,8 @@ class RuleWalker {
         if (Object.hasOwn(rule, alias)) {
           this.report({
             code: 'VANITY_CSS_INVALID_KEY',
-            message: `${this.at(path, key)} and ${this.at(path, alias)} declare the same CSS property`,
-            path: this.at(path, key),
+            message: `${this.joinPath(path, key)} and ${this.joinPath(path, alias)} declare the same CSS property`,
+            path: this.joinPath(path, key),
             fix: 'choose either the alias or the standard property name in this rule arm',
           })
           continue
@@ -198,8 +198,8 @@ class RuleWalker {
         && Object.values(this.ctx.propertyAliases.aliases).includes(key as VanityCssPropertyName)) {
         this.report({
           code: 'VANITY_CSS_INVALID_KEY',
-          message: `${this.at(path, key)} is hidden by the aliases-only policy`,
-          path: this.at(path, key),
+          message: `${this.joinPath(path, key)} is hidden by the aliases-only policy`,
+          path: this.joinPath(path, key),
           fix: `use the configured alias, or write this declaration through ${this.ctx.standardEmitterName ?? 'class.standard'}()`,
         })
         continue
@@ -214,8 +214,8 @@ class RuleWalker {
     if (!isPlainObject(value) && !Array.isArray(value) && !isOmit(value)) {
       this.report({
         code: 'VANITY_CSS_INVALID_KEY',
-        message: `${this.at(path, key)} is a condition, so it takes a nested rule — not a plain value`,
-        path: this.at(path, key),
+        message: `${this.joinPath(path, key)} is a condition, so it takes a nested rule — not a plain value`,
+        path: this.joinPath(path, key),
         fix: `write ${key}: { property: value }`,
       })
       return
@@ -229,12 +229,12 @@ class RuleWalker {
     }
   }
 
-  private atRule(key: string, value: unknown, arm: VanityArm, path: string[]): void {
+  private visitAtRule(key: string, value: unknown, arm: VanityArm, path: string[]): void {
     if (!isPlainObject(value) && !Array.isArray(value) && !isOmit(value)) {
       this.report({
         code: 'VANITY_CSS_INVALID_KEY',
-        message: `${this.at(path, key)} takes a nested rule`,
-        path: this.at(path, key),
+        message: `${this.joinPath(path, key)} takes a nested rule`,
+        path: this.joinPath(path, key),
       })
       return
     }
@@ -254,8 +254,8 @@ class RuleWalker {
       if (reason !== undefined) {
         this.report({
           code: 'VANITY_CSS_INVALID_SELECTOR',
-          message: `${this.at(path, key)} does not parse: ${reason}`,
-          path: this.at(path, key),
+          message: `${this.joinPath(path, key)} does not parse: ${reason}`,
+          path: this.joinPath(path, key),
           fix: 'fix the query — the same text must hold as CSS',
         })
         return
@@ -279,8 +279,8 @@ class RuleWalker {
 
     this.report({
       code: 'VANITY_CSS_INVALID_KEY',
-      message: `${this.at(path, key)} is not an at-rule class() nests`,
-      path: this.at(path, key),
+      message: `${this.joinPath(path, key)} is not an at-rule class() nests`,
+      path: this.joinPath(path, key),
       fix: redirect,
     })
   }
@@ -289,8 +289,8 @@ class RuleWalker {
     if (!isPlainObject(value) && !Array.isArray(value) && !isOmit(value)) {
       this.report({
         code: 'VANITY_CSS_INVALID_KEY',
-        message: `${this.at(path, key)} is a selector, so it takes a nested rule`,
-        path: this.at(path, key),
+        message: `${this.joinPath(path, key)} is a selector, so it takes a nested rule`,
+        path: this.joinPath(path, key),
       })
       return
     }
@@ -302,8 +302,8 @@ class RuleWalker {
     if (reason !== undefined) {
       this.report({
         code: 'VANITY_CSS_INVALID_SELECTOR',
-        message: `${this.at(path, key)} does not parse: ${reason}`,
-        path: this.at(path, key),
+        message: `${this.joinPath(path, key)} does not parse: ${reason}`,
+        path: this.joinPath(path, key),
       })
       return
     }
@@ -319,12 +319,12 @@ class RuleWalker {
     if (isPlainObject(value)) {
       // A nested object under a non-property reads as a mistyped condition,
       // not as a property-first map — name the key itself.
-      if (!isCssProperty(toKebab(key))) {
+      if (!isCssProperty(convertToKebab(key))) {
         const suggestion = didYouMean(key, [...this.ctx.conditions.keys()])
         this.report({
           code: 'VANITY_CSS_UNKNOWN_PROPERTY',
-          message: `${this.at(path, authoredKey)} is neither a CSS property nor a condition of this system${suggestion ? ` — did you mean '${suggestion}'?` : ''}`,
-          path: this.at(path, authoredKey),
+          message: `${this.joinPath(path, authoredKey)} is neither a CSS property nor a condition of this system${suggestion ? ` — did you mean '${suggestion}'?` : ''}`,
+          path: this.joinPath(path, authoredKey),
           fix: suggestion ? `use '${suggestion}', or declare the condition in createSystem` : 'declare the condition in createSystem({ conditions })',
         })
         return
@@ -346,8 +346,8 @@ class RuleWalker {
           const suggestion = didYouMean(conditionName, [...this.ctx.conditions.keys(), BASE])
           this.report({
             code: 'VANITY_CSS_UNKNOWN_CONDITION',
-            message: `${this.at(authoredPath, conditionName)} is not a condition of this system${suggestion ? ` — did you mean '${suggestion}'?` : ''}`,
-            path: this.at(authoredPath, conditionName),
+            message: `${this.joinPath(authoredPath, conditionName)} is not a condition of this system${suggestion ? ` — did you mean '${suggestion}'?` : ''}`,
+            path: this.joinPath(authoredPath, conditionName),
             fix: suggestion ? `use '${suggestion}', or declare the condition in createSystem` : 'declare the condition in createSystem({ conditions })',
           })
           continue
@@ -376,7 +376,7 @@ class RuleWalker {
         ? value.map(entry => serializeStyleValue(entry, at, this.ctx))
         : serializeStyleValue(value, at, this.ctx)
 
-      const cssProperty = toKebab(property)
+      const cssProperty = convertToKebab(property)
 
       for (const entry of Array.isArray(serialized) ? serialized : [serialized]) {
         // Numbers take the substrate's unit rule downstream, so only their
@@ -389,9 +389,9 @@ class RuleWalker {
         if (issue?.kind === 'unknown-property') {
           this.report({
             code: 'VANITY_CSS_UNKNOWN_PROPERTY',
-            message: `${at} — ${issue.reason}${issue.suggestion ? ` — did you mean '${toCamel(issue.suggestion)}'?` : ''}`,
+            message: `${at} — ${issue.reason}${issue.suggestion ? ` — did you mean '${convertToCamel(issue.suggestion)}'?` : ''}`,
             path: at,
-            fix: issue.suggestion ? `use ${toCamel(issue.suggestion)}` : 'use a CSS property, a condition, or a selector containing \'&\'',
+            fix: issue.suggestion ? `use ${convertToCamel(issue.suggestion)}` : 'use a CSS property, a condition, or a selector containing \'&\'',
           })
           return
         }
@@ -407,7 +407,7 @@ class RuleWalker {
         }
       }
 
-      this.unit(arm).declarations[property] = serialized
+      this.createUnit(arm).declarations[property] = serialized
     }
     catch (error) {
       if (error instanceof VanityError) {
@@ -419,7 +419,7 @@ class RuleWalker {
     }
   }
 
-  private unit(arm: VanityArm): VanityUnit {
+  private createUnit(arm: VanityArm): VanityUnit {
     const key = getArmKey(arm)
     const existing = this.units.at(-1)
 
@@ -453,7 +453,7 @@ class RuleWalker {
     }
   }
 
-  private at(path: string[], key: string): string {
+  private joinPath(path: string[], key: string): string {
     return [...path, key].join('.')
   }
 
@@ -558,6 +558,6 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 /** Kebab back to camel, for suggestions that read like the authoring surface. */
-function toCamel(property: string): string {
+function convertToCamel(property: string): string {
   return property.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase())
 }

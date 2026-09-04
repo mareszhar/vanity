@@ -127,6 +127,8 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run publish:sdk:dry-run` | run the full gate and package rehearsal without changing versions |
 | `pnpm run publish:sdk:patch` / `:minor` / `:major` | release: preflight, gate, rehearse, bump, publish, await npm, commit, tag, and push |
 
+`pnpm run bench:baseline` is a manual release gate. Run it before release review and reconcile its raw, minified, and min+gzip package-entry measurements with [benchmarks.md](./benchmarks.md); it remains separate from `check` and `validate` because the measurement is intentionally reviewed as a baseline rather than run as a per-test assertion.
+
 ## 5. Test organization
 
 SDK tests live beside the code they exercise in `sdk/src/`:
@@ -171,6 +173,8 @@ The validation entrypoints clear only the demo-generated declaration and adapter
 Non-Nuxt demos run `vanity prepare` before typechecking, so a clean checkout has the generated ambient declarations its `*.css.ts` and application modules rely on; the command's contract lives in [spec-integrations.md §8](../reference/spec-integrations.md#8-integration-adapters). The Turbo `prep` task declares the canonical `.vanity/types/` directory and the `@types/vanity-*-auto-imports` bridges as outputs, so a cached preparation stays usable by the dependent typecheck task.
 
 Checked-in benchmark fixtures under `benchmarks/generated/` are deterministic source artifacts and are guarded by `pnpm run bench:fixtures:check`.
+
+The canary's `sandbox/canary/dist-ssr/entry-server.js` is intentionally tracked as a bundle-composition tripwire. `pnpm run canary:validate` rewrites it during the SSR build; review changes to that artifact as evidence of what the published runtime path pulls into the canary, rather than treating it as disposable local output. Other generated `dist/` directories remain ignored.
 
 ## 7. CI
 

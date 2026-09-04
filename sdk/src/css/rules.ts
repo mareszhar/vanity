@@ -2,8 +2,7 @@ import type { VanitySystemContext } from './context'
 import type { VanityRulesEmitter } from './types'
 import { VanityError } from '../diagnostics'
 import { record } from '../introspect/records'
-import { substrate } from '../substrate'
-import { createLayerContext } from './context'
+import { createLayerContext, requireStyleModuleFile } from './context'
 import { emitGlobal } from './emit'
 import { compileStyleRule } from './rule'
 import { checkSelector } from './validation'
@@ -19,7 +18,7 @@ export function createRulesEmitter(system: VanitySystemContext): VanityRulesEmit
 }
 
 function emitRule(system: VanitySystemContext, selector: string, rule: unknown): void {
-  const file = substrate.modules.requireStyleModule('rules')
+  const file = requireStyleModuleFile('rules')
   const reason = checkSelector(selector)
   if (reason !== undefined) {
     throw new VanityError({

@@ -3,7 +3,7 @@
 import type { TransformOptions, ViteDevServer } from 'vite'
 import type { VanityIdentifierMode } from '../../config'
 import type { VanityInspectRecord } from '../../introspect/records'
-import type { VanityPortableSystemV2 } from '../../system/contract'
+import type { VanityPortableSystem } from '../../system/contract'
 import type {
   BuiltStyleModule,
   BundleExternalModule,
@@ -15,7 +15,7 @@ import { isAbsolute, join, posix, resolve } from 'node:path'
 import { substrate } from '../../substrate'
 import { replaceEntryVirtualIds, sendCssUpdate } from '../hmr/update'
 import { evaluateStyleModule } from '../modules/evaluate'
-import { normalizePath } from '../path'
+import { normalizePath } from './path'
 import { assertNamespaceOwnership, isSameAuthoredFile } from './systems'
 
 export interface StyleAutoImportInjection {
@@ -30,7 +30,7 @@ export interface StyleTransformContext {
   readonly server?: ViteDevServer
   readonly clientServer?: ViteDevServer
   readonly systemSources: readonly NormalizedSystemSource[]
-  readonly namespaceOwners: Map<string, Map<string, VanityPortableSystemV2>>
+  readonly namespaceOwners: Map<string, Map<string, VanityPortableSystem>>
   readonly recordsByFile: Map<string, VanityInspectRecord[]>
   readonly cssByVirtualId: Map<string, string>
   readonly cssVirtualIdsByEntry: Map<string, Set<string>>
@@ -177,7 +177,7 @@ export async function transformStyleModule(
   const nextVirtualIds = new Set<string>()
 
   for (const [serializedFileScope, css] of cssByFileScope) {
-    const fileScope = substrate.modules.parseFileScope(serializedFileScope)
+    const fileScope = substrate.backend.parseFileScope(serializedFileScope)
     const system = portableSystems.find(portable =>
       !isSameAuthoredFile(fileScope.filePath, filePath, root)
       && isSameAuthoredFile(fileScope.filePath, portable.source, root))
@@ -243,7 +243,7 @@ export async function transformStyleModule(
   if (context.server)
     context.scheduleManifest()
 
-  let code = substrate.modules.serializeStyleModule(cssImports, exports, unusedCompositionRegex)
+  let code = substrate.backend.serializeStyleModule(cssImports, exports, unusedCompositionRegex)
 
   if (context.server && !transformOptions?.ssr) {
     const signature = Object.keys(exports).sort().join('\0')
