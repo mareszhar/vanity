@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { readStoreDirFromModules } from './pnpm-store'
 import {
   catalogUpdateChoices,
   catalogUpdateTargets,
@@ -67,6 +68,21 @@ describe('dependency updater catalog helpers', () => {
         { name: 'beta', current: '3.0.0', latest: '4.0.0', dependentPackageCount: 1 },
       ],
     )
+  })
+
+  it('ignores a diagnostic prefix before pnpm’s JSON report', () => {
+    const outdatedSource = `
+[WARN] Request took 30001ms: https://registry.npmjs.org/tsx
+${JSON.stringify({
+  tsx: {
+    current: '4.23.12',
+    latest: '4.23.13',
+  },
+})}`
+
+    assert.deepEqual(catalogUpdateChoices(['tsx'], outdatedSource), [
+      { name: 'tsx', current: '4.23.12', latest: '4.23.13', dependentPackageCount: 0 },
+    ])
   })
 
   it('identifies the semver suffix changed by an update', () => {
@@ -148,5 +164,19 @@ describe('dependency updater catalog helpers', () => {
       }),
       { hasChanges: true, shouldWriteWorkspace: false },
     )
+  })
+})
+
+describe('pnpm install metadata helpers', () => {
+  it('reads the store path from pnpm module state', () => {
+    assert.equal(
+      readStoreDirFromModules(JSON.stringify({ storeDir: '/tmp/vanity-store/v11', packageManager: 'pnpm@11.24.0' })),
+      '/tmp/vanity-store/v11',
+    )
+  })
+
+  it('ignores malformed or missing store metadata', () => {
+    assert.equal(readStoreDirFromModules('{"packageManager":"pnpm@11.24.0"}'), undefined)
+    assert.equal(readStoreDirFromModules('not yaml'), undefined)
   })
 })

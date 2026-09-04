@@ -57,6 +57,12 @@ Scripts that inspect the repository as a whole—lint, documentation examples, a
 - **Demo integration:** Playwright against Nuxt and Vite production/development servers.
 - **Primary integration substrate:** published vanilla-extract packages declared in `sdk/package.json`.
 
+### Package-manager updates
+
+The root `package.json` `packageManager` field is the source of truth for the pnpm version used by this workspace. Run `pnpm run pnpm:self-update` to update that pin with pnpm's `self-update` command and then verify the workspace with `pnpm install --frozen-lockfile --force` under the newly selected CLI. The force is intentional: pnpm documents it as the repair path for modules created by an incompatible CLI or linked to a different store. The update helpers use the user-level pnpm store (`$PNPM_HOME/store` when `PNPM_HOME` is set), automatically relink an existing `node_modules` tree that points at another store, and remove the ignored project-local `.pnpm-store` only after the relink succeeds. They fail rather than silently accepting a project-local fallback, preventing a pnpm upgrade from making an otherwise valid workspace fail later with `ERR_PNPM_UNEXPECTED_STORE`. In a pinned project, pnpm's self-update changes the root pin rather than installing a separate global version; the next pnpm invocation automatically switches to it. Review and commit the `package.json` pin separately from dependency changes.
+
+This is separate from `pnpm run upi`: `pnpm:self-update` changes the package manager, while `upi` reviews registry dependencies in the default catalog. If dependency updates are also intended, run `pnpm run upi` after the pnpm update, then `pnpm run validate` before release work.
+
 ### Dependency policy
 
 Third-party version ranges live in `pnpm-workspace.yaml`. The default `catalog` is the exact maintainer test matrix consumed with `catalog:`; the named `peers` catalog is the broader SDK compatibility contract consumed with `catalog:peers`. This keeps “what this checkout verifies” separate from “what consumers may install” without duplicating either policy across package manifests.
@@ -65,7 +71,7 @@ Packing and publication use pnpm, which natively materializes both catalog and w
 
 Use `workspace:*` only for local workspace packages: it guarantees a local link during development and is likewise replaced by the publishable version during packing. Do not use it for registry dependencies.
 
-Run `pnpm run upi` to review and select latest eligible upgrades from the default catalog. The script derives its package selectors from that catalog, asks pnpm for machine-readable latest-version data, and presents one Clack multiselect option per outdated catalog entry. Each option shows the installed and latest versions, with the changed major, minor, or patch suffix highlighted accordingly; Space toggles an entry, the arrow keys move, and Enter confirms. Cancelling or submitting without a selection is a no-op. The updater deliberately excludes TypeScript while its ESLint integration supports only the current workspace toolchain, and preserves the broader `peers` catalog because it defines the SDK's published compatibility contract. Follow an upgrade with `pnpm run validate` before release work.
+Run `pnpm run upi` to review and select latest eligible upgrades from the default catalog. The script derives its package selectors from that catalog, asks pnpm for machine-readable latest-version data at error log level, and presents one Clack multiselect option per outdated catalog entry. Its parser also tolerates a diagnostic prefix from a pnpm reporter so a slow registry request cannot corrupt the JSON review. Each option shows the installed and latest versions, with the changed major, minor, or patch suffix highlighted accordingly; Space toggles an entry, the arrow keys move, and Enter confirms. Cancelling or submitting without a selection is a no-op. The updater deliberately excludes TypeScript while its ESLint integration supports only the current workspace toolchain, and preserves the broader `peers` catalog because it defines the SDK's published compatibility contract. Follow a dependency upgrade with `pnpm run validate` before release work.
 
 The dependency-update mental model has three layers: the workspace discovers projects and provides one install graph; the default catalog owns the exact versions Vanity tests; and the named `peers` catalog owns the broader versions the published SDK promises to support. `upi` derives candidates from the default catalog, asks pnpm for current registry data, lets the maintainer choose catalog entries once, and then delegates the actual update and install to pnpm before reapplying the explicit compatibility policies. A successful pnpm exit without a changed catalog or lockfile is treated as a no-op, which makes canceling safe.
 
@@ -78,6 +84,7 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | Command | Purpose |
 | --- | --- |
 | `pnpm install` | install the workspace and optionally install the repository Git hook |
+| `pnpm run pnpm:self-update` | update the pinned pnpm version and verify the workspace with it |
 | `pnpm run dev` | run the SDK stub build and all demos |
 | `pnpm run build` | build every workspace package with a build task |
 | `pnpm run typecheck` | typecheck every workspace package that exposes a typecheck task |
@@ -164,7 +171,7 @@ Spikes are permanent references, not scratch work. When a spike's finding still 
 The root `.gitignore` is the single ignore authority. Generated or machine-local state includes:
 
 - `node_modules/`, `dist/`, `.nuxt/`, `.output/`, and `styled-system/`;
-- `.turbo/`, `.pnpm-store/`, coverage, Playwright results, and TypeScript build info;
+- `.turbo/`, coverage, Playwright results, and TypeScript build info; `.pnpm-store/` remains ignored only as a safeguard against pnpm's filesystem fallback and should not appear in a normal checkout;
 - `.vanity/` manifests, benchmark measurements, release validation receipts, and in-flight release records;
 - generated auto-import declarations.
 

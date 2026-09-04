@@ -152,9 +152,16 @@ function outdatedRecord(source: string): Record<string, unknown> {
   if (trimmedSource === '')
     return {}
 
+  // pnpm normally keeps diagnostics separate from --format json output, but
+  // some reporters can prefix a warning (for example, a slow registry
+  // request) to the JSON stream. Find the object before parsing so a benign
+  // diagnostic cannot make the machine-readable report unusable.
+  const objectStart = trimmedSource.indexOf('{')
+  const jsonSource = objectStart === -1 ? trimmedSource : trimmedSource.slice(objectStart)
+
   let parsed: unknown
   try {
-    parsed = JSON.parse(trimmedSource)
+    parsed = JSON.parse(jsonSource)
   }
   catch (error) {
     throw new Error('Unable to read pnpm outdated output as JSON.', { cause: error })

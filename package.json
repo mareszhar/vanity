@@ -8,6 +8,7 @@
   "scripts": {
     "postinstall": "tsx scripts/install-git-hooks.ts --optional",
     "git:hooks:install": "tsx scripts/install-git-hooks.ts",
+    "pnpm:self-update": "tsx scripts/self-update-pnpm.ts",
     "upi": "tsx scripts/update-dependencies.ts",
     "prep": "turbo run prep",
     "lint": "eslint . --cache --cache-location .cache/eslint",

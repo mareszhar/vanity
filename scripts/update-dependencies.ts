@@ -10,6 +10,14 @@ import { fileURLToPath } from 'node:url'
 import { styleText } from 'node:util'
 import { cancel, isCancel, multiselect } from '@clack/prompts'
 import {
+  absoluteStorePath,
+  isProjectStore,
+  linkedStoreDir,
+  pnpmStoreArgs,
+  relinkNodeModules,
+  removeProjectStore,
+} from './pnpm-store'
+import {
   catalogUpdateChoices,
   catalogUpdateTargets,
   defaultCatalogNames,
@@ -22,6 +30,7 @@ import {
 const root = fileURLToPath(new URL('..', import.meta.url))
 const workspaceConfig = new URL('../pnpm-workspace.yaml', import.meta.url)
 const workspaceLockfile = new URL('../pnpm-lock.yaml', import.meta.url)
+const modulesState = new URL('../node_modules/.modules.yaml', import.meta.url)
 const workspaceState = new URL('../node_modules/.pnpm-workspace-state-v1.json', import.meta.url)
 const guardedCatalogEntries = [
   // @typescript-eslint 8.x supports TypeScript < 6.1. Keep this in lockstep
@@ -42,9 +51,11 @@ function pnpmCommand(): string {
   return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 }
 
+const storeArgs = pnpmStoreArgs()
+
 function runPnpm(args: readonly string[]): Promise<number> {
   return new Promise((resolve, reject) => {
-    const child = spawn(pnpmCommand(), [...args], { cwd: root, stdio: 'inherit' })
+    const child = spawn(pnpmCommand(), [...storeArgs, ...args], { cwd: root, stdio: 'inherit' })
     child.once('error', reject)
     child.once('close', code => resolve(code ?? 1))
   })
@@ -52,7 +63,9 @@ function runPnpm(args: readonly string[]): Promise<number> {
 
 function runPnpmCapture(args: readonly string[]): Promise<{ exitCode: number, stdout: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(pnpmCommand(), [...args], {
+    const child = spawn(pnpmCommand(), [...storeArgs, ...args], {
+      // Keep every updater operation on the store backing the current
+      // node_modules tree. pnpm rejects a tree linked from another store.
       cwd: root,
       stdio: ['inherit', 'pipe', 'inherit'],
     })
@@ -64,6 +77,36 @@ function runPnpmCapture(args: readonly string[]): Promise<{ exitCode: number, st
     child.once('error', reject)
     child.once('close', code => resolve({ exitCode: code ?? 1, stdout }))
   })
+}
+
+async function repairUnexpectedStore(): Promise<void> {
+  const linkedStore = await linkedStoreDir(modulesState)
+  if (linkedStore === undefined)
+    return
+
+  const storeResult = await runPnpmCapture(['store', 'path'])
+  if (storeResult.exitCode !== 0)
+    process.exit(storeResult.exitCode)
+
+  const selectedStore = storeResult.stdout.trim().split(/\r?\n/).at(-1)?.trim()
+  if (selectedStore === undefined)
+    throw new Error('Unable to determine the user-level pnpm store.')
+  if (isProjectStore(root, selectedStore))
+    throw new Error('pnpm resolved the workspace-local .pnpm-store; configure a writable user-level pnpm store before running upi.')
+
+  if (absoluteStorePath(root, linkedStore) !== absoluteStorePath(root, selectedStore)) {
+    console.log('[upi] relinking the workspace install to the user-level pnpm store.')
+    await relinkNodeModules(
+      root,
+      () => runPnpm(['install', '--frozen-lockfile']),
+      async () => {
+        const repairedStore = await linkedStoreDir(modulesState)
+        return repairedStore !== undefined && absoluteStorePath(root, repairedStore) === absoluteStorePath(root, selectedStore)
+      },
+    )
+  }
+
+  await removeProjectStore(root)
 }
 
 function colorizeLatestVersion(current: string, latest: string): string {
@@ -80,15 +123,23 @@ const originalPeerCatalog = namedPeerCatalog(originalSource)
 const protectedNames = new Set<string>(guardedCatalogEntries.map(entry => entry.name))
 const updateTargets = catalogUpdateTargets(defaultCatalogNames(originalSource), protectedNames)
 
+await repairUnexpectedStore()
+
 const outdatedResult = await runPnpmCapture([
   'outdated',
   '-r',
   '--format',
   'json',
+  // Keep pnpm warnings out of the machine-readable stdout stream. The
+  // parser also tolerates a warning prefix for pnpm versions/reporters that
+  // do not honor this separation.
+  '--loglevel=error',
   ...updateTargets,
 ])
 if (outdatedResult.exitCode !== 0 && outdatedResult.exitCode !== 1)
   process.exit(outdatedResult.exitCode)
+if (outdatedResult.exitCode === 1 && outdatedResult.stdout.trim() === '')
+  throw new Error('pnpm outdated failed before producing JSON output.')
 
 const updateChoices = catalogUpdateChoices(updateTargets, outdatedResult.stdout)
 if (updateChoices.length === 0) {
