@@ -104,8 +104,7 @@ export interface VanityAxisConfig<
   readonly modeOrder?: readonly (keyof Modes & string)[]
   /** Missing mode values may be derived from authored sibling values at token-finalization time. */
   readonly derive?: Derive
-  /** Query-free runtime behavior when condition metadata cannot activate the axis. */
-  /** Register a query-free control for this axis. */
+  /** A query-free runtime control for an axis condition metadata cannot activate. */
   readonly control?: Control
   /** Preserve native `light-dark()` behavior and its fallback policy. */
   readonly native?: VanityNativeSchemePolicy

@@ -207,7 +207,7 @@ export type {
   VanityOpenAxisModes,
   VanitySchemeAxisOptions,
 } from './system/axes'
-export { axis, colorSchemes } from './system/axes'
+export { axis, colorSchemes, defaultMode } from './system/axes'
 export {
   aria,
   condition,
