@@ -427,6 +427,7 @@ export function defineAxis<
 /** Standalone axis-definition constructor for already-normalized mode triggers. */
 export const axis = defineAxis
 
+/** Mark the default mode inline; `defaultMode(trigger)` still gives that mode a condition. Equivalent to the axis `default` key. */
 export function defaultMode(): VanityDefaultAxisMode<true>
 export function defaultMode<Trigger extends VanityConditionInput | VanityAxisTrigger<boolean>>(
   trigger: Trigger,
