@@ -265,6 +265,27 @@ Sugar:
 
 A token may ignore an available axis entirely. “All tokens vary on axis X” is an explicit group/system check, not a definition default.
 
+### Numeric scales
+
+`scale.linear()` and `scale.modular()` return callable typed scales. A scale resolves a configured named step or any finite numeric step, exposes its immutable `.steps` map, and materializes named values through `.tokens()`:
+
+| Helper | Formula | Options |
+| --- | --- | --- |
+| `scale.linear({ unit, steps })` | `unit * step` CSS pixels | `unit` is the number of pixels per step; `steps` maps names to numbers. |
+| `scale.modular({ base, ratio, steps, unit })` | `base * ratio ** step` in `unit` | `base` defaults to `1`; `unit` defaults to `rem`; `ratio` must be positive. |
+
+```TS
+import { scale } from '@mszr/vanity'
+
+const spacing = scale.linear({
+  unit: 4,
+  steps: { sm: 2, md: 4 },
+})
+
+spacing('md') // 16px
+spacing.tokens() // { sm: 8px, md: 16px }
+```
+
 ## 11. Handles and projections
 
 Locked token handles expose:
@@ -358,6 +379,19 @@ Preserve:
 - contrast, unused-token, scale, axis, portability, root, and registration checks.
 
 Manifest v4 contains one system map plus source-grouped module facts without duplicating the portable compiler artifact.
+
+### Cross-token checks
+
+`check.textContrast(text, background)` registers a build-time pairing check for a token module. It defaults to APCA Lc 60; `.aa()` selects WCAG 2 at 4.5, `.aaa()` selects WCAG 2 at 7, and `.lc(min)` selects an explicit APCA threshold:
+
+| Helper | Level |
+| --- | --- |
+| `check.textContrast(text, background)` | APCA Lc 60 |
+| `.aa()` | WCAG 2 contrast 4.5 |
+| `.aaa()` | WCAG 2 contrast 7 |
+| `.lc(min)` | APCA Lc `min` |
+
+Supply the returned checks through the token-resolution `checks: refs => [...]` option. A bound system applies the same callback shape to an inline token module.
 
 ### Emission and identity details
 

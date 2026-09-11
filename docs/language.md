@@ -2,6 +2,8 @@
 
 Vanity's language follows its behavior. The mental model comes first; the glossary indexes it.
 
+This guide defines reusable language and navigation. Owning reference specifications define exact APIs; maintainer records define implementation, evidence, and workspace practice.
+
 ## 0. House style and naming law
 
 The style for every Vanity document:
@@ -54,69 +56,34 @@ Implementation functions, methods, and callable constants begin with a verb. The
 | `prefix*` / `omit*` / `pick*` / `use*` | Apply the exact structural operation / consume a capability through a framework or runtime binding. |
 | `$verb` | Runtime-controller mutation fenced beside user-defined names. |
 
-Direct action verbs such as `inspect*`, `run*`, `write*`, `load*`, `select*`, `plan*`,
-`transform*`, `invoke*`, `remove*`, `replace*`, `check*`, `describe*`, `explain*`,
-`diff*`, `setup*`, `ensure*`, `remember*`, `schedule*`, `configure*`, `handle*`,
-`start*`, `finish*`, `choose*`, `reconcile*`, `decorate*`, `switch*`, `set*`,
-`clear*`, `mark*`, `track*`, `send*`, `inject*`, `initialize*`, `append*`,
-`strip*`, `extract*`, `convert*`, `lower*`, `adapt*`, `fold*`, `evaluate*`,
-`consume*`, `join*`, `negate*`, `intersect*`, and `dedupe*` follow the same law when
-their narrower operation is clearer than one of the grouped verbs above.
+When none of the grouped prefixes fits, choose a precise direct action verb whose name states the operation exactly—for example, `inspect*`, `compile*`, `fold*`, or `reorder*`. The [naming audit](../scripts/audit.ts) checks the complete implementation vocabulary; this document defines the rule rather than duplicating that changing list.
 
-The same rule permits precise direct actions such as `compile*`, `split*`, `count*`,
-`extend*`, `seal*`, `measure*`, `wire*`, `attach*`, `identify*`, and `reorder*` when
-those names state the operation exactly. The diagnostic suggestion `didYouMean`,
-the axis authoring callables `axis`, `defaultMode`, `condition`, and `schemeIs`,
-the layer callable `inLayer`, and the color authoring operations `legibleOn`,
-`colorMix`, the named polar-space adjustment namespaces, and the color-value
-method `mix` are established public language.
+`expect*` is never deferred to consolidation. A plugin may expect a shape and use it in the next statement because the guard has already thrown or returned; recording a requirement for a later check would not provide that guarantee.
 
-The public DSL intentionally retains result-named callables such as `class`, `rules`, `raw`, `recipe`, `anatomy`, `atoms`, `fragment`, `port`, `keyframes`, `fontFace`, and `runtime`, plus CSS-standard constructors and the established relational family `propsOf`, `fromTokenGroup`, `tokensOf`, `namesOf`, `varsOf`, and `snapshotFrom`. These exceptions do not authorize new noun-shaped implementation helpers.
+### Vocabulary owned by another contract
 
-The naming audit also records a small closed set of names whose spelling is owned by another
-contract. Token-builder `root`, scale methods `linear` and `modular`, color-relative `from`,
-contrast-check thresholds `aa`, `aaa`, and `lc`, the token declaration shorthand `tdec`, and
-the `tdec.propagated` member name are
-public authoring vocabulary. `invalidColor` is the resolver protocol callback, `transaction` is
-the runtime batching protocol, `forEach`, `entries`, `keys`, and `values` are standard collection
-protocol methods, `toString` is the JavaScript string protocol, and `ownKeys` is the JavaScript
-`Proxy` trap. `config`, `configResolved`, `transformInclude`, `handler`, `unstable_pluginFilter`, and
-`onEndFileScope` are Vite or Vanilla Extract lifecycle spellings; `fallback`, `deprecated`, and
-`optionsIdentity` belong to public extension/plugin contracts. The public cascade and condition
-algebra uses `layer`, `and`, `or`, `not`, `to`, `activate`, `absoluteCondition`, `scheme`, `val`,
-`tokens`, and `textContrast`; the runtime contract owns `matches`, `contains`, `snapshot`,
-`runtimeStyle`, and `runtimeProps`. Hail's established vocabulary includes `inE`, `circle`,
-`square`, `truncate`, and `contrastOf`, while `rawValue` exposes the CSS data-type vocabulary
-(`unknown`, `declaration`, `percentage`, `length`, `numberPercentage`, `lengthPercentage`,
-`image`, `position`, `easingFunction`, `transformFunction`, `transformList`, `customIdent`,
-`dashedIdent`, `string`, `url`, and `plugin`). The audit category ids — `unusedTokens`,
-`nearDuplicates`, `contrast`, `escapes`, `scaleStrays`, `focusVisibility`, `rawAssertions`,
-`aliasEscapes`, `overwriteInventory`, `eagerStyleBarrels`, `cssParityGaps`, `staleArtifacts`, `rootModeDisagreements`,
-`staleDerivations`, `derivedCaseGrowth`, `ambiguousAxes`, `mutableRootHazards`,
-`nonportableValues`, and `specificityContexts` — are a stable introspection
-taxonomy, not implementation helpers. `value`, `VariableDeclarator`,
-`ImportSpecifier`, `CallExpression`, and `Declaration` retain their public escape or
-parser/transform visitor spellings. Every other production function, method, and callable
-constant is checked for a verb-first name by `scripts/audit.ts`.
+Not every public name is an implementation operation. Some spellings belong to a platform grammar, a host protocol, a public DSL, or a serialized data contract:
 
-`expect*` is never deferred to consolidation. A plugin may expect a shape and use it in the next
-statement because the guard has already thrown or returned; recording a requirement for a later
-check would not provide that guarantee.
+| Vocabulary owner | Naming rule | Canonical home |
+| --- | --- | --- |
+| CSS and web standards | Keep a CSS spelling when Vanity models that platform concept; give Vanity-only behavior a distinct name. | [Values](./reference/spec-values.md) and [styling](./reference/spec-css.md) |
+| JavaScript and browser protocols | Mirror the protocol spelling at the boundary; do not rename it to satisfy the verb-first rule. | [Runtime](./reference/spec-runtime.md) and [integrations](./reference/spec-integrations.md) |
+| Build hosts and backends | Mirror host lifecycle names in the adapter that implements them. | [Integrations](./reference/spec-integrations.md) |
+| Public authoring DSL | Allow a result-named or noun-shaped callable when it names the thing the author is defining, composing, or querying. | The owning [reference specification](./README.md#reference) |
+| Portable and introspection data | Use stable field and category names that describe data; they are not implementation verbs. | [Introspection](./reference/spec-introspection.md) and the relevant [system contract](./reference/spec-system.md) |
+
+The naming allowlist in `scripts/audit.ts` is the exhaustive, machine-checked list of concrete exceptions. Maintain each exception with its owning contract and test; do not copy that inventory into this rulebook.
 
 ### Module names and load-bearing nouns
 
-Module filenames describe what the module owns. Use a plural when a module owns a collection or
-vocabulary of peer members: `system/axes.ts` owns `AxisRegistry`, `system/plugins.ts` owns
-`PluginRegistry`, `values/codecs.ts` owns `DtcgCodecRegistry`, and `system/definitions.ts`,
-`tokens/names.ts`, and `tokens/checks.ts` own related vocabularies. Use a singular when a module
-defines one thing and the operations over it: `values/kernel.ts`, `system/contract.ts`,
-`system/state.ts`, `runtime/controller.ts`, `tokens/builder.ts`, `tokens/module.ts`, and
-`substrate/vanilla-extract/adapter.ts` are singular for this reason.
+Module filenames describe ownership rather than the number of runtime instances:
 
-Apply the rule to the module's ownership, not to the number of instances created at runtime. A
-handle module defines what one handle is and how to create, read, and update it; handles live in
-the token graph and there is no handle registry. That is why the canonical filename is
-`tokens/handle.ts`, matching `atoms/handle.ts`, `ports/handle.ts`, and `recipes/handle.ts`.
+| Shape | Use when | Examples |
+| --- | --- | --- |
+| plural | The module owns a collection or vocabulary of peer members. | `system/axes.ts`, `system/plugins.ts`, `values/codecs.ts`, `system/definitions.ts`, `tokens/names.ts`, `tokens/checks.ts` |
+| singular | The module defines one model and the operations over it. | `values/kernel.ts`, `system/contract.ts`, `system/state.ts`, `runtime/controller.ts`, `tokens/builder.ts`, `tokens/module.ts`, `substrate/vanilla-extract/adapter.ts` |
+
+A handle module defines what one handle is and how to create, read, and update it; handles live in the token graph and there is no handle registry. That is why the canonical filename is `tokens/handle.ts`, matching `atoms/handle.ts`, `ports/handle.ts`, and `recipes/handle.ts`.
 
 These nouns carry precise architectural meaning:
 
@@ -132,14 +99,11 @@ These nouns carry precise architectural meaning:
 | `host` | Something that installs or runs another capability, qualified by scope. |
 | `origin` | The declared owner of authored capability data. `provenance` is evidence of how a resolved result was produced. |
 
-Collections are plural, booleans use predicate names, singular identifiers end in `Id`, and
-ordered revisions use their domain nouns. Avoid generic names such as `data`, `info`, `item`,
-`thing`, `manager`, and `helper` when the domain supplies a precise term.
+Collections are plural, booleans use predicate names, singular identifiers end in `Id`, and ordered revisions use their domain nouns. Avoid generic names such as `data`, `info`, `item`, `thing`, `manager`, and `helper` when the domain supplies a precise term.
 
 ### Validation has qualified meanings
 
-`validation` is not a global policy switch. Every validation mechanism has a qualified owner and
-an explicit execution point:
+`validation` is not a global policy switch. Every validation mechanism has a qualified owner and an explicit execution point:
 
 | Sense | Owner | When it runs |
 | --- | --- | --- |
@@ -151,12 +115,9 @@ an explicit execution point:
 | `expect*` structural requirements | `system/open.ts` | immediately at the `expect*` call |
 | `audit()` / diagnostics | `introspect/audit.ts` | on demand over a locked system |
 
-Keep the sense visible at the use site. Do not introduce a bare `validate` or `validation`
-identifier whose meaning is unclear from its module, and do not route these mechanisms through a
-new generic validation switch.
+Keep the sense visible at the use site. Do not introduce a bare `validate` or `validation` identifier whose meaning is unclear from its module, and do not route these mechanisms through a new generic validation switch.
 
-Author-facing failures use `VanityError`, with a stable code and structured path/fix guidance;
-`TypeError` is reserved for a genuine internal invariant violation that indicates a Vanity bug.
+Author-facing failures use `VanityError`, with a stable code and structured path/fix guidance; `TypeError` is reserved for a genuine internal invariant violation that indicates a Vanity bug.
 
 ## 1. Behavioral spine
 
@@ -274,10 +235,9 @@ Vite, Nuxt, and WXT are build hosts. `/vite`, `/nuxt`, and `/wxt` are Vanity-own
 | plugin | Identified reusable contribution that can add shape and declare external requirements. |
 | named system rule | Metadata-bearing system-owned rule contribution emitted once by the compiler; it may contain nested selector rules and at-rules. |
 
-Composition uses the canonical verb meanings in [§0](#0-house-style-and-naming-law):
-composition verbs form an algebra, but their definitions live in the house-style table.
+Composition uses the canonical verb meanings in [§0](#0-house-style-and-naming-law): composition verbs form an algebra, but their definitions live in the house-style table.
 
-`defineRules`, `addRule(s)`, `overwriteRule(s)`, and `expectRule(s)` remain the symmetric system-composition family. `ds.rules()` authors selector rules inside a style module; receiver and context make the distinction.
+System composition keeps singular/plural verb families symmetric for each registered kind. Styling rule authoring is a separate operation: its receiver and execution context distinguish it from system-level rule composition. See [system authoring](./reference/spec-system-authoring.md) and [styling and output](./reference/spec-css.md) for the concrete forms.
 
 ## 5. Contracts, projections, artifacts, and handles
 
@@ -326,7 +286,7 @@ resolved token handle
       └─ mutable token control inside a runtime controller
 ```
 
-Do not describe one JavaScript handle as travelling between environments and gaining methods.
+Do not describe one JavaScript handle as traveling between environments and gaining methods.
 
 Canonical handle compounds:
 
@@ -368,18 +328,17 @@ Inside a runtime controller, a mutable token leaf is a token control, not a gene
 | position | Place in CSS grammar that accepts a value. |
 | dimension | Independent non-substitutable classification or proof axis. |
 
-Color policy vocabulary is explicit: `mixSpace` supplies a missing
-`color-mix()` interpolation space, and `adjustSpace` supplies the working space
-for bare polar channel adjustments. Named polar namespaces state the working
-space at the call site and take precedence over `adjustSpace`.
+Color policy vocabulary is explicit: `mixSpace` supplies a missing `color-mix()` interpolation space, and `adjustSpace` supplies the working space for bare polar channel adjustments. Named polar namespaces state the working space at the call site and take precedence over `adjustSpace`.
 
 `theme` remains an application word. `scope` is reserved for CSS `@scope`. `override` remains cascade language; definition-data replacement is `overwrite`.
 
 ## 7. Styling vocabulary
 
+Styling has one important boundary: style data is inert ordered declaration/rule data, while a style emitter registers that data for compiler materialization. A restored styling handle selects precompiled output or produces declaration data; it does not synthesize arbitrary browser CSS.
+
 ```text
-style data producer
-  returns inert ordered declaration/rule data
+style data
+  inert ordered declaration/rule data
         │ consumed by
         ▼
 style emitter
@@ -393,69 +352,31 @@ compiler
 browser
 ```
 
-| Class | APIs | Effect |
+The complete producer/emitter API table lives in [styling and output §1](./reference/spec-css.md#1-styling-families). This guide keeps the ownership rule:
+
+| Need | Model | Contract |
 | --- | --- | --- |
-| style-data producers | `fragment`, `tdec`, `tdec.propagated`, `port.dec`, declaration bundles | return inert data; do not register or emit output |
-| style emitters | `class`, `rules`, `raw`, `recipe`, `anatomy`, `atoms`, `keyframes`, `fontFace` | register style output while a style module is evaluated |
-| restored resolvers | recipe, anatomy, atom-set, port, and other restored handles | select precompiled classes or produce declaration data; never synthesize arbitrary browser CSS |
+| finite component choices | recipe or anatomy | precompiled class selection |
+| finite declared utility choices | atom set | bounded property/value space |
+| open per-instance component value | port | component-owned custom-property boundary |
+| live system-wide design decision | mutable token | system-owned runtime control |
 
-Names state their result:
-
-```text
-class      → generated class handle/string
-recipe     → finite class-selection function
-anatomy    → part-keyed class-selection functions
-atoms      → bounded utility-class resolver
-fragment   → reusable ordered style data
-rules      → authored selector rules
-tdec       → token custom-property declaration data
-tdec.propagated → token declarations plus invalidated folded dependents
-keyframes  → animation-name handle
-fontFace   → font-family handle
-raw        → raw CSS in the declared layer
-```
-
-| Concept | Ownership and variability |
-| --- | --- |
-| recipe | finite component-owned choices |
-| anatomy | finite choices across named component parts |
-| atom set | finite declared property/value utility table |
-| port | open component/style-owned per-instance input |
-| mutable token | system-owned design decision with declared runtime-addressable slots |
-
-Finite declared choice belongs in recipes, anatomy, or atom sets. An open per-instance value belongs in a port. A system-owned live decision belongs in a mutable token.
-
-A fragment is ordered declaration/rule data with no class or selector of its own. A mixin is a normal TypeScript function returning a fragment or another styling input.
-
-`ds.omit` means no declaration. CSS `unset` keeps its platform meaning.
+A mixin is an ordinary TypeScript function that returns a styling input. An explicit omission removes a declaration; CSS `unset` keeps its platform meaning. See [styling and output](./reference/spec-css.md) for the concrete forms.
 
 ## 8. Runtime vocabulary
 
-The object returned by `ds.runtime()` is the runtime controller:
+Runtime is the projection that writes declared custom-property slots and axis controls at declared roots. It validates and batches those operations, snapshots and restores semantic state, and inspects its own writes; it does not generate arbitrary CSS or calculate the full cascade.
 
-```TS
-const rt = ds.runtime()
+| Term | Meaning | Canonical contract |
+| --- | --- | --- |
+| runtime controller | binds roots and performs declared DOM writes | [Runtime](./reference/spec-runtime.md) |
+| token control | mutates a declared mutable token address | [Runtime §2](./reference/spec-runtime.md#2-token-tree) |
+| axis control | activates or reads a declared axis mode | [Runtime §3](./reference/spec-runtime.md#3-axis-tree) |
+| snapshot | semantic runtime state suitable for hydration/reconciliation | [Runtime §6–8](./reference/spec-runtime.md#6-snapshots) |
 
-rt.t.color.brand.$set('#635bff')
-rt.axes.scheme.$switchTo('dark')
-```
+Runtime mutation uses fenced verbs because it sits beside user token, axis, and mode names. The exact mutation and snapshot APIs belong to the [runtime contract](./reference/spec-runtime.md). Build-time declaration producers remain ordinary styling inputs.
 
-The controller resolves/binds declared roots, validates and batches declared operations, snapshots its state, reconciles/hydrates snapshots, and inspects its own writes. It does not generate arbitrary CSS or calculate the full cascade.
-
-Runtime mutation uses fenced verbs because they sit beside user token/axis/mode names. Build-time declaration producers do not:
-
-```TS
-port.dec(value)
-ds.tdec({ color: { brand: value } })
-ds.tdec.propagated({ color: { brand: value } })
-
-rt.t.color.brand.$set(value)
-rt.axes.scheme.$switchTo('dark')
-```
-
-Bare `runtime` keeps its temporal meaning in compounds such as runtime validation, runtime schema, runtime snapshot, runtime props, and runtime styles.
-
-## 9. Module roles and integration vocabulary
+## 9. Module roles
 
 | Module role | Purpose | Processing |
 | --- | --- | --- |
@@ -480,16 +401,7 @@ system/style imports
 restored handles + runtime/application APIs
 ```
 
-Configuration uses compact module-role keys:
-
-```TS
-{
-  compiler: { system, layerOrder },
-  autoImports: { shared, style, app },
-}
-```
-
-`compiler` configures a Vanity-owned actor. `autoImports` configures import routing. `style` and `app` target their module roles; `shared` is shorthand for routing one source to both roles, not a third role.
+Build-host configuration is an integration concern. `system`, `style`, `app`, and `shared` describe module-role routing; the exact configuration shape and host lifecycle hooks live in [integrations](./reference/spec-integrations.md).
 
 ## 10. Canonical file roles
 
@@ -505,66 +417,16 @@ A system must not be created or consolidated inside `*.css.ts`. The compiler ser
 
 ## 11. Public surface map
 
-### Top level
+This is a map of ownership, not an exhaustive API catalog. The owning reference contract documents concrete members, signatures, examples, and degradation behavior; this guide explains how the surfaces fit together.
 
-```text
-createSystem
-definePlugin
-defineTokens / defineAxes / defineConditions / defineConsts / defineUtils
-defineConstructor / defineConstructors / defineRules / definePolicies
-portable built-in value constructors
-data / media / supports / container / selector / condition / scope
-systemRoot / moduleRoot / thisMode
-range / fromEntries / mapRecord / ports
-```
-
-### Open system
-
-```text
-add{Kind} / add{Kinds}; addPlugin
-augmentToken(s) / augmentAxis(es)
-overwrite token(s) / axis(es) / condition(s) / const(s) / rule(s) / policy(ies)
-expect tokens, axes, conditions, consts, utils, rules, plugins, constructors, policies
-define* detached modules / tdef
-t / tdec / constructors / conditions
-consolidate
-```
-
-### Locked system
-
-```text
-t / consts / conditions / axes / layers / policies
-constructors and added utils
-class / recipe / anatomy / atoms / fragment / rules
-tdec / tdec.propagated / port / keyframes / fontFace / raw
-inLayer / omit / serialize
-runtime / snapshotFrom / reconcileRuntimeSnapshot / runtimeStyle / runtimeProps
-introspect / explain / audit
-```
-
-Introspection, explanation, manifest, diagnostic, and audit contracts are defined in [spec-introspection.md](./reference/spec-introspection.md).
-
-### Runtime controller
-
-```text
-t.<path>.$set / $unset
-axes.<axis>.$switchTo / $cycle / $current
-axes.<axis>.<mode>.$activate
-refreshRoots / bindRoot / transaction
-snapshot / hydrate / inspect
-VanityRuntimeError
-```
-
-### Component/framework projections
-
-```text
-propsOf
-usePorts
-useAnatomy
-fromTokenGroup
-button.ports
-namesOf / varsOf / tokensOf
-```
+| Surface | Responsibility | Read next |
+| --- | --- | --- |
+| Top-level authoring | Portable CSS values, conditions, detached definitions, and system creation. | [Values](./reference/spec-values.md), [conditions](./reference/spec-conditions.md), [system authoring](./reference/spec-system-authoring.md) |
+| Open system | Additive composition, augmentation, explicit overwrite, requirements, token builders, and plugin mounting. | [Open and locked systems](./reference/spec-system.md), [tokens](./reference/spec-tokens.md), [extensions](./reference/spec-extensions.md) |
+| Locked system | Resolved tokens, conditions, policies, style emitters, declarations, recipes, ports, and semantic observation. | [Styling](./reference/spec-css.md), [recipes](./reference/spec-recipes.md), [introspection](./reference/spec-introspection.md) |
+| Runtime controller | Declared token slots and axis controls, roots, transactions, snapshots, hydration, and inspection. | [Runtime](./reference/spec-runtime.md) |
+| Framework and build projections | Module-role routing, restored handles, ports, Vue/Nuxt adapters, and host lifecycle integration. | [Integrations](./reference/spec-integrations.md), [Vue and Nuxt](./reference/spec-vue.md), [ports](./reference/spec-ports.md) |
+| Optional opinion | Hail's removable constructors, controls, presets, and global rules. | [Hail](./reference/spec-hail.md) |
 
 The effective locked/public surface is authoritative: a member that appears only in a lower-level implementation type is not public API.
 
@@ -583,7 +445,7 @@ const palette = ds.defineTokens()
 
 Tree syntax uses `ds.tdef({...})` to distinguish a definition from a group. `.add(name, config)` accepts raw config directly because that position cannot be a group.
 
-Every logical and resolved token handle exposes `$dec`. On a CSS-property leaf it declares that property; on a property/condition group it recursively projects themeable declaration data. `tdec` points the other direction: it assigns values to token custom properties. `tdec.propagated` assigns the named values and every build-folded dependent they invalidate; live dependents remain browser-driven and are omitted.
+Token handles project declarations toward CSS properties, while token-declaration data assigns values back to token custom properties. A graph-aware declaration can include build-folded dependents that a local substitution invalidates; live dependents remain browser-driven. The [token](./reference/spec-tokens.md) and [styling](./reference/spec-css.md) specifications define the concrete APIs.
 
 ## 13. Condition language
 
@@ -595,12 +457,7 @@ const inCard = scope('.card').to('.card-media')
 
 Conditions are AST values with `.and`, `.or`, and `.not()`. Plain selector/query strings remain the raw standards escape. Strings are never preprocessed as a private Vanity dialect.
 
-The built-in `colorSchemes()` axis follows its mount name for explicit selector
-and runtime attributes: `addAxis('scheme', colorSchemes())` uses `data-scheme`,
-while `addAxis('appearance', colorSchemes())` uses `data-appearance`. Its
-`native.kind: 'scheme'` metadata remains the source of `light-dark()` lowering;
-the axis name never creates that behavior by itself. `schemeIs()` uses the
-conventional `scheme` name unless an explicit axis name is supplied.
+Color-scheme axis behavior and `schemeIs()` are documented in [Conditions §9](./reference/spec-conditions.md#9-scheme-convenience).
 
 ## 14. Import patterns
 

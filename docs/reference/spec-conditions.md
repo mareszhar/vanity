@@ -171,6 +171,20 @@ open.addAxis('scheme', {
 })
 ```
 
+A mode value is any condition input ([§1](#1-condition-constructors)): a helper such as `schemeIs()`, `data()`, `media()`, or `selector()`, a raw selector/query string, `'&'` for the base relationship, or `thisMode` ([§4](#4-anchors)) for a mode carried by its own activation selector. Mark the default mode with the `default` key or, inline, with `defaultMode()`; the two are equivalent, and `defaultMode(trigger)` marks the default mode while still giving it a condition.
+
+The object form accepts:
+
+| Field | Meaning |
+| --- | --- |
+| `modes` | Named modes and their condition arms. |
+| `default` | Names the default mode; equivalent to marking that mode with `defaultMode()`. |
+| `modeOrder` | Tie-breaker for overlapping arms; must list every mode exactly once. |
+| `derive` | Fills a missing mode's value from its authored siblings at token finalization. |
+| `control` | A query-free runtime control for an axis condition metadata cannot activate ([§11](#11-runtime-activation-metadata)). |
+| `native` | Preserves native `light-dark()` behavior and its fallback policy ([§9](#9-scheme-convenience)). |
+| `description` | Human-readable axis description shown in introspection. |
+
 `addAxes(ds => ({...}))` and callback overloads exist only when accumulated system context is needed.
 
 Every axis records:
@@ -301,4 +315,6 @@ Required matrices:
 - `sandbox/canary/tests/conditions.spec.ts` exercises the projected cross-kind condition and both opposing color-scheme preferences in Chromium.
 - Registration, axis/case ordering, native-scheme locality, overlap audit, and sparse runtime addresses remain covered by the token-module, emission, audit, and runtime suites.
 
-The preset’s `open`, `closed`, `checked`, `selected`, `highlighted`, and `invalid` conditions are backed by `VANITY_HEADLESS_CONDITION_CONTRACTS`. Each record contains the exact emitted selector and per-library component, part, element, official source, and verification date. The 2026-07-24 evidence covers Reka UI, Ark UI, and Zag without pretending their selection contracts are interchangeable: `data-state="checked"` remains `checked`, while `selected` is reserved for the real `data-selected` contracts exposed by Reka range cells and Zag cascade-select items.
+The preset’s `open`, `closed`, `checked`, `selected`, `highlighted`, and `invalid` conditions are backed by `VANITY_HEADLESS_CONDITION_CONTRACTS`. Each record contains the exact emitted selector and per-library component, part, element, official source, and verification date.
+
+The 2026-07-24 evidence covers Reka UI, Ark UI, and Zag without pretending their selection contracts are interchangeable. `data-state="checked"` remains `checked`, while `selected` is reserved for the real `data-selected` contracts exposed by Reka range cells and Zag cascade-select items.

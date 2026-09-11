@@ -61,13 +61,13 @@ T1 against T2 is the whole finding: one line in the authoring package removes th
 
 T8 confirms the line survives `verbatimModuleSyntax` and is erased from emit: the emitted JS is `export const button = cls({ color: t.color.brand });` with no trace of the import, and the emitted `.d.ts` is a clean `export declare const button: string`.
 
-That emitted JS also makes the division of labour explicit: **the unlock import fixes only the type half.** The value half is unchanged — the building host's compiler still injects the real import when it evaluates the `*.css.ts`. An intermediate consumer only ever typechecks the file, which is exactly why types alone are enough for it.
+That emitted JS also makes the division of labor explicit: **the unlock import fixes only the type half.** The value half is unchanged — the building host's compiler still injects the real import when it evaluates the `*.css.ts`. An intermediate consumer only ever typechecks the file, which is exactly why types alone are enough for it.
 
 T9 adds that the choice is **per file, not per package**: one package holding an explicit-import file beside an unlock file compiles clean in an unconfigured consumer, because each file carries its own answer to where its names come from.
 
 ### 2. `const` is the reason declarations cannot compose
 
-T3 is the coexistence failure, and it is not subtle: two `declare global` blocks declaring one name are a hard `TS2451`, because **block-scoped declarations cannot be redeclared even when their types are identical**. Vanity emits `const` ([autoImportDeclarations.ts:28](../../sdk/src/compiler/auto-imports/autoImportDeclarations.ts:28)), so any two generated declarations covering one name are mutually exclusive by construction.
+T3 is the coexistence failure, and it is not subtle: two `declare global` blocks declaring one name are a hard `TS2451`, because **block-scoped declarations cannot be redeclared even when their types are identical**. Vanity emits `const` ([autoImportDeclarations.ts:28](../../sdk/src/compiler/auto-imports/autoImportDeclarations.ts#L28)), so any two generated declarations covering one name are mutually exclusive by construction.
 
 `var` is the platform's own answer — it is why `lib.dom.d.ts` writes `declare var window: Window` rather than `const`. T5 and T7 show identical-type redeclaration becoming legal, and **T6 shows the safety is retained**: divergent types still fail, with an error naming both offending types.
 

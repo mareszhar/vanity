@@ -128,7 +128,7 @@ Value resolution uses the system policy book described in [System authoring §8]
 
 An export named after a CSS function matches the platform grammar and semantics for the declared spec snapshot. This applies to color functions, `light-dark()`, math, transforms, gradients, media/container range syntax, `@scope`, and every future same-named surface.
 
-`lightDark(light, dark)` replaces `scheme()`:
+`lightDark(light, dark)` provides the CSS-aligned conditional value:
 
 - argument order matches CSS;
 - color/color returns `<color>`;
@@ -140,7 +140,7 @@ An export named after a CSS function matches the platform grammar and semantics 
 
 `legibleOn()` remains distinct because it is an APCA-based algorithmic helper, not CSS `contrast-color()`. Its option is `{ contrast }`, documented as minimum APCA Lc contrast.
 
-Vanity's `alpha` is an alpha-channel replacement convenience, not CSS Color 5 `alpha()`. It is one color-wide top-level operation:
+Vanity's `alpha` is one color-wide alpha-channel convenience, not CSS Color 5 `alpha()`:
 
 ```TS
 ds.alpha(color, 0.2)
@@ -163,6 +163,20 @@ Math operations follow CSS Values semantics:
 
 No CSS-native name may front a narrower undocumented arithmetic language.
 
+### Numeric helpers
+
+The math constructors produce typed CSS values, and `calc()` returns an immutable chainable calculation:
+
+| Helper | Role |
+| --- | --- |
+| `calc(value)` | Start a typed calculation; chain `.add()`, `.subtract()`, `.multiply()`, `.divide()`, or `.negate()`. |
+| `min(...)` / `max(...)` | Choose among compatible values. |
+| `clamp(min, preferred, max)` | Bound a compatible preferred value. |
+| `interpolate(from, to, progress)` | Linearly interpolate compatible numeric values; unitless `progress` may extrapolate. |
+| `fluid({ min, max, minVw, maxVw })` | Emit bounded viewport interpolation as `clamp()`/`calc()`; viewport defaults are 320px and 1280px. |
+
+All helpers retain dimensions and validate compatibility at the cursor. `fluid()` takes CSS-pixel `min` and `max` numbers; `interpolate()` does not clamp `progress`. Use `calc(...).divide(...)` for typed division; a literal numeric zero divisor is an authoring error.
+
 ## 8. Colors
 
 Preserve:
@@ -171,12 +185,18 @@ Preserve:
 - number, percentage, angle, `none`, calculation, token, and custom-property channels where CSS allows;
 - relative-color construction and channel operations;
 - interpolation spaces and hue policy;
-- alpha replacement;
+- alpha-channel operations;
 - gamut-sensitive and platform-dependent preservation;
 - build/live equivalence where possible;
 - support-aware contrast fallback.
 
-Color leaves preserve their authored CSS form. Parsed leaves such as `color('blue')` remain `blue`, and typed leaves such as `hsl(...)`, `lab(...)`, and `color(display-p3 ...)` retain their native function and channel spelling in tokens and declarations. Static computations fold only when equivalent to the CSS result: channel adjustments use the operation's named space, while other computed values with no preserved notation canonicalize to `oklch()`. Live, volatile, and token-referencing expressions remain native CSS. The `color()` constructor is still meaningfully typed even when its output matches a bare color literal: it carries the `<color>` contract and color operations.
+Color leaves preserve their authored CSS form. Parsed leaves such as `color('blue')` remain `blue`.
+
+Typed leaves such as `hsl(...)`, `lab(...)`, and `color(display-p3 ...)` retain their native function and channel spelling in tokens and declarations.
+
+Static computations fold only when equivalent to the CSS result. Channel adjustments use the operation's named space, preserving the origin's notation for safe same-space adjustments; other computed values with no preserved notation canonicalize to `oklch()`.
+
+Live, volatile, and token-referencing expressions remain native CSS. The `color()` constructor is still meaningfully typed when its output matches a bare color literal: it carries the `<color>` contract and color operations.
 
 `colorMix()` is the CSS-shaped two-color constructor. CSS requires an interpolation method, so the unbound form is completed with `.in()`:
 
@@ -185,7 +205,11 @@ colorMix(['red', ['blue', 35]]).in('oklab')
 color('red').mix('blue', 35).in('oklab')
 ```
 
-The free constructor and the color-value/token-handle `.mix()` method build the same node and use CSS's percentage units (`0..100`) and exactly two color items. A bound system may supply the omitted method through `policies.color.mixSpace`; an explicit `.in()` always overrides that policy. A missing method produces a cursor diagnostic whose repair is to choose `.in(space)` or declare `policies.color.mixSpace`.
+The free constructor and the color-value/token-handle `.mix()` method build the same node and use CSS's percentage units (`0..100`) and exactly two color items.
+
+A bound system may supply the omitted interpolation space through `policies.color.mixSpace`; an explicit `.in()` always overrides that policy.
+
+A missing interpolation space produces a cursor diagnostic whose repair is to choose `.in(space)` or declare `policies.color.mixSpace`.
 
 Build folding is intentionally conservative: an oklab mix with no hue path folds whenever CSS determines both weights without an alpha multiplier.
 
@@ -197,7 +221,7 @@ Build folding is intentionally conservative: an oklab mix with no hue path folds
 | both given, positive sum other than `100` | normalized, with the CSS alpha multiplier | native `color-mix()` |
 | both given, sum `0` | invalid CSS | authoring diagnostic |
 
-Other spaces, hue paths, live percentage inputs, and CSS-normalized percentage shapes remain native `color-mix()` CSS. This preserves the browser as the semantic authority when Vanity cannot prove its build-time math is identical.
+Other spaces, hue paths, live percentage inputs, and both-explicit percentages that require CSS normalization remain native `color-mix()` CSS. This preserves the browser as the semantic authority when Vanity cannot prove its build-time math is identical.
 
 `legibleOn()` still needs one build-time color to choose black or white. When its target is live or a valid static color whose mix shape Vanity declines to fold, it uses a documented representative approximation rather than failing consolidation. The pick and its approximation are visible in `explain()` and the existing `contrast` audit category; a value that is not a color remains an error.
 
@@ -223,13 +247,35 @@ ds.lch.rotate(color, 30)
 ds.hwb.rotate(color, 30)
 ```
 
-The mapping is space-owned: `lighten`/`darken` address `l` in OKLCH/LCH/HSL, `saturate`/`desaturate` address `c` in OKLCH/LCH and `s` in HSL, and `rotate` addresses `h` everywhere. HWB has no lightness or chroma/saturation channel, so its namespace exposes only `rotate`; `alpha` is the color-wide top-level operation. Bare adjustment helpers use `policies.color.adjustSpace`; explicit namespaces always win for channel adjustments.
+The mapping is space-owned:
 
-Static alpha replacement preserves the origin's native notation when it can (`color(display-p3 ...)` remains Display-P3 and `hsl(...)` remains HSL). A channel adjustment folds when its origin is static and the operation's space can represent that origin. Cross-space adjustments into unbounded `oklch` and `lch` always fold; adjustments into sRGB-bounded `hsl` and `hwb` fold only when the origin resolves inside sRGB. An out-of-gamut origin stays native relative-color CSS so its gamut and browser resolution remain intact. Folding into the operation's own space is exact — the operation defines its result there — so the result is canonicalized like any computed value. An adjustment authored in the origin's own space additionally keeps that origin's notation. Live, volatile, and referenced origins stay native relative-color CSS.
+| Helpers | Relative channel |
+| --- | --- |
+| `lighten` / `darken` | `l` in OKLCH, LCH, and HSL |
+| `saturate` / `desaturate` | `c` in OKLCH and LCH; `s` in HSL |
+| `rotate` | `h` in every polar space |
 
-Adjustment folds apply deltas in CSS relative-color channel units, including HSL's `0..100` saturation/lightness channels even though the build-time color library stores them as `0..1` fractions. Every folded channel number passes Vanity's canonical four-decimal formatter. Alpha over a parsed sRGB leaf uses the conventional `rgb(r g b / alpha)` notation; function-shaped origins keep their authored function and gamut.
+HWB has no lightness or chroma/saturation channel, so its namespace exposes only `rotate`. `alpha` is the color-wide top-level operation. Bare adjustment helpers use `policies.color.adjustSpace`; explicit namespaces always win for channel adjustments.
 
-Omitted components inherit from the origin. Replacements accept compatible literals, references, token handles, mutable handles, calculations, and relative channel operations. `alpha` is always explicit in the relative record; `a` remains a Lab/OKLab/custom-color axis where applicable.
+Static alpha operations preserve the origin's native notation when they can: `color(display-p3 ...)` remains Display-P3 and `hsl(...)` remains HSL.
+
+Channel adjustments follow these folding rules:
+
+- a static origin folds when the operation's space can represent that origin;
+- cross-space adjustments into unbounded `oklch` and `lch` always fold;
+- adjustments into sRGB-bounded `hsl` and `hwb` fold only when the origin resolves inside sRGB;
+- an out-of-gamut origin stays native relative-color CSS so its gamut and browser resolution remain intact;
+- folding into the operation's own space is exact because the operation defines its result there, so the result is canonicalized like any computed value;
+- an adjustment authored in the origin's own space additionally keeps that origin's notation;
+- live, volatile, and referenced origins stay native relative-color CSS.
+
+Adjustment folds apply deltas in CSS relative-color channel units, including HSL's `0..100` saturation/lightness channels even though the build-time color library stores them as `0..1` fractions. Every folded channel number passes Vanity's canonical four-decimal formatter.
+
+Alpha over a parsed sRGB leaf uses the conventional `rgb(r g b / alpha)` notation; function-shaped origins keep their authored function and gamut.
+
+Omitted components inherit from the origin. Replacements accept compatible literals, references, token handles, mutable handles, calculations, and relative channel operations.
+
+`alpha` is always explicit in the relative record; `a` remains a Lab/OKLab/custom-color axis where applicable.
 
 `channel` is an immutable relative component seed:
 
@@ -312,10 +358,20 @@ The low-level runtime setter accepts a raw custom-property name, `{ $name }`, `{
 
 ## 11. Typed raw values
 
+`rawValue` is the typed standards escape for CSS grammar that does not need a dedicated constructor. Its members follow the data-type vocabulary:
+
+| Family | Members |
+| --- | --- |
+| broad slots | `unknown`, `declaration` |
+| numeric and dimensional | `number`, `integer`, `percentage`, `numberPercentage`, `length`, `lengthPercentage`, `angle`, `time`, `frequency`, `resolution`, `flex` |
+| visual and spatial | `color`, `image`, `position` |
+| functions and identifiers | `easingFunction`, `transformFunction`, `transformList`, `customIdent`, `dashedIdent`, `string`, `url` |
+| extension | `plugin(name, syntax)` → `plugin:<name>` |
+
 Typed raw values:
 
 - preserve the asserted type for contextual compatibility;
-- parse broad balance/syntax safety;
+- validate the supplied syntax without claiming structure it cannot inspect;
 - never claim structure-dependent transforms;
 - never fold;
 - appear in provenance and audits;
@@ -356,4 +412,8 @@ Every helper receives:
 
 The declaration validator has a central property-grammar keyword path, with `box-shadow`/`text-shadow` `none` and the initial CSS-wide matrix covered across class, recipe, atom, and alias paths.
 
-Compatible token handles retain their CSS data type through constructors, operations, fallbacks, declarations, and runtime setters. The cross-cutting value-law suite covers color channels, math/clamp/negation, grid fragments, typed custom-property fallbacks, image tokens, and snapshot setters. `lightDark(light, dark)` is the only scheme-pair value constructor and implements color/color plus image-or-`none` overloads; mixed forms fail at the cursor. `legibleOn` exposes only `{ contrast }`. `sdk/src/values/parity.ts` is the authoritative machine ledger. Every release emitter preserves these guarantees; broader generated property coverage remains continuous parity work.
+Compatible token handles retain their CSS data type through constructors, operations, fallbacks, declarations, and runtime setters. The cross-cutting value-law suite covers color channels, math/clamp/negation, grid fragments, typed custom-property fallbacks, image tokens, and snapshot setters.
+
+`lightDark(light, dark)` is the only scheme-pair value constructor and implements color/color plus image-or-`none` overloads; mixed forms fail at the cursor. `legibleOn` exposes only `{ contrast }`.
+
+The machine ledger in [`sdk/src/values/parity.ts`](../../sdk/src/values/parity.ts) is authoritative for CSS-named surface coverage; the relevant CSS snapshots and boundary decisions are recorded in the [parity ledger](../maintainers/parity-ledger.md).

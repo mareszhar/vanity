@@ -15,7 +15,7 @@ Nuxt serves the app (`http://localhost:3000` by default).
 ## What it proves
 
 - SSR links generated stylesheets and paints the studio with real CSS — no `.vanity.css` requests, no unstyled first paint.
-- **Hue** writes one channel (`--prism-color-hue`); accent, neutral surfaces, states, and legible foregrounds re-derive through CSS. Authored lightness/chroma keep flowing through HMR because the runtime only _re-hues_, never re-serialises the color.
+- **Hue** writes one channel (`--prism-color-hue`); accent, neutral surfaces, states, and legible foregrounds re-derive through CSS. Authored lightness/chroma keep flowing through HMR because the runtime only _re-hues_, never re-serializes the color.
 - **Appearance** (system/light/dark) comes from one elevation-driven token set; an explicit scheme wins even against the OS preference and survives SSR/hydration with no flash.
 - **Density** and **motion** are environmental axes; **shadows** combine scheme (transparent in the dark) and density (lifted when spacious) as layered stacks.
 - **Radius** and **typeface** are mutable tokens over self-hosted variable faces.

@@ -1,5 +1,5 @@
 /**
- * Conditions ([patterns.md §5]): a named circumstance — pseudo, media,
+ * Conditions ([spec-conditions.md §1]): a named circumstance — pseudo, media,
  * container, scheme, element state — defined once in the system, usable as a
  * bare key everywhere. Values are plain selector strings or the typed helpers;
  * helpers exist for readability, strings are never second-class. A condition

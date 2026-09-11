@@ -36,7 +36,9 @@ export function tokenVar(value: VanityToken<'color'>) {
 | Styling methods on any consolidated system | `VanitySystem` |
 | A reusable inert declaration/rule value | `VanityFragment` |
 
-`VanityOpenSystemBase` and `VanitySystem` are deliberately empty-shape baselines. Every concrete open or locked system has more members and is assignable by width subtyping. System-specific tokens are intentionally absent from these baselines; a plugin must declare those through `expect*`. Layer-specific members such as `inLayer()` are likewise absent from `VanitySystem`, because an arbitrary system cannot promise a particular layer vocabulary. Accept the concrete system type when a helper needs one.
+`VanityOpenSystemBase` and `VanitySystem` are deliberately empty-shape baselines. Every concrete open or locked system has more members and is assignable by width subtyping.
+
+System-specific tokens are intentionally absent from these baselines; a plugin must declare those through `expect*`. Layer-specific members such as `inLayer()` are likewise absent from `VanitySystem`, because an arbitrary system cannot promise a particular layer vocabulary. Accept the concrete system type when a helper needs one.
 
 ```ts
 import type {

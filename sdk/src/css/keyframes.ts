@@ -1,5 +1,5 @@
 /**
- * `keyframes` and `fontFace` ([spec-css.md §6]): anonymous at-rules whose
+ * `keyframes` and `fontFace` ([spec-css.md §9]): anonymous at-rules whose
  * identity is the export that holds them. Steps are declaration-only rule
  * objects — a condition or selector inside one is semantically meaningless,
  * so the grammar refuses it rather than silently ignoring it.

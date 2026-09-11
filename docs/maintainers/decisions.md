@@ -4,7 +4,9 @@ This register records cross-specification choices and deliberate boundaries. Dom
 
 ## Recording durable decisions
 
-Record a choice here when it establishes a public contract, serialized format, or documented boundary. The task brief determines the collaboration flow: an agent may decide within its scope, surface a choice for maintainer input, or combine both. When the brief requires maintainer approval, obtain an explicit answer before treating the choice as settled. Never infer approval from a recommendation, silence, or a prior record. If implementation precedes an answer, leave the choice open until it is confirmed or reversed.
+Record a choice here when it establishes a public contract, serialized format, or documented boundary. The task brief determines the collaboration flow: an agent may decide within its scope, surface a choice for maintainer input, or combine both.
+
+When the brief requires maintainer approval, obtain an explicit answer before treating the choice as settled. Never infer approval from a recommendation, silence, or a prior record. If implementation precedes an answer, leave the choice open until it is confirmed or reversed.
 
 ## Product and language
 
@@ -17,7 +19,7 @@ Record a choice here when it establishes a public contract, serialized format, o
 | Compatible token handles are values wherever their CSS data type is accepted. | Authors never build `var()` adapters by hand. |
 | CSS-wide keywords work in every applicable declaration form. | A helper cannot narrow the platform grammar by accident. |
 | A CSS-named surface matches CSS grammar and defaults exactly; a Vanity-coined surface may carry defaults, but they are documented, consistent, and policy-configurable. | One rule decides every "should Vanity choose this for you" question, and the answer is predictable from the name alone. |
-| A color leaf keeps its authored spelling; only a build-time computation is canonicalized to oklch. | Emitted CSS reads like the CSS that was authored, and folding never substitutes one platform function for another. |
+| A color leaf keeps its authored spelling; a build-time computation uses its operation's named space when one defines its result, and otherwise canonicalizes to `oklch()`. A safe same-space adjustment may preserve the origin's notation. | Emitted CSS reads like the CSS that was authored, and folding never substitutes one platform function for another. |
 | One CSS concept has one implementation. A free function and a method form share the node, units, requirements, and folding rules. | Two spellings of one idea never disagree about what they emit. |
 | A built-in color-scheme axis derives its explicit attribute and runtime control from its mount name; `native.kind: 'scheme'` remains explicit metadata. | Named mounts stay coherent across layers, selectors, runtime state, and native `light-dark()` lowering without inferring behavior from the word `scheme`. |
 

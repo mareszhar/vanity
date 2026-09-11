@@ -40,7 +40,9 @@ Deterministic identity goldens are reportable contract evidence. A changed emitt
 
 A finite-domain behavior is tested by iterating the same named table the implementation reads, so a missing member fails to type-check instead of going untested. Tests enumerate every relevant position and projection for the behavior under test rather than selecting representative examples, and a behavior with independent dimensions is iterated over their product.
 
-A guard, diagnostic, or audit category is proven on both sides: it fires on every in-domain violation and stays silent on every in-domain non-violation, including adjacent-but-unrelated inputs and absent preconditions. Proving only the firing side ships false positives, which reach consumers as failures on correct systems. A carrier is tested through the output it produces — for CSS, by resolving the emitted text — so that addressing a cell and selecting only that cell remain separate assertions.
+A guard, diagnostic, or audit category is proven on both sides: it fires on every in-domain violation and stays silent on every in-domain non-violation, including adjacent-but-unrelated inputs and absent preconditions. Proving only the firing side ships false positives, which reach consumers as failures on correct systems.
+
+A carrier is tested through the output it produces—for CSS, by resolving the emitted text—so that addressing a cell and selecting only that cell remain separate assertions.
 
 A check is covered by a maintainer test for good input, bad input, and an absent source, and reports what it verified when it passes. A control whose success is silent cannot be distinguished from one that skipped.
 
@@ -211,7 +213,7 @@ Type tests that merely assert assignability are insufficient for APIs whose prod
 
 ## 6. Performance benchmarks
 
-Record cold and warm results with environment metadata. Benchmarks are comparative gates against the previous accepted implementation on the same machine/CI class, not universal marketing numbers.
+Record cold and warm results with environment metadata. Benchmarks are comparative gates against the accepted baseline on the same machine/CI class, not universal marketing numbers.
 
 Required measurements:
 
@@ -249,7 +251,23 @@ Store machine-readable results under a generated benchmark artifact path and com
 
 ### 6.1 Resource hygiene
 
-Resource-heavy evidence dimensions use measured, bounded concurrency. Selenita language services use at most six local workers while leaving one core for the host, and two workers in CI; the compact production browser matrix uses two workers; independent demo builds use at most three. Complete SDK type/editor tests, generated benchmarks, browser matrices, and packed fresh-app lifecycles remain separate runs so their compiler, browser, and filesystem peaks do not stack. A type-level prototype is first measured on the small fixture; recursive growth or a multi-gigabyte compiler heap is a design failure to remove, not a reason to keep rerunning the large corpus. Long-lived dev/browser processes must release watchers, HTTP, and HMR ports before another lifecycle begins. The raw vanilla-extract compatibility compiler must remain lazy and transportless; its regression fixture occupies Vite's default WebSocket port while proving compilation still succeeds without a warning. Sandbox-denied browser/Mach-port or watcher failures are rerun in the supported unsandboxed environment, while assertion failures remain red.
+Resource-heavy evidence dimensions use measured, bounded concurrency:
+
+| Work | Limit |
+| --- | --- |
+| Selenita language services | Six local workers with one core left for the host; two workers in CI. |
+| Compact production browser matrix | Two workers. |
+| Independent demo builds | Three workers. |
+
+Complete SDK type/editor tests, generated benchmarks, browser matrices, and packed fresh-app lifecycles remain separate runs so their compiler, browser, and filesystem peaks do not stack.
+
+Measure a type-level prototype on the small fixture first. Recursive growth or a multi-gigabyte compiler heap is a design failure to remove, not a reason to keep rerunning the large corpus.
+
+Long-lived development/browser processes release watchers, HTTP, and HMR ports before another lifecycle begins.
+
+The raw vanilla-extract compatibility compiler remains lazy and transportless. Its fixture occupies Vite's default WebSocket port while proving compilation still succeeds without a warning.
+
+Rerun sandbox-denied browser, Mach-port, or watcher failures in the supported unsandboxed environment; assertion failures remain red.
 
 The maintainer loop has two honest gates. `pnpm run check:fast` uses cached lint, root tooling/browser-spec typechecking, incremental SDK typechecking, and the runtime/output evidence dimensions; `pnpm run check` adds the complete workspace typecheck, documentation, all Selenita and type assertions, audits, and benchmark-fixture drift. `pnpm run validate` adds canary, optimizer, production/development browser, and lifecycle evidence. Fast feedback never substitutes for the complete release-shaped gate.
 

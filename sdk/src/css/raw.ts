@@ -1,5 +1,5 @@
 /**
- * `raw` ([spec-css.md §8]): the escape hatch is CSS itself. The block
+ * `raw` ([spec-css.md §9]): the escape hatch is CSS itself. The block
  * is real CSS with real nesting semantics — lightningcss parses and flattens
  * it under the generated class — so stepping off the object syntax costs
  * nothing else: still scoped, still validated, still token-interpolating, and

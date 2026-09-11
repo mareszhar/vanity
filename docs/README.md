@@ -6,7 +6,7 @@ Vanity’s documentation has one public product path and one maintainer path. St
 
 - [Getting started](./guides/getting-started.md) — install Vanity, create a system, compile styles, and choose the next document.
 - [Vision](./vision.md) — product promise, capability boundary, and the principles that govern every surface.
-- [Language](./language.md) — canonical vocabulary, API names, file roles, and authoring style.
+- [Language](./language.md) — canonical terms, ownership boundaries, file roles, and authoring style.
 
 ## Reference
 

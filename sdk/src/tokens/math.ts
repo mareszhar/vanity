@@ -1,7 +1,7 @@
 /**
  * Build-time color math. The one law here: every operation computes exactly
  * the formula its live-CSS serialization asks the browser to compute
- * ([spec-tokens.md §2]) — so lightening is `l + delta` in oklch because the
+ * ([spec-values.md §8–9]) — so lightening is `l + delta` in oklch because the
  * emitted form is `calc(l + delta)`, values are never clamped the browser
  * wouldn't clamp, and the canonical formatter bounds divergence to the
  * rounding digit.

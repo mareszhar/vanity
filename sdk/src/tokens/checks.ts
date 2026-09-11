@@ -1,6 +1,6 @@
 /**
  * Standalone checks: build-time guarantees over pairings the graph doesn't own
- * ([spec-tokens.md §5]). APCA Lc 60 by default; the WCAG 2 shorthands are
+ * ([spec-tokens.md §12]). APCA Lc 60 by default; the WCAG 2 shorthands are
  * one method away. Failures are diagnostics with fix-its, never findings in an
  * audit nobody re-runs.
  */

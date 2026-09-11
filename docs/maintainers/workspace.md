@@ -59,7 +59,21 @@ Scripts that inspect the repository as a whole—lint, documentation examples, a
 
 ### Package-manager updates
 
-The root `package.json` `packageManager` field is the source of truth for the pnpm version used by this workspace. Run `pnpm run pnpm:self-update` to update that pin with pnpm's `self-update` command and then verify the workspace with `pnpm install --frozen-lockfile --force` under the newly selected CLI. The force is intentional: pnpm documents it as the repair path for modules created by an incompatible CLI or linked to a different store. The update helpers use the user-level pnpm store (`$PNPM_HOME/store` when `PNPM_HOME` is set), automatically relink an existing `node_modules` tree that points at another store, and remove the ignored project-local `.pnpm-store` only after the relink succeeds. They fail rather than silently accepting a project-local fallback, preventing a pnpm upgrade from making an otherwise valid workspace fail later with `ERR_PNPM_UNEXPECTED_STORE`. In a pinned project, pnpm's self-update changes the root pin rather than installing a separate global version; the next pnpm invocation automatically switches to it. Review and commit the `package.json` pin separately from dependency changes.
+The root `package.json` `packageManager` field is the source of truth for the pnpm version used by this workspace.
+
+To update that pin:
+
+1. Run `pnpm run pnpm:self-update`.
+2. Verify the workspace with `pnpm install --frozen-lockfile --force` under the newly selected CLI.
+3. Review the `package.json` pin separately from dependency changes.
+
+The force is intentional: pnpm documents it as the repair path for modules created by an incompatible CLI or linked to a different store.
+
+The update helpers use the user-level pnpm store (`$PNPM_HOME/store` when `PNPM_HOME` is set), automatically relink an existing `node_modules` tree that points at another store, and remove the ignored project-local `.pnpm-store` only after the relink succeeds.
+
+They fail rather than silently accepting a project-local fallback. This prevents a pnpm upgrade from making an otherwise valid workspace fail later with `ERR_PNPM_UNEXPECTED_STORE`.
+
+In a pinned project, pnpm's self-update changes the root pin rather than installing a separate global version; the next pnpm invocation automatically switches to it.
 
 This is separate from `pnpm run upi`: `pnpm:self-update` changes the package manager, while `upi` reviews registry dependencies in the default catalog. If dependency updates are also intended, run `pnpm run upi` after the pnpm update, then `pnpm run validate` before release work.
 
@@ -71,9 +85,17 @@ Packing and publication use pnpm, which natively materializes both catalog and w
 
 Use `workspace:*` only for local workspace packages: it guarantees a local link during development and is likewise replaced by the publishable version during packing. Do not use it for registry dependencies.
 
-Run `pnpm run upi` to review and select latest eligible upgrades from the default catalog. The script derives its package selectors from that catalog, asks pnpm for machine-readable latest-version data at error log level, and presents one Clack multiselect option per outdated catalog entry. Its parser also tolerates a diagnostic prefix from a pnpm reporter so a slow registry request cannot corrupt the JSON review. Each option shows the installed and latest versions, with the changed major, minor, or patch suffix highlighted accordingly; Space toggles an entry, the arrow keys move, and Enter confirms. Cancelling or submitting without a selection is a no-op. The updater deliberately excludes TypeScript while its ESLint integration supports only the current workspace toolchain, and preserves the broader `peers` catalog because it defines the SDK's published compatibility contract. Follow a dependency upgrade with `pnpm run validate` before release work.
+Run `pnpm run upi` to review and select eligible upgrades from the default catalog:
 
-The dependency-update mental model has three layers: the workspace discovers projects and provides one install graph; the default catalog owns the exact versions Vanity tests; and the named `peers` catalog owns the broader versions the published SDK promises to support. `upi` derives candidates from the default catalog, asks pnpm for current registry data, lets the maintainer choose catalog entries once, and then delegates the actual update and install to pnpm before reapplying the explicit compatibility policies. A successful pnpm exit without a changed catalog or lockfile is treated as a no-op, which makes canceling safe.
+- the updater derives package selectors from the default catalog and requests machine-readable registry data;
+- one Clack multiselect option represents each outdated catalog entry, with the changed semver suffix highlighted;
+- the parser tolerates a pnpm reporter prefix, so diagnostics cannot corrupt the JSON review;
+- Space toggles an entry, the arrow keys move, and Enter confirms; cancellation or an empty submission is a no-op;
+- TypeScript remains excluded while the ESLint integration supports only the current workspace toolchain;
+- the broader `peers` catalog remains intact because it defines the SDK's published compatibility contract;
+- a pnpm exit without a changed catalog or lockfile is a no-op.
+
+The workspace provides one dependency graph, the default catalog owns the exact maintainer matrix, and the `peers` catalog owns the published compatibility range. Follow a dependency upgrade with `pnpm run validate` before release work.
 
 Repository automation under `scripts/` is TypeScript run through `tsx`, with an introductory comment that states the operational purpose and the invariant each script protects. Published runtime shims and tool-required configuration files may still use their required JavaScript module format outside that directory.
 
@@ -145,7 +167,9 @@ SDK tests live beside the code they exercise in `sdk/src/`:
 - `*.dx.test.ts` — editor completion, diagnostics, and hover;
 - `*.out.test.ts` — emitted CSS and artifact shape.
 
-Repository browser tests live in `tests/`. They own cross-package evidence that cannot belong to the SDK: `demos.spec.ts` and `scheme-axis.spec.ts` exercise built Nuxt/Vite applications, while `dev/nuxt-dev.spec.ts` proves first paint and HMR against the development server. The root `tsconfig.json` typechecks these Node/Playwright files and root tooling without making those concerns part of the reusable `tsconfig.base.json`. Shared demo data lives in `sandbox/fixtures/`; package-consumer fixtures live in `sdk/src/test-support/`.
+Repository browser tests live in `tests/`. They own cross-package evidence that cannot belong to the SDK: `demos.spec.ts` and `scheme-axis.spec.ts` exercise built Nuxt/Vite applications, while `dev/nuxt-dev.spec.ts` proves first paint and HMR against the development server.
+
+The root `tsconfig.json` typechecks these Node/Playwright files and root tooling without making those concerns part of the reusable `tsconfig.base.json`. Shared demo data lives in `sandbox/fixtures/`; package-consumer fixtures live in `sdk/src/test-support/`.
 
 The permanent evidence policy is [testing.md](./testing.md); use it to choose the dimensions required by a change.
 
@@ -198,7 +222,14 @@ The SDK package metadata points to `https://github.com/mareszhar/vanity` and dec
 
 Release tooling is intentionally review-first, and a release is one command, happy path included. The one precondition it asks of the maintainer: the working tree must be clean before `pnpm run publish:sdk:patch`, `:minor`, or `:major` starts — whatever history led there, squashed or not.
 
-Given that, the command verifies npm authentication and target-version availability before any expensive work, runs the complete gate and packaging rehearsal, bumps `sdk/package.json`, rebuilds, publishes `@mszr/vanity`, waits for registry visibility, then commits the bump as `🔖 release v<version>`, tags `HEAD` as `v<version>`, and pushes the branch and tag to `origin`. The only remaining step is attaching release notes to the GitHub release the pushed tag makes available.
+Given that, the command performs the release in this order:
+
+1. Verify npm authentication and target-version availability.
+2. Run the complete gate and packaging rehearsal.
+3. Bump `sdk/package.json`, rebuild, and publish `@mszr/vanity`.
+4. Wait for registry visibility, commit the bump as `🔖 release v<version>`, tag `HEAD` as `v<version>`, and push the branch and tag to `origin`.
+
+The only remaining step is attaching release notes to the GitHub release the pushed tag makes available.
 
 `pnpm run publish:sdk:dry-run` proves the same gate and packaging rehearsal without changing anything.
 

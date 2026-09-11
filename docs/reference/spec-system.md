@@ -123,7 +123,7 @@ semantic token subject
   └─ token control          (runtime controller; mutable addresses only)
 ```
 
-These are context-specific interfaces to one semantic subject, not one JavaScript object travelling through every environment.
+These are context-specific interfaces to one semantic subject, not one JavaScript object traveling through every environment.
 
 Token-module `.refs` are lazy module-relative handles. They rebind at each mount, including inside expressions, while `open.t` addresses the accumulated modules and `locked.t` owns final CSS identity.
 

@@ -117,7 +117,7 @@ Utility namespaces merge recursively, but duplicate leaves and namespace/functio
 
 ## 6. State and handle law
 
-Semantic subjects retain identity across contexts; their handles do not become one travelling object.
+Semantic subjects retain identity across contexts; their handles do not become one traveling object.
 
 | Context | Token interface |
 | --- | --- |

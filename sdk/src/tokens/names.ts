@@ -1,5 +1,5 @@
 /**
- * Emitted names are a public, consumer-facing API ([spec-tokens.md §9]):
+ * Emitted names are a public, consumer-facing API ([spec-tokens.md §11]):
  * path-derived kebab-case names under the system prefix, stable across builds.
  * The runtime rule here and the type-level `VanityKebab` must agree exactly —
  * both convert per character, so `brandSoft` → `brand-soft` everywhere.

@@ -1,6 +1,6 @@
 /**
  * Color values are expression trees, not eager computations
- * ([spec-tokens.md §3]): the compiler either folds a tree with build-time
+ * ([spec-values.md §8–9]): the compiler either folds a tree with build-time
  * math or serializes it to live CSS, choosing per liveness. The helper set is
  * finite and closed — a helper that cannot compile to CSS under liveness
  * doesn't ship — and every helper exists both as a method and standalone.
@@ -763,7 +763,7 @@ export interface VanityLegibleOptions {
 
 /**
  * The color legible on `target` — named for what it produces, carrying its
- * check ([spec-tokens.md §5]). Checked at build over exactly foldable targets;
+ * check ([spec-tokens.md §12]). Checked at build over exactly foldable targets;
  * over a live or deliberately unfoldable target it uses a representative
  * selected from the target's authored defaults. That static pick remains in
  * use if runtime values later drift far from those defaults, and the

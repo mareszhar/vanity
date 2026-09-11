@@ -69,7 +69,7 @@ The result is ordinary CSS with recognizable classes and custom properties. No c
 
 ## Next
 
-- Read [the language](../language.md) for the canonical terms and API map.
+- Read [the language](../language.md) for canonical terms, ownership boundaries, and the map between product surfaces.
 - Read [system authoring](../reference/spec-system-authoring.md) before adding modules, axes, conditions, or plugins.
 - Read [styling and output](../reference/spec-css.md) before building components.
 - Read [Vite, Vue, and Nuxt integrations](../reference/spec-integrations.md) when connecting an application.

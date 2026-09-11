@@ -1,5 +1,5 @@
 /**
- * `createSystem` — bind once, typed everywhere ([spec-css.md §1]): a
+ * `createSystem` — bind once, typed everywhere ([spec-system.md §1 and §6]): a
  * factory that closes over tokens, conditions, and layers and returns
  * authoring functions whose types are inferred. No codegen, no artifact
  * directory — inference is the codegen. The floor is deliberately designed: tokens can be
@@ -162,7 +162,7 @@ export interface VanitySystemOptions<
   root?: string
   /** The declared layer that owns ordinary token declarations. */
   tokenLayer?: L[number]
-  /** Build-time checks over an inline token module ([spec-tokens.md §5]); a `defineTokens` result brings its own. */
+  /** Build-time checks over an inline token module ([spec-tokens.md §12]); a `defineTokens` result brings its own. */
   checks?: (tokens: VanitySystemTokens<T, P>) => readonly VanityCheck[]
   /** Opt out of the built-in base condition set. */
   baseConditions?: B

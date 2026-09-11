@@ -87,7 +87,11 @@ Contracts:
 
 `setMode`, `clearMode`, and boolean `$activate(false)` do not exist because their names make false promises for `&`-conditioned modes.
 
-For unusual axes, `axis({ control })` or the direct `addAxis()` config may declare `{ id, read(root), activate(root, mode), project?(mode) }`. The stable `id` and optional data-only style/attribute projections enter the portable runtime contract; closures do not. An in-process locked system binds its control automatically. A restored application-system projection receives the same implementation explicitly through `runtime({ controls: { [id]: control } })`, just as Standard Schema validators cross the boundary by stable ID. A control adapter makes every declared mode activatable and remains responsible for honest reads. A custom control that affects first paint supplies `project`; otherwise SSR projection stays honestly empty for that custom effect. Changing control semantics requires a new `id`; reusing an id promises the same read/activate/projection contract across compiler and application environments.
+For unusual axes, `axis({ control })` or the direct `addAxis()` config may declare `{ id, read(root), activate(root, mode), project?(mode) }`.
+
+The stable `id` and optional data-only style/attribute projections enter the portable runtime contract; closures do not. An in-process locked system binds its control automatically. A restored application-system projection receives the same implementation explicitly through `runtime({ controls: { [id]: control } })`, just as Standard Schema validators cross the boundary by stable ID.
+
+A control adapter makes every declared mode activatable and remains responsible for honest reads. A custom control that affects first paint supplies `project`; otherwise SSR projection stays honestly empty for that custom effect. Changing control semantics requires a new `id`; reusing an id promises the same read/activate/projection contract across compiler and application environments.
 
 ## 4. Root targeting
 
@@ -203,7 +207,9 @@ Optional Standard Schema contracts:
 
 Transactions validate all values before writes.
 
-Synchronous runtime misuse and runtime-controller failures throw `VanityRuntimeError`. Import it from `@mszr/vanity` or `@mszr/vanity/runtime`; both expose the same browser-safe class. Its `code` and `diagnostic` fields carry a stable runtime code, semantic location, supporting detail, and repair guidance. Reconciliation and inspection return runtime diagnostics in their result objects when a per-entry problem can be reported without aborting the whole operation.
+Synchronous runtime misuse and runtime-controller failures throw `VanityRuntimeError`. Import it from `@mszr/vanity` or `@mszr/vanity/runtime`; both expose the same browser-safe class. Its `code` and `diagnostic` fields carry a stable runtime code, semantic location, supporting detail, and repair guidance.
+
+Reconciliation and inspection return runtime diagnostics in their result objects when a per-entry problem can be reported without aborting the whole operation.
 
 ## 10. Generic custom-property escape
 

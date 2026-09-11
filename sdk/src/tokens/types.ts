@@ -986,7 +986,7 @@ export type VanityVarsOf<Selection> = Selection extends { readonly $name: infer 
 export interface VanityTokensOptions<T = unknown, Prefix extends string = string> {
   /** The custom-property prefix: `--vanity-*` by default. */
   prefix?: Prefix
-  /** Standalone guarantees over pairings the graph doesn't own ([spec-tokens.md §5]). */
+  /** Standalone guarantees over pairings the graph doesn't own ([spec-tokens.md §12]). */
   checks?: (refs: VanityTokens<T, Prefix>) => readonly VanityCheck[]
 }
 

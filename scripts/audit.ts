@@ -276,7 +276,7 @@ const NAMING_VERB_PREFIXES = [
   'reject',
 ] as const
 
-/** Public result-named DSL and CSS vocabulary explicitly allowed by docs/language.md. */
+/** Concrete names owned by public DSLs, host protocols, and serialized contracts. */
 const NAMING_ALLOWLIST = new Set([
   'class',
   'rules',
@@ -505,7 +505,7 @@ export async function auditProductionNames(root = packageSourceRoot): Promise<vo
     throw new Error([
       '[vanity] naming-law violations in production source:',
       ...violations.map(value => `  ${value}`),
-      'Rename the operation with a documented verb or add a deliberate public-DSL exception to docs/language.md.',
+      'Rename the operation with a documented verb or add a deliberate exception with an owning contract and maintainer test.',
     ].join('\n'))
   }
 }

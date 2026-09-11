@@ -102,7 +102,12 @@ A precompiled design-system package ships:
 
 A package boundary is a read site: simplify accumulated intersection types there so consumer hovers show one public object and builder internals never leak. The emitted declarations must not require `type-fest`.
 
-The two published command-line/tooling entries remain JavaScript by host contract: `sdk/typescript.cjs` is loaded by TypeScript as a CommonJS language-service plugin, and `sdk/bin/vanity.mjs` is the executable ESM wrapper around the built CLI. They are intentionally exempt from the SDK TypeScript program because their host APIs are runtime-injected and their implementation is shipped as source; the naming-law audit includes both files explicitly so the repository-wide naming rule still applies to them.
+The two published command-line/tooling entries remain JavaScript by host contract:
+
+- `sdk/typescript.cjs` is loaded by TypeScript as a CommonJS language-service plugin.
+- `sdk/bin/vanity.mjs` is the executable ESM wrapper around the built CLI.
+
+They are intentionally exempt from the SDK TypeScript program because their host APIs are runtime-injected and their implementation is shipped as source. The naming-law audit includes both files explicitly so the repository-wide naming rule still applies to them.
 
 The compiler validates that build JavaScript and adjacent portable data agree. A stale pair fails with package name, both identities, and a rebuild fix.
 
@@ -168,7 +173,7 @@ Every styling emitter lowers to one ordered, lossless rule IR supporting:
 
 `@property` is unlayered and resolves duplicate registrations by stylesheet order. `@font-face` and `@keyframes` may live inside layers, where layer priority participates in name collision resolution. The IR records those differences explicitly.
 
-Named system rules sit above rule IR. Their name and metadata are shape/provenance; `css` lowers into the same ordered IR as every emitter. The versioned portable contract currently stores this low-level shape in `ruleGroups`, but the public authoring language remains `defineRules`, `addRule(s)`, `overwriteRule(s)`, `expectRule(s)`, and `ds.rules`. The system artifact records fingerprints and emits each named rule once, independent of how many styling surfaces are evaluated.
+Named system rules sit above rule IR. Their name and metadata are shape/provenance; `css` lowers into the same ordered IR as every emitter. The versioned portable contract currently stores this low-level shape in `ruleGroups`; the exact named-rule grammar belongs to [spec-system-authoring.md §9](../reference/spec-system-authoring.md#9-named-system-rules). The system artifact records fingerprints and emits each named rule once, independent of how many styling surfaces are evaluated.
 
 Relative colors add a value-IR node carrying the selected color space, origin, component map, and alpha. Component expressions retain references, liveness, requirements, and constructor provenance; serialization chooses native relative syntax or an exact fold. No intermediate stage stringifies a live value.
 
@@ -203,24 +208,13 @@ Required recovery sequences:
 
 ## 10. Source ownership and boundaries
 
-A file boundary exists to separate concerns a reader holds separately, not to satisfy a line-count
-target. Split when a file mixes mental models, when one concern's types would make unrelated code
-depend on another concern, or when two concerns change for unrelated reasons. Do not split a
-cohesive object merely because it is long: following one stateful thing through several files is
-harder to maintain than reading it in one place.
+A file boundary exists to separate concerns a reader holds separately, not to satisfy a line-count target. Split when a file mixes mental models, when one concern's types would make unrelated code depend on another concern, or when two concerns change for unrelated reasons. Do not split a cohesive object merely because it is long: following one stateful thing through several files is harder to maintain than reading it in one place.
 
 Three boundaries are intentionally shaped by that rule:
 
-- `system/open.ts` is large because it materializes the complete chainable authoring surface. Its
-  many method signatures and implementations are one public mental model; separating them by
-  size would make the surface harder to navigate.
-- `tokens/module.ts` keeps the inert graph and its closely related authoring, build, runtime,
-  emission, and introspection projections together. Those operations share one private graph
-  representation and splitting them would leak that representation across files.
-- `values/kernel.ts` keeps the kernel, constructor binding, and value serialization together while
-  they remain one small value-semantics model. `substrate/vanilla-extract/adapter.ts` likewise
-  keeps the backend adapter's authoring, file-scope, serialization, and transformation lifecycle
-  together. Its boundary is enforced by the backend-import guard, not by fragmenting the adapter.
+- `system/open.ts` is large because it materializes the complete chainable authoring surface. Its many method signatures and implementations are one public mental model; separating them by size would make the surface harder to navigate.
+- `tokens/module.ts` keeps the inert graph and its closely related authoring, build, runtime, emission, and introspection projections together. Those operations share one private graph representation and splitting them would leak that representation across files.
+- `values/kernel.ts` keeps the kernel, constructor binding, and value serialization together while they remain one small value-semantics model. `substrate/vanilla-extract/adapter.ts` likewise keeps the backend adapter's authoring, file-scope, serialization, and transformation lifecycle together. Its boundary is enforced by the backend-import guard, not by fragmenting the adapter.
 
 ### Current domain ownership
 
@@ -238,46 +232,30 @@ The source tree follows the mental model of the system:
 | substrate | `types.ts` for the portable module contract and explicitly Vanilla Extract-bound lifecycle contract; `index.ts` for selection; `vanilla-extract/adapter.ts` for all backend-specific integration |
 | styling domains | `recipes/`, `atoms/`, and `ports/` remain separate because their authoring and projection semantics differ; `plugins/` and `presets/` likewise retain their domain boundaries |
 
-Package entrypoints expose capabilities or select adapters. They do not become alternate homes for
-domain implementations.
+Package entrypoints expose capabilities or select adapters. They do not become alternate homes for domain implementations.
 
-The substrate keeps its portability boundary explicit. `VanityPortableModuleSubstrate` contains the
-scope, function-serialization, and style-module transformation operations that Vanity can preserve
-across implementations. `VanityVanillaExtractModuleLifecycle` contains the current backend's
-file-scope, module-serialization, package-resolution, initialization, and Vite-plugin operations;
-it is deliberately not a portable contract. `vanilla-extract/adapter.ts` is the sole translation
-point for that backend lifecycle and for capture/identifier shapes that mirror Vanilla Extract.
-The cross-specification substrate boundaries and their re-entry conditions live in
-[decisions.md](./decisions.md); this section records the ownership and implementation seam.
+The substrate keeps its portability boundary explicit:
+
+| Contract | Owns | Portable |
+| --- | --- | --- |
+| `VanityPortableModuleSubstrate` | scope, function serialization, and style-module transformation operations that can survive across implementations | yes |
+| `VanityVanillaExtractModuleLifecycle` | backend file scope, module serialization, package resolution, initialization, and Vite-plugin operations | no |
+
+`vanilla-extract/adapter.ts` is the sole translation point for the backend lifecycle and for capture/identifier shapes that mirror Vanilla Extract. The cross-specification substrate boundaries and their re-entry conditions live in [decisions.md](./decisions.md); this section records the ownership and implementation seam.
 
 ### Compiler and Vite boundaries
 
-The compiler owns Vanity's pipeline, while a host adapter owns how that pipeline is mounted. In
-particular, `compiler/modules/` answers the complete question “how does this style source become a
-live system?”: bundling and evaluation stay together. `compiler/projection/` answers “how does
-this resolved system become browser or SSR artifact source?”: runtime module generation is
-projection and is not Vite-specific.
+The compiler owns Vanity's pipeline, while a host adapter owns how that pipeline is mounted. In particular, `compiler/modules/` answers the complete question “how does this style source become a live system?”: bundling and evaluation stay together. `compiler/projection/` answers “how does this resolved system become browser or SSR artifact source?”: runtime module generation is projection and is not Vite-specific.
 
-`vite.ts` owns only the Vite lifecycle: the plugin factory and hooks, auto-import plugin
-composition, Vite/Rollup id and path normalization, and Vite-shaped diagnostics and build errors.
-Its hooks delegate style bundling, source transforms, evaluation, HMR, and runtime artifact
-generation to `compiler/`. A helper belongs in the host adapter only when its answer would change
-for a different bundler; otherwise it belongs with the Vanity operation it serves.
+`vite.ts` owns only the Vite lifecycle: the plugin factory and hooks, auto-import plugin composition, Vite/Rollup id and path normalization, and Vite-shaped diagnostics and build errors. Its hooks delegate style bundling, source transforms, evaluation, HMR, and runtime artifact generation to `compiler/`. A helper belongs in the host adapter only when its answer would change for a different bundler; otherwise it belongs with the Vanity operation it serves.
 
 ### External format boundaries
 
-Every external artifact format has a producer and a strict reader placed at the same architectural
-boundary. The producer defines the current representation; the reader validates the complete known
-schema recursively and rejects missing required material, unknown fields, stale keys from removed
-formats, and superseded versions before downstream code sees the data.
+Every external artifact format has a producer and a strict reader placed at the same architectural boundary. The producer defines the current representation; the reader validates the complete known schema recursively and rejects missing required material, unknown fields, stale keys from removed formats, and superseded versions before downstream code sees the data.
 
 | Format | Producer | Strict reader |
 | --- | --- | --- |
 | portable system v2 | `system/contract.ts` | `system/contractValidation.ts` |
 | manifest v4 | `introspect/manifest.ts` | `introspect/manifestValidation.ts` |
 
-Vanity is pre-1.0, so rejecting data outside the current known schema is not backward-compatibility
-handling; it is the absence of it. Closing a schema to what the reader actually understands keeps
-the boundary honest and turns a confusing downstream failure into a clear diagnostic at the door.
-When a new external format is introduced, add its producer/reader pair before wiring it into a
-consumer, rather than growing loose checks at call sites.
+Vanity is pre-1.0, so rejecting data outside the current known schema is not backward-compatibility handling; it is the absence of it. Closing a schema to what the reader actually understands keeps the boundary honest and turns a confusing downstream failure into a clear diagnostic at the door. When a new external format is introduced, add its producer/reader pair before wiring it into a consumer, rather than growing loose checks at call sites.

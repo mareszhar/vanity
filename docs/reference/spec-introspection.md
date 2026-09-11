@@ -96,9 +96,11 @@ It returns a `VanityAuditReport` with `findings` and an explicit `unevaluated` l
 | `nearDuplicates`, `scaleStrays`, `focusVisibility` | `emittedCss` |
 | `eagerStyleBarrels`, `cssParityGaps`, `staleArtifacts`, `rootModeDisagreements` | `buildEvidence` |
 
-`staleDerivations` is an error by default because a missing declaration can leave an emitted build-folded value stale under an active axis mode. The other system categories remain advisory by default, and every category can be promoted or silenced through audit policy. `derivedCaseGrowth` warns when one correct folded token needs more intersection declarations than its budget; keeping the derivation live with `reference: 'var'` is the escape. Its default advisory budget is 32 required cases.
+`staleDerivations` is an error by default because a missing declaration can leave an emitted build-folded value stale under an active axis mode. The other system categories remain advisory by default, and every category can be promoted or silenced through audit policy.
 
-The complete build-scope `audit(manifest, css, config?, evidence?)` continues to evaluate the same seven system categories alongside the twelve evidence-dependent categories. Consolidation-time `audit` policy establishes the default level for each category; a call-time config can override it for that audit call.
+`derivedCaseGrowth` warns when one correct folded token needs more intersection declarations than its budget; keeping the derivation live with `reference: 'var'` is the escape. Its default advisory budget is 32 required cases.
+
+The complete build-scope `audit(manifest, css, config?, evidence?)` evaluates the same seven system categories alongside the twelve evidence-dependent categories. Consolidation-time `audit` policy establishes the default level for each category; a call-time config can override it for that audit call.
 
 ## 4. Structured explanation
 
@@ -110,7 +112,13 @@ const component = ds.explain(button)
 const input = ds.explain(button.ports.tint)
 ```
 
-Tokens, axes, conditions, recipes, anatomies, and ports return structured semantic data. Token explanations include authored expression, reference/fold decisions, dependencies, support, preview, declarations, runtime addresses, portability, and ownership. A `legibleOn()` target that uses a representative approximation records that fact in its expression and fold reason. Recipe/anatomy explanations include variants, toggles, defaults, parts, and published ports. Port explanations include type, default, validation, description, and deprecation.
+Tokens, axes, conditions, recipes, anatomies, and ports return structured semantic data.
+
+| Subject | Explanation includes |
+| --- | --- |
+| token | authored expression, reference/fold decisions, dependencies, support, preview, declarations, runtime addresses, portability, and ownership; a representative `legibleOn()` approximation records its approximation in the expression and fold reason |
+| recipe or anatomy | variants, toggles, defaults, parts, and published ports |
+| port | type, default, validation, description, and deprecation |
 
 `formatExplanation()` renders stable human output. Formatted prose is a view of the structured result, never the API of record. A semantic path such as `color.brand` can be resolved by the CLI without loading TypeScript.
 
@@ -176,6 +184,18 @@ The omitted manifest defaults to `.vanity/manifest.json`. `inspect` summarizes t
 
 Identity changes constrain the system categories reported. Module recipes, ports, styles, escapes, contrast, and usage are diffed under their semantic category. The formatted output is stable enough for review; `--json` is the integration contract.
 
+The same projections are available programmatically:
+
+| Need | API | Entry point |
+| --- | --- | --- |
+| Read or validate | `readManifest`, `assertManifest` | `@mszr/vanity/cli` |
+| Summarize or explain | `inspectManifest`, `explainManifestPath` | `@mszr/vanity/cli` |
+| Build or audit | `buildManifest`, `audit`, `formatAuditFindings` | `@mszr/vanity/vite` |
+| Diff | `diffManifests`, `formatManifestDiff` | `@mszr/vanity/vite` |
+| Build agent context | `buildAgentContext`, `generateAgentContext` | `@mszr/vanity/vite` |
+
+`readManifest()` is asynchronous; the other functions operate on an already loaded manifest or semantic map. `runVanityCli()` is the package launcher used by the executable.
+
 ## 7. Diagnostics
 
 Authoring and build failures use the normalized diagnostic delivered by `VanityError`, compiler sinks, and integrations:
@@ -223,7 +243,9 @@ Public-surface hover/TSDoc coverage and consumer testing helpers enforce this co
 
 ## 10. Audits
 
-The audit taxonomy and system/build scope split are defined in [§3](#3-two-truthful-scopes). Evidence-dependent categories consume explicit integration/runtime evidence rather than guessing from filenames or static selectors. Audit categories are advisory by default except for `staleDerivations`, which is an error by default because it can make emitted CSS observably wrong; `derivedCaseGrowth` remains advisory because its output is correct but large; every category respects consolidation-time `off`/`warn`/`error` policy and includes a repair direction.
+The audit taxonomy and system/build scope split are defined in [§3](#3-two-truthful-scopes). Evidence-dependent categories consume explicit integration/runtime evidence rather than guessing from filenames or static selectors.
+
+Audit categories are advisory by default except for `staleDerivations`, which is an error by default because it can make emitted CSS observably wrong. `derivedCaseGrowth` remains advisory because its output is correct but large; every category respects consolidation-time `off`/`warn`/`error` policy and includes a repair direction.
 
 ## 11. Agent and DevTools projections
 
@@ -252,4 +274,4 @@ Permanent evidence covers:
 - published schema and CLI from a freshly packed consumer;
 - repository benchmark and package-size baselines.
 
-Test ownership is catalogued in [testing.md](../maintainers/testing.md); performance history is recorded in [benchmarks.md](../maintainers/benchmarks.md).
+Test ownership is cataloged in [testing.md](../maintainers/testing.md); performance measurements are recorded in [benchmarks.md](../maintainers/benchmarks.md).

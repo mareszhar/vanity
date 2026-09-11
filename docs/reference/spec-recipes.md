@@ -17,7 +17,7 @@ Variants and anatomy compress component state into a legible, typed contract. Th
 
 ## 1. `recipe()` — variants, toggles, compound, defaults
 
-**Why.** The variants model is the part of this problem the last decade actually solved (Stitches proved it; everyone inherited it). vanity keeps the settled shape deliberately — a proposal earns trust by not re-inventing solved things — and adds only two refinements: toggles as their own key, and full condition support inside every arm.
+**Why.** The variants model is a familiar, proven component contract. Vanity keeps that direct shape and adds two refinements: toggles as their own key, and full condition support inside every arm.
 
 **Usage.**
 
@@ -68,7 +68,7 @@ button.variants // → the typed variant map, for prop forwarding and docs
 - A recipe lives in one cascade layer, chosen with `ds.recipe.layer(name)` or `ds.inLayer(name).recipe`. A `layer:` option or rule key is a diagnostic; layer placement is emitter configuration everywhere.
 - Calling with no arguments yields the defaults; the full call-site law — strict literals, permissive widened props — is [§4](#4-the-call-site-props-in-classes-out).
 
-**Implementation.** Per-arm `class()`-equivalent lowering into the shared ordered rule IR plus a lookup table (the runtime is a class-string join over the precomputed table, restored across the build/app boundary by `restoreRecipe`). Emission order — base, variants, toggles, compound — makes compound entries win by ordinary CSS order within the layer. Debug names follow the declaration via the `/vite` transform (`button_intent_brand__h4x`). Prior art read, not depended on: `@vanilla-extract/recipes`, CVA, Stitches.
+**Implementation.** Per-arm `class()`-equivalent lowering into the shared ordered rule IR plus a lookup table (the runtime is a class-string join over the precomputed table, restored across the build/app boundary by `restoreRecipe`). Emission order — base, variants, toggles, compound — makes compound entries win by ordinary CSS order within the layer. Debug names follow the declaration via the `/vite` transform (`button_intent_brand__h4x`).
 
 ### 1.1 Token-group variants
 
@@ -244,7 +244,9 @@ export const accordionItem = ds.class({
 })
 ```
 
-**Contract details.** State conditions are ordinary system conditions (`data('state', 'open')` helper or raw selector). Applications register the headless states they use; Hail does not guess a component library’s contract. No adapter layer exists or is needed. **Who sets `data-state`:** a headless library (Reka UI, Ark) sets it for you — that's its contract; when you own the DOM, bind it yourself (`:data-state="open ? 'open' : 'closed'"`). The quickstart and demo model both.
+**Contract details.** State conditions are ordinary system conditions (`data('state', 'open')` helper or raw selector). Applications register the headless states they use; Hail does not guess a component library’s contract. No adapter layer exists or is needed.
+
+**Who sets `data-state`.** A headless library (Reka UI, Ark) sets it for you—that is its contract. When you own the DOM, bind it yourself (`:data-state="open ? 'open' : 'closed'"`). The quickstart and demo model both.
 
 ---
 

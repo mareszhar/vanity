@@ -97,7 +97,7 @@ Vanity evaluates the style module at build time and emits ordinary CSS: classes,
 
 Use the locked system to create classes, ordered fragments, selector rules, recipes, anatomies, atom sets, ports, keyframes, font faces, and raw CSS. Mutable tokens and activatable axes lower to declared browser-native slots; the optional runtime controller sets those slots and can create SSR-safe snapshots.
 
-Vite projects manifests and portable system data from the same semantic contract. The CLI can inspect, explain, and diff those artifacts; the testing kit verifies emitted CSS, folding, rendered values, and editor DX.
+The Vite integration projects the manifest and portable system data from the same semantic contract. The CLI can inspect, explain, and diff those artifacts; the testing kit verifies emitted CSS, folding, rendered values, and editor DX.
 
 ```TS
 const runtime = ds.runtime()

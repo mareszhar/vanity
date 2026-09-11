@@ -87,7 +87,7 @@ const d = useAnatomy(s.dialog, props)
 
 ## 3. The SFC mapping
 
-**Why.** Vue's scoped-style machinery is a set of workarounds for CSS-the-global-language. A compiled, module-scoped model doesn't reimplement the workarounds — it removes the problems they work around. The mapping is documentation-as-contract; migrating users must find each habit's home:
+**Why.** Vue's scoped-style machinery is a set of workarounds for CSS-the-global-language. A compiled, module-scoped model doesn't reimplement the workarounds — it removes the problems they work around. The mapping is documentation-as-contract; each SFC habit has a defined Vanity home:
 
 | SFC feature | Compensates for | In vanity |
 | --- | --- | --- |
@@ -138,16 +138,19 @@ The shared configuration and the two module-role pipelines are defined in [spec-
 
 - **HMR:** editing a `.css.ts` hot-swaps the emitted CSS without a full reload or component state loss. Stable virtual CSS ids swap the style tag in place, style modules self-accept, an edit to a bundled dependency hot-updates every style module built on it, and only an export-shape change costs a full reload. The Nuxt demos lock this contract end to end; a regression is a release blocker.
 - **SSR:** static styles ship as stylesheets; port values as inline style; no FOUC, no hydration style mismatch, no per-request collection.
-- **Mutable-token/mode flash:** persist application settings or `runtime.snapshot()` in a cookie/server payload, pass each root entry from `ds.runtimeProps()` to its matching server-rendered root, and construct `ds.runtime({ within, initial: snapshot })` on mount. The first SSR paint already contains the mode attributes and opaque slot values; hydration validates the same semantic addresses without rewriting them. The module's small `vanity-scheme` HTML-cookie adapter remains available for the common document-root light/dark case, while custom roots and multi-axis systems use the declared-root runtime rather than a global theme registry.
+- **Mutable-token/mode flash:** persist application settings or `runtime.snapshot()` in a cookie/server payload.
+  - Pass each root entry from `ds.runtimeProps()` to its matching server-rendered root, then construct `ds.runtime({ within, initial: snapshot })` on mount.
+  - The first SSR paint already contains the mode attributes and opaque slot values; hydration validates the same semantic addresses without rewriting them.
+  - The module's small `vanity-scheme` HTML-cookie adapter remains available for the common document-root light/dark case, while custom roots and multi-axis systems use the declared-root runtime rather than a global theme registry.
 
 ---
 
 ## 6. Colocation stance
 
-**Why.** The one honest ergonomic regression versus SFCs: styles move from `<style>` in the same file to a sibling `Button.css.ts`. Stated plainly rather than papered over.
+**Why.** The current ergonomic trade-off versus SFCs is that styles move from `<style>` in the same file to a sibling `Button.css.ts`. The sibling form keeps build-time evaluation and portable package boundaries explicit.
 
 **Contract details.**
 
 - The sibling `*.css.ts` module is the stable, portable authoring form — required by the evaluation model ([patterns.md §1](../maintainers/patterns.md#1-evaluate-typescript-compile-css)).
-- The sting is smallest exactly where colocation matters most: design-system styles (tokens, recipes, anatomies) _want_ their own files, and small one-off styling stays short through `ds.atoms()` ([spec-recipes.md](./spec-recipes.md)) and `overrides`-layer `class()` calls.
+- The trade-off is smallest where colocation matters most: design-system styles (tokens, recipes, anatomies) _want_ their own files, and small one-off styling stays short through `ds.atoms()` ([spec-recipes.md](./spec-recipes.md)) and `overrides`-layer `class()` calls.
 - Inline TypeScript style blocks are not part of the current contract. A future proposal would need to preserve the same evaluation model and justify its editor-tooling cost.

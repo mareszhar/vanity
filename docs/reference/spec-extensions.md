@@ -75,6 +75,8 @@ const compact = createSystem().addPlugin(densityTools({ base: 4 }))
 
 Inline plugins are accepted when they carry a stable identity suitable for their semantics.
 
+When options contain values that cannot serve as identity directly, define `optionsIdentity(options)` to project them onto a deterministic JSON-safe identity. The projection participates in plugin compatibility and system identity; the original options still configure the plugin.
+
 ## 4. Namespaces
 
 A related family should use a namespaced util:
@@ -89,7 +91,7 @@ ds.addUtils({
 })
 ```
 
-A single universal verb may be flat when collision risk and future meaning are clear. Additive-only rejects every collision at the plugin's mount and names the plugin plus the conflicting namespace. System emitters, registration methods, constructors, and prior utilities occupy one reserved top-level namespace, so no contribution can be accepted only to disappear behind a locked-system member later.
+A single universal verb may be flat when collision risk and future meaning are clear. Additive-only rejects every collision at the plugin's mount and names the plugin plus the conflicting namespace. System emitters, registration methods, constructors, and existing utilities occupy one reserved top-level namespace, so no contribution can be accepted only to disappear behind a locked-system member later.
 
 The locked system exposes added utils and constructors but no registration methods.
 
@@ -128,7 +130,7 @@ System config contains policy only:
 - default units;
 - token reference/emission;
 - support targets;
-- validation behavior;
+- color policy;
 - naming/layer conventions that change meaning or output.
 
 `addConsts` contains JSON-serializable convenience data. Nonportable values fail at the cursor/build rather than disappearing from the manifest.
