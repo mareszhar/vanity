@@ -6,7 +6,15 @@
  * not create or store a runtime system surface.
  */
 
-import type { VanityDefaultTokenPolicy, VanityTokenModuleRequirement, VanityTokenPolicy } from '../tokens/types'
+import type {
+  VanityColorAdjustmentConstructor,
+  VanityColorInterpolationSpace,
+  VanityColorMixConstructor,
+  VanityDefaultTokenPolicy,
+  VanityPolarColorSpace,
+  VanityTokenModuleRequirement,
+  VanityTokenPolicy,
+} from '../tokens/types'
 import type { VanityCanonicalConstructors } from '../values/defaults'
 import type { VanityValueKernel, VanityValueOperationContext } from '../values/kernel'
 import type { VanityLengthConstructor, VanityLengthUnit } from '../values/units'
@@ -87,15 +95,42 @@ type ConfiguredLengthUnit<Policies, Fallback extends VanityLengthUnit>
 type CurrentLengthUnit<Constructors>
   = Constructors extends { readonly length: VanityLengthConstructor<infer Unit> } ? Unit : 'px'
 
+type ConfiguredColorMixSpace<Policies>
+  = Policies extends {
+    readonly color: { readonly mixSpace: infer Space extends VanityColorInterpolationSpace }
+  } ? Space : undefined
+
+type ConfiguredColorAdjustSpace<Policies>
+  = Policies extends {
+    readonly color: { readonly adjustSpace: infer Space extends VanityPolarColorSpace }
+  } ? Space : undefined
+
+type ProjectedConstructorName<Name extends PropertyKey, Policies>
+  = [ConfiguredColorAdjustSpace<Policies>] extends ['hwb']
+    ? Name extends 'lighten' | 'darken' | 'saturate' | 'desaturate' ? never : Name
+    : Name
+
 export type ProjectConstructors<Constructors extends object, Policies>
   = {
-    readonly [Name in keyof Constructors]: Name extends 'length'
+    readonly [Name in keyof Constructors as ProjectedConstructorName<Name, Policies>]: Name extends 'length'
       ? ProjectRestrictedConstructor<
         VanityLengthConstructor<ConfiguredLengthUnit<Policies, CurrentLengthUnit<Constructors>>>,
         Name,
         RestrictionOf<Policies, Name>
       >
-      : ProjectRestrictedConstructor<Constructors[Name], Name, RestrictionOf<Policies, Name>>
+      : Name extends 'colorMix'
+        ? ProjectRestrictedConstructor<
+          VanityColorMixConstructor<ConfiguredColorMixSpace<Policies>>,
+          Name,
+          RestrictionOf<Policies, Name>
+        >
+        : Name extends 'lighten' | 'darken' | 'saturate' | 'desaturate' | 'rotate'
+          ? ProjectRestrictedConstructor<
+            VanityColorAdjustmentConstructor<ConfiguredColorAdjustSpace<Policies>>,
+            Name,
+            RestrictionOf<Policies, Name>
+          >
+          : ProjectRestrictedConstructor<Constructors[Name], Name, RestrictionOf<Policies, Name>>
   }
 
 type ProjectTokenPolicy<Policy extends VanityTokenPolicy, Policies>

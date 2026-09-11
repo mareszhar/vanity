@@ -45,6 +45,7 @@ export const hailThemingRules = defineRules({
     order: 20,
     css: {
       ':root': { colorScheme: 'light dark' },
+      // Hail mounts its native color scheme axis under the conventional `scheme` name.
       ':root[data-scheme=\"light\"]': { colorScheme: 'only light' },
       ':root[data-scheme=\"dark\"]': { colorScheme: 'only dark' },
     },

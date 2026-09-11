@@ -23,6 +23,7 @@ import type {
   VanityStrictPropertyAliasClassEmitter,
   VanityStrictPropertyAliasFragmentFactory,
   VanityStrictPropertyAliasRulesEmitter,
+  VanityTokenDeclarationProducer,
   VanityTokenDeclarations,
 } from '../css/types'
 import type { VanityAuditReport } from '../introspect/audit'
@@ -73,12 +74,12 @@ import type { VanityPolicies } from './policies'
 import type { VanitySystemRule } from './rules'
 import { bindAtoms } from '../atoms/atoms'
 import { createClassEmitter } from '../css/class'
-import { createLayerContext, requireStyleModuleFile } from '../css/context'
+import { createLayerContext, hasStyleModuleFile, requireStyleModuleFile } from '../css/context'
 import { createFragmentFactory, omit } from '../css/fragment'
 import { bindFontFace, bindKeyframes } from '../css/keyframes'
 import { createRawEmitter } from '../css/raw'
 import { createRulesEmitter } from '../css/rules'
-import { createTokenDeclarations } from '../css/tdec'
+import { createPropagatedTokenDeclarations, createTokenDeclarations } from '../css/tdec'
 import { checkSelector } from '../css/validation'
 import { getDiagnosticSource, VanityError } from '../diagnostics'
 import { runSystemAudit } from '../introspect/audit'
@@ -98,6 +99,7 @@ import {
   VANITY_SYSTEM_SURFACE_VERSION,
 } from '../system/surface'
 import { getTokenModule, isTokenBuilder } from '../tokens/builder'
+import { bindColorMix } from '../tokens/color'
 import { attachTokenDeclarationGetters } from '../tokens/declarations'
 import { isHandle } from '../tokens/handle'
 import {
@@ -268,7 +270,7 @@ type VanitySystemReadSurface<
   readonly fragment: LockedFragmentFactory<C, L, Consts>
   readonly omit: VanityOmit
   /** Produce CSS declaration data over resolved tokens without mutating runtime state. */
-  readonly tdec: (declarations: VanityTokenDeclarations<T>) => Record<`--${string}`, string | number>
+  readonly tdec: VanityTokenDeclarationProducer<T>
   readonly keyframes: VanityKeyframesFunction<L>
   readonly fontFace: VanityFontFaceFunction<L>
   /** Variants compress state: props in, classes out ([spec-recipes.md §1]). */
@@ -385,7 +387,7 @@ interface VanitySystemBindingSurface<
    * @example
    * `ds.class({ ...ds.tdec({ color: { brand: 'rebeccapurple' } }) })`
    */
-  readonly tdec: (declarations: VanityTokenDeclarations<T>) => Record<`--${string}`, string | number>
+  readonly tdec: VanityTokenDeclarationProducer<T>
   readonly keyframes: VanityKeyframesFunction<L>
   readonly fontFace: VanityFontFaceFunction<L>
   /** Variants compress state: props in, classes out ([spec-recipes.md §1]). */
@@ -653,13 +655,11 @@ function materializeLockedSystem<
       `${axesLayer}.${axis}`,
     ])))
     const casesLayer = `${qualifiedTokenLayer}.cases`
-    const overridesLayer = `${qualifiedTokenLayer}.overrides`
     phaseLayers = Object.freeze({
       root: qualifiedTokenLayer,
       base: baseLayer,
       axes: axisLayers,
       cases: casesLayer,
-      overrides: overridesLayer,
     })
   }
 
@@ -710,8 +710,9 @@ function materializeLockedSystem<
     })
   }
 
+  const nativeSchemeAxis = binding.axes.order.find(axis => binding.axes.definitions[axis]?.native?.kind === 'scheme')
   const conditionInputs = {
-    ...(options.baseConditions === false ? {} : createBaseConditions()),
+    ...(options.baseConditions === false ? {} : createBaseConditions(nativeSchemeAxis ?? 'scheme')),
     ...options.conditions,
   }
   const conditions = normalizeConditions(conditionInputs, file)
@@ -867,6 +868,7 @@ function materializeLockedSystem<
     [],
   )
   let emitted = false
+  let ensureSystemEmitted = (): void => {}
   const emitSystem = () => {
     if (emitted)
       return
@@ -885,7 +887,6 @@ function materializeLockedSystem<
         for (const axis of binding.axes.order)
           substrate.css.emitLayer({ parent: axesLayer, name: axis })
         substrate.css.emitLayer({ parent: qualifiedTokenLayer, name: 'cases' })
-        substrate.css.emitLayer({ parent: qualifiedTokenLayer, name: 'overrides' })
       }
 
       emitTokenGraph(tokens)
@@ -895,19 +896,41 @@ function materializeLockedSystem<
     emitted = true
   }
 
+  const emitFirstCache = new WeakMap<object, unknown>()
+  const emitFirst = <F>(fn: F): F => {
+    if (typeof fn !== 'function')
+      return fn
+
+    const existing = emitFirstCache.get(fn as object)
+    if (existing !== undefined)
+      return existing as F
+
+    const wrapped = new Proxy(fn as object, {
+      apply: (target, thisArg, args) => {
+        ensureSystemEmitted()
+        return Reflect.apply(target as (...args: unknown[]) => unknown, thisArg, args)
+      },
+      get: (target, key, receiver) => emitFirst(Reflect.get(target, key, receiver)),
+    }) as F
+    emitFirstCache.set(fn as object, wrapped)
+    return wrapped
+  }
+
+  const buildSurface = <F>(name: string, fn: F): F => buildOnly(name, emitFirst(fn))
+
   let bound: Record<string, unknown>
   const createLayeredSystem = (name: string): object => {
     const placed = createLayerContext(system, name)
     return Object.freeze({
       ...bound,
-      class: buildOnly('class', createClassEmitter(placed)),
-      rules: buildOnly('rules', createRulesEmitter(placed)),
-      raw: buildOnly('raw', createRawEmitter(placed)),
-      keyframes: buildOnly('keyframes', bindKeyframes(placed)),
-      fontFace: buildOnly('fontFace', bindFontFace(placed)),
-      recipe: buildOnly('recipe', bindRecipe(placed)),
-      anatomy: buildOnly('anatomy', bindAnatomy(placed)),
-      atoms: buildOnly('atoms', bindAtoms(placed, name)),
+      class: buildSurface('class', createClassEmitter(placed)),
+      rules: buildSurface('rules', createRulesEmitter(placed)),
+      raw: buildSurface('raw', createRawEmitter(placed)),
+      keyframes: buildSurface('keyframes', bindKeyframes(placed)),
+      fontFace: buildSurface('fontFace', bindFontFace(placed)),
+      recipe: buildSurface('recipe', bindRecipe(placed)),
+      anatomy: buildSurface('anatomy', bindAnatomy(placed)),
+      atoms: buildSurface('atoms', bindAtoms(placed, name)),
     })
   }
 
@@ -925,26 +948,39 @@ function materializeLockedSystem<
     }
   }
 
-  bound = {
+  const constructors = {
     ...binding.kernel.constructors,
+    colorMix: bindColorMix(valueContext.policies.color.mixSpace),
+  }
+
+  const tdec = Object.assign(
+    (declarations: VanityTokenDeclarations<Bound['t']>) =>
+      createTokenDeclarations(tokens as Bound['t'], declarations),
+    {
+      propagated: (declarations: VanityTokenDeclarations<Bound['t']>) =>
+        createPropagatedTokenDeclarations(tokens as Bound['t'], resolvedGraph, declarations),
+    },
+  ) as VanityTokenDeclarationProducer<Bound['t']>
+
+  bound = {
+    ...constructors,
     ...utilityTree,
 
     t: tokens as Bound['t'],
-    class: buildOnly('class', createClassEmitter(system) as Bound['class']),
-    rules: buildOnly('rules', createRulesEmitter(system) as Bound['rules']),
-    raw: buildOnly('raw', createRawEmitter(system) as Bound['raw']),
-    fragment: buildOnly('fragment', createFragmentFactory()),
+    class: buildSurface('class', createClassEmitter(system) as Bound['class']),
+    rules: buildSurface('rules', createRulesEmitter(system) as Bound['rules']),
+    raw: buildSurface('raw', createRawEmitter(system) as Bound['raw']),
+    fragment: buildSurface('fragment', createFragmentFactory()),
     omit,
-    tdec: buildOnly('tdec', (declarations: VanityTokenDeclarations<Bound['t']>) =>
-      createTokenDeclarations(tokens as Bound['t'], declarations)),
-    keyframes: buildOnly('keyframes', bindKeyframes(system)),
-    fontFace: buildOnly('fontFace', bindFontFace(system)),
-    recipe: buildOnly('recipe', bindRecipe(system) as Bound['recipe']),
-    anatomy: buildOnly('anatomy', bindAnatomy(system) as Bound['anatomy']),
-    port: buildOnly('port', ((input: VanityPortInput, options?: object) =>
+    tdec: buildSurface('tdec', tdec),
+    keyframes: buildSurface('keyframes', bindKeyframes(system)),
+    fontFace: buildSurface('fontFace', bindFontFace(system)),
+    recipe: buildSurface('recipe', bindRecipe(system) as Bound['recipe']),
+    anatomy: buildSurface('anatomy', bindAnatomy(system) as Bound['anatomy']),
+    port: buildSurface('port', ((input: VanityPortInput, options?: object) =>
       createPort(input, options as any, { prefix, serialize: serializeSystemValue })) as Bound['port']),
-    atoms: buildOnly('atoms', bindAtoms(system) as Bound['atoms']),
-    inLayer: buildOnly('inLayer', createLayeredSystem as Bound['inLayer']),
+    atoms: buildSurface('atoms', bindAtoms(system) as Bound['atoms']),
+    inLayer: buildSurface('inLayer', createLayeredSystem as Bound['inLayer']),
     tokensOf: buildOnly('tokensOf', projectTokens as Bound['tokensOf']),
     namesOf: buildOnly('namesOf', ((selection: object) => project(selection, 'name')) as Bound['namesOf']),
     varsOf: buildOnly('varsOf', ((selection: object) => project(selection, 'var')) as Bound['varsOf']),
@@ -1014,6 +1050,12 @@ function materializeLockedSystem<
     ...(mode.overwrites === undefined ? {} : { overwrites: mode.overwrites }),
     emit: emitSystem,
   })
+  ensureSystemEmitted = (): void => {
+    if (emitted)
+      return
+    recordPortableSystem(contract.portable)
+    emitSystem()
+  }
   Object.defineProperty(bound, VANITY_IN_PROCESS_SYSTEM, {
     enumerable: false,
     value: contract,
@@ -1079,7 +1121,7 @@ function materializeLockedSystem<
             })
           }
         }
-        if (typeof key === 'string' && BUILD_SURFACES.has(key)) {
+        if (typeof key === 'string' && BUILD_SURFACES.has(key) && hasStyleModuleFile()) {
           // Consolidation normally happens in a plain system module, outside
           // the style-module inspection collector. Record the portable
           // contract at the first build-time use so manifests still receive

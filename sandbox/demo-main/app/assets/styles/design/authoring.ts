@@ -16,7 +16,7 @@ export const {
   clamp,
   fontFace,
   keyframes,
-  mix,
+  colorMix,
   percent,
   port,
   raw,

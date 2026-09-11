@@ -14,16 +14,13 @@ The numbered laws below make that north star operational. None outranks it; none
 
 ## 1. Naming law
 
-CSS owns CSS vocabulary. Vanity uses a CSS name only for the platform concept exactly; algorithmic relatives receive distinct names.
+The naming law and the house style that applies it are canonical in [language §0](./language.md#0-house-style-and-naming-law), including the `$` namespace fence and the verb vocabulary. This section states what the law requires of every domain contract.
 
-A base term preserves the same useful inference everywhere it appears. Qualifiers may specialize that inference by domain, owner, state, representation, or relation; they may not rescue unrelated meanings. Natural reuse is welcome when the relation transfers—for example, system host and build host.
+CSS owns CSS vocabulary: a CSS name is used only for the platform concept exactly, and an algorithmic relative receives a distinct name.
 
-Verb meanings are canonical in [language §0](./language.md#0-house-style-and-naming-law); this
-document states the naming law and its consequences, not a second verb glossary.
+Natural reuse is welcome when the relation transfers. System host and build host specialize one base term by owner; they do not rescue unrelated meanings.
 
-`$` is a namespace fence, not decoration. It appears on `ds.t.color.brand.$name`, `rt.t.color.brand.$set`, `$axes`, and fenced path keys such as `'$system'`. It does not appear on wholly Vanity-owned surfaces such as `rt.refreshRoots()` or `port.dec()`.
-
-User token, axis, and mode names may not begin with `$`. Nothing else is reserved merely for possible future use.
+A name that no longer predicts what its subject does is a defect in the contract, not a cosmetic preference.
 
 ## 2. Value law
 

@@ -1,6 +1,8 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { VANITY_BUILTIN_CONSTRUCTOR_NAMES } from '@mszr/vanity'
 import {
+  VANITY_COINED_CONSTRUCTOR_NAMES,
   VANITY_CSS_NAMED_API_ROWS,
   VANITY_CSS_PARITY_LEDGER,
 } from '@mszr/vanity/capabilities'
@@ -65,5 +67,33 @@ describe('machine-readable CSS parity ledger', () => {
       'revert',
       'revert-layer',
     ])
+  })
+
+  it('classifies every builtin constructor exactly once', () => {
+    const cssNames = new Set(Object.keys(VANITY_CSS_NAMED_API_ROWS))
+    const coinedNames = new Set(Object.keys(VANITY_COINED_CONSTRUCTOR_NAMES))
+
+    for (const name of VANITY_BUILTIN_CONSTRUCTOR_NAMES) {
+      const isCssNamed = cssNames.has(name)
+      const isCoined = coinedNames.has(name)
+      expect(isCssNamed !== isCoined, name).toBe(true)
+
+      if (isCssNamed) {
+        expect(VANITY_CSS_PARITY_LEDGER, `${name} must have a ledger row`)
+          .toHaveProperty(VANITY_CSS_NAMED_API_ROWS[name as keyof typeof VANITY_CSS_NAMED_API_ROWS])
+      }
+      else {
+        expect(
+          VANITY_COINED_CONSTRUCTOR_NAMES[name as keyof typeof VANITY_COINED_CONSTRUCTOR_NAMES],
+          `${name} needs a rationale`,
+        ).toMatch(/\S/)
+      }
+    }
+
+    for (const [name, rationale] of Object.entries(VANITY_COINED_CONSTRUCTOR_NAMES)) {
+      expect(VANITY_BUILTIN_CONSTRUCTOR_NAMES, `${name} is not a builtin constructor`).toContain(name)
+      expect(rationale, `${name} rationale must stay on one line`).not.toMatch(/[\r\n]/)
+      expect(rationale, `${name} rationale must not be empty`).toMatch(/\S/)
+    }
   })
 })

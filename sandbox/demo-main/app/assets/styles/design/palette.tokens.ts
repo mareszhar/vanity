@@ -43,10 +43,10 @@ export const paletteTokens = open.defineTokens({
       // colors, not transparency. Alpha would let whatever sits behind them
       // (grid lines, gradients, adjacent surfaces) bleed through; these are
       // surfaces, and a surface is not see-through.
-      brandSoft: open.mix(m.canvas, m.brand, 0.14),
-      brandMuted: open.mix(m.canvas, m.brand, 0.34),
-      brandHover: open.mix(m.brand, m.ink, 0.14),
-      brandActive: open.mix(m.brand, m.ink, 0.24),
+      brandSoft: open.colorMix([m.canvas, [m.brand, 14]]).in('oklab'),
+      brandMuted: open.colorMix([m.canvas, [m.brand, 34]]).in('oklab'),
+      brandHover: open.colorMix([m.brand, [m.ink, 14]]).in('oklab'),
+      brandActive: open.colorMix([m.brand, [m.ink, 24]]).in('oklab'),
       // Alpha belongs here: a scrim genuinely *is* transparent.
       scrim: open.alpha(m.ink, 0.55),
       positive: open.oklch(0.68, 0.14, 155),

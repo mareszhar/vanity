@@ -10,6 +10,7 @@ The locked system exposes one CSS input language through style-data producers an
 | --- | --- |
 | `ds.fragment(input)` | reusable ordered styling data, no selector and no output effect |
 | `ds.tdec(tree)` | token custom-property declarations as reusable style data |
+| `ds.tdec.propagated(tree)` | token declarations plus changed build-folded dependents as reusable style data |
 | `port.dec(value)` | one component-owned custom-property declaration fragment |
 
 ### Style emitters
@@ -210,6 +211,8 @@ Per-emitter `.layer(name)` may override it. No ambient `assignToLayer()` mutatio
 Authored styles default to the first layer after system-owned layers. Unlayered consumer CSS retains ordinary precedence over layered output.
 
 The compiler owns the first-loaded cross-system layer prelude; import order does not.
+
+Token emission uses the phase layers `tokens.base`, `tokens.axes.<axis>`, and `tokens.cases` beneath the system token layer. Local token declarations belong to the caller's styling emitter, and `overrides` is an ordinary top-level cascade layer.
 
 ## 9. At-rules and raw
 

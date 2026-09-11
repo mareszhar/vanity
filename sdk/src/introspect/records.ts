@@ -84,6 +84,17 @@ export interface VanityTokenSemanticRecord {
     readonly val?: string | number
     readonly reason?: string
   }
+  /**
+   * Build-time coverage proof for folded derivations whose dependencies vary
+   * across more than one axis. Required cases are the combinations where the
+   * axis layers alone would not deliver the resolved value.
+   */
+  readonly axisCoverage?: {
+    /** Axes carried by this token's own branches and transitive dependencies. */
+    readonly contributingAxes: readonly string[]
+    /** Full mode combinations that require an intersection declaration. */
+    readonly requiredCases: readonly Readonly<Record<string, string>>[]
+  }
   readonly dependencies: readonly VanityTokenDependencyRecord[]
   readonly support: {
     readonly target?: string
@@ -246,6 +257,8 @@ export interface VanityContrastRecord extends VanitySourceRecord {
   min: number
   /** True when the threshold was consciously accepted at the definition site. */
   accepted: boolean
+  /** The pick used a representative target because exact folding was declined. */
+  fallback?: string
 }
 
 export interface VanityStyleRecord extends VanitySourceRecord {
@@ -289,6 +302,8 @@ export type VanityInspectRecord
  * - `cssParityGaps`: declared CSS capability rows missing from emitted or adapter evidence.
  * - `staleArtifacts`: generated artifacts whose content or identity no longer matches their source.
  * - `rootModeDisagreements`: root mode readings that disagree across the build evidence.
+ * - `staleDerivations`: folded token values that do not cover every mode of a varying dependency axis.
+ * - `derivedCaseGrowth`: folded derivations whose required intersection cases exceed the advisory size budget.
  */
 export type VanityAuditKind
   = | 'unusedTokens'
@@ -308,14 +323,19 @@ export type VanityAuditKind
     | 'cssParityGaps'
     | 'staleArtifacts'
     | 'rootModeDisagreements'
+    | 'staleDerivations'
+    | 'derivedCaseGrowth'
 
 /** Per-category audit behavior: `'off'` silences, `'warn'` reports, and `'error'` promotes a finding to a failure. */
 export type VanityAuditLevel = 'off' | 'warn' | 'error'
 
 /**
  * Per-audit promotion, declared on the system so the quality bar travels with
- * the design system ([spec-introspection.md §3]): none is a hard gate by
- * default; `error` promotes one, `off` silences one.
+ * the design system ([spec-introspection.md §3]): most categories are
+ * advisory by default; `staleDerivations` is an error by default because it
+ * can make an emitted folded value observably wrong, while `derivedCaseGrowth`
+ * remains advisory because its output is correct; `error` promotes another
+ * category and `off` silences one.
  */
 export type VanityAuditConfig = Partial<Record<VanityAuditKind, VanityAuditLevel>>
 

@@ -115,7 +115,7 @@ The system records axis declaration order and may overwrite it explicitly after 
 base
 → each axis in declared order
 → explicit multi-axis cases
-→ token override classes/runtime public bindings
+→ propagated token declaration classes/runtime public bindings
 ```
 
 Cascade layers encode this order before any declaration is emitted. Module import order cannot change it. `consolidate({ axisOrder })` is optional; when present it is an exhaustive typed override, not a requirement imposed on the common one-axis case.
@@ -282,3 +282,15 @@ A feature is complete only when the applicable evidence is green:
 One evidence dimension cannot stand in for another.
 
 The consumer testing kit exposes the same law to design-system and plugin authors. Output capture owns a style-module callback, fold evidence owns an in-process resolved handle, rendered assertions own a mounted DOM fixture, and Selenita owns TypeScript editor observations. None pretends to prove another evidence dimension.
+
+## 18. A rule covers its whole domain
+
+A behavior that ranges over a finite domain is expressed as named data the implementation reads, not as prose about examples. Independent dimensions form one product rather than a union of slices: name the dimensions, state the size of the product, and give every cell a value. `COLOR_RELATIVE_CHANNEL_FOLD_SCALES` is the reference shape, where a space or channel with no entry fails to type-check.
+
+A rule names the cells that need output, and the mechanism carrying that output selects exactly those cells. A CSS arm ordered by specificity inside one layer loses that ordering when it is conjoined into a later one, so a carrier's own shapes belong to the domain it is written against.
+
+A property accumulated over a graph includes the starting node's own contribution unless a stated reason excludes it. Such a definition is a recurrence over the subject and its neighbors, not a walk that begins at the neighbors.
+
+A fact a tool produces has one version-controlled source, and every place it is written down is compared against that source. The comparison has no silent skip path: a missing source fails rather than passing quietly. Reviewed byte facts live in `benchmarks/accepted.json`, while raw machine output stays ignored.
+
+[Testing §1.1](./testing.md#11-total-space-enforcement) owns how each of these is proven and which artifact enforces it.

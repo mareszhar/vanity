@@ -101,6 +101,13 @@ describe('hail', () => {
     const value = ds.serialize(ds.oklchx.inE(0.25, 0.1, 280))
     expect(value).toContain('var(--hail-hail-most-elevated-l)')
     expect(new Set(Object.keys(ds.axes.scheme.modes))).toEqual(new Set(['light', 'dark']))
+    expect(ds.introspect().axes.scheme.modes.dark.arms).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runtime: { kind: 'attribute', name: 'data-scheme', value: 'dark' },
+        }),
+      ]),
+    )
   })
 
   it('installs exact token/rule preset selections and reports dependencies', () => {

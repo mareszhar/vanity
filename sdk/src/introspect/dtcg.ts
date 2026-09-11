@@ -12,6 +12,7 @@ import type {
   VanityJsonValue,
 } from './interchange'
 import type { VanityTokenRecord } from './records'
+import { converter, parse as parseCssColor } from 'culori'
 import { VanityError } from '../diagnostics'
 import { createPolicyState, resolvePolicies } from '../system/policies'
 import { getSystemTokenModuleRequirement } from '../system/shape'
@@ -19,7 +20,6 @@ import { getOpenSystemState } from '../system/state'
 import { getTokenModule } from '../tokens/builder'
 import { createTokenFactory } from '../tokens/config'
 import { composeTokenModules, deriveTokenModule } from '../tokens/derive'
-import { parseColor } from '../tokens/math'
 import { defineTokenModule, getTokenGraph, getTokenInspections, isTokenModule } from '../tokens/module'
 import { getTokenModuleRequirement } from '../tokens/requirements'
 import { resolveTokenModule } from '../tokens/resolve'
@@ -673,7 +673,7 @@ function createStandardCarrier(
       return { type: 'duration', value: { value: Number(match[1]), unit: match[2] } }
     }
     case 'color': {
-      const color = parseColor(text)
+      const color = parseCssColor(text)
       if (!color) {
         throwDtcgError(
           'VANITY_DTCG_UNSUPPORTED',
@@ -682,11 +682,12 @@ function createStandardCarrier(
           'use a standard color representation or export with strict: false',
         )
       }
+      const colorSpace = getDtcgColorSpace(text)
       return {
         type: 'color',
         value: {
-          colorSpace: 'oklch',
-          components: [color.l, color.c, color.h ?? 'none'],
+          colorSpace,
+          components: getDtcgColorComponents(color, colorSpace),
           alpha: color.alpha ?? 1,
         },
       }
@@ -698,6 +699,93 @@ function createStandardCarrier(
         token.path,
         'install a DTCG codec for this value or export with strict: false',
       )
+  }
+}
+
+type DtcgColorSpace
+  = | 'srgb' | 'srgb-linear' | 'display-p3' | 'a98-rgb' | 'prophoto-rgb' | 'rec2020'
+    | 'xyz-d50' | 'xyz-d65' | 'lab' | 'lch' | 'oklab' | 'oklch' | 'hsl' | 'hwb'
+
+const DTCG_COLOR_SPACES = new Set<DtcgColorSpace>([
+  'srgb',
+  'srgb-linear',
+  'display-p3',
+  'a98-rgb',
+  'prophoto-rgb',
+  'rec2020',
+  'xyz-d50',
+  'xyz-d65',
+  'lab',
+  'lch',
+  'oklab',
+  'oklch',
+  'hsl',
+  'hwb',
+])
+
+/** Select the DTCG space from the emitted CSS notation. */
+function getDtcgColorSpace(css: string): DtcgColorSpace {
+  const text = css.trim()
+  const match = text.match(/^(?:rgb|rgba)\s*\(/i)
+  if (match)
+    return 'srgb'
+  const polar = text.match(/^(hsl|hwb|lab|lch|oklab|oklch)\s*\(/i)
+  if (polar)
+    return polar[1]!.toLowerCase() as DtcgColorSpace
+  const profile = text.match(/^color\(\s*([a-z0-9-]+)\s+/i)?.[1]?.toLowerCase()
+  if (profile && isDtcgColorSpace(profile))
+    return profile
+
+  // Named colors and hex leaves are normalized by culori as sRGB, but their
+  // authored CSS has no function/profile prefix from which to read that fact.
+  if (parseCssColor(text)?.mode === 'rgb')
+    return 'srgb'
+
+  return 'oklch'
+}
+
+function isDtcgColorSpace(value: string): value is DtcgColorSpace {
+  return DTCG_COLOR_SPACES.has(value as DtcgColorSpace)
+}
+
+function getDtcgColorComponents(
+  parsed: NonNullable<ReturnType<typeof parseCssColor>>,
+  space: DtcgColorSpace,
+): [number | 'none', number | 'none', number | 'none'] {
+  const mode = ({
+    'srgb': 'rgb',
+    'srgb-linear': 'lrgb',
+    'display-p3': 'p3',
+    'a98-rgb': 'a98',
+    'prophoto-rgb': 'prophoto',
+    'rec2020': 'rec2020',
+    'xyz-d50': 'xyz50',
+    'xyz-d65': 'xyz65',
+    'lab': 'lab',
+    'lch': 'lch',
+    'oklab': 'oklab',
+    'oklch': 'oklch',
+    'hsl': 'hsl',
+    'hwb': 'hwb',
+  } as const)[space]
+  const converted = converter(mode)(parsed) as unknown as Record<string, number | undefined>
+  if (converted === undefined)
+    return [0, 0, 0]
+
+  switch (space) {
+    case 'hsl':
+      return [converted.h ?? 0, (converted.s ?? 0) * 100, (converted.l ?? 0) * 100]
+    case 'hwb':
+      return [converted.h ?? 0, (converted.w ?? 0) * 100, (converted.b ?? 0) * 100]
+    case 'lab':
+    case 'lch':
+      return [converted.l ?? 0, converted.a ?? converted.c ?? 0, converted.b ?? converted.h ?? 0]
+    case 'oklab':
+      return [converted.l ?? 0, converted.a ?? 0, converted.b ?? 0]
+    case 'oklch':
+      return [converted.l ?? 0, converted.c ?? 0, converted.h ?? 'none']
+    default:
+      return [converted.r ?? converted.x ?? 0, converted.g ?? converted.y ?? 0, converted.b ?? converted.z ?? 0]
   }
 }
 
@@ -949,7 +1037,10 @@ function encodeValue(
 }
 
 function configureByType(authoring: DtcgAuthoringContext, type: VanityCssDataType, config: Record<string, unknown>): unknown {
-  if ('val' in config)
+  // Standard DTCG imports carry the type separately from `$value`. Keep the
+  // generic factory only for genuinely unknown values so a typed value does
+  // not lose its contract when it is imported and exported again.
+  if (type === 'unknown')
     return (authoring.token as any)(config)
   const method = ({
     'number-percentage': 'numberPercentage',

@@ -33,23 +33,136 @@ export type VanityColorInterpolationSpace
 export type VanityPolarColorSpace = 'hsl' | 'hwb' | 'lch' | 'oklch'
 export type VanityHueInterpolation = 'shorter' | 'longer' | 'increasing' | 'decreasing'
 
-/** Canonical authored color value: expression/data only, with no token mode. */
-export interface VanityAuthoredColor extends VanitySelfValue<'color'> {
-  alpha: (amount: number) => VanityAuthoredColor
-  lighten: (amount: number) => VanityAuthoredColor
-  darken: (amount: number) => VanityAuthoredColor
-  saturate: (amount: number) => VanityAuthoredColor
-  desaturate: (amount: number) => VanityAuthoredColor
-  rotate: (degrees: number) => VanityAuthoredColor
-  mix: (other: VanityColorish, amount: number) => VanityAuthoredInterpolatedColor
-}
+/** A CSS percentage accepted by color-mix(), including typed values and handles. */
+export type VanityColorMixPercentage
+  = | number
+    | VanityCssValue<string, 'percentage'>
+    | VanityCompatibleTokenInput<'percentage'>
 
-export interface VanityAuthoredInterpolatedColor extends VanityAuthoredColor {
-  in: {
+/** One color item in CSS color-mix(); its percentage is optional and authored in 0..100 units. */
+export type VanityColorMixItem
+  = | VanityColorish
+    | readonly [VanityColorish, VanityColorMixPercentage]
+
+/**
+ * An interpolation whose required working space has not been selected yet.
+ * Choose one with `.in(space)`, or declare `policies.color.mixSpace` on the
+ * owning system before using the value as a color.
+ */
+export interface VanityAuthoredInterpolation extends VanitySelfValue<'color'> {
+  readonly in: {
     (space: VanityColorInterpolationSpace): VanityAuthoredColor
     (space: VanityPolarColorSpace, options: { hue: VanityHueInterpolation }): VanityAuthoredColor
   }
 }
+
+/** The complete result of selecting an interpolation space for a color mix. */
+export interface VanityAuthoredInterpolatedColor extends VanityAuthoredColor {
+  readonly in: {
+    (space: VanityColorInterpolationSpace): VanityAuthoredColor
+    (space: VanityPolarColorSpace, options: { hue: VanityHueInterpolation }): VanityAuthoredColor
+  }
+}
+
+/**
+ * CSS-exact color-mix() constructor. A bound system supplies `DefaultSpace`
+ * from `policies.color.mixSpace`; an unbound constructor requires `.in()`.
+ */
+export interface VanityColorMixConstructor<DefaultSpace extends VanityColorInterpolationSpace | undefined = undefined> {
+  <const Items extends readonly [VanityColorMixItem, VanityColorMixItem]>(
+    items: Items,
+  ): [DefaultSpace] extends [undefined] ? VanityAuthoredInterpolation : VanityAuthoredInterpolatedColor
+}
+
+declare const VANITY_PENDING_COLOR_ADJUSTMENT: unique symbol
+
+/**
+ * A bare color adjustment whose owning system has not selected a working
+ * polar space yet. The value is intentionally not a `VanityAuthoredColor`:
+ * choose `policies.color.adjustSpace` or use a named space namespace first.
+ */
+export interface VanityPendingColorAdjustment extends VanitySelfValue<'color'> {
+  readonly [VANITY_PENDING_COLOR_ADJUSTMENT]: 'declare policies.color.adjustSpace or use a color-space namespace'
+}
+
+/** The result type projected onto a bare adjustment constructor by a system. */
+export type VanityColorAdjustmentResult<DefaultSpace extends VanityPolarColorSpace | undefined>
+  = [DefaultSpace] extends [undefined] ? VanityPendingColorAdjustment : VanityAuthoredColor
+
+/** Bare channel-adjust conveniences projected through `policies.color.adjustSpace`. */
+interface VanityColorAdjustmentConstructorBase<DefaultSpace extends VanityPolarColorSpace | undefined> {
+  <S extends VanityColorish>(color: S, amount: number): VanityColorAdjustmentResult<DefaultSpace>
+  /** Sugar for `<space>.from(color, { h: channel.add(degrees) })`. */
+  rotate: <S extends VanityColorish>(color: S, degrees: number) => VanityColorAdjustmentResult<DefaultSpace>
+}
+
+/**
+ * Bare channel-adjust conveniences projected through the selected policy.
+ * An HWB policy retains only the operations its channels can express.
+ */
+export type VanityColorAdjustmentConstructor<DefaultSpace extends VanityPolarColorSpace | undefined = undefined>
+  = VanityColorAdjustmentConstructorBase<DefaultSpace> & (
+    [DefaultSpace] extends ['hwb'] ? object : {
+      /** Sugar for `<space>.from(color, { l: channel.add(amount) })` where supported. */
+      lighten: <S extends VanityColorish>(color: S, amount: number) => VanityColorAdjustmentResult<DefaultSpace>
+      /** Sugar for `<space>.from(color, { l: channel.subtract(amount) })` where supported. */
+      darken: <S extends VanityColorish>(color: S, amount: number) => VanityColorAdjustmentResult<DefaultSpace>
+      /** Sugar for `<space>.from(color, { c: channel.add(amount) })` or HSL's `s`. */
+      saturate: <S extends VanityColorish>(color: S, amount: number) => VanityColorAdjustmentResult<DefaultSpace>
+      /** Sugar for `<space>.from(color, { c: channel.subtract(amount) })` or HSL's `s`. */
+      desaturate: <S extends VanityColorish>(color: S, amount: number) => VanityColorAdjustmentResult<DefaultSpace>
+    })
+
+/** Explicit adjustment methods available on a polar color-space namespace. */
+export interface VanityColorAdjustmentNamespaceBase {
+  /** Rotate the hue; equivalent to `<space>.from(color, { h: channel.add(degrees) })`. */
+  readonly rotate: (color: VanityColorish, degrees: number) => VanityAuthoredColor
+}
+
+/** Adjustment methods for polar spaces that expose lightness and chroma/saturation channels. */
+export interface VanityColorAdjustmentNamespaceWithChannels
+  extends VanityColorAdjustmentNamespaceBase {
+  /** Sugar for `<space>.from(color, { l: channel.add(amount) })`. */
+  readonly lighten: (color: VanityColorish, amount: number) => VanityAuthoredColor
+  /** Sugar for `<space>.from(color, { l: channel.subtract(amount) })`. */
+  readonly darken: (color: VanityColorish, amount: number) => VanityAuthoredColor
+  /** Sugar for `<space>.from(color, { c: channel.add(amount) })`; HSL addresses `s`. */
+  readonly saturate: (color: VanityColorish, amount: number) => VanityAuthoredColor
+  /** Sugar for `<space>.from(color, { c: channel.subtract(amount) })`; HSL addresses `s`. */
+  readonly desaturate: (color: VanityColorish, amount: number) => VanityAuthoredColor
+}
+
+/**
+ * The methods exposed beside `.from()` for one explicit polar color space.
+ * HWB deliberately receives only `rotate`: it has no lightness or
+ * chroma/saturation channel for the other verbs to address, and alpha is a
+ * color-wide operation.
+ */
+export type VanityColorAdjustmentNamespace<Space extends VanityPolarColorSpace>
+  = Space extends 'hwb'
+    ? VanityColorAdjustmentNamespaceBase
+    : VanityColorAdjustmentNamespaceWithChannels
+
+/** Color operations shared by authored values and color token handles. */
+export interface VanityColorMethods {
+  /** Replace the alpha channel; live references use Vanity's oklch relative form. */
+  alpha: (amount: number) => VanityAuthoredColor
+  /** Lighten through the owning system's adjustment policy. */
+  lighten: (amount: number) => VanityAuthoredColor
+  /** Darken through the owning system's adjustment policy. */
+  darken: (amount: number) => VanityAuthoredColor
+  /** Increase chroma/saturation through the owning system's adjustment policy. */
+  saturate: (amount: number) => VanityAuthoredColor
+  /** Decrease chroma/saturation through the owning system's adjustment policy. */
+  desaturate: (amount: number) => VanityAuthoredColor
+  /** Rotate hue through the owning system's adjustment policy. */
+  rotate: (degrees: number) => VanityAuthoredColor
+  /** Mix this color with another in a required CSS interpolation space. */
+  mix: (other: VanityColorish, percentage?: VanityColorMixPercentage) => VanityAuthoredInterpolation
+}
+
+/** Canonical authored color value: expression/data only, with no token mode. */
+export interface VanityAuthoredColor extends VanitySelfValue<'color'>, VanityColorMethods {}
 
 /** Authored contrast pairing; resolution determines its build guarantee. */
 export interface VanityAuthoredContrast<G extends VanityContrastGuarantee = VanityContrastGuarantee> {
@@ -516,7 +629,7 @@ export interface VanityTokenHandle<
 
 /** Erased token-handle shape used at dynamic graph and introspection boundaries; prefer the inferred handle type at authoring sites. */
 export type VanityTokenHandleAny = VanityTokenHandle<any, string, string, any, any, any, any, any, any, any>
-export type VanityColorTokenHandle = VanityTokenHandle<any, string, string, 'color', any, any, any, any, any, any>
+export type VanityColorTokenHandle = VanityTokenHandle<any, string, string, 'color', any, any, any, any, any, any> & VanityColorMethods
 
 // ─── Token module: input shape and inferred output ──────────────────────────
 
@@ -828,14 +941,18 @@ export type VanityTokenHandleOf<
   VanityConfiguredVal<Node>,
   Name,
   Path,
-  Node extends VanityConfiguredTokenShape<any, infer Type> ? Type : VanityDataTypeOf<VanityConfiguredVal<Node>>,
+  Node extends VanityConfiguredTokenShape<any, infer ConfiguredType>
+    ? ConfiguredType
+    : VanityDataTypeOf<VanityConfiguredVal<Node>>,
   VanityConfiguredReference<Node, Policy>,
   VanityConfiguredEmit<Node, Policy>,
   VanityConfiguredMutable<Node>,
   VanityConfiguredAxes<Node>,
   VanityConfiguredCases<Node>,
   VanityConfiguredDescription<Node>
->
+> & ((Node extends VanityConfiguredTokenShape<any, infer ConfiguredType>
+  ? ConfiguredType
+  : VanityDataTypeOf<VanityConfiguredVal<Node>>) extends 'color' ? VanityColorMethods : Record<never, never>)
 
 export type VanityTokensFromDefinition<SystemTokens, Definition>
   = Definition extends VanityTokenDefinition<infer Graph, any>

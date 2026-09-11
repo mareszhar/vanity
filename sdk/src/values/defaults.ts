@@ -6,7 +6,13 @@ import type {
   VanityLightDarkImage,
   VanityNumericColorChannel,
 } from '../tokens/color'
-import type { VanityAuthoredColor, VanityAuthoredInterpolatedColor, VanityColorish } from '../tokens/types'
+import type {
+  VanityAuthoredColor,
+  VanityAuthoredInterpolatedColor,
+  VanityColorAdjustmentConstructor,
+  VanityColorish,
+  VanityColorMixConstructor,
+} from '../tokens/types'
 import type { VanityCssValue } from './types'
 import type { VanityLengthConstructor, VanityLengthUnit } from './units'
 import {
@@ -16,7 +22,6 @@ import {
   colorMix as colorMixImplementation,
   darken as darkenImplementation,
   desaturate as desaturateImplementation,
-  displayP3 as displayP3Implementation,
   hsl as hslImplementation,
   hwb as hwbImplementation,
   lab as labImplementation,
@@ -24,7 +29,6 @@ import {
   legibleOn as legibleOnImplementation,
   lightDark as lightDarkImplementation,
   lighten as lightenImplementation,
-  mix as mixImplementation,
   oklab as oklabImplementation,
   oklch as oklchImplementation,
   rgb as rgbImplementation,
@@ -43,7 +47,6 @@ const VANITY_CORE_EXTENSION_IDENTITIES = Object.freeze([
   { id: 'org.vanity.core.adaptive-length', version: 1 },
   { id: 'org.vanity.core.color', version: 1 },
   { id: 'org.vanity.core.color-function', version: 1 },
-  { id: 'org.vanity.core.color-mix', version: 1 },
   { id: 'org.vanity.core.grid', version: 1 },
 ] as const)
 
@@ -58,7 +61,6 @@ const STATIC_CORE_CONSTRUCTORS = Object.freeze({
   customProperty,
   darken: darkenImplementation,
   desaturate: desaturateImplementation,
-  displayP3: displayP3Implementation,
   flex,
   frequency,
   fluid: fluidImplementation,
@@ -74,7 +76,6 @@ const STATIC_CORE_CONSTRUCTORS = Object.freeze({
   lighten: lightenImplementation,
   max: maxImplementation,
   min: minImplementation,
-  mix: mixImplementation,
   number: cssNumber,
   oklab: oklabImplementation,
   oklch: oklchImplementation,
@@ -111,18 +112,19 @@ type VanityColorConstructorName
     | 'colorMix'
     | 'darken'
     | 'desaturate'
-    | 'displayP3'
     | 'hsl'
     | 'hwb'
     | 'lab'
     | 'lch'
     | 'lighten'
-    | 'mix'
     | 'oklab'
     | 'oklch'
     | 'rgb'
     | 'rotate'
     | 'saturate'
+
+type VanityColorAdjustmentConstructorName
+  = 'darken' | 'desaturate' | 'lighten' | 'rotate' | 'saturate'
 
 /** Exact CSS `light-dark()` overloads on a finalized system. */
 interface VanityCanonicalLightDark {
@@ -153,9 +155,12 @@ interface VanityCanonicalColor {
 /** Constructors as seen from a canonical system. */
 export type VanityCanonicalConstructors<DefaultLengthUnit extends VanityLengthUnit = 'px'>
   = Omit<VanityPortableConstructors<DefaultLengthUnit>, VanityColorConstructorName | 'lightDark'> & {
-    readonly [Key in Exclude<VanityColorConstructorName, 'color'>]: VanityCanonicalConstructor<VanityPortableConstructors<DefaultLengthUnit>[Key]>
+    readonly [Key in Exclude<VanityColorConstructorName, 'color' | 'colorMix'>]: Key extends VanityColorAdjustmentConstructorName
+      ? VanityColorAdjustmentConstructor
+      : VanityCanonicalConstructor<VanityPortableConstructors<DefaultLengthUnit>[Key]>
   } & {
     readonly color: VanityCanonicalColor
+    readonly colorMix: VanityColorMixConstructor
     readonly lightDark: VanityCanonicalLightDark
   }
 
@@ -188,7 +193,6 @@ export const {
   customProperty: defaultCustomProperty,
   darken,
   desaturate,
-  displayP3,
   flex: defaultFlex,
   frequency: defaultFrequency,
   fluid,
@@ -205,7 +209,6 @@ export const {
   lighten,
   max,
   min,
-  mix,
   number: defaultNumber,
   oklab,
   oklch,

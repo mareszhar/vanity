@@ -102,6 +102,7 @@ import {
   getTokenModule,
   isTokenBuilder,
 } from '../tokens/builder'
+import { bindColorMix } from '../tokens/color'
 import { createTokenFactory } from '../tokens/config'
 import {
   attachLogicalTokenDeclarationGetter,
@@ -114,7 +115,15 @@ import { resolveTokenModule } from '../tokens/resolve'
 import { mergeDtcgCodecs } from '../values/codecs'
 import { createValueKernel, extendValueKernel, serializeValueWithContext } from '../values/kernel'
 import { markConstructorUsage, VANITY_DEFAULT_CSS_SUPPORT } from '../values/protocol'
-import { axis as defineAxis, defineOpenAxis, isAxisDefinition, normalizeAxisAdditions } from './axes'
+import {
+  bindSchemeAxisDefinition,
+  axis as defineAxis,
+  defineOpenAxis,
+  isAxisDefinition,
+  isMountRelativeSchemeAxis,
+  markMountRelativeSchemeAxis,
+  normalizeAxisAdditions,
+} from './axes'
 import { createBaseConditions, thisMode } from './conditions'
 import { consolidateSystem } from './consolidate'
 import {
@@ -146,6 +155,7 @@ import {
 import { getOpenSystemState, VANITY_OPEN_SYSTEM_STATE } from './state'
 
 export type {
+  VanityColorPolicies,
   VanityConstructorPolicies,
   VanityConstructorPolicy,
   VanityConstructorRestriction,
@@ -1830,8 +1840,14 @@ function replaceAxis(
   name: string,
   definition: VanityAxisDefinition,
 ): VanityAxisRegistry {
+  const existing = registry.definitions[name]
+  const nextDefinition = existing !== undefined
+    && isMountRelativeSchemeAxis(existing)
+    && definition.native?.kind === 'scheme'
+    ? markMountRelativeSchemeAxis(definition)
+    : definition
   return Object.freeze({
-    definitions: Object.freeze({ ...registry.definitions, [name]: definition }),
+    definitions: Object.freeze({ ...registry.definitions, [name]: bindSchemeAxisDefinition(name, nextDefinition) }),
     order: Object.freeze([...registry.order]),
   })
 }
@@ -1842,6 +1858,11 @@ export function materializeOpen(
 ): VanityOpenSystem<any, any, any, any, any, any> {
   const activePluginContext = pluginContext === null ? undefined : pluginContext
   OPEN_STATE_PLUGIN_CONTEXT.set(state, activePluginContext)
+  const valueContext = getValueContext(state)
+  const constructors = {
+    ...state.values.constructors,
+    colorMix: bindColorMix(valueContext.policies.color.mixSpace),
+  }
   let surface: VanityOpenSystem<any, any, any, any, any, any>
   let preview: object | undefined
   const getPreviewLogicalTokens = () => {
@@ -2074,7 +2095,7 @@ export function materializeOpen(
     tdec(input: object) {
       return createDeferredTokenDeclarations(getPreviewLogicalTokens(), input as any)
     },
-    serialize: (value: VanityValue) => serializeValueWithContext(getValueContext(state), value),
+    serialize: (value: VanityValue) => serializeValueWithContext(valueContext, value),
     addPolicy(name: string, value: unknown) {
       const resolved = typeof value === 'function' ? value(surface) : value
       return applyPolicyPatch('add', { [name]: resolved })
@@ -2723,7 +2744,7 @@ export function materializeOpen(
   }
 
   const target = {
-    ...state.values.constructors,
+    ...constructors,
     ...state.utils,
     ...methods,
     [VANITY_OPEN_SYSTEM_STATE]: state,

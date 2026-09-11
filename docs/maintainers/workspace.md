@@ -134,7 +134,7 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run publish:sdk:dry-run` | run the full gate and package rehearsal without changing versions |
 | `pnpm run publish:sdk:patch` / `:minor` / `:major` | release: preflight, gate, rehearse, bump, publish, await npm, commit, tag, and push |
 
-`pnpm run bench:baseline` is a manual release gate. Run it before release review and reconcile its root raw-byte and runtime raw, minified, and min+gzip measurements with [benchmarks.md](./benchmarks.md); it remains separate from `check` and `validate` because the measurement is intentionally reviewed as a baseline rather than run as a per-test assertion.
+`pnpm run bench:baseline` is a manual release gate. Run it before release review; it writes the raw receipt, compares every reviewed byte fact with `benchmarks/accepted.json`, and reports any drift that needs an explicit baseline decision and page update. It remains separate from `check` and `validate` because the measurement is intentionally reviewed as a baseline rather than run as a per-test assertion.
 
 ## 5. Test organization
 

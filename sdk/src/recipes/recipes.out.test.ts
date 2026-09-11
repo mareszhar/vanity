@@ -60,7 +60,6 @@ describe('recipe()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -163,7 +162,6 @@ describe('anatomy()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;

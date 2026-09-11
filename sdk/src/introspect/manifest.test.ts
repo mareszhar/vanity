@@ -33,6 +33,20 @@ function manifestOf(ds: ReturnType<typeof fixture>) {
   return buildManifest(records, result.css)
 }
 
+function approximateManifest() {
+  const open = createSystem()
+  const ds = open.addTokens({
+    color: {
+      onMix: open.legibleOn(open.colorMix(['white', 'red']).in('srgb')),
+    },
+  }).consolidate({ prefix: 'manifest-approximate' })
+  const { records, result } = collectInspection(() => emit(() => {
+    void ds.class
+    return ds
+  }))
+  return buildManifest(records, result.css)
+}
+
 describe('canonical introspection', () => {
   it('uses the exact same canonical map for ds.introspect() and Manifest v4', () => {
     const ds = fixture()
@@ -181,6 +195,25 @@ describe('canonical introspection', () => {
       expect(() => assertManifest(value), name).toThrow()
       expect(validate(value), `${name} must be rejected by the published schema`).toBe(false)
     }
+  })
+
+  it('validates approximate contrast fallback records in both manifest readers', async () => {
+    const schema = JSON.parse(await readFile(
+      new URL('../../manifest.schema.json', import.meta.url),
+      'utf8',
+    ))
+    const validate = new Ajv2020({ strict: true }).compile(schema)
+    const manifest = approximateManifest()
+
+    expect(() => assertManifest(manifest)).not.toThrow()
+    expect(validate(manifest)).toBe(true)
+    expect(validate.errors).toBeNull()
+    expect(manifest.modules.$project?.contrast).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        pairing: 'color.onMix',
+        fallback: expect.stringContaining('representative approximation'),
+      }),
+    ]))
   })
 
   it('rejects malformed, unknown, and semantically invalid Manifest v4 data at the CLI boundary', () => {

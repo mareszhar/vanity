@@ -1,9 +1,10 @@
 /**
  * Audits ([spec-introspection.md §3]): the build knows enough to flag
- * drift lint can't see. Each finding is a warning with a fix-it — never a
- * hard gate unless the system promoted it (`consolidate({ audit })`), and
- * never moralizing: a category only speaks where the system's own data shows a
- * convention exists to stray from.
+ * drift lint can't see. Findings carry a fix-it and are never moralizing: a
+ * category only speaks where the system's own data shows a convention exists
+ * to stray from. Stale folded derivations are an error by default because
+ * their output is visibly incorrect when a varying dependency is selected;
+ * derived-case growth is advisory because the larger output remains correct.
  */
 
 import type { VanityOklch } from '../tokens/math'
@@ -11,6 +12,7 @@ import type { VanityManifest, VanityManifestContrast, VanityManifestEscape, Vani
 import type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel } from './records'
 import type { VanitySystemMap } from './system'
 import { parseBlocks, walkDeclarations } from '../css/compile'
+import { hasBrowserReactiveSyntax } from '../tokens/expressions'
 import { parseColor } from '../tokens/math'
 import { createManifestModules, getManifestTokenUsage } from './manifest'
 
@@ -67,6 +69,9 @@ const NEAR_DUPLICATE_EPSILON = 0.02
 /** A category speaks only when tokens already carry it: at least this many tokenized declarations… */
 const STRAY_MIN_TOKENIZED = 2
 
+/** Warn when one folded derivation needs more intersection arms than this. */
+const DERIVED_CASE_ADVISORY_THRESHOLD = 32
+
 const DEFAULT_AUDIT_LEVELS: Record<VanityAuditKind, VanityAuditLevel> = {
   unusedTokens: 'warn',
   nearDuplicates: 'warn',
@@ -85,6 +90,8 @@ const DEFAULT_AUDIT_LEVELS: Record<VanityAuditKind, VanityAuditLevel> = {
   cssParityGaps: 'warn',
   staleArtifacts: 'warn',
   rootModeDisagreements: 'warn',
+  staleDerivations: 'error',
+  derivedCaseGrowth: 'warn',
 }
 
 const SYSTEM_AUDIT_KINDS = [
@@ -93,10 +100,13 @@ const SYSTEM_AUDIT_KINDS = [
   'overwriteInventory',
   'nonportableValues',
   'specificityContexts',
+  'staleDerivations',
+  'derivedCaseGrowth',
 ] as const
 
 type SystemAuditKind = typeof SYSTEM_AUDIT_KINDS[number]
-type AuditRunner = () => VanityAuditFinding[]
+type AuditFindingDraft = Omit<VanityAuditFinding, 'level'>
+type AuditRunner = () => AuditFindingDraft[]
 type SystemAuditCategories = Record<SystemAuditKind, AuditRunner>
 
 const UNEVALUATED_AUDITS: readonly VanityUnevaluatedAudit[] = [
@@ -147,6 +157,8 @@ export function audit(
     mutableRootHazards: systemCategories.mutableRootHazards,
     aliasEscapes: () => findAliasEscapes(manifest),
     overwriteInventory: systemCategories.overwriteInventory,
+    staleDerivations: systemCategories.staleDerivations,
+    derivedCaseGrowth: systemCategories.derivedCaseGrowth,
     eagerStyleBarrels: () => (evidence.eagerStyleBarrels ?? []).map(entry => ({
       kind: 'eagerStyleBarrels' as const,
       level: 'warn' as const,
@@ -186,7 +198,7 @@ export function audit(
   return findings
 }
 
-/** Run the five audit categories that a consolidated semantic map can decide. */
+/** Run the seven audit categories that a consolidated semantic map can decide. */
 export function runSystemAudit(
   system: VanitySystemMap,
   config?: VanityAuditConfig,
@@ -230,6 +242,8 @@ function createSystemAuditCategories(system: VanitySystemMap): SystemAuditCatego
     overwriteInventory: () => findOverwriteInventory(system),
     nonportableValues: () => findNonportableValues(system),
     specificityContexts: () => findSpecificityContexts(system),
+    staleDerivations: () => findStaleDerivations(system),
+    derivedCaseGrowth: () => findDerivedCaseGrowth(system),
   }
 }
 
@@ -371,14 +385,21 @@ function getLabAxes({ c, h }: VanityOklch): [number, number] {
 /** The consciously-accepted thresholds, surfaced so acceptance stays a decision. */
 function findAcceptedContrast(manifest: VanityManifest): VanityAuditFinding[] {
   return getManifestContrast(manifest)
-    .filter(entry => entry.accepted)
-    .map(entry => ({
-      kind: 'contrast' as const,
-      level: 'warn' as const,
-      message: `${entry.pairing} accepts ${describeLevel(entry)} — measured ${entry.measured} (${entry.scheme})`,
-      fix: 'raise the target contrast to retire the acceptance',
-      ...(entry.declaredAt?.file === undefined ? {} : { file: entry.declaredAt.file }),
-    }))
+    .filter(entry => entry.accepted || entry.fallback !== undefined)
+    .map((entry) => {
+      const fallback = entry.fallback
+      return {
+        kind: 'contrast' as const,
+        level: 'warn' as const,
+        message: fallback === undefined
+          ? `${entry.pairing} accepts ${describeLevel(entry)} — measured ${entry.measured} (${entry.scheme})`
+          : `${entry.pairing} uses a ${fallback} — measured ${entry.measured} (${entry.scheme})`,
+        fix: fallback === undefined
+          ? 'raise the target contrast to retire the acceptance'
+          : 'make the target exactly foldable for a proven build-time pick, or accept the representative fallback',
+        ...(entry.declaredAt?.file === undefined ? {} : { file: entry.declaredAt.file }),
+      }
+    })
 }
 
 function describeLevel(entry: VanityManifestContrast): string {
@@ -664,6 +685,89 @@ function findMutableRootHazards(system: VanitySystemMap): VanityAuditFinding[] {
   return findings
 }
 
+function findStaleDerivations(system: VanitySystemMap): AuditFindingDraft[] {
+  const findings: AuditFindingDraft[] = []
+
+  for (const [path, token] of Object.entries(system.tokens)) {
+    if (!token.emit || token.dependencies.length === 0 || !isBuildFoldedEmission(token))
+      continue
+
+    const coverage = token.axisCoverage
+    if (coverage === undefined || coverage.contributingAxes.length < 2)
+      continue
+
+    const covered = new Set(token.declarations
+      .filter(declaration => declaration.kind === 'case' && declaration.when !== undefined)
+      .map(declaration => getCaseAddress(declaration.when!)))
+    const missing = coverage.requiredCases.filter(when => !covered.has(getCaseAddress(when)))
+    if (missing.length === 0)
+      continue
+
+    findings.push({
+      kind: 'staleDerivations',
+      message: `${path} is folded from dependencies varying across ${coverage.contributingAxes.join(', ')} but has no intersection declaration for ${missing.map(formatCaseWhen).join(', ')}`,
+      fix: 'emit a case declaration for every combination whose resolved value differs from the axis cascade, or keep the derivation live so the browser can recompute it',
+      ...(token.declaredAt?.file === undefined ? {} : { file: token.declaredAt.file }),
+    })
+  }
+
+  return findings
+}
+
+/**
+ * Surface correct-but-large folded intersections before they dominate a
+ * stylesheet. Authors can keep the derivation live when the product of mode
+ * counts is not worth the build-time CSS.
+ */
+function findDerivedCaseGrowth(system: VanitySystemMap): AuditFindingDraft[] {
+  const findings: AuditFindingDraft[] = []
+
+  for (const [path, token] of Object.entries(system.tokens)) {
+    if (!token.emit || !isBuildFoldedEmission(token))
+      continue
+
+    const coverage = token.axisCoverage
+    if (coverage === undefined || coverage.requiredCases.length <= DERIVED_CASE_ADVISORY_THRESHOLD)
+      continue
+
+    findings.push({
+      kind: 'derivedCaseGrowth',
+      message: `${path} requires ${coverage.requiredCases.length} derived intersection declarations across ${coverage.contributingAxes.join(', ')} (advisory budget: ${DERIVED_CASE_ADVISORY_THRESHOLD})`,
+      fix: `keep ${path} live with reference: 'var' to opt out of combinatorial derived-case CSS`,
+      ...(token.declaredAt?.file === undefined ? {} : { file: token.declaredAt.file }),
+    })
+  }
+
+  return findings
+}
+
+function getCaseAddress(when: Readonly<Record<string, string>>): string {
+  return Object.entries(when)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([axis, mode]) => `${axis}:${mode}`)
+    .join('|')
+}
+
+function formatCaseWhen(when: Readonly<Record<string, string>>): string {
+  return Object.entries(when)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([axis, mode]) => `${axis}: ${mode}`)
+    .join(', ')
+}
+
+function isBuildFoldedEmission(token: VanitySystemMap['tokens'][string]): boolean {
+  if (token.fold.status === 'folded')
+    return true
+  if (token.fold.status !== 'preserved')
+    return false
+  if (token.fold.reason === 'browser-reactive color semantics')
+    return false
+  const emitted = token.declarations
+    .map(declaration => String(declaration.val))
+    .join('\n')
+  return !hasBrowserReactiveSyntax(emitted)
+}
+
 function findAliasEscapes(manifest: VanityManifest): VanityAuditFinding[] {
   return getManifestEscapes(manifest)
     .filter(escape => escape.form === 'class.standard')
@@ -720,6 +824,8 @@ const AUDIT_CATEGORY_TITLES: Record<VanityAuditKind, string> = {
   cssParityGaps: 'CSS parity gaps',
   staleArtifacts: 'stale artifacts',
   rootModeDisagreements: 'root mode disagreements',
+  staleDerivations: 'stale folded derivations',
+  derivedCaseGrowth: 'derived-case growth',
 }
 
 /** Grouped, deep-linked findings — what `pnpm run audit` prints. */

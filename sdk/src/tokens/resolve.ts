@@ -3,7 +3,7 @@
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
 import type { VanityCssValue } from '../values/types'
 import type { VanityColorExpr } from './color'
-import type { VanityResolver, VanityScheme } from './expressions'
+import type { VanityContrastTargetResolution, VanityResolver, VanityScheme } from './expressions'
 import type { VanityOklch } from './math'
 import type { NodeResult, TokenGraph, TokenModule, TokenNode, TokenResolutionOptions, VanityLeafDefinition } from './module'
 import type { VanityTokens } from './types'
@@ -16,7 +16,15 @@ import {
 } from '../values/protocol'
 import { TextContrastCheck } from './checks'
 import { convertToExpression, getColorRequirements } from './color'
-import { foldExpr, getExpressionTraits, serializeContrastPick, serializeExpr } from './expressions'
+import {
+  foldColorCss,
+  foldContrastTarget,
+  foldExpr,
+  getExpressionTraits,
+  resolveContrastPick,
+  serializeContrastResolution,
+  serializeExpr,
+} from './expressions'
 import { readHandleVar } from './handle'
 import { formatNumber, formatOklch, measureApcaContrast, measureWcagContrast, parseColor, pickLegible } from './math'
 import {
@@ -68,12 +76,15 @@ export function resolveGraph(
   context?: string,
 ): { results: Map<string, NodeResult>, diagnostics: VanityDiagnostic[] } {
   const results = new Map<string, NodeResult>()
+  const contrastResults = new Map<string, Map<VanityScheme, VanityContrastTargetResolution>>()
   const stack: string[] = []
   const diagnostics: VanityDiagnostic[] = []
   let authoredValues: ReturnType<typeof createAuthoredValueFolder>
 
   const resolver: VanityResolver = {
+    policies: graph.policies,
     foldRef: (handle, scheme) => foldNode(requireNode(handle), scheme),
+    foldRefForContrast: (handle, scheme) => foldContrastNode(requireNode(handle), scheme),
     foldValue: (value, scheme) => authoredValues.foldValue(value, scheme),
     serializeValue: value => authoredValues.serializeValue(value),
     getRefTraits: (handle) => {
@@ -91,13 +102,13 @@ export function resolveGraph(
         ? readHandleVar(referenced.handle)
         : resolveNode(referenced).emitted
     },
-    invalidColor: (detail) => {
+    invalidColor: (detail, fix) => {
       throw new VanityError({
         code: 'VANITY_TOKENS_INVALID_COLOR',
         message: `${stack[stack.length - 1] ?? 'a token'} cannot resolve: ${detail}`,
         path: stack[stack.length - 1],
         file: graph.file,
-        fix: 'give it a color value, or reference a color token',
+        fix: fix ?? 'give it a color value, or reference a color token',
       })
     },
   }
@@ -178,6 +189,23 @@ export function resolveGraph(
     return parsed
   }
 
+  function foldContrastNode(node: TokenNode, scheme: VanityScheme): VanityContrastTargetResolution {
+    const byScheme = contrastResults.get(node.key)
+    const cached = byScheme?.get(scheme)
+    if (cached !== undefined)
+      return cached
+
+    const definition = getDefinition(node)
+    const resolution = definition.kind !== 'color' && definition.kind !== 'contrast'
+      ? { color: foldNode(node, scheme), approximate: false }
+      : enforceAcyclicResolution(node, () => foldContrastTarget(definition.expr, scheme, resolver))
+    const targetCache = byScheme ?? new Map<VanityScheme, VanityContrastTargetResolution>()
+    targetCache.set(scheme, resolution)
+    if (byScheme === undefined)
+      contrastResults.set(node.key, targetCache)
+    return resolution
+  }
+
   function resolveNode(node: TokenNode): NodeResult {
     const memoized = results.get(node.key)
 
@@ -208,6 +236,18 @@ export function resolveGraph(
     if (definition.kind === 'value') {
       const valueNode = valueNodeOf(definition.value)
       const reactive = valueNode.dependencies.length > 0
+
+      // `reference: 'val'` asks for the authored representative of a value
+      // expression. Resolve its graph references before serialization so an
+      // explicit value-only derivation can participate in axis substitution;
+      // the default `var` policy remains browser-reactive.
+      if (node.contract.reference === 'val') {
+        return {
+          traits: { cssLive: false, volatile: false, conditional: false },
+          emitted: authoredValues.foldValue(definition.value, 'light'),
+        }
+      }
+
       return {
         traits: { cssLive: reactive, volatile: reactive, conditional: false },
         emitted: serializeTokenCss(graph, definition.value),
@@ -222,7 +262,7 @@ export function resolveGraph(
     const traits = inner
 
     if (node.contract.canonical && graph.support) {
-      const missing = [...getColorRequirements(expr)].filter(feature => !graph.support!.features.has(feature))
+      const missing = [...getColorRequirements(expr, graph.policies?.color.adjustSpace)].filter(feature => !graph.support!.features.has(feature))
       if (missing.length > 0) {
         throw new VanityError({
           code: 'VANITY_TOKENS_INVALID_COLOR',
@@ -240,14 +280,21 @@ export function resolveGraph(
 
     const emitted = inner.cssLive || inner.volatile
       ? serializeExpr(expr, resolver)
-      : formatOklch(foldExpr(expr, 'light', resolver))
+      : foldColorCss(expr, 'light', resolver)
 
     return { traits, emitted }
   }
 
   function calculateContrastResult(node: TokenNode, expr: Extract<VanityColorExpr, { kind: 'contrast' }>): NodeResult {
     const traits = getExpressionTraits(expr.target, resolver)
-    const emitted = serializeContrastPick(expr, resolver)
+    const resolution = resolveContrastPick(expr, resolver)
+    const emitted = serializeContrastResolution(resolution)
+    const contrastFallback = resolution.fallbackReason === undefined
+      ? undefined
+      : {
+          schemes: resolution.fallbackSchemes,
+          reason: resolution.fallbackReason,
+        }
 
     if (traits.volatile) {
       // The guarantee cannot be total over a live target, so keep the checked
@@ -256,13 +303,13 @@ export function resolveGraph(
       // the target itself is scheme-invariant; that breaks an opaque
       // background/foreground pairing. Revisit a native upgrade once that
       // implementation is interoperable with the CSS Color 5 contract.
-      return { traits, emitted }
+      return { traits, emitted, ...(contrastFallback === undefined ? {} : { contrastFallback }) }
     }
 
     const schemes: VanityScheme[] = traits.cssLive ? ['light', 'dark'] : ['light']
 
     for (const scheme of schemes) {
-      const target = foldExpr(expr.target, scheme, resolver)
+      const target = scheme === 'light' ? resolution.lightTarget : resolution.darkTarget
       const pick = pickLegible(target)
 
       if (Math.abs(pick.lc) < expr.contrast) {
@@ -280,13 +327,133 @@ export function resolveGraph(
       }
     }
 
-    return { traits, emitted }
+    return { traits, emitted, ...(contrastFallback === undefined ? {} : { contrastFallback }) }
   }
 
   for (const node of graph.nodes.values())
     resolveNode(node)
 
   return { results, diagnostics }
+}
+
+/**
+ * Resolve a graph as if selected token definitions held different values and
+ * return only the emitted custom properties whose CSS changed. Live
+ * derivations are absent by construction: their emitted `var()` expression is
+ * unchanged, so the browser remains responsible for recomputing them.
+ *
+ * The graph's original results are never mutated. Callers use this primitive
+ * for axis arms and local declaration producers, while cycle guarding,
+ * memoization, and diagnostics remain owned by `resolveGraph`.
+ */
+export function resolveTokenSubstitutions(
+  graph: TokenGraph,
+  substitutions: Map<string, VanityOverride>,
+  context: string,
+): { declarations: Map<`--${string}`, string>, diagnostics: VanityDiagnostic[] } {
+  const { results, diagnostics } = resolveGraph(graph, substitutions, context)
+  const declarations = new Map<`--${string}`, string>()
+
+  for (const [key, result] of results) {
+    const baseline = graph.results.get(key)
+    const node = graph.nodes.get(key)
+    if (baseline === undefined || node === undefined || baseline.emitted === result.emitted)
+      continue
+    declarations.set(node.name as `--${string}`, result.emitted)
+  }
+
+  return { declarations, diagnostics }
+}
+
+export interface VanityTokenSubstitutionModeResolution {
+  readonly axis: string
+  readonly mode: string
+  readonly declarations: ReadonlyMap<`--${string}`, string>
+  /** Declarations whose value changed compared with this mode without local substitutions. */
+  readonly substitutionChanges: ReadonlySet<`--${string}`>
+}
+
+/**
+ * Re-resolve a substitution alongside each declared axis mode.
+ *
+ * Local substitutions take precedence over an axis branch for the same token;
+ * every other token receives the branch selected by the current mode. The
+ * returned maps contain only emitted CSS that differs from the base graph,
+ * matching `resolveTokenSubstitutions`' live-reference contract. The
+ * `substitutionChanges` set compares the substituted mode with the same mode
+ * using only its axis branches, so a dependent that varies by axis alone is
+ * not mistaken for a dependent affected by the local substitution.
+ */
+export function resolveTokenSubstitutionsByAxisMode(
+  graph: TokenGraph,
+  substitutions: ReadonlyMap<string, VanityOverride>,
+  context: (axis: string, mode: string) => string,
+): { resolutions: readonly VanityTokenSubstitutionModeResolution[], diagnostics: VanityDiagnostic[] } {
+  const resolutions: VanityTokenSubstitutionModeResolution[] = []
+  const diagnostics: VanityDiagnostic[] = []
+  const nodes = [...graph.nodes.values()]
+
+  for (const axis of graph.axes?.order ?? []) {
+    const definition = graph.axes!.definitions[axis]!
+
+    for (const mode of definition.modeOrder) {
+      const modeSubstitutions = new Map<string, VanityOverride>()
+      for (const node of nodes) {
+        const branch = node.branches.find(candidate => candidate.kind === 'axis'
+          && candidate.axis === axis
+          && candidate.mode === mode)
+        if (branch !== undefined && branch.definition.kind !== 'none')
+          modeSubstitutions.set(node.key, branch.definition)
+      }
+
+      const substitutedMode = new Map(modeSubstitutions)
+      for (const [key, definition] of substitutions)
+        substitutedMode.set(key, definition)
+
+      if (substitutedMode.size === 0)
+        continue
+
+      const modeResolved = resolveTokenSubstitutions(graph, modeSubstitutions, context(axis, mode))
+      const resolved = substitutions.size === 0
+        ? modeResolved
+        : resolveTokenSubstitutions(graph, substitutedMode, context(axis, mode))
+      diagnostics.push(...resolved.diagnostics)
+      resolutions.push({
+        axis,
+        mode,
+        declarations: resolved.declarations,
+        substitutionChanges: substitutions.size === 0
+          ? new Set()
+          : getChangedDeclarationNames(graph, modeResolved.declarations, resolved.declarations),
+      })
+    }
+  }
+
+  return { resolutions, diagnostics }
+}
+
+function getChangedDeclarationNames(
+  graph: TokenGraph,
+  withoutSubstitutions: ReadonlyMap<`--${string}`, string>,
+  withSubstitutions: ReadonlyMap<`--${string}`, string>,
+): ReadonlySet<`--${string}`> {
+  const baseline = new Map(
+    [...graph.nodes.values()].map(node => [node.name as `--${string}`, graph.results.get(node.key)?.emitted]),
+  )
+  const names = new Set<`--${string}`>([
+    ...withoutSubstitutions.keys(),
+    ...withSubstitutions.keys(),
+  ])
+  const changed = new Set<`--${string}`>()
+
+  for (const name of names) {
+    const without = withoutSubstitutions.get(name) ?? baseline.get(name)
+    const withSubstitution = withSubstitutions.get(name) ?? baseline.get(name)
+    if (without !== withSubstitution)
+      changed.add(name)
+  }
+
+  return changed
 }
 
 /** Build-time representative projection shared by derivation fallback and checks. */
@@ -529,30 +696,85 @@ export function runTokenChecks(checks: readonly unknown[], graph: TokenGraph): V
 }
 
 /** Create the no-cycle resolver used by authored checks and introspection. */
-export function createTokenCheckResolver(graph: TokenGraph, scheme: VanityScheme): VanityResolver {
+export function createTokenCheckResolver(graph: TokenGraph, _scheme: VanityScheme): VanityResolver {
   let resolver: VanityResolver
+  const contrastStack: string[] = []
+  const contrastResults = new Map<string, Map<VanityScheme, VanityContrastTargetResolution>>()
   const authoredValues = createAuthoredValueFolder(graph, () => resolver, node => node.definition)
 
+  function foldContrastNode(node: TokenNode, targetScheme: VanityScheme): VanityContrastTargetResolution {
+    if (contrastStack.includes(node.key)) {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_CYCLE',
+        message: `token derivation cycle: ${[...contrastStack.slice(contrastStack.indexOf(node.key)), node.key].join(' → ')}`,
+        path: node.key,
+        file: graph.file,
+        fix: 'break the loop — one of these derivations must resolve to a value',
+      })
+    }
+
+    const byScheme = contrastResults.get(node.key)
+    const cached = byScheme?.get(targetScheme)
+    if (cached !== undefined)
+      return cached
+
+    const definition = node.definition
+    const resolution = definition.kind !== 'color' && definition.kind !== 'contrast'
+      ? (() => {
+          const css = authoredValues.foldDefault(node, targetScheme)
+          const parsed = parseColor(css)
+          if (!parsed)
+            return resolver.invalidColor(`${node.key} holds '${css}', which is not a color`)
+          return { color: parsed, approximate: false }
+        })()
+      : (() => {
+          contrastStack.push(node.key)
+          try {
+            return foldContrastTarget(definition.expr, targetScheme, resolver)
+          }
+          finally {
+            contrastStack.pop()
+          }
+        })()
+    const targetCache = byScheme ?? new Map<VanityScheme, VanityContrastTargetResolution>()
+    targetCache.set(targetScheme, resolution)
+    if (byScheme === undefined)
+      contrastResults.set(node.key, targetCache)
+    return resolution
+  }
+
   resolver = {
-    foldRef: (handle) => {
+    policies: graph.policies,
+    foldRef: (handle, targetScheme) => {
       const node = getNode(handle)
       if (!node)
         return resolver.invalidColor('a referenced token does not belong to this token module')
-      const css = authoredValues.foldDefault(node, scheme)
+      const css = authoredValues.foldDefault(node, targetScheme)
       const parsed = parseColor(css)
       if (!parsed)
         return resolver.invalidColor(`${node.key} holds '${css}', which is not a color`)
       return parsed
     },
-    foldValue: value => authoredValues.foldValue(value, scheme),
+    foldRefForContrast: (handle, targetScheme) => {
+      const node = getNode(handle)
+      if (!node)
+        return resolver.invalidColor('a referenced token does not belong to this token module')
+      return foldContrastNode(node, targetScheme)
+    },
+    foldValue: (value, targetScheme) => authoredValues.foldValue(value, targetScheme),
     serializeValue: value => authoredValues.serializeValue(value),
     getRefTraits: (handle) => {
       const node = getNode(handle)
       const result = node === undefined ? undefined : graph.results.get(node.key)
       return result?.traits ?? { cssLive: false, volatile: false, conditional: false }
     },
-    invalidColor: (detail) => {
-      throw new VanityError({ code: 'VANITY_TOKENS_INVALID_COLOR', message: `a check cannot resolve: ${detail}`, file: graph.file })
+    invalidColor: (detail, fix) => {
+      throw new VanityError({
+        code: 'VANITY_TOKENS_INVALID_COLOR',
+        message: `a check cannot resolve: ${detail}`,
+        file: graph.file,
+        ...(fix === undefined ? {} : { fix }),
+      })
     },
   }
 

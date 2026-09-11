@@ -347,7 +347,6 @@ const NAMING_ALLOWLIST = new Set([
   'colorMix',
   'container',
   'data',
-  'displayP3',
   'flex',
   'frequency',
   'grid',
@@ -400,8 +399,9 @@ const NAMING_ALLOWLIST = new Set([
   'config',
   'configResolved',
   'transformInclude',
-  // Public token-declaration shorthand and JavaScript Proxy protocol hook.
+  // Public token-declaration vocabulary and JavaScript Proxy protocol hook.
   'tdec',
+  'propagated',
   'ownKeys',
   // Public cascade and condition algebra vocabulary. These names are the
   // language users write, not implementation helpers that happen to be
@@ -470,10 +470,13 @@ const NAMING_ALLOWLIST = new Set([
   'focusVisibility',
   'rawAssertions',
   'aliasEscapes',
+  'overwriteInventory',
   'eagerStyleBarrels',
   'cssParityGaps',
   'staleArtifacts',
   'rootModeDisagreements',
+  'staleDerivations',
+  'derivedCaseGrowth',
   'ambiguousAxes',
   'mutableRootHazards',
   'nonportableValues',

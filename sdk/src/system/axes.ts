@@ -139,6 +139,7 @@ export type VanityOpenAxisModes<Modes extends Readonly<Record<string, unknown>>>
 }
 
 export const VANITY_AXIS_DEFINITION = Symbol.for('vanity.axisDefinition')
+const VANITY_MOUNT_RELATIVE_SCHEME = Symbol.for('vanity.mountRelativeScheme')
 
 export interface VanityAxisDefinition<
   Modes extends Readonly<Record<string, VanityAxisModeInput>> = Readonly<Record<string, VanityAxisModeInput>>,
@@ -525,8 +526,9 @@ export function createAxisData(
   })), true)
 }
 
-function createAxisSchemeTrigger(mode: 'light' | 'dark'): VanityAxisTrigger<true> {
-  const [explicit, preferred] = getSchemeConditionArms(mode)
+function createAxisSchemeTrigger(mode: 'light' | 'dark', axisName = 'scheme'): VanityAxisTrigger<true> {
+  const [explicit, preferred] = getSchemeConditionArms(mode, axisName)
+  const name = `data-${convertToKebab(axisName)}`
 
   return createTrigger([
     Object.freeze({
@@ -542,7 +544,7 @@ function createAxisSchemeTrigger(mode: 'light' | 'dark'): VanityAxisTrigger<true
       locality: 'root' as const,
       priority: 100,
       placement: 'root' as const,
-      runtime: Object.freeze({ kind: 'attribute' as const, name: 'data-scheme', value: mode }),
+      runtime: Object.freeze({ kind: 'attribute' as const, name, value: mode }),
     }),
   ], true)
 }
@@ -552,7 +554,7 @@ function createSchemeAxis(options: VanitySchemeAxisOptions = {}): VanityAxisDefi
   readonly dark: VanityAxisTrigger<true>
 }> {
   const locality = options.locality ?? 'element'
-  return defineAxis({
+  return markMountRelativeSchemeAxis(defineAxis({
     modes: { light: createAxisSchemeTrigger('light'), dark: createAxisSchemeTrigger('dark') },
     default: 'light',
     modeOrder: ['light', 'dark'],
@@ -564,11 +566,46 @@ function createSchemeAxis(options: VanitySchemeAxisOptions = {}): VanityAxisDefi
       dark: 'dark',
     },
     ...(options.description === undefined ? {} : { description: options.description }),
-  })
+  })) as VanityAxisDefinition<{
+    readonly light: VanityAxisTrigger<true>
+    readonly dark: VanityAxisTrigger<true>
+  }>
 }
 
-/** Explicit guarded color-scheme axis; no behavior is inferred from its mount name. */
+/** Explicit guarded color-scheme axis: `light-dark()` lowering comes from `native.kind`, never from the mount name; the explicit attribute follows the mount. */
 export const colorSchemes = createSchemeAxis
+
+/** Mark the built-in scheme definition so its selectors can follow its mount. */
+export function markMountRelativeSchemeAxis(definition: VanityAxisDefinition): VanityAxisDefinition {
+  const marked = { ...definition }
+  Object.defineProperty(marked, VANITY_MOUNT_RELATIVE_SCHEME, { value: true })
+  return Object.freeze(marked)
+}
+
+/** Identify the built-in scheme definition that owns mount-relative selectors. */
+export function isMountRelativeSchemeAxis(value: unknown): value is VanityAxisDefinition {
+  return typeof value === 'object' && value !== null
+    && (value as Record<PropertyKey, unknown>)[VANITY_MOUNT_RELATIVE_SCHEME] === true
+}
+
+/** Rebind the built-in scheme definition's attribute and selectors to its axis name. */
+export function bindSchemeAxisDefinition(name: string, definition: VanityAxisDefinition): VanityAxisDefinition {
+  if (name === 'scheme' || !isMountRelativeSchemeAxis(definition)
+    || definition.native?.kind !== 'scheme'
+    || definition.native.light !== 'light'
+    || definition.native.dark !== 'dark') {
+    return definition
+  }
+
+  return markMountRelativeSchemeAxis({
+    ...definition,
+    modes: Object.freeze({
+      ...definition.modes,
+      light: createAxisSchemeTrigger('light', name),
+      dark: createAxisSchemeTrigger('dark', name),
+    }),
+  })
+}
 
 /** Normalize the direct public `addAxis(name, config)` form against its mount identity. */
 export function defineOpenAxis<
@@ -645,7 +682,7 @@ export function normalizeAxisAdditions<const Axes extends VanityAxisDefinitions>
         'create the axis definition with axis() or colorSchemes()',
       )
     }
-    merged[name] = definition
+    merged[name] = bindSchemeAxisDefinition(name, definition)
     order.push(name)
   }
 

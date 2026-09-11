@@ -6,13 +6,10 @@
  */
 
 import {
-  alpha,
   container,
   createSystem,
-  darken,
   legibleOn,
   lightDark,
-  lighten,
   media,
   oklch,
   scale,
@@ -59,10 +56,10 @@ function prismOpen() {
     },
   }).add(m => ({
     color: {
-      surface: lighten(m.color.brand, 0.24),
-      ink: darken(m.color.brand, 0.4),
-      brandSoft: alpha(m.color.brand, 0.12),
-      brandHover: lighten(m.color.brand, 0.06),
+      surface: oklch.lighten(m.color.brand, 0.24),
+      ink: oklch.darken(m.color.brand, 0.4),
+      brandSoft: open.alpha(m.color.brand, 0.12),
+      brandHover: oklch.lighten(m.color.brand, 0.06),
       onBrand: legibleOn(m.color.brand),
     },
   }))

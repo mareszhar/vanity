@@ -45,6 +45,39 @@ describe('policy as system law', () => {
     expect(() => createSystem({
       constructors: { length: { restrict: { level: 'forbid', typo: true } } },
     } as never)).toThrow(/unknown key 'typo'/)
+    expect(() => createSystem({ color: { typo: 'oklch' } } as never)).toThrow(/unknown color policy/)
+    expect(() => createSystem({ color: { mixSpace: 'invalid-space' } } as never)).toThrow(/color\.mixSpace/)
+    expect(() => createSystem({ color: { adjustSpace: 'srgb' } } as never)).toThrow(/color\.adjustSpace/)
+  })
+
+  it('binds colorMix defaults through the owning system and preserves explicit .in()', () => {
+    const configured = createSystem({ color: { mixSpace: 'oklab' } })
+
+    expect(configured.policies.color).toEqual({ mixSpace: 'oklab' })
+    expect(configured.serialize(configured.colorMix(['red', 'blue'])))
+      .toMatch(/^oklch\(/)
+    expect(configured.serialize(configured.colorMix(['red', 'blue']).in('srgb')))
+      .toBe('color-mix(in srgb, red, blue)')
+  })
+
+  it('binds bare color adjustments through the owning system and keeps explicit namespaces authoritative', () => {
+    const configured = createSystem({ color: { adjustSpace: 'hsl' } })
+
+    expect(configured.policies.color).toEqual({ adjustSpace: 'hsl' })
+    expect(configured.serialize(configured.lighten('red', 0.1)))
+      .toBe('hsl(0 100% 50.1%)')
+    expect(configured.serialize(configured.alpha(configured.hsl(200, 50, 50), 0.2)))
+      .toBe('hsl(200 50% 50% / 0.2)')
+    expect(configured.serialize(configured.hsl.lighten('red', 0.1)))
+      .toBe('hsl(0 100% 50.1%)')
+    expect(configured.serialize(configured.oklch.lighten('red', 0.1)))
+      .toMatch(/^oklch\(/)
+
+    const unconfigured = createSystem()
+    expect(unconfigured.serialize(unconfigured.alpha('blue', 0.2)))
+      .toBe('rgb(0 0 255 / 0.2)')
+    expect(() => unconfigured.serialize(unconfigured.lighten('red', 0.1)))
+      .toThrow(/adjustSpace/)
   })
 
   it('resolves portable adaptive lengths at the host border and preserves explicit units', () => {

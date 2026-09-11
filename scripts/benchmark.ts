@@ -33,6 +33,13 @@ import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import ts from 'typescript'
 import { benchmarkScales } from '../benchmarks/scales'
+import {
+  benchmarkByteFactsFromResult,
+  compareBenchmarkByteFacts,
+  countBenchmarkByteFacts,
+  formatBenchmarkByteDifferences,
+  readBenchmarkByteFacts,
+} from './benchmark-facts'
 
 interface CommandMeasurement {
   output: string
@@ -100,6 +107,7 @@ interface BenchmarkResult {
   }
   package: {
     rootBytes: number
+    presetsBytes: number
     runtimeBytes: number
     runtimeMinifiedBytes: number
     runtimeMinGzipBytes: number
@@ -403,6 +411,7 @@ const result: BenchmarkResult = {
   },
   package: {
     rootBytes: statSync(join(workspaceDir, 'sdk/dist/index.mjs')).size,
+    presetsBytes: statSync(join(workspaceDir, 'sdk/dist/presets.mjs')).size,
     runtimeBytes: runtimeEntry.rawBytes,
     runtimeMinifiedBytes: runtimeEntry.minifiedBytes,
     runtimeMinGzipBytes: runtimeEntry.minGzipBytes,
@@ -415,3 +424,21 @@ const output = join(artifactsRoot, 'current.json')
 mkdirSync(dirname(output), { recursive: true })
 writeFileSync(output, `${JSON.stringify(result, null, 2)}\n`)
 console.log(`✓ wrote ${relative(workspaceDir, output)}`)
+
+const acceptedFailures: string[] = []
+const accepted = readBenchmarkByteFacts(join(workspaceDir, 'benchmarks/accepted.json'), acceptedFailures)
+if (accepted === undefined) {
+  console.error(acceptedFailures.join('\n'))
+  process.exitCode = 1
+}
+else {
+  const differences = compareBenchmarkByteFacts(benchmarkByteFactsFromResult(result), accepted)
+  if (differences.length > 0) {
+    console.error('benchmark baseline differs from benchmarks/accepted.json')
+    console.error(formatBenchmarkByteDifferences(differences, 'fresh', 'accepted').join('\n'))
+    process.exitCode = 1
+  }
+  else {
+    console.log(`✓ benchmark baseline: ${countBenchmarkByteFacts(accepted)} byte figures match benchmarks/accepted.json`)
+  }
+}

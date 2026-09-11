@@ -9,6 +9,7 @@
 import type { TokenGraph } from '../tokens/module'
 import { substrate } from '../substrate'
 import { getPhaseLayer, planTokenEmission } from '../tokens/module'
+import { convertToKebab } from '../tokens/names'
 
 const CONTRAST_COLOR_SUPPORT = '(color: contrast-color(red))'
 
@@ -115,9 +116,11 @@ export function emitTokenCss(graph: TokenGraph): void {
   }
 
   if (hasSchemePairs) {
+    const nativeSchemeAxis = graph.axes?.order.find(axis => graph.axes?.definitions[axis]?.native?.kind === 'scheme')
+    const schemeAttribute = `data-${convertToKebab(nativeSchemeAxis ?? 'scheme')}`
     for (const root of schemeRoots) {
-      substrate.css.emitGlobalRule({ selector: `:is(${root})[data-scheme='light']`, rule: { colorScheme: 'light' } })
-      substrate.css.emitGlobalRule({ selector: `:is(${root})[data-scheme='dark']`, rule: { colorScheme: 'dark' } })
+      substrate.css.emitGlobalRule({ selector: `:is(${root})[${schemeAttribute}='light']`, rule: { colorScheme: 'light' } })
+      substrate.css.emitGlobalRule({ selector: `:is(${root})[${schemeAttribute}='dark']`, rule: { colorScheme: 'dark' } })
     }
   }
 

@@ -166,6 +166,19 @@ export type VanityTokenDeclarations<T> = {
     : T[Key] extends object ? VanityTokenDeclarations<T[Key]> : never
 }
 
+/**
+ * Produce token declaration data for a resolved system. The direct call
+ * declares exactly the tokens supplied; `propagated` also includes every
+ * build-folded token invalidated by those substitutions. Live derivations are
+ * omitted because the browser recomputes them from the declarations above.
+ * Placement remains the caller's responsibility: use the returned data in a
+ * class, rule, layer, or condition.
+ */
+export interface VanityTokenDeclarationProducer<T> {
+  (declarations: VanityTokenDeclarations<T>): Record<`--${string}`, string | number>
+  readonly propagated: (declarations: VanityTokenDeclarations<T>) => Record<`--${string}`, string | number>
+}
+
 // Alias declarations layer onto the stable standard grammar. Keeping the
 // alias map shallow avoids cloning csstype's 870-property recursive graph for
 // every system/plugin chain while preserving exact keys and target values.

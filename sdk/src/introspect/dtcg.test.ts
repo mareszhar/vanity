@@ -45,6 +45,64 @@ describe('dTCG interchange', () => {
     expect(document.motion.quick).toEqual({ $type: 'duration', $value: { value: 160, unit: 'ms' } })
   })
 
+  it('preserves authored color spaces through standard DTCG round trips', () => {
+    const open = createSystem()
+    const p3 = open.color('display-p3', 1, 0.123456789, 0)
+    const hsl = open.hsl(200, 50, 50)
+    const parsed = open.color('blue')
+    const first = locked(open.addTokens({
+      color: {
+        p3: open.tdef({ val: p3 }),
+        hsl: open.tdef({ val: hsl }),
+        lab: open.tdef({ val: open.lab(50, 20, 30) }),
+        oklch: open.tdef({ val: open.oklch(0.58, 0.2, 285) }),
+        parsed: open.tdef({ val: parsed }),
+        p3Alpha: open.tdef({ val: open.alpha(p3, 0.4) }),
+        hslAlpha: open.tdef({ val: open.alpha(hsl, 0.4) }),
+        hslAdjusted: open.tdef({ val: open.hsl.lighten(hsl, 0.1) }),
+        hslCrossAdjusted: open.tdef({ val: open.hsl.lighten(open.oklch(0.5, 0.1, 30), 0.1) }),
+        parsedAlpha: open.tdef({ val: open.alpha(parsed, 0.4) }),
+        computedMix: open.tdef({ val: open.colorMix(['red', 'blue']).in('oklab') }),
+      },
+    }), { prefix: 'dtcg-colors' })
+
+    const exported = exportDesignTokens(first, { mode: 'resolved' }) as any
+    expect(exported.color.p3.$value).toEqual({
+      colorSpace: 'display-p3',
+      components: [1, 0.123456789, 0],
+      alpha: 1,
+    })
+    expect(exported.color.hsl.$value).toEqual({
+      colorSpace: 'hsl',
+      components: [200, 50, 50],
+      alpha: 1,
+    })
+    expect(exported.color.lab.$value).toEqual({
+      colorSpace: 'lab',
+      components: [50, 20, 30],
+      alpha: 1,
+    })
+    expect(exported.color.oklch.$value).toEqual({
+      colorSpace: 'oklch',
+      components: [0.58, 0.2, 285],
+      alpha: 1,
+    })
+    expect(exported.color.parsed.$value.colorSpace).toBe('srgb')
+    expect(exported.color.p3Alpha.$value).toMatchObject({ colorSpace: 'display-p3', alpha: 0.4 })
+    expect(exported.color.hslAlpha.$value).toMatchObject({ colorSpace: 'hsl', alpha: 0.4 })
+    expect(exported.color.hslAdjusted.$value).toMatchObject({ colorSpace: 'hsl', components: [200, 50, 50.1] })
+    expect(exported.color.hslCrossAdjusted.$value.colorSpace).toBe('hsl')
+    expect(exported.color.parsedAlpha.$value).toMatchObject({ colorSpace: 'srgb', alpha: 0.4 })
+    expect(exported.color.computedMix.$value.colorSpace).toBe('oklch')
+
+    const imported = importDesignTokens(exported)
+    const second = locked(open.addTokens(imported), { prefix: 'dtcg-colors-roundtrip' })
+    const roundTrip = exportDesignTokens(second, { mode: 'resolved' }) as any
+    for (const name of ['p3', 'hsl', 'lab', 'oklch', 'p3Alpha', 'hslAlpha', 'hslAdjusted', 'hslCrossAdjusted', 'parsedAlpha', 'computedMix'])
+      expect(roundTrip.color[name].$value).toEqual(exported.color[name].$value)
+    expect(exportDesignTokens(first, { mode: 'resolved', strict: false })).toEqual(exported)
+  })
+
   it('round-trips portable authored traits, aliases, axes, and reservations', () => {
     const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
     const module = open.defineTokens({

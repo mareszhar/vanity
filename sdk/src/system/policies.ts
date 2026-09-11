@@ -1,5 +1,6 @@
 import type { VanityDiagnosticCode } from '../diagnostics'
 import type {
+  VanityColorPolicies,
   VanityPolicies,
   VanityPolicyJson,
   VanityResolvedPolicies,
@@ -9,6 +10,7 @@ import { VanityError } from '../diagnostics'
 import { VANITY_DEFAULT_CSS_SUPPORT } from '../values/protocol'
 
 export type {
+  VanityColorPolicies,
   VanityConstructorPolicies,
   VanityConstructorPolicy,
   VanityConstructorRestriction,
@@ -18,8 +20,35 @@ export type {
   VanityTokenPolicies,
 } from '../values/policies'
 
-const KNOWN_POLICY_GROUPS = new Set(['constructors', 'support', 'layerOrder', 'tokens', 'plugins'])
+const KNOWN_POLICY_GROUPS = new Set([
+  'constructors',
+  'support',
+  'layerOrder',
+  'tokens',
+  'color',
+  'plugins',
+])
 const TOKEN_POLICY_KEYS = new Set(['reference', 'emit'])
+const COLOR_POLICY_KEYS = new Set(['mixSpace', 'adjustSpace'])
+const COLOR_INTERPOLATION_SPACES = new Set([
+  'srgb',
+  'srgb-linear',
+  'display-p3',
+  'display-p3-linear',
+  'a98-rgb',
+  'prophoto-rgb',
+  'rec2020',
+  'lab',
+  'oklab',
+  'xyz',
+  'xyz-d50',
+  'xyz-d65',
+  'hsl',
+  'hwb',
+  'lch',
+  'oklch',
+])
+const COLOR_ADJUST_SPACES = new Set(['hsl', 'hwb', 'lch', 'oklch'])
 
 export function createPolicyState(): VanityPolicies {
   return Object.freeze({})
@@ -45,6 +74,7 @@ export function resolvePolicies(
       reference: authored.tokens?.reference ?? 'var',
       emit: authored.tokens?.emit ?? true,
     },
+    color: authored.color ?? {},
     plugins: authored.plugins ?? {},
   }) as VanityResolvedPolicies
 }
@@ -185,6 +215,9 @@ function validatePolicies(policies: VanityPolicies): void {
     }
   }
 
+  if (policies.color !== undefined)
+    validateColorPolicy(policies.color)
+
   if (policies.plugins !== undefined) {
     if (!isPlainRecord(policies.plugins)) {
       throwPolicyError(
@@ -210,6 +243,48 @@ function validatePolicies(policies: VanityPolicies): void {
     for (const [name, value] of Object.entries(policies.constructors))
       validateConstructorPolicy(name, value)
   }
+}
+
+function validateColorPolicy(value: VanityColorPolicies): void {
+  if (!isPlainRecord(value)) {
+    throwPolicyError(
+      'VANITY_POLICY_INVALID',
+      'color policy must be a plain object',
+      'color',
+      'provide an object containing mixSpace and/or adjustSpace',
+    )
+  }
+  for (const key of Object.keys(value)) {
+    if (!COLOR_POLICY_KEYS.has(key)) {
+      throwPolicyError(
+        'VANITY_POLICY_INVALID',
+        `unknown color policy '${key}'`,
+        ['color', key],
+        'use the mixSpace or adjustSpace policy key',
+      )
+    }
+  }
+  if (value.mixSpace !== undefined && !isColorInterpolationSpace(value.mixSpace)) {
+    throwPolicyError(
+      'VANITY_POLICY_INVALID',
+      'color.mixSpace must be a CSS color interpolation space',
+      ['color', 'mixSpace'],
+      'set mixSpace to a named CSS space or a custom --profile space',
+    )
+  }
+  if (value.adjustSpace !== undefined && !COLOR_ADJUST_SPACES.has(String(value.adjustSpace))) {
+    throwPolicyError(
+      'VANITY_POLICY_INVALID',
+      'color.adjustSpace must be a polar color space',
+      ['color', 'adjustSpace'],
+      'set adjustSpace to hsl, hwb, lch, or oklch',
+    )
+  }
+}
+
+function isColorInterpolationSpace(value: unknown): boolean {
+  return typeof value === 'string'
+    && (COLOR_INTERPOLATION_SPACES.has(value) || /^--.+$/.test(value))
 }
 
 function mergePolicies(

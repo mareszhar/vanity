@@ -13,6 +13,8 @@ describe('class and rules types', () => {
     expectTypeOf(ds.class([fragment, false, ds.omit, { color: 'blue' }])).toEqualTypeOf<string>()
     expectTypeOf(ds.tdec({ color: { brand: 'rebeccapurple' } }))
       .toMatchTypeOf<Record<`--${string}`, string | number>>()
+    expectTypeOf(ds.tdec.propagated({ color: { brand: 'rebeccapurple' } }))
+      .toMatchTypeOf<Record<`--${string}`, string | number>>()
 
     // @ts-expect-error — token declaration trees retain exact token paths
     ds.tdec({ color: { missing: 'red' } })

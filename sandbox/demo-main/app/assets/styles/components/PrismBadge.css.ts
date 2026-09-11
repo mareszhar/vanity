@@ -15,9 +15,9 @@ export const badge = recipe({
     tone: {
       brand: { background: t.color.brandSoft, color: t.color.brand },
       neutral: { background: t.color.surface, color: t.color.inkMuted, boxShadow: `inset 0 0 0 1px ${t.color.border}` },
-      positive: { background: mix(t.color.canvas, t.color.positive, 0.16), color: t.color.positive },
-      warning: { background: mix(t.color.canvas, t.color.warning, 0.16), color: t.color.warning },
-      danger: { background: mix(t.color.canvas, t.color.danger, 0.16), color: t.color.danger },
+      positive: { background: colorMix([t.color.canvas, [t.color.positive, 16]]).in('oklab'), color: t.color.positive },
+      warning: { background: colorMix([t.color.canvas, [t.color.warning, 16]]).in('oklab'), color: t.color.warning },
+      danger: { background: colorMix([t.color.canvas, [t.color.danger, 16]]).in('oklab'), color: t.color.danger },
     },
   },
   defaults: { tone: 'brand' },

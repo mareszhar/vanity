@@ -218,6 +218,7 @@ const EMPTY_RESOLVED_POLICIES: VanityResolvedPolicies = Object.freeze({
   support: VANITY_DEFAULT_CSS_SUPPORT,
   layerOrder: Object.freeze([]),
   tokens: Object.freeze({ reference: 'var', emit: true }),
+  color: Object.freeze({}),
   plugins: Object.freeze({}),
 })
 

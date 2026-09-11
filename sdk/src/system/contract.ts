@@ -94,6 +94,8 @@ export interface VanityPortablePolicies {
   readonly layerOrder: VanityJsonify<VanityResolvedPolicies['layerOrder']>
   /** Token reference and emission defaults. */
   readonly tokens: VanityJsonify<VanityResolvedPolicies['tokens']>
+  /** Color interpolation and channel-adjust defaults. */
+  readonly color: VanityJsonify<VanityResolvedPolicies['color']>
   /** JSON-safe plugin policies keyed by plugin id. */
   readonly plugins: VanityJsonify<VanityResolvedPolicies['plugins']>
   /** Extension policy values owned outside the core groups. */

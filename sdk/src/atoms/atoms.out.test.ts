@@ -32,7 +32,6 @@ describe('atoms, emitted', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-space-sm: 8px;

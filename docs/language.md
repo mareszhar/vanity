@@ -64,17 +64,19 @@ Direct action verbs such as `inspect*`, `run*`, `write*`, `load*`, `select*`, `p
 their narrower operation is clearer than one of the grouped verbs above.
 
 The same rule permits precise direct actions such as `compile*`, `split*`, `count*`,
-`extend*`, `seal*`, `measure*`, `mix*`, `wire*`, `attach*`, `identify*`, and `reorder*` when
+`extend*`, `seal*`, `measure*`, `wire*`, `attach*`, `identify*`, and `reorder*` when
 those names state the operation exactly. The diagnostic suggestion `didYouMean`,
 the axis authoring callables `axis`, `defaultMode`, `condition`, and `schemeIs`,
 the layer callable `inLayer`, and the color authoring operations `legibleOn`,
-`lighten`, `darken`, `desaturate`, and `mix` are established public language.
+`colorMix`, the named polar-space adjustment namespaces, and the color-value
+method `mix` are established public language.
 
 The public DSL intentionally retains result-named callables such as `class`, `rules`, `raw`, `recipe`, `anatomy`, `atoms`, `fragment`, `port`, `keyframes`, `fontFace`, and `runtime`, plus CSS-standard constructors and the established relational family `propsOf`, `fromTokenGroup`, `tokensOf`, `namesOf`, `varsOf`, and `snapshotFrom`. These exceptions do not authorize new noun-shaped implementation helpers.
 
 The naming audit also records a small closed set of names whose spelling is owned by another
 contract. Token-builder `root`, scale methods `linear` and `modular`, color-relative `from`,
-contrast-check thresholds `aa`, `aaa`, and `lc`, and the token declaration shorthand `tdec` are
+contrast-check thresholds `aa`, `aaa`, and `lc`, the token declaration shorthand `tdec`, and
+the `tdec.propagated` member name are
 public authoring vocabulary. `invalidColor` is the resolver protocol callback, `transaction` is
 the runtime batching protocol, `forEach`, `entries`, `keys`, and `values` are standard collection
 protocol methods, `toString` is the JavaScript string protocol, and `ownKeys` is the JavaScript
@@ -89,9 +91,10 @@ algebra uses `layer`, `and`, `or`, `not`, `to`, `activate`, `absoluteCondition`,
 `image`, `position`, `easingFunction`, `transformFunction`, `transformList`, `customIdent`,
 `dashedIdent`, `string`, `url`, and `plugin`). The audit category ids — `unusedTokens`,
 `nearDuplicates`, `contrast`, `escapes`, `scaleStrays`, `focusVisibility`, `rawAssertions`,
-`aliasEscapes`, `eagerStyleBarrels`, `cssParityGaps`, `staleArtifacts`, `rootModeDisagreements`,
-`ambiguousAxes`, `mutableRootHazards`, `nonportableValues`, and `specificityContexts` — are a
-stable introspection taxonomy, not implementation helpers. `value`, `VariableDeclarator`,
+`aliasEscapes`, `overwriteInventory`, `eagerStyleBarrels`, `cssParityGaps`, `staleArtifacts`, `rootModeDisagreements`,
+`staleDerivations`, `derivedCaseGrowth`, `ambiguousAxes`, `mutableRootHazards`,
+`nonportableValues`, and `specificityContexts` — are a stable introspection
+taxonomy, not implementation helpers. `value`, `VariableDeclarator`,
 `ImportSpecifier`, `CallExpression`, and `Declaration` retain their public escape or
 parser/transform visitor spellings. Every other production function, method, and callable
 constant is checked for a verb-first name by `scripts/audit.ts`.
@@ -365,6 +368,11 @@ Inside a runtime controller, a mutable token leaf is a token control, not a gene
 | position | Place in CSS grammar that accepts a value. |
 | dimension | Independent non-substitutable classification or proof axis. |
 
+Color policy vocabulary is explicit: `mixSpace` supplies a missing
+`color-mix()` interpolation space, and `adjustSpace` supplies the working space
+for bare polar channel adjustments. Named polar namespaces state the working
+space at the call site and take precedence over `adjustSpace`.
+
 `theme` remains an application word. `scope` is reserved for CSS `@scope`. `override` remains cascade language; definition-data replacement is `overwrite`.
 
 ## 7. Styling vocabulary
@@ -387,7 +395,7 @@ browser
 
 | Class | APIs | Effect |
 | --- | --- | --- |
-| style-data producers | `fragment`, `tdec`, `port.dec`, declaration bundles | return inert data; do not register or emit output |
+| style-data producers | `fragment`, `tdec`, `tdec.propagated`, `port.dec`, declaration bundles | return inert data; do not register or emit output |
 | style emitters | `class`, `rules`, `raw`, `recipe`, `anatomy`, `atoms`, `keyframes`, `fontFace` | register style output while a style module is evaluated |
 | restored resolvers | recipe, anatomy, atom-set, port, and other restored handles | select precompiled classes or produce declaration data; never synthesize arbitrary browser CSS |
 
@@ -401,6 +409,7 @@ atoms      → bounded utility-class resolver
 fragment   → reusable ordered style data
 rules      → authored selector rules
 tdec       → token custom-property declaration data
+tdec.propagated → token declarations plus invalidated folded dependents
 keyframes  → animation-name handle
 fontFace   → font-family handle
 raw        → raw CSS in the declared layer
@@ -438,6 +447,7 @@ Runtime mutation uses fenced verbs because they sit beside user token/axis/mode 
 ```TS
 port.dec(value)
 ds.tdec({ color: { brand: value } })
+ds.tdec.propagated({ color: { brand: value } })
 
 rt.t.color.brand.$set(value)
 rt.axes.scheme.$switchTo('dark')
@@ -526,7 +536,7 @@ consolidate
 t / consts / conditions / axes / layers / policies
 constructors and added utils
 class / recipe / anatomy / atoms / fragment / rules
-tdec / port / keyframes / fontFace / raw
+tdec / tdec.propagated / port / keyframes / fontFace / raw
 inLayer / omit / serialize
 runtime / snapshotFrom / reconcileRuntimeSnapshot / runtimeStyle / runtimeProps
 introspect / explain / audit
@@ -573,7 +583,7 @@ const palette = ds.defineTokens()
 
 Tree syntax uses `ds.tdef({...})` to distinguish a definition from a group. `.add(name, config)` accepts raw config directly because that position cannot be a group.
 
-Every logical and resolved token handle exposes `$dec`. On a CSS-property leaf it declares that property; on a property/condition group it recursively projects themeable declaration data. `tdec` points the other direction: it assigns values to token custom properties.
+Every logical and resolved token handle exposes `$dec`. On a CSS-property leaf it declares that property; on a property/condition group it recursively projects themeable declaration data. `tdec` points the other direction: it assigns values to token custom properties. `tdec.propagated` assigns the named values and every build-folded dependent they invalidate; live dependents remain browser-driven and are omitted.
 
 ## 13. Condition language
 
@@ -584,6 +594,13 @@ const inCard = scope('.card').to('.card-media')
 ```
 
 Conditions are AST values with `.and`, `.or`, and `.not()`. Plain selector/query strings remain the raw standards escape. Strings are never preprocessed as a private Vanity dialect.
+
+The built-in `colorSchemes()` axis follows its mount name for explicit selector
+and runtime attributes: `addAxis('scheme', colorSchemes())` uses `data-scheme`,
+while `addAxis('appearance', colorSchemes())` uses `data-appearance`. Its
+`native.kind: 'scheme'` metadata remains the source of `light-dark()` lowering;
+the axis name never creates that behavior by itself. `schemeIs()` uses the
+conventional `scheme` name unless an explicit axis name is supplied.
 
 ## 14. Import patterns
 

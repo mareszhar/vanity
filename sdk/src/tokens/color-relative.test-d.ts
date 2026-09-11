@@ -15,6 +15,11 @@ describe('relative color-family types', () => {
     expectTypeOf(ds.oklch.from(base, { c: channel.add(1) }).type).toEqualTypeOf<'color'>()
     expectTypeOf(ds.color.from(base, { space: 'display-p3' }).type).toEqualTypeOf<'color'>()
 
+    // @ts-expect-error — alpha is color-wide; use alpha() or `.from(..., { alpha })`.
+    ds.hsl.alpha(base, 0.5)
+    // @ts-expect-error — HWB exposes only its hue rotation sugar.
+    ds.hwb.alpha(base, 0.5)
+
     // @ts-expect-error — Lab's `a` is an axis; alpha is always `alpha`.
     ds.lab.from(base, { opacity: 0.5 })
     // @ts-expect-error — RGB has no hue channel.

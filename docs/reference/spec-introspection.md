@@ -19,6 +19,10 @@ System construction records authored facts once. These projections read that rec
 
 Parallel provenance registries are prohibited. The portable `vanity.system/2` compiler artifact remains a private interchange form because it carries restoration data; tools see the normalized semantic map instead.
 
+Resolved standard DTCG color values use the color space named by their emitted CSS, including full component precision. Parsed names and hex leaves use `srgb`; authored notation that a fold preserves (such as HSL alpha or a same-space adjustment) keeps that space; canonical computed `oklch()` values use `oklch`. This keeps interchange aligned with authored CSS and the explanation projection instead of normalizing every color to one space.
+
+Standard DTCG export carries authored color leaves and exact folded values whose emitted CSS has a standard DTCG color representation. A live CSS expression, such as a non-`oklab` `color-mix()`, is not a standard DTCG value; strict export (the default) reports `VANITY_DTCG_UNSUPPORTED`. Use `{ strict: false }` for an explicit lossy snapshot or install a DTCG codec for an extension value.
+
 ## 2. Contract introspection
 
 ```TS
@@ -50,6 +54,7 @@ Token records preserve:
 - type, `reference`, `emit`, `mutable`, and default/reservation state;
 - authored expression and inference reasons;
 - fold status and refusal reason;
+- multi-axis fold coverage and any required intersection cases;
 - semantic dependencies and support requirements/fallbacks;
 - exact declarations, selectors, at-rules, layers, branches, and cases;
 - custom-property registration;
@@ -73,13 +78,15 @@ modules    classes, recipes, anatomy, ports, escapes, contrast, token usage
 
 No global registry pretends the locked system knows future style output.
 
-The locked-system audit evaluates exactly these five system-scope categories:
+The locked-system audit evaluates exactly these seven system-scope categories:
 
 - `ambiguousAxes`;
 - `mutableRootHazards`;
 - `overwriteInventory`;
-- `nonportableValues`; and
-- `specificityContexts`.
+- `nonportableValues`;
+- `specificityContexts`;
+- `staleDerivations`; and
+- `derivedCaseGrowth`.
 
 It returns a `VanityAuditReport` with `findings` and an explicit `unevaluated` list. The latter is deliberately not an empty-success signal: it names the twelve categories that require information outside a locked system and the missing evidence kind:
 
@@ -89,7 +96,9 @@ It returns a `VanityAuditReport` with `findings` and an explicit `unevaluated` l
 | `nearDuplicates`, `scaleStrays`, `focusVisibility` | `emittedCss` |
 | `eagerStyleBarrels`, `cssParityGaps`, `staleArtifacts`, `rootModeDisagreements` | `buildEvidence` |
 
-The complete build-scope `audit(manifest, css, config?, evidence?)` continues to evaluate the same five system categories alongside the twelve evidence-dependent categories. Consolidation-time `audit` policy establishes the default level for each category; a call-time config can override it for that audit call.
+`staleDerivations` is an error by default because a missing declaration can leave an emitted build-folded value stale under an active axis mode. The other system categories remain advisory by default, and every category can be promoted or silenced through audit policy. `derivedCaseGrowth` warns when one correct folded token needs more intersection declarations than its budget; keeping the derivation live with `reference: 'var'` is the escape. Its default advisory budget is 32 required cases.
+
+The complete build-scope `audit(manifest, css, config?, evidence?)` continues to evaluate the same seven system categories alongside the twelve evidence-dependent categories. Consolidation-time `audit` policy establishes the default level for each category; a call-time config can override it for that audit call.
 
 ## 4. Structured explanation
 
@@ -101,7 +110,7 @@ const component = ds.explain(button)
 const input = ds.explain(button.ports.tint)
 ```
 
-Tokens, axes, conditions, recipes, anatomies, and ports return structured semantic data. Token explanations include authored expression, reference/fold decisions, dependencies, support, preview, declarations, runtime addresses, portability, and ownership. Recipe/anatomy explanations include variants, toggles, defaults, parts, and published ports. Port explanations include type, default, validation, description, and deprecation.
+Tokens, axes, conditions, recipes, anatomies, and ports return structured semantic data. Token explanations include authored expression, reference/fold decisions, dependencies, support, preview, declarations, runtime addresses, portability, and ownership. A `legibleOn()` target that uses a representative approximation records that fact in its expression and fold reason. Recipe/anatomy explanations include variants, toggles, defaults, parts, and published ports. Port explanations include type, default, validation, description, and deprecation.
 
 `formatExplanation()` renders stable human output. Formatted prose is a view of the structured result, never the API of record. A semantic path such as `color.brand` can be resolved by the CLI without loading TypeScript.
 
@@ -165,7 +174,7 @@ The omitted manifest defaults to `.vanity/manifest.json`. `inspect` summarizes t
 
 `prepare` reconciles declarations for enabled auto-import module roles from `vanity.config.ts` (or `--config`) without compiling styles or evaluating the system, so a host can run it before `tsc`; [spec-integrations.md §8](./spec-integrations.md#8-integration-adapters) owns the full contract.
 
-Identity changes constrain the system categories reported. Module recipes, ports, styles, escapes, contrast, and usage are diffed under their semantic category. The formatted output is stable enough for release review; `--json` is the integration contract.
+Identity changes constrain the system categories reported. Module recipes, ports, styles, escapes, contrast, and usage are diffed under their semantic category. The formatted output is stable enough for review; `--json` is the integration contract.
 
 ## 7. Diagnostics
 
@@ -214,7 +223,7 @@ Public-surface hover/TSDoc coverage and consumer testing helpers enforce this co
 
 ## 10. Audits
 
-The audit taxonomy and system/build scope split are defined in [§3](#3-two-truthful-scopes). Evidence-dependent categories consume explicit integration/runtime evidence rather than guessing from filenames or static selectors. Every audit category is advisory by default, respects consolidation-time `off`/`warn`/`error` policy, and includes a repair direction.
+The audit taxonomy and system/build scope split are defined in [§3](#3-two-truthful-scopes). Evidence-dependent categories consume explicit integration/runtime evidence rather than guessing from filenames or static selectors. Audit categories are advisory by default except for `staleDerivations`, which is an error by default because it can make emitted CSS observably wrong; `derivedCaseGrowth` remains advisory because its output is correct but large; every category respects consolidation-time `off`/`warn`/`error` policy and includes a repair direction.
 
 ## 11. Agent and DevTools projections
 

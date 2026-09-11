@@ -18,10 +18,10 @@ describe('shared value editor DX', () => {
 
   it('keeps custom-property anatomy and color interpolation discoverable', () => {
     const result = project.query`
-      import { customProperty, mix } from '@mszr/vanity'
+      import { colorMix, customProperty } from '@mszr/vanity'
       const gap = customProperty('--gap', { type: 'length' })
       void gap.${cursor('property')}
-      void mix('#fff', '#000', 0.5).${cursor('mix')}
+      void colorMix(['#fff', '#000']).${cursor('mix')}
     `
 
     expect(result.at('property').completions).toContainCompletions(['$name', '$var'])

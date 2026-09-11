@@ -18,6 +18,25 @@ import { VanityError } from '../diagnostics'
 
 type RecordValue = Record<string, unknown>
 
+const COLOR_INTERPOLATION_SPACES = new Set([
+  'srgb',
+  'srgb-linear',
+  'display-p3',
+  'display-p3-linear',
+  'a98-rgb',
+  'prophoto-rgb',
+  'rec2020',
+  'lab',
+  'oklab',
+  'xyz',
+  'xyz-d50',
+  'xyz-d65',
+  'hsl',
+  'hwb',
+  'lch',
+  'oklch',
+])
+
 const CSS_DATA_TYPES = new Set([
   'unknown',
   'declaration',
@@ -158,7 +177,7 @@ function assertPortablePolicies(value: unknown): void {
   const policies = requireRecord(value, 'portable system.policies')
   if (Object.hasOwn(policies, 'support'))
     fail('portable system.policies.support', 'is not part of the portable policy contract')
-  for (const name of ['constructors', 'layerOrder', 'tokens', 'plugins']) {
+  for (const name of ['constructors', 'layerOrder', 'tokens', 'color', 'plugins']) {
     if (!Object.hasOwn(policies, name))
       fail(`portable system.policies.${name}`, 'is required')
   }
@@ -175,6 +194,9 @@ function assertPortablePolicies(value: unknown): void {
       case 'tokens':
         assertTokenPolicies(policy)
         break
+      case 'color':
+        assertColorPolicies(policy)
+        break
       case 'plugins':
         assertJsonRecord(policy, 'portable system.policies.plugins')
         break
@@ -182,6 +204,26 @@ function assertPortablePolicies(value: unknown): void {
         assertJsonValue(policy, `portable system.policies.${name}`)
     }
   }
+}
+
+function assertColorPolicies(value: unknown): void {
+  const policy = requireRecord(value, 'portable system.policies.color')
+  assertExactKeys(policy, [], ['mixSpace', 'adjustSpace'], 'portable system.policies.color')
+  if (policy.mixSpace !== undefined) {
+    assertOptionalString(policy.mixSpace, 'portable system.policies.color.mixSpace')
+    if (!isColorInterpolationSpace(policy.mixSpace))
+      fail('portable system.policies.color.mixSpace', 'must be a CSS color interpolation space')
+  }
+  if (policy.adjustSpace !== undefined) {
+    assertOptionalString(policy.adjustSpace, 'portable system.policies.color.adjustSpace')
+    if (!['hsl', 'hwb', 'lch', 'oklch'].includes(policy.adjustSpace as string))
+      fail('portable system.policies.color.adjustSpace', 'must be hsl, hwb, lch, or oklch')
+  }
+}
+
+function isColorInterpolationSpace(value: unknown): boolean {
+  return typeof value === 'string'
+    && (COLOR_INTERPOLATION_SPACES.has(value) || /^--.+$/.test(value))
 }
 
 function assertConstructorPolicy(value: unknown, path: string): void {
@@ -557,7 +599,7 @@ function assertTokenSemantic(value: unknown, path: string): void {
     'branches',
     'portability',
     'metadata',
-  ], ['registration'], path)
+  ], ['axisCoverage', 'registration'], path)
   assertCssType(semantic.type, `${path}.type`)
   assertReference(semantic.reference, `${path}.reference`)
   assertBoolean(semantic.emit, `${path}.emit`)
@@ -577,6 +619,8 @@ function assertTokenSemantic(value: unknown, path: string): void {
     fail(`${path}.fold.status`, 'contains an invalid fold status')
   assertOptionalTokenValue(fold.val, `${path}.fold.val`)
   assertOptionalString(fold.reason, `${path}.fold.reason`)
+  if (semantic.axisCoverage !== undefined)
+    assertAxisCoverage(semantic.axisCoverage, `${path}.axisCoverage`)
   assertArray(semantic.dependencies, `${path}.dependencies`)
   semantic.dependencies.forEach((entry, index) => assertDependency(entry, `${path}.dependencies[${index}]`))
   const support = requireRecord(semantic.support, `${path}.support`)
@@ -599,6 +643,18 @@ function assertTokenSemantic(value: unknown, path: string): void {
     assertExtension(portability.extension, `${path}.portability.extension`)
   assertOptionalString(portability.reason, `${path}.portability.reason`)
   assertJsonRecord(semantic.metadata, `${path}.metadata`)
+}
+
+function assertAxisCoverage(value: unknown, path: string): void {
+  const coverage = requireRecord(value, path)
+  assertExactKeys(coverage, ['contributingAxes', 'requiredCases'], [], path)
+  assertStringArray(coverage.contributingAxes, `${path}.contributingAxes`)
+  assertArray(coverage.requiredCases, `${path}.requiredCases`)
+  coverage.requiredCases.forEach((entry, index) => {
+    const when = requireRecord(entry, `${path}.requiredCases[${index}]`)
+    for (const [axis, mode] of Object.entries(when))
+      assertString(mode, `${path}.requiredCases[${index}].${axis}`)
+  })
 }
 
 function assertTokenRegistration(value: unknown, path: string): void {

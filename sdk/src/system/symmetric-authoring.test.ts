@@ -1,5 +1,6 @@
 import {
   channel,
+  colorSchemes,
   createSystem,
   defineAxes,
   defineConditions,
@@ -11,11 +12,91 @@ import {
   defineTokens,
   defineUtils,
   media,
+  schemeIs,
 } from '@mszr/vanity'
 import { emit } from '@test'
 import { describe, expect, it, vi } from 'vitest'
 
 describe('symmetric authoring', () => {
+  it('keeps schemeIs conventional by default and aligns named mounts on request', () => {
+    expect(schemeIs('dark').compiled).toContain('[data-scheme=\'dark\']')
+
+    const named = schemeIs('dark', 'appearance')
+    expect(named.compiled).toContain('[data-appearance=\'dark\']')
+    expect(named.arms[0]?.runtime).toEqual({ kind: 'attribute', name: 'data-appearance', value: 'dark' })
+  })
+
+  it('binds the built-in dark condition to a named native scheme axis', () => {
+    const ds = createSystem()
+      .addAxis('appearance', colorSchemes())
+      .consolidate({ root: '#studio' })
+    const { css } = emit(() => {
+      ds.class({ dark: { color: 'black' } }, 'named-scheme-condition')
+    })
+
+    expect(css).toContain('[data-appearance=\'dark\']')
+    expect(css).not.toContain('data-scheme')
+  })
+
+  describe('locked build-surface emission', () => {
+    const buildSurfaceNames = [
+      'class',
+      'rules',
+      'raw',
+      'fragment',
+      'tdec',
+      'keyframes',
+      'fontFace',
+      'recipe',
+      'anatomy',
+      'port',
+      'atoms',
+      'inLayer',
+    ] as const
+
+    it('allows a plain system module to read every build surface', () => {
+      const ds = createSystem()
+        .addTokens({ color: { brand: 'red' } })
+        .consolidate({ prefix: 'readable' })
+      const surface = ds as unknown as Record<typeof buildSurfaceNames[number], unknown>
+
+      for (const name of buildSurfaceNames)
+        expect(() => void surface[name]).not.toThrow()
+
+      expect(() => void (surface.class as { readonly layer?: unknown }).layer).not.toThrow()
+      expect(() => void (surface.rules as { readonly layer?: unknown }).layer).not.toThrow()
+    })
+
+    it('emits the system before a build surface called through an alias', () => {
+      const ds = createSystem()
+        .addTokens({ color: { brand: 'red' } })
+        .consolidate({ prefix: 'aliased' })
+      const style = ds.class
+
+      const { css } = emit(() => style.layer('utilities')({
+        color: ds.t.color.brand,
+      }, 'aliased-card'))
+
+      expect(css).toContain('--aliased-color-brand: red')
+      expect(css).toContain('color: var(--aliased-color-brand)')
+      expect(css.indexOf('--aliased-color-brand: red')).toBeLessThan(
+        css.indexOf('color: var(--aliased-color-brand)'),
+      )
+    })
+
+    it('keeps the missing-plugin diagnostic for calls outside a style module', () => {
+      const ds = createSystem()
+        .addTokens({ color: { brand: 'red' } })
+        .consolidate({ prefix: 'guarded' })
+      const surface = ds as unknown as Record<typeof buildSurfaceNames[number], unknown>
+
+      for (const name of buildSurfaceNames) {
+        const call = surface[name] as (...args: unknown[]) => unknown
+        expect(() => call()).toThrow(/VANITY_VITE_PLUGIN_MISSING/)
+      }
+    })
+  })
+
   it('mounts detached modules, arrays, callbacks, and singular contributions', () => {
     const conditions = defineConditions({ compact: '&[data-density=compact]' })
       .add('wide', media({ width: { '>=': '60rem' } }))
@@ -99,7 +180,7 @@ describe('symmetric authoring', () => {
     })
     const ds = createSystem().addConstructors(family).consolidate()
 
-    expect(ds.serialize(ds.tone('red'))).toMatch(/^oklch\(/)
+    expect(ds.serialize(ds.tone('red'))).toBe('red')
     expect(ds.serialize(ds.tone.from('red'))).toContain('oklch(')
     expect(ds.serialize(ds.tone.vivid('red'))).toContain('oklch(')
   })

@@ -84,6 +84,8 @@ export interface VanityIntrospectedToken extends VanitySemanticEntry {
   readonly inference: VanityTokenRecord['semantic']['inference']
   /** Fold decision recorded for this token. */
   readonly fold: VanityTokenRecord['semantic']['fold']
+  /** Build-time proof of any required multi-axis intersection declarations. */
+  readonly axisCoverage?: VanityTokenRecord['semantic']['axisCoverage']
   /** Semantic dependencies of the token. */
   readonly dependencies: readonly VanityIntrospectionDependency[]
   /** CSS feature support result for the token value. */
@@ -503,6 +505,7 @@ function createIntrospectedToken(
     expression: semantic.expression,
     inference: semantic.inference,
     fold: semantic.fold,
+    ...(semantic.axisCoverage === undefined ? {} : { axisCoverage: semantic.axisCoverage }),
     dependencies: semantic.dependencies,
     support: semantic.support,
     declarations: semantic.declarations,

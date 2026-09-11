@@ -1310,7 +1310,7 @@ function restoreStyleAuthoringStub(meta) {
 	};
 }
 //#endregion
-//#region \0vanity:system-runtime:ssr:vanity-compatibility-1-1ih7bmt:vanity-runtime-schema-1-yf3nmp
+//#region \0vanity:system-runtime:ssr:vanity-compatibility-1-155xo2h:vanity-runtime-schema-1-yf3nmp
 var _runtimeContract = {
 	"axes": { "scheme": {
 		"attribute": {

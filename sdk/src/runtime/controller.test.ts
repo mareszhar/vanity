@@ -472,6 +472,31 @@ describe('mutable runtime', () => {
     expect(root.attributes.get('data-scheme')).toBe('light')
   })
 
+  it('activates a mounted scheme axis through its derived data attribute', () => {
+    const open = createSystem().addAxis('appearance', colorSchemes({ locality: 'root' }))
+    const ds = open.addTokens({
+      color: {
+        brand: open.tdef.color({
+          axes: { appearance: { light: 'white', dark: 'black' } },
+        }),
+      },
+    }).consolidate({ prefix: 'appearance', root: '#appearance' })
+    const root = new MemoryRoot('#appearance')
+    const runtime = ds.runtime({ within: root })
+
+    runtime.axes.appearance.$switchTo('dark')
+
+    expect(root.attributes.get('data-appearance')).toBe('dark')
+    expect(root.attributes.has('data-scheme')).toBe(false)
+    expect(ds.introspect().axes.appearance.modes.dark.arms).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runtime: { kind: 'attribute', name: 'data-appearance', value: 'dark' },
+        }),
+      ]),
+    )
+  })
+
   it('does not overstate activation for compound environmental conditions', () => {
     const open = createSystem().addAxis('compound', {
       modes: {

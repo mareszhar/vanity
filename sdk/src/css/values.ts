@@ -1,7 +1,7 @@
 /**
  * Value serialization for rule positions. Token handles interpolate as their
- * `var()` reference — never folded, so a build-time token override re-derives
- * them like any other custom property. Color-helper expressions serialize
+ * `var()` reference — never folded, so a `tdec.propagated` substitution
+ * re-derives them like any other custom property. Color-helper expressions serialize
  * through the same classifier the graph uses ([patterns.md §3]): anonymous
  * static subtrees fold, graph edges stay `var()` references.
  */
@@ -100,13 +100,21 @@ function resolveValue(path: string, ctx: VanityValueContext): VanityResolver {
         file: ctx.file,
       })
     },
-    invalidColor: (detail) => {
+    foldRefForContrast: (handle: VanityInternalTokenHandle) => {
+      throw new VanityError({
+        code: 'VANITY_CSS_INVALID_VALUE',
+        message: `${path} cannot fold ${readHandlePath(handle)} at build time`,
+        path,
+        file: ctx.file,
+      })
+    },
+    invalidColor: (detail, fix) => {
       throw new VanityError({
         code: 'VANITY_CSS_INVALID_VALUE',
         message: `${path} cannot resolve: ${detail}`,
         path,
         file: ctx.file,
-        fix: 'give the color helper a color value or a color token',
+        fix: fix ?? 'give the color helper a color value or a color token',
       })
     },
   }

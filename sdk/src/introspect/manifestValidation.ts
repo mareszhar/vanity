@@ -262,7 +262,7 @@ function assertIntrospectedToken(value: unknown, path: string): void {
     'portability',
     'preview',
     'metadata',
-  ], ['scopes', 'module', 'name', 'registration', 'runtime'])
+  ], ['axisCoverage', 'scopes', 'module', 'name', 'registration', 'runtime'])
   assertStringArray(token.path, `${path}.path`)
   assertString(token.root, `${path}.root`)
   if (token.scopes !== undefined)
@@ -287,6 +287,8 @@ function assertIntrospectedToken(value: unknown, path: string): void {
   assertString(fold.status, `${path}.fold.status`)
   assertOptionalTokenValue(fold.val, `${path}.fold.val`)
   assertOptionalString(fold.reason, `${path}.fold.reason`)
+  if (token.axisCoverage !== undefined)
+    assertAxisCoverageShape(token.axisCoverage, `${path}.axisCoverage`)
   assertArray(token.dependencies, `${path}.dependencies`)
   token.dependencies.forEach((entry, index) => assertDependencyShape(entry, `${path}.dependencies[${index}]`))
   const support = requireRecord(token.support, `${path}.support`)
@@ -324,6 +326,18 @@ function assertIntrospectedToken(value: unknown, path: string): void {
   }
   if (token.runtime !== undefined)
     assertTokenRecordRuntimeShape(token.runtime, `${path}.runtime`)
+}
+
+function assertAxisCoverageShape(value: unknown, path: string): void {
+  const coverage = requireRecord(value, path)
+  assertKeys(coverage, ['contributingAxes', 'requiredCases'], [], path)
+  assertStringArray(coverage.contributingAxes, `${path}.contributingAxes`)
+  assertArray(coverage.requiredCases, `${path}.requiredCases`)
+  coverage.requiredCases.forEach((entry, index) => {
+    const when = requireRecord(entry, `${path}.requiredCases[${index}]`)
+    for (const [axis, mode] of Object.entries(when))
+      assertString(mode, `${path}.requiredCases[${index}].${axis}`)
+  })
 }
 
 function assertModule(value: unknown, path: string): void {
@@ -400,7 +414,7 @@ function assertEscape(value: unknown, path: string): void {
 
 function assertContrast(value: unknown, path: string): void {
   const contrast = requireRecord(value, path)
-  assertSemanticEntry(contrast, path, 'contrast', ['pairing', 'scheme', 'algorithm', 'measured', 'min', 'accepted'], [])
+  assertSemanticEntry(contrast, path, 'contrast', ['pairing', 'scheme', 'algorithm', 'measured', 'min', 'accepted'], ['fallback'])
   assertString(contrast.pairing, `${path}.pairing`)
   if (contrast.scheme !== 'light' && contrast.scheme !== 'dark')
     fail(`${path}.scheme`, 'must be light or dark')
@@ -409,6 +423,7 @@ function assertContrast(value: unknown, path: string): void {
   assertNumber(contrast.measured, `${path}.measured`)
   assertNumber(contrast.min, `${path}.min`)
   assertBoolean(contrast.accepted, `${path}.accepted`)
+  assertOptionalString(contrast.fallback, `${path}.fallback`)
 }
 
 function assertSemanticEntry(

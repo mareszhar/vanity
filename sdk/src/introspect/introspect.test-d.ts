@@ -55,6 +55,8 @@ describe('the audit config', () => {
       | 'cssParityGaps'
       | 'staleArtifacts'
       | 'rootModeDisagreements'
+      | 'staleDerivations'
+      | 'derivedCaseGrowth'
     >()
     expectTypeOf<VanityAuditLevel>().toEqualTypeOf<'off' | 'warn' | 'error'>()
   })

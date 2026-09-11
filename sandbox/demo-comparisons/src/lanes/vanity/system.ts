@@ -1,14 +1,15 @@
+import type { VanityColorish } from '@mszr/vanity'
 import { createSystem } from '@mszr/vanity'
 
 /** The comparison lane uses the same additive open → locked system flow. */
 const open = createSystem()
 
-function plane<Base extends Parameters<typeof open.mix>[1]>(base: Base, position: number) {
+function plane(base: VanityColorish, position: number) {
   const neutral = open.lightDark(
     open.oklch(0.99 - 0.91 * position, 0, 0),
     open.oklch(0.13 + 0.86 * position, 0, 0),
   )
-  return open.mix(neutral, base, 0.04)
+  return open.colorMix([neutral, [base, 4]]).in('oklab')
 }
 
 export const ds = open
@@ -34,10 +35,10 @@ export const ds = open
         ink: plane(m.brand, 0.94),
       }))
       .add(m => ({
-        brandHover: open.mix(m.brand, m.ink, 0.12),
+        brandHover: open.colorMix([m.brand, [m.ink, 12]]).in('oklab'),
         // The surface lifted toward the brand — opaque, like every other soft
         // plane. Alpha is for things that are actually transparent.
-        brandSoft: open.mix(m.surface, m.brand, 0.16),
+        brandSoft: open.colorMix([m.surface, [m.brand, 16]]).in('oklab'),
       })),
     space: { xs: open.length.px(4), sm: open.length.px(8), md: open.length.px(16), lg: open.length.px(24) },
     radius: { sm: open.length.px(6), md: open.length.px(10), pill: open.length.px(999) },

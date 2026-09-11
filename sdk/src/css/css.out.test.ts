@@ -49,7 +49,6 @@ describe('class()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -104,7 +103,6 @@ describe('class()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -158,7 +156,6 @@ describe('class()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -201,7 +198,6 @@ describe('class()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -242,7 +238,6 @@ describe('class()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -281,7 +276,6 @@ describe('class()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -316,7 +310,6 @@ describe('class()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -358,7 +351,6 @@ describe('class()', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -409,7 +401,6 @@ describe('keyframes and rules', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -461,7 +452,6 @@ describe('keyframes and rules', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;
@@ -511,7 +501,6 @@ describe('raw', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: #635bff;

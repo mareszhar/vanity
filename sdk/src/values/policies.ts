@@ -1,3 +1,4 @@
+import type { VanityColorInterpolationSpace, VanityPolarColorSpace } from '../tokens/types'
 import type { VanityCssSupportTarget } from './protocol'
 import type { VanityLengthUnit } from './units'
 
@@ -46,6 +47,14 @@ export interface VanityTokenPolicies {
   readonly emit?: boolean
 }
 
+/** Policy defaults for color operations whose CSS grammar needs an explicit space. */
+export interface VanityColorPolicies {
+  /** Interpolation space supplied when colorMix() omits its required .in() call. */
+  readonly mixSpace?: VanityColorInterpolationSpace
+  /** Working polar space supplied to the bare channel-adjust conveniences. */
+  readonly adjustSpace?: VanityPolarColorSpace
+}
+
 /** Authored system policy; omitted known leaves resolve from the library defaults. */
 export interface VanityPolicies {
   /** Configure restrictions and unit behavior for named value constructors. */
@@ -56,6 +65,8 @@ export interface VanityPolicies {
   readonly layerOrder?: readonly string[]
   /** Set token-wide reference and emission defaults; explicit token traits win. */
   readonly tokens?: VanityTokenPolicies
+  /** Configure the working spaces for color interpolation and channel adjustment. */
+  readonly color?: VanityColorPolicies
   /** Store JSON-safe plugin policy payloads keyed by plugin id. */
   readonly plugins?: Readonly<Record<string, VanityPolicyJson>>
   /** Preserve an extension policy that is owned by a system or plugin. */
@@ -77,6 +88,8 @@ export interface VanityResolvedPolicies {
     /** Default token emission decision after policy resolution. */
     readonly emit: boolean
   }
+  /** Resolved working-space defaults for color operations. */
+  readonly color: VanityColorPolicies
   /** Resolved JSON-safe plugin policy payloads keyed by plugin id. */
   readonly plugins: Readonly<Record<string, VanityPolicyJson>>
   /** Preserve extension policy data not known to the core. */

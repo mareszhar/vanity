@@ -1248,6 +1248,31 @@
       },
       "additionalProperties": false
     },
+    "axisCoverage": {
+      "type": "object",
+      "required": [
+        "contributingAxes",
+        "requiredCases"
+      ],
+      "properties": {
+        "contributingAxes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requiredCases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "support": {
       "type": "object",
       "required": [
@@ -1661,6 +1686,9 @@
             },
             "fold": {
               "$ref": "#/$defs/fold"
+            },
+            "axisCoverage": {
+              "$ref": "#/$defs/axisCoverage"
             },
             "dependencies": {
               "type": "array",
@@ -2263,6 +2291,9 @@
             },
             "accepted": {
               "type": "boolean"
+            },
+            "fallback": {
+              "type": "string"
             }
           }
         }

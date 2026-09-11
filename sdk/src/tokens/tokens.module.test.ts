@@ -125,6 +125,49 @@ describe('token-module traits and handles', () => {
     expect(consolidate).toThrow(/reference: 'val'/)
   })
 
+  it('folds static cross-space adjustments without relative-color support', () => {
+    const open = createSystem({
+      support: defineCssSupportTarget({
+        id: 'without-relative-color-static-adjustment',
+        features: ['color-level-4', 'custom-properties'],
+      }),
+    })
+
+    const { css } = emit(() => inSystemScope(() => emitSystem(
+      open.addTokens({
+        color: {
+          adjusted: open.oklch.lighten(open.hsl(200, 50, 50), 0.1),
+          inGamutHsl: open.hsl.rotate(open.color('display-p3', 0.5, 0.1, 0.1), 30),
+          inGamutHwb: open.hwb.rotate(open.color('display-p3', 0.5, 0.1, 0.1), 30),
+        },
+      }).consolidate({ prefix: 'static-adjustment' }),
+    )))
+
+    expect(css).toMatch(/--static-adjustment-color-adjusted: oklch\(/)
+    expect(css).toMatch(/--static-adjustment-color-in-gamut-hsl: hsl\(/)
+    expect(css).toMatch(/--static-adjustment-color-in-gamut-hwb: hwb\(/)
+  })
+
+  it('requires relative-color for cross-space adjustments outside bounded target gamut', () => {
+    const open = createSystem({
+      support: defineCssSupportTarget({
+        id: 'without-relative-color-bounded-out-of-gamut',
+        features: ['color-level-4', 'custom-properties'],
+      }),
+    })
+
+    const consolidate = () => emit(() => inSystemScope(() => emitSystem(
+      open.addTokens({
+        color: {
+          hslOut: open.hsl.rotate(open.color('display-p3', 1, 0, 0), 30),
+          hwbOut: open.hwb.rotate(open.color('display-p3', 1, 0, 0), 30),
+        },
+      }).consolidate({ prefix: 'bounded-adjustment' }),
+    )))
+
+    expect(consolidate).toThrow(/relative-color.*without-relative-color-bounded-out-of-gamut/)
+  })
+
   it('restores the same handle and branch semantics in application code', () => {
     const restored = restoreToken({
       name: '--app-color-accent',

@@ -198,13 +198,18 @@ The explicit built-in `colorSchemes()` axis definition bundles:
 - exact `light`/`dark` modes plus the unpinned state in which OS preference selects between them;
 - honest locality and fallback metadata.
 
-`colorSchemes()` and `schemeIs()` lower through the same guarded scheme-arm builder. The convenience never creates a parallel condition representation.
+The explicit selector, runtime attribute, and root synchronization follow the axis mount name. A conventional `scheme` mount uses `data-scheme`; mounting the same definition as `appearance` uses `data-appearance`. The definition still carries `native.kind: 'scheme'`, so the mount name does not control `light-dark()` lowering.
+
+`colorSchemes()` and `schemeIs()` lower through the same guarded scheme-arm builder. The standalone condition uses the conventional `scheme` mount by default; pass the axis name when a named scheme axis is the condition's target. The convenience never creates a parallel condition representation.
 
 ```TS
 import { colorSchemes, createSystem, schemeIs } from '@mszr/vanity'
 
 const open = createSystem().addAxis('scheme', colorSchemes())
 const dark = schemeIs('dark') // a condition; it composes like any other condition
+
+const named = createSystem().addAxis('appearance', colorSchemes())
+const namedDark = schemeIs('dark', 'appearance')
 ```
 
 The axis and `schemeIs()` share one guarded scheme-arm builder. Output covers sparse non-color tokens, and the permanent canary proves explicit light under OS dark and explicit dark under OS light through the compiler-produced CSS.

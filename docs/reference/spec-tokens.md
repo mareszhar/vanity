@@ -313,6 +313,29 @@ A plain namespace is never flattened. The diagnostic names its invalid children 
 - `$dec` applies token values as styling declarations;
 - `tdec` authors declarations that assign values to token custom properties.
 
+`tdec.propagated` is the graph-aware declaration producer for a local change:
+
+```TS
+const midnightCard = ds.class({
+  ...ds.tdec.propagated({ surface: { base: '#18181b' } }),
+  padding: ds.t.space.md,
+})
+```
+
+It declares the named tokens and every build-folded token whose value changes under those substitutions. Live derivations are omitted because their `var()` expressions already recompute in the browser. The graph is resolved from a fresh result map; the locked system and its base token declarations do not change, and the returned record has no placement or emission effect.
+
+If a changed folded dependent resolves to different values across any mode of an axis, `tdec.propagated` reports `VANITY_TOKENS_INVALID_OVERRIDE` instead of emitting an unconditional value that would win over the axis arm. Scope the substitution inside one mode, keep the derivation live, or express the variation as an axis.
+
+Choose the vocabulary by ownership and variability:
+
+| | Vocabulary | Scope |
+| --- | --- | --- |
+| axis | declared, finite, system-wide, runtime-controllable, in the manifest | the whole system knows it |
+| `tdec.propagated` | ad-hoc, unnamed, local | one component or page owns it |
+| `tdec` | ad-hoc, literal, no graph consequences | you own the consequences |
+
+An axis is a finite system choice; `tdec.propagated` is a local scoped substitution; `tdec` is a direct declaration fragment. The distinction is the same as the distinction between recipes (finite declared choices) and ports (open per-instance values).
+
 Preserve exact system-bound projections:
 
 - `tokensOf`;
@@ -347,6 +370,10 @@ unlayered @property registrations
 → explicit cross-axis cases
 → subtree/runtime declarations
 ```
+
+For each axis mode and explicit case, the compiler re-resolves the graph with that branch's token definitions and compares the result with the base graph. Only changed emitted custom properties are written into the existing axis or case arm: build-folded derivations follow their varying inputs, while live derivations keep their `var()` expression and are left for the browser to recompute.
+
+The intersection cost is multiplicative. When a build-folded token varies over `n` contributing axes, its `axisCoverage.requiredCases` can contain up to the product of those axes' mode counts. Each required combination receives an intersection declaration so the folded value remains correct; keeping the derivation live with `reference: 'var'` opts out of that build-time CSS. The `derivedCaseGrowth` audit category is advisory when the required-case count exceeds its documented budget of 32 intersection cases.
 
 References authored through a module’s lazy `.refs` carry module-relative identity in the value graph. Mounting the same module twice rebinds direct aliases and arbitrary expressions independently; no preview `--module-*` name may escape into consolidated output.
 

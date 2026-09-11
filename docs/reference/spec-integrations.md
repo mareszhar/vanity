@@ -173,6 +173,29 @@ export default defineVanityConfig({
 })
 ```
 
+One authoring file can serve both compiler evaluation and application-safe shared imports. `$system` names that same `compiler.system` entry, and the barrel may destructure the helpers it wants to expose:
+
+```TS
+// src/design/authoring.ts
+import { createSystem } from '@mszr/vanity'
+
+export const ds = createSystem()
+  .addTokens({ color: { brand: '#635bff' } })
+  .consolidate({ prefix: 'app' })
+
+export const { class: cls, t } = ds
+```
+
+```TS
+// vanity.config.ts
+export default {
+  compiler: { system: './src/design/authoring.ts' },
+  autoImports: { shared: '$system' },
+}
+```
+
+The compiler evaluates the file for `cls` and `t`; application modules receive the generated projection. The shared route creates no third module role.
+
 The file is optional for adapters and is the CLI's default configuration source. `vanity prepare` reads it without loading Vite or Nuxt, statically discovers enabled module-role routes, and reconciles their declarations before a separate typecheck. Use `vanity prepare --root <project>` when running from another directory or `--config <path>` for a differently named module. The equivalent programmatic surface is `planAutoImportDeclarations()` for host-owned registration and `writeAutoImportDeclarations()` for filesystem reconciliation. Shared config paths should be project-relative or absolute; framework aliases such as `~` are available only when an adapter resolves them. Running the command alongside `nuxt prepare` is safe; Nuxt still owns its native application type registry, so Nuxt does not require this extra step.
 
 The shared style-module pipeline evaluates `*.css.ts`, imports a locked system from plain `system.ts`, emits one system CSS artifact and one CSS artifact per style source, preserves lazy splitting, writes the manifest, provides stable dev endpoints and DevTools, recovers from dependency errors without restart, generates browser and SSR projections from portable data, and supports precompiled package contracts. `compiler.layerOrder` establishes the host-wide order of CSS layer roots; its detailed semantics live in [spec-system.md §9](./spec-system.md#9-compiler-projection).

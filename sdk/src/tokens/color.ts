@@ -13,13 +13,19 @@ import type {
   VanityCssValue,
   VanityTokenInput,
 } from '../values/types'
+import type { VanityResolver } from './expressions'
 import type { VanityInternalTokenHandle } from './handle'
 import type {
   VanityAuthoredColor,
   VanityAuthoredContrast,
   VanityAuthoredInterpolatedColor,
+  VanityAuthoredInterpolation,
+  VanityColorAdjustmentNamespace,
   VanityColorInterpolationSpace,
   VanityColorish,
+  VanityColorMixConstructor,
+  VanityColorMixItem,
+  VanityColorMixPercentage,
   VanityHueInterpolation,
   VanityPolarColorSpace,
 } from './types'
@@ -36,9 +42,9 @@ import {
   VANITY_NODE,
 } from '../values/protocol'
 import { VANITY_VALUE } from '../values/types'
+import { foldColorCss, isMixShapeFoldable, serializeExpr } from './expressions'
 import { isHandle, readHandlePath } from './handle'
-import { parseColor } from './math'
-import { serializeExpr } from './resolve'
+import { canFoldColorAdjustmentInSpace, parseColor } from './math'
 
 // ─── The expression tree ─────────────────────────────────────────────────────
 
@@ -48,7 +54,7 @@ export type VanityColorExpr
     | { kind: 'value', value: VanityCssValue<string, 'color'> }
     | { kind: 'ref', handle: VanityInternalTokenHandle }
     | { kind: 'alpha', input: VanityColorExpr, amount: number }
-    | { kind: 'adjust', input: VanityColorExpr, channel: 'l' | 'c' | 'h', delta: number }
+    | { kind: 'adjust', input: VanityColorExpr, space?: VanityPolarColorSpace, channel: 'l' | 'c' | 'h' | 's', delta: number }
     | { kind: 'channels', input: VanityColorExpr, channels: VanityOklchChannels }
     | {
       kind: 'relative'
@@ -63,8 +69,9 @@ export type VanityColorExpr
       kind: 'mix'
       input: VanityColorExpr
       other: VanityColorExpr
-      amount: number
-      space: VanityColorInterpolationSpace
+      inputPercentage?: VanityColorMixPercentage
+      otherPercentage?: VanityColorMixPercentage
+      space?: VanityColorInterpolationSpace
       hue?: VanityHueInterpolation
     }
     | { kind: 'scheme', light: VanityColorExpr, dark: VanityColorExpr }
@@ -179,19 +186,31 @@ const standaloneResolver = {
       fix: 'resolve the color expression through its owning token module',
     })
   },
+  foldRefForContrast(handle: VanityInternalTokenHandle): never {
+    return standaloneResolver.foldRef(handle)
+  },
   getRefTraits: (handle: VanityInternalTokenHandle) => ({
     cssLive: handle.$reference === 'var',
     volatile: handle.$mutable,
     conditional: false,
   }),
-  invalidColor(detail: string): never {
+  invalidColor(detail: string, fix?: string): never {
     throw new VanityError({
       code: 'VANITY_TOKENS_INVALID_COLOR',
       message: `cannot resolve color expression: ${detail}`,
       path: ['color'],
-      fix: 'provide a valid color value or reference a color token',
+      fix: fix ?? 'provide a valid color value or reference a color token',
     })
   },
+}
+
+function getStandaloneResolver(adjustSpace?: VanityPolarColorSpace): VanityResolver {
+  if (adjustSpace === undefined)
+    return standaloneResolver
+  return {
+    ...standaloneResolver,
+    policies: { color: { adjustSpace } },
+  }
 }
 
 // ─── Color values ────────────────────────────────────────────────────────────
@@ -208,31 +227,38 @@ class ColorValue {
   }
 
   alpha(amount: number): ColorValue {
-    return copyColorValue(this, { kind: 'alpha', input: this.expr, amount })
+    return copyColorValue(this, createAlphaExpression(this.expr, amount))
   }
 
   lighten(amount: number): ColorValue {
-    return copyColorValue(this, { kind: 'adjust', input: this.expr, channel: 'l', delta: amount })
+    return copyColorValue(this, createAdjustExpression(this.expr, undefined, 'l', amount))
   }
 
   darken(amount: number): ColorValue {
-    return copyColorValue(this, { kind: 'adjust', input: this.expr, channel: 'l', delta: -amount })
+    return copyColorValue(this, createAdjustExpression(this.expr, undefined, 'l', -amount))
   }
 
   saturate(amount: number): ColorValue {
-    return copyColorValue(this, { kind: 'adjust', input: this.expr, channel: 'c', delta: amount })
+    return copyColorValue(this, createAdjustExpression(this.expr, undefined, 'c', amount))
   }
 
   desaturate(amount: number): ColorValue {
-    return copyColorValue(this, { kind: 'adjust', input: this.expr, channel: 'c', delta: -amount })
+    return copyColorValue(this, createAdjustExpression(this.expr, undefined, 'c', -amount))
   }
 
   rotate(degrees: number): ColorValue {
-    return copyColorValue(this, { kind: 'adjust', input: this.expr, channel: 'h', delta: degrees })
+    return copyColorValue(this, createAdjustExpression(this.expr, undefined, 'h', degrees))
   }
 
-  mix(other: VanityColorish, amount: number): ColorValue {
-    return createInterpolatedColor(copyColorValue(this, { kind: 'mix', input: this.expr, other: convertToExpression(other), amount, space: 'oklab' }))
+  mix(other: VanityColorish, percentage?: VanityColorMixPercentage): ColorValue & VanityAuthoredInterpolation {
+    if (percentage !== undefined)
+      validateColorMixPercentage(percentage)
+    return createInterpolatedColor(copyColorValue(this, {
+      kind: 'mix',
+      input: this.expr,
+      other: convertToExpression(other),
+      ...(percentage === undefined ? {} : { otherPercentage: percentage }),
+    }))
   }
 }
 
@@ -292,7 +318,7 @@ function createOklch(
   return createFunctionalColor('oklch', [l, c, h], alpha, { hueIndices: new Set([2]) })
 }
 
-export interface VanityOklchFunction {
+export interface VanityOklchFunction extends VanityColorAdjustmentNamespace<'oklch'> {
   (l: VanityNumericColorChannel, c: VanityNumericColorChannel, h: VanityHueChannel, alpha?: VanityNumericColorChannel): VanityAuthoredColor
   /** CSS relative-color syntax with foldable channel operations. */
   from: <S extends VanityColorish>(base: S, channels: VanityOklchChannels) => VanityAuthoredColor
@@ -302,7 +328,7 @@ export interface VanityOklchFunction {
  * OKLCH constructor plus typed relative-color composition:
  * `oklch.from(base, { c: channel.multiply(0.5), alpha: 0.2 })`.
  */
-export const oklch: VanityOklchFunction = Object.assign(createOklch, {
+export const oklch: VanityOklchFunction = Object.assign(createOklch, createColorAdjustmentMethods('oklch'), {
   from<S extends VanityColorish>(base: S, channels: VanityOklchChannels): VanityAuthoredColor {
     validateChannels(channels)
     return applyColorExpression(base, input => ({ kind: 'channels', input, channels })) as unknown as VanityAuthoredColor
@@ -333,10 +359,14 @@ function createRgb(r: VanityNumericColorChannel, g: VanityNumericColorChannel, b
   return createFunctionalColor('rgb', [r, g, b], alpha)
 }
 
-interface VanityRelativeColorFunction<Channels, Args extends readonly unknown[]> {
+type VanityRelativeColorFunction<
+  Channels,
+  Args extends readonly unknown[],
+  Space extends VanityPolarColorSpace | undefined = undefined,
+> = {
   (...args: Args): VanityAuthoredColor
   from: <S extends VanityColorish>(base: S, channels: Channels) => VanityAuthoredColor
-}
+} & ([Space] extends [undefined] ? object : VanityColorAdjustmentNamespace<Exclude<Space, undefined>>)
 
 export type VanityRgbFunction = VanityRelativeColorFunction<
   VanityRgbChannels,
@@ -354,7 +384,8 @@ export type VanityHslFunction = VanityRelativeColorFunction<
     s: VanityNumericColorChannel,
     l: VanityNumericColorChannel,
     alpha?: VanityNumericColorChannel,
-  ]
+  ],
+  'hsl'
 >
 export type VanityHwbFunction = VanityRelativeColorFunction<
   VanityHwbChannels,
@@ -363,7 +394,8 @@ export type VanityHwbFunction = VanityRelativeColorFunction<
     w: VanityNumericColorChannel,
     b: VanityNumericColorChannel,
     alpha?: VanityNumericColorChannel,
-  ]
+  ],
+  'hwb'
 >
 export type VanityLabFunction = VanityRelativeColorFunction<
   VanityLabChannels,
@@ -381,7 +413,8 @@ export type VanityLchFunction = VanityRelativeColorFunction<
     c: VanityNumericColorChannel,
     h: VanityHueChannel,
     alpha?: VanityNumericColorChannel,
-  ]
+  ],
+  'lch'
 >
 export type VanityOklabFunction = VanityRelativeColorFunction<
   VanityOklabChannels,
@@ -396,13 +429,13 @@ export type VanityOklabFunction = VanityRelativeColorFunction<
 /** sRGB plus typed CSS relative-color syntax. */
 export const rgb: VanityRgbFunction = createRelativeFunction(createRgb, 'rgb', ['r', 'g', 'b'])
 /** HSL plus typed CSS relative-color syntax. */
-export const hsl: VanityHslFunction = createRelativeFunction(createHsl, 'hsl', ['h', 's', 'l'])
+export const hsl: VanityHslFunction = createRelativeFunction(createHsl, 'hsl', ['h', 's', 'l'], 'hsl')
 /** HWB plus typed CSS relative-color syntax. */
-export const hwb: VanityHwbFunction = createRelativeFunction(createHwb, 'hwb', ['h', 'w', 'b'])
+export const hwb: VanityHwbFunction = createRelativeFunction(createHwb, 'hwb', ['h', 'w', 'b'], 'hwb')
 /** CIE Lab; `a` is the color axis and alpha is spelled `alpha`. */
 export const lab: VanityLabFunction = createRelativeFunction(createLab, 'lab', ['l', 'a', 'b'])
 /** CIE LCH plus typed CSS relative-color syntax. */
-export const lch: VanityLchFunction = createRelativeFunction(createLch, 'lch', ['l', 'c', 'h'])
+export const lch: VanityLchFunction = createRelativeFunction(createLch, 'lch', ['l', 'c', 'h'], 'lch')
 /** OKLab; `a` is the color axis and alpha is spelled `alpha`. */
 export const oklab: VanityOklabFunction = createRelativeFunction(createOklab, 'oklab', ['l', 'a', 'b'])
 
@@ -431,20 +464,18 @@ function createProfiledColor(
   return createFunctionalColor(`color(${space}`, channels, alpha)
 }
 
-/** Display-P3 convenience over the standards-shaped `color()` constructor. */
-export function displayP3(r: VanityNumericColorChannel, g: VanityNumericColorChannel, b: VanityNumericColorChannel, alpha?: VanityNumericColorChannel): VanityAuthoredColor {
-  return createColorSpace('display-p3', r, g, b, alpha)
-}
-
 function createRelativeFunction<
   Channels extends object,
   Args extends readonly unknown[],
+  Space extends VanityPolarColorSpace | undefined = undefined,
 >(
   absolute: (...args: Args) => VanityAuthoredColor,
   fn: Exclude<Extract<VanityColorExpr, { kind: 'relative' }>['function'], 'color'>,
   names: readonly string[],
-): VanityRelativeColorFunction<Channels, Args> {
+  space?: Space,
+): VanityRelativeColorFunction<Channels, Args, Space> {
   return Object.assign(absolute, {
+    ...(space === undefined ? {} : createColorAdjustmentMethods(space)),
     from<S extends VanityColorish>(
       base: S,
       channels: Channels,
@@ -458,7 +489,7 @@ function createRelativeFunction<
         record.alpha as VanityNumericColorChannel | VanityChannelOperation<VanityNumericColorChannel> | undefined,
       ) as unknown as VanityAuthoredColor
     },
-  })
+  }) as VanityRelativeColorFunction<Channels, Args, Space>
 }
 
 function createRelativeColor(
@@ -481,6 +512,67 @@ function createRelativeColor(
     channels,
     ...(alpha === undefined ? {} : { alpha }),
   }))
+}
+
+type VanityColorAdjustmentVerb = 'lighten' | 'darken' | 'saturate' | 'desaturate' | 'rotate'
+
+function createAlphaExpression(
+  input: VanityColorExpr,
+  amount: number,
+): Extract<VanityColorExpr, { kind: 'alpha' }> {
+  return { kind: 'alpha', input, amount }
+}
+
+function createAdjustExpression(
+  input: VanityColorExpr,
+  space: VanityPolarColorSpace | undefined,
+  channel: Extract<VanityColorExpr, { kind: 'adjust' }>['channel'],
+  delta: number,
+): Extract<VanityColorExpr, { kind: 'adjust' }> {
+  return { kind: 'adjust', input, ...(space === undefined ? {} : { space }), channel, delta }
+}
+
+/** Build the explicit, space-owned channel sugar that sits beside a polar `.from()`. */
+function createColorAdjustmentMethods<const Space extends VanityPolarColorSpace>(space: Space): VanityColorAdjustmentNamespace<Space> {
+  const createMethod = (verb: VanityColorAdjustmentVerb) => (color: VanityColorish, amount: number) =>
+    applyColorExpression(color, (input) => {
+      const channel = getAdjustmentChannel(space, verb)
+      if (channel === undefined) {
+        throw new VanityError({
+          code: 'VANITY_TOKENS_INVALID_COLOR',
+          message: `${space}.${verb}() cannot address a channel that ${space} does not expose`,
+          path: [space, verb],
+          fix: `use ${space}.from(color, { alpha }), ${space}.rotate(), or the channel operations supported by ${space}`,
+        })
+      }
+
+      const direction = verb === 'darken' || verb === 'desaturate' ? -1 : 1
+      return createAdjustExpression(input, space, channel, direction * amount)
+    }) as unknown as VanityAuthoredColor
+
+  const methods: Record<string, (color: VanityColorish, amount: number) => VanityAuthoredColor> = {
+    rotate: createMethod('rotate'),
+  }
+  if (space !== 'hwb') {
+    methods.lighten = createMethod('lighten')
+    methods.darken = createMethod('darken')
+    methods.saturate = createMethod('saturate')
+    methods.desaturate = createMethod('desaturate')
+  }
+  return methods as unknown as VanityColorAdjustmentNamespace<Space>
+}
+
+function getAdjustmentChannel(
+  space: VanityPolarColorSpace,
+  verb: VanityColorAdjustmentVerb,
+): 'l' | 'c' | 'h' | 's' | undefined {
+  if (verb === 'rotate')
+    return 'h'
+  if (space === 'hwb')
+    return undefined
+  if (verb === 'lighten' || verb === 'darken')
+    return 'l'
+  return space === 'hsl' ? 's' : 'c'
 }
 
 function getColorSpaceChannelNames(space: VanityCssColorSpace, count: number): readonly string[] {
@@ -671,10 +763,11 @@ export interface VanityLegibleOptions {
 
 /**
  * The color legible on `target` — named for what it produces, carrying its
- * check ([spec-tokens.md §5]). Checked at build over build-known targets;
- * over a live target it uses a fallback selected from the target's authored
- * token defaults. That static pick remains in use if runtime values later
- * drift far from those defaults.
+ * check ([spec-tokens.md §5]). Checked at build over exactly foldable targets;
+ * over a live or deliberately unfoldable target it uses a representative
+ * selected from the target's authored defaults. That static pick remains in
+ * use if runtime values later drift far from those defaults, and the
+ * approximation is retained in introspection and the contrast audit.
  */
 export function legibleOn<S extends VanityColorish>(
   target: S,
@@ -698,99 +791,143 @@ function applyColorExpression(input: VanityColorish, expr: (input: VanityColorEx
   return value
 }
 
+/**
+ * Replace a color's alpha channel without selecting a polar working space.
+ * Static leaves preserve their authored notation; live references use
+ * Vanity's stable `oklch(from … l c h / alpha)` form.
+ */
 export function alpha(color: VanityColorish, amount: number): SameColor {
-  return applyColorExpression(color, input => ({ kind: 'alpha', input, amount })) as unknown as SameColor
+  return applyColorExpression(color, input => createAlphaExpression(input, amount)) as unknown as SameColor
 }
 
 export function lighten(color: VanityColorish, amount: number): SameColor {
-  return applyColorExpression(color, input => ({ kind: 'adjust', input, channel: 'l', delta: amount })) as unknown as SameColor
+  return applyColorExpression(color, input => createAdjustExpression(input, undefined, 'l', amount)) as unknown as SameColor
 }
 
 export function darken(color: VanityColorish, amount: number): SameColor {
-  return applyColorExpression(color, input => ({ kind: 'adjust', input, channel: 'l', delta: -amount })) as unknown as SameColor
+  return applyColorExpression(color, input => createAdjustExpression(input, undefined, 'l', -amount)) as unknown as SameColor
 }
 
 export function saturate(color: VanityColorish, amount: number): SameColor {
-  return applyColorExpression(color, input => ({ kind: 'adjust', input, channel: 'c', delta: amount })) as unknown as SameColor
+  return applyColorExpression(color, input => createAdjustExpression(input, undefined, 'c', amount)) as unknown as SameColor
 }
 
 export function desaturate(color: VanityColorish, amount: number): SameColor {
-  return applyColorExpression(color, input => ({ kind: 'adjust', input, channel: 'c', delta: -amount })) as unknown as SameColor
+  return applyColorExpression(color, input => createAdjustExpression(input, undefined, 'c', -amount)) as unknown as SameColor
 }
 
 export function rotate(color: VanityColorish, degrees: number): SameColor {
-  return applyColorExpression(color, input => ({ kind: 'adjust', input, channel: 'h', delta: degrees })) as unknown as SameColor
+  return applyColorExpression(color, input => createAdjustExpression(input, undefined, 'h', degrees)) as unknown as SameColor
 }
 
-export function mix<A extends VanityColorish, B extends VanityColorish>(
-  color: A,
-  other: B,
-  amount: number,
-): VanityAuthoredInterpolatedColor {
-  const value = applyColorExpression(color, input => ({ kind: 'mix', input, other: convertToExpression(other), amount, space: 'oklab' }))
-  return createInterpolatedColor(value) as unknown as VanityAuthoredInterpolatedColor
-}
-
-export type VanityColorMixPercentage = number | VanityCssValue<string, 'percentage'>
-export type VanityColorMixItem = VanityColorish | readonly [VanityColorish, VanityColorMixPercentage]
-/** Configure interpolation space and hue path for `colorMix()`. */
-export interface VanityColorMixOptions {
-  /** Interpolation color space; defaults to the CSS color-mix default. */
-  in?: VanityColorInterpolationSpace
-  /** Hue interpolation path; only valid for polar color spaces. */
-  hue?: VanityHueInterpolation
-}
-
-/** Full CSS `color-mix()` list grammar; `mix(a, b, amount)` remains its two-color shorthand. */
-export function colorMix(
-  items: readonly [VanityColorMixItem, ...VanityColorMixItem[]],
-  options: VanityColorMixOptions = {},
-): VanityAuthoredColor {
-  const space = options.in
-  if (options.hue && (!space || !isPolarSpace(space))) {
+/**
+ * Create the shared color-mix expression used by the free constructor and
+ * color-value/token-handle method forms. Both percentages are validated here
+ * so the CSS rule that a zero total is invalid fails at the authoring site.
+ */
+function createColorMixValue(
+  items: readonly [VanityColorMixItem, VanityColorMixItem],
+  space?: VanityColorInterpolationSpace,
+): ColorValue & VanityAuthoredInterpolation {
+  if (!Array.isArray(items) || items.length !== 2) {
     throw new VanityError({
       code: 'VANITY_TOKENS_INVALID_COLOR',
-      message: `${space ?? 'the default color space'} has no hue interpolation path`,
-      path: ['colorMix', 'in'],
-      fix: 'choose a polar interpolation space before selecting a hue path',
+      message: `colorMix() needs exactly two color items; received ${Array.isArray(items) ? items.length : 'a non-array value'}`,
+      path: ['colorMix', 'items'],
+      fix: 'pass a two-item colorMix tuple, with an optional percentage on each item',
     })
   }
 
-  const normalized = items.map((item) => {
-    const [color, percentage] = Array.isArray(item) ? item : [item, undefined] as const
-    if (typeof percentage === 'number' && (percentage < 0 || percentage > 100 || !Number.isFinite(percentage))) {
+  const normalized = items.map(normalizeColorMixItem) as [
+    NormalizedColorMixItem,
+    NormalizedColorMixItem,
+  ]
+  if (typeof normalized[0].percentage === 'number'
+    && typeof normalized[1].percentage === 'number'
+    && normalized[0].percentage + normalized[1].percentage === 0) {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: 'colorMix() cannot use two percentages that sum to 0',
+      path: ['colorMix', 'percentage'],
+      fix: 'give at least one color a positive percentage',
+    })
+  }
+  const value = new ColorValue({
+    kind: 'mix',
+    input: normalized[0].color,
+    other: normalized[1].color,
+    ...(normalized[0].percentage === undefined ? {} : { inputPercentage: normalized[0].percentage }),
+    ...(normalized[1].percentage === undefined ? {} : { otherPercentage: normalized[1].percentage }),
+    ...(space === undefined ? {} : { space }),
+  })
+  return createInterpolatedColor(value)
+}
+
+interface NormalizedColorMixItem {
+  readonly color: VanityColorExpr
+  readonly percentage?: VanityColorMixPercentage
+}
+
+function normalizeColorMixItem(item: VanityColorMixItem): NormalizedColorMixItem {
+  const [color, percentage] = Array.isArray(item) ? item : [item, undefined] as const
+  if (percentage !== undefined)
+    validateColorMixPercentage(percentage)
+  return {
+    color: convertToExpression(color),
+    ...(percentage === undefined ? {} : { percentage }),
+  }
+}
+
+function validateColorMixPercentage(value: VanityColorMixPercentage): void {
+  if (typeof value === 'number') {
+    if (value < 0 || value > 100 || !Number.isFinite(value)) {
       throw new VanityError({
         code: 'VANITY_TOKENS_INVALID_COLOR',
-        message: `colorMix() percentages must be finite and between 0 and 100; received ${percentage}`,
+        message: `colorMix() percentages must be finite and between 0 and 100; received ${value}`,
         path: ['colorMix', 'percentage'],
         fix: 'pass a finite percentage from 0 through 100',
       })
     }
-    return { color: convertToExpression(color as VanityColorish), percentage: percentage as VanityColorMixPercentage | undefined }
-  })
+    return
+  }
 
-  const dependencies = normalized.flatMap(item => [
-    ...collectCommonValueNodes(item.color),
-    ...(item.percentage && typeof item.percentage !== 'number' ? [getNode(item.percentage)] : []),
-  ])
-  const value = new ExpressionValue(createPluginNode({
-    type: 'color',
-    extension: { id: 'org.vanity.core.color-mix', version: 1 },
-    dependencies,
-    requirements: ['color-mix'],
-    source: { helper: 'colorMix' },
-    serialize(context) {
-      const interpolation = space ? `in ${space}${options.hue ? ` ${options.hue} hue` : ''}, ` : ''
-      const serialized = normalized.map((item) => {
-        const percentage = item.percentage === undefined
-          ? ''
-          : ` ${typeof item.percentage === 'number' ? `${number(item.percentage)}%` : context.serialize(item.percentage)}`
-        return `${serializeExpr(item.color, standaloneResolver, context)}${percentage}`
-      })
-      return `color-mix(${interpolation}${serialized.join(', ')})`
-    },
-  }))
-  return new ColorValue({ kind: 'value', value }) as unknown as VanityAuthoredColor
+  const declaredType = (typeof value === 'object' || typeof value === 'function') && value !== null && '$type' in value
+    ? value.$type
+    : undefined
+  if (declaredType !== undefined && declaredType !== 'percentage' && declaredType !== 'unknown') {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: `colorMix() percentage cannot use a <${declaredType}> value`,
+      path: ['colorMix', 'percentage'],
+      fix: 'pass percent(), a percentage token, or a compatible percentage value',
+    })
+  }
+
+  const node = isNodeValue(value)
+    ? getNode(value)
+    : createInputNode(value as VanityCssInput, 'percentage')
+  if (node.type !== 'percentage' && node.type !== 'unknown') {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: `colorMix() percentage cannot use a <${node.type}> value`,
+      path: ['colorMix', 'percentage'],
+      fix: 'pass percent(), a percentage token, or a compatible percentage value',
+    })
+  }
+}
+
+/** CSS-exact `color-mix()`; choose its required interpolation space with `.in()`. */
+export function colorMix(items: readonly [VanityColorMixItem, VanityColorMixItem]): VanityAuthoredInterpolation {
+  return createColorMixValue(items)
+}
+
+/** Bind colorMix() to a system policy without changing its CSS-shaped call signature. */
+export function bindColorMix(defaultSpace: undefined): VanityColorMixConstructor
+export function bindColorMix<Space extends VanityColorInterpolationSpace>(defaultSpace: Space): VanityColorMixConstructor<Space>
+export function bindColorMix(defaultSpace: VanityColorInterpolationSpace | undefined): VanityColorMixConstructor
+export function bindColorMix(defaultSpace: VanityColorInterpolationSpace | undefined): VanityColorMixConstructor {
+  return ((items: readonly [VanityColorMixItem, VanityColorMixItem]) =>
+    createColorMixValue(items, defaultSpace)) as VanityColorMixConstructor
 }
 
 /** The color methods every graph handle carries, so derivations read as `color.brand.lighten(0.06)`. */
@@ -798,17 +935,26 @@ export function handleColorMethods(handle: VanityInternalTokenHandle): Record<st
   const getColorReference = (): VanityColorExpr => ({ kind: 'ref', handle })
 
   return {
-    alpha: (amount: number) => new ColorValue({ kind: 'alpha', input: getColorReference(), amount }),
-    lighten: (amount: number) => new ColorValue({ kind: 'adjust', input: getColorReference(), channel: 'l', delta: amount }),
-    darken: (amount: number) => new ColorValue({ kind: 'adjust', input: getColorReference(), channel: 'l', delta: -amount }),
-    saturate: (amount: number) => new ColorValue({ kind: 'adjust', input: getColorReference(), channel: 'c', delta: amount }),
-    desaturate: (amount: number) => new ColorValue({ kind: 'adjust', input: getColorReference(), channel: 'c', delta: -amount }),
-    rotate: (degrees: number) => new ColorValue({ kind: 'adjust', input: getColorReference(), channel: 'h', delta: degrees }),
-    mix: (other: VanityColorish, amount: number) => createInterpolatedColor(new ColorValue({ kind: 'mix', input: getColorReference(), other: convertToExpression(other), amount, space: 'oklab' })),
+    alpha: (amount: number) => new ColorValue(createAlphaExpression(getColorReference(), amount)),
+    lighten: (amount: number) => new ColorValue(createAdjustExpression(getColorReference(), undefined, 'l', amount)),
+    darken: (amount: number) => new ColorValue(createAdjustExpression(getColorReference(), undefined, 'l', -amount)),
+    saturate: (amount: number) => new ColorValue(createAdjustExpression(getColorReference(), undefined, 'c', amount)),
+    desaturate: (amount: number) => new ColorValue(createAdjustExpression(getColorReference(), undefined, 'c', -amount)),
+    rotate: (degrees: number) => new ColorValue(createAdjustExpression(getColorReference(), undefined, 'h', degrees)),
+    mix: (other: VanityColorish, percentage?: VanityColorMixPercentage) => {
+      if (percentage !== undefined)
+        validateColorMixPercentage(percentage)
+      return createInterpolatedColor(new ColorValue({
+        kind: 'mix',
+        input: getColorReference(),
+        other: convertToExpression(other),
+        ...(percentage === undefined ? {} : { otherPercentage: percentage }),
+      }))
+    },
   }
 }
 
-function createInterpolatedColor(value: ColorValue): ColorValue & VanityAuthoredInterpolatedColor {
+function createInterpolatedColor(value: ColorValue): ColorValue & VanityAuthoredInterpolation {
   const createInterpolationSpace = (
     space: VanityColorInterpolationSpace,
     options?: { hue: VanityHueInterpolation },
@@ -834,7 +980,7 @@ function createInterpolatedColor(value: ColorValue): ColorValue & VanityAuthored
   }
 
   Object.defineProperty(value, 'in', { value: createInterpolationSpace, enumerable: false })
-  return value as ColorValue & VanityAuthoredInterpolatedColor
+  return value as ColorValue & VanityAuthoredInterpolation
 }
 
 function isPolarSpace(space: VanityColorInterpolationSpace): space is VanityPolarColorSpace {
@@ -969,12 +1115,25 @@ function collectCommonValueNodes(expr: VanityColorExpr): import('../values/proto
         ...collectChannelValueNodes(expr.alpha),
       ]
     case 'mix':
-      return [...collectCommonValueNodes(expr.input), ...collectCommonValueNodes(expr.other)]
+      return [
+        ...collectCommonValueNodes(expr.input),
+        ...collectCommonValueNodes(expr.other),
+        ...collectColorMixPercentageNodes(expr.inputPercentage),
+        ...collectColorMixPercentageNodes(expr.otherPercentage),
+      ]
     case 'scheme':
       return [...collectCommonValueNodes(expr.light), ...collectCommonValueNodes(expr.dark)]
     case 'contrast':
       return collectCommonValueNodes(expr.target)
   }
+}
+
+function collectColorMixPercentageNodes(
+  value: VanityColorMixPercentage | undefined,
+): VanityExpressionNode[] {
+  if (value === undefined || typeof value === 'number')
+    return []
+  return [isNodeValue(value) ? getNode(value) : createInputNode(value as VanityCssInput, 'percentage')]
 }
 
 function collectChannelValueNodes(
@@ -989,32 +1148,44 @@ function collectChannelValueNodes(
   return isNodeValue(value) ? [getNode(value)] : []
 }
 
-export function getColorRequirements(expr: VanityColorExpr): Set<import('../values/protocol').VanityCssFeature> {
+export function getColorRequirements(
+  expr: VanityColorExpr,
+  adjustSpace?: VanityPolarColorSpace,
+): Set<import('../values/protocol').VanityCssFeature> {
   const requirements = new Set<import('../values/protocol').VanityCssFeature>(['color-level-4'])
-
-  if (isColorExpressionFoldable(expr))
-    return requirements
 
   switch (expr.kind) {
     case 'alpha':
+      if (!isColorExpressionFoldable(expr, adjustSpace))
+        requirements.add('relative-color')
+      getColorRequirements(expr.input, adjustSpace).forEach(value => requirements.add(value))
+      break
     case 'adjust':
+      if (!isColorExpressionFoldable(expr, adjustSpace))
+        requirements.add('relative-color')
+      getColorRequirements(expr.input, adjustSpace).forEach(value => requirements.add(value))
+      break
     case 'channels':
+      if (!isColorExpressionFoldable(expr, adjustSpace))
+        requirements.add('relative-color')
+      getColorRequirements(expr.input, adjustSpace).forEach(value => requirements.add(value))
+      break
     case 'relative':
       requirements.add('relative-color')
-      getColorRequirements(expr.input).forEach(value => requirements.add(value))
+      getColorRequirements(expr.input, adjustSpace).forEach(value => requirements.add(value))
       break
     case 'mix':
       requirements.add('color-mix')
-      getColorRequirements(expr.input).forEach(value => requirements.add(value))
-      getColorRequirements(expr.other).forEach(value => requirements.add(value))
+      getColorRequirements(expr.input, adjustSpace).forEach(value => requirements.add(value))
+      getColorRequirements(expr.other, adjustSpace).forEach(value => requirements.add(value))
       break
     case 'scheme':
       requirements.add('light-dark')
-      getColorRequirements(expr.light).forEach(value => requirements.add(value))
-      getColorRequirements(expr.dark).forEach(value => requirements.add(value))
+      getColorRequirements(expr.light, adjustSpace).forEach(value => requirements.add(value))
+      getColorRequirements(expr.dark, adjustSpace).forEach(value => requirements.add(value))
       break
     case 'contrast':
-      getColorRequirements(expr.target).forEach(value => requirements.add(value))
+      getColorRequirements(expr.target, adjustSpace).forEach(value => requirements.add(value))
       break
     case 'value':
       getNode(expr.value).requirements.forEach(value => requirements.add(value))
@@ -1027,7 +1198,7 @@ export function getColorRequirements(expr: VanityColorExpr): Set<import('../valu
   return requirements
 }
 
-function isColorExpressionFoldable(expr: VanityColorExpr): boolean {
+function isColorExpressionFoldable(expr: VanityColorExpr, adjustSpace?: VanityPolarColorSpace): boolean {
   switch (expr.kind) {
     case 'oklch':
     case 'parse':
@@ -1048,18 +1219,23 @@ function isColorExpressionFoldable(expr: VanityColorExpr): boolean {
     case 'scheme':
       return false
     case 'alpha':
-    case 'adjust':
-      return isColorExpressionFoldable(expr.input)
+      return isColorExpressionFoldable(expr.input, adjustSpace)
+    case 'adjust': {
+      const space = expr.space ?? adjustSpace
+      return space !== undefined
+        && isColorExpressionFoldable(expr.input, adjustSpace)
+        && canFoldColorAdjustmentInSpace(foldColorCss(expr.input, 'light', getStandaloneResolver(adjustSpace)), space)
+    }
     case 'channels':
-      return isColorExpressionFoldable(expr.input)
+      return isColorExpressionFoldable(expr.input, adjustSpace)
         && Object.values(expr.channels).every(value => isChannelFoldable(value))
     case 'relative':
       return false
     case 'mix':
-      return expr.space === 'oklab' && expr.hue === undefined
-        && isColorExpressionFoldable(expr.input) && isColorExpressionFoldable(expr.other)
+      return isMixShapeFoldable(expr)
+        && isColorExpressionFoldable(expr.input, adjustSpace) && isColorExpressionFoldable(expr.other, adjustSpace)
     case 'contrast':
-      return isColorExpressionFoldable(expr.target)
+      return isColorExpressionFoldable(expr.target, adjustSpace)
   }
 }
 

@@ -28,11 +28,29 @@ Interpret evidence sweeps semantically. A text match may be executable code, a c
 
 Deterministic identity goldens are reportable contract evidence. A changed emitted class name, custom-property name, runtime state key, or deterministic signature is an identity change, not a fixture refresh; re-record it only after an explicit decision names every changed identity and the user-visible gain.
 
-### 1.1 Release gate
+### 1.1 Total-space enforcement
+
+[Patterns §18](./patterns.md#18-a-rule-covers-its-whole-domain) states the rules; this section states how each is proven and which artifact enforces it.
+
+| Practice | Enforcing artifact |
+| --- | --- |
+| Enumerate the true domain, not a slice of it | `COLOR_RELATIVE_CHANNEL_FOLD_SCALES`; the generated fixture product |
+| Prove the mechanism, not the intention | `sdk/src/tokens/tokens.axes.property.test.ts`; `scripts/benchmark-assertion.test.ts` |
+| Never maintain a generated fact by hand | `benchmarks/accepted.json`; `scripts/generate-benchmarks.ts --check` |
+
+A finite-domain behavior is tested by iterating the same named table the implementation reads, so a missing member fails to type-check instead of going untested. Tests enumerate every relevant position and projection for the behavior under test rather than selecting representative examples, and a behavior with independent dimensions is iterated over their product.
+
+A guard, diagnostic, or audit category is proven on both sides: it fires on every in-domain violation and stays silent on every in-domain non-violation, including adjacent-but-unrelated inputs and absent preconditions. Proving only the firing side ships false positives, which reach consumers as failures on correct systems. A carrier is tested through the output it produces — for CSS, by resolving the emitted text — so that addressing a cell and selecting only that cell remain separate assertions.
+
+A check is covered by a maintainer test for good input, bad input, and an absent source, and reports what it verified when it passes. A control whose success is silent cannot be distinguished from one that skipped.
+
+The axis-composition harness covers axis counts, mode counts, per-axis explicit/unconditional/media-guarded arm-shape assignments, and own/dependency/both/chained/live dependent shapes. It parses emitted token layers, resolves every reachable attribute state by layer order, specificity, and source order, and compares the winners with `resolveGraph`; it also proves derived selectors match only their addressed states. Future axis changes extend this product and carrier evidence rather than adding a single fixture.
+
+### 1.2 Release gate
 
 Every accepted change remains an independently verifiable vertical slice. The public suite, typecheck, build, demos, package rehearsal, and maintained fresh-app smoke stay green at integration boundaries.
 
-Every required evidence dimension is green before release acceptance. Slower promotion matrices run on their defined schedule and remain green.
+Every required evidence dimension is green before release acceptance. Slower promotion matrices run on their defined schedule and remain green. The practices in [§1.1](#11-total-space-enforcement) apply to the gate itself: manual re-reading during review does not count as a control.
 
 ## 2. Fixture families
 
@@ -121,7 +139,7 @@ Test each data type against:
 - mutable `null` mode/case reservation has no authored slot value, accepts `$set()`, and `$unset()` restores the prior effective expression;
 - native scheme output composes a reserved branch fallback inside `light-dark()` and selector emission preserves the equivalent fallback behavior;
 - module composition/derivation;
-- token override class;
+- propagated token declaration class;
 - resolved environment snapshot;
 - manifest and DTCG projections;
 - authored DTCG plugin codecs at base, axis-mode, and case addresses, including branch-only dependency order;
@@ -235,7 +253,7 @@ Resource-heavy evidence dimensions use measured, bounded concurrency. Selenita l
 
 The maintainer loop has two honest gates. `pnpm run check:fast` uses cached lint, root tooling/browser-spec typechecking, incremental SDK typechecking, and the runtime/output evidence dimensions; `pnpm run check` adds the complete workspace typecheck, documentation, all Selenita and type assertions, audits, and benchmark-fixture drift. `pnpm run validate` adds canary, optimizer, production/development browser, and lifecycle evidence. Fast feedback never substitutes for the complete release-shaped gate.
 
-The accepted large fixture records 1.00s TypeScript total time, 287,522 instantiations, 142,142 kB reported memory, 587,110 B declarations, 5.008ms CSS completion, 0.104ms runtime completion, 6.132ms graph rename, and 6.259s production manifest/CSS build. The accepted environment, fixture identities, and complete baseline are in [benchmarks.md](./benchmarks.md).
+The large fixture is the accepted performance reference; its measurements live in [benchmarks.md](./benchmarks.md).
 
 ## 7. Runtime/browser contract
 

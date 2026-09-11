@@ -264,17 +264,31 @@ export function container(
   )
 }
 
+type SchemeConditionCompiled<
+  Scheme extends 'light' | 'dark',
+  AxisName extends string,
+> = `&:where([data-${VanityKebab<AxisName>}='${Scheme}'], [data-${VanityKebab<AxisName>}='${Scheme}'] *) | @media (prefers-color-scheme: ${Scheme})`
+
 /**
  * The effective scheme ([spec-conditions.md §9]): the OS preference unless an
- * ancestor pins `data-scheme`. Two arms — the pinned subtree, and the
- * preference outside any opposite-pinned subtree.
+ * ancestor pins the mounted scheme axis. Two arms — the pinned subtree, and
+ * the preference outside any opposite-pinned subtree. The optional axis name
+ * keeps a named scheme condition aligned with a non-conventional mount; the
+ * default is the conventional `scheme` axis.
  */
-export function schemeIs<const Scheme extends 'light' | 'dark'>(
+export function schemeIs<
+  const Scheme extends 'light' | 'dark',
+  const AxisName extends string = 'scheme',
+>(
   scheme: Scheme,
-): VanityFluentCondition<`&:where([data-scheme='${Scheme}'], [data-scheme='${Scheme}'] *) | @media (prefers-color-scheme: ${Scheme})`, true> {
-  const arms = getSchemeConditionArms(scheme)
+  axisName?: AxisName,
+): VanityFluentCondition<SchemeConditionCompiled<Scheme, AxisName>, true> {
+  const mountedAxisName = axisName ?? 'scheme' as AxisName
+  const attribute = getSchemeAttribute(mountedAxisName)
+  const arms = getSchemeConditionArms(scheme, mountedAxisName)
+  const compiled = `&:where([${attribute}='${scheme}'], [${attribute}='${scheme}'] *) | @media (prefers-color-scheme: ${scheme})`
   return createCondition(
-    `&:where([data-scheme='${scheme}'], [data-scheme='${scheme}'] *) | @media (prefers-color-scheme: ${scheme})`,
+    compiled,
     {
       kind: 'or',
       conditions: [
@@ -288,26 +302,35 @@ export function schemeIs<const Scheme extends 'light' | 'dark'>(
         },
       ],
     },
-    { ...arms[0], runtime: { kind: 'attribute', name: 'data-scheme', value: scheme } },
+    { ...arms[0], runtime: { kind: 'attribute', name: attribute, value: scheme } },
     arms[1],
-  ) as unknown as VanityFluentCondition<`&:where([data-scheme='${Scheme}'], [data-scheme='${Scheme}'] *) | @media (prefers-color-scheme: ${Scheme})`, true>
+  ) as unknown as VanityFluentCondition<SchemeConditionCompiled<Scheme, AxisName>, true>
 }
 
 /**
  * Canonical effective-scheme arms shared by named conditions and axis
  * projection. Adapters may add priority/runtime metadata, but must not fork
- * the selector or preference guards.
+ * the selector or preference guards. `axisName` is the public mount name of
+ * the scheme axis and defaults to the conventional `scheme`.
  */
-export function getSchemeConditionArms(scheme: 'light' | 'dark'): readonly [VanityConditionArm, VanityConditionArm] {
+export function getSchemeConditionArms(
+  scheme: 'light' | 'dark',
+  axisName = 'scheme',
+): readonly [VanityConditionArm, VanityConditionArm] {
   const opposite = scheme === 'light' ? 'dark' : 'light'
+  const attribute = getSchemeAttribute(axisName)
 
   return [
-    { selector: `&:where([data-scheme='${scheme}'], [data-scheme='${scheme}'] *)` },
+    { selector: `&:where([${attribute}='${scheme}'], [${attribute}='${scheme}'] *)` },
     {
       media: `(prefers-color-scheme: ${scheme})`,
-      selector: `&:where(:not([data-scheme='${opposite}'], [data-scheme='${opposite}'] *))`,
+      selector: `&:where(:not([${attribute}='${opposite}'], [${attribute}='${opposite}'] *))`,
     },
   ]
+}
+
+function getSchemeAttribute(axisName: string): string {
+  return `data-${convertToKebab(axisName)}`
 }
 
 /** A literal `data-*` selector; compose `selector('&')` when anchoring is intended. */
@@ -381,9 +404,10 @@ export interface VanityBaseConditionInputs {
  * names, no opinions. A condition never claims less than it does — `hover` is
  * `:hover`; the interactive-affordance pair is named `hoverFocus` for what it
  * is. Breakpoints, container sizes, and headless states are opinions and live
- * in the preset.
+ * in the preset. A consolidated system supplies its native scheme mount name
+ * so `dark` and `light` stay aligned with the axis selectors.
  */
-export function createBaseConditions(): VanityBaseConditionInputs {
+export function createBaseConditions(axisName = 'scheme'): VanityBaseConditionInputs {
   return {
     hover: selector('&:hover'),
     hoverFocus: selector('&:hover, &:focus-visible'),
@@ -392,11 +416,11 @@ export function createBaseConditions(): VanityBaseConditionInputs {
     disabled: selector('&:disabled'),
     motionOk: media('(prefers-reduced-motion: no-preference)'),
     motionReduce: media('(prefers-reduced-motion: reduce)'),
-    dark: schemeIs('dark'),
-    light: schemeIs('light'),
+    dark: schemeIs('dark', axisName),
+    light: schemeIs('light', axisName),
     ltr: selector('&:dir(ltr)'),
     rtl: selector('&:dir(rtl)'),
-  }
+  } as unknown as VanityBaseConditionInputs
 }
 
 // ─── Introspection ───────────────────────────────────────────────────────────

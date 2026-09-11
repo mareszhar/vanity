@@ -194,12 +194,18 @@ createSystem({
     reference: 'var',
     emit: true,
   },
+  color: {
+    mixSpace: 'oklab',
+    adjustSpace: 'oklch',
+  },
 })
 ```
 
 This is equivalent to `createSystem().addPolicies(config)`.
 
-Known top-level groups are `constructors`, `support`, `layerOrder`, `tokens`, and `plugins`. The `tokens` group owns `reference` and `emit`; generic `validation` is not a system policy. Constructor names form an open subfamily for built-in, user, and plugin constructors. Plugin policy data is auto-scoped by plugin identity.
+Known top-level groups are `constructors`, `support`, `layerOrder`, `tokens`, `color`, and `plugins`. The `tokens` group owns `reference` and `emit`; the `color` group owns `mixSpace` and `adjustSpace`; generic `validation` is not a system policy. Constructor names form an open subfamily for built-in, user, and plugin constructors. Plugin policy data is auto-scoped by plugin identity.
+
+`color.mixSpace` supplies the interpolation method that CSS requires when a bound `colorMix()` call omits `.in()`. `color.adjustSpace` supplies the named polar space for the bare Vanity channel-adjust conveniences; both policies are optional, and an explicit namespace or `.in()` call always wins. The policy values are part of the portable contract so a restored system binds the same constructor grammar and diagnostics.
 
 Conformance policy adapts unresolved values at system entry. Restriction policy is metadata and diagnostics, never shape subtraction. `forbid` fails consolidation, `discourage` warns and compiles. `prospective` covers later contributions; `retroactive` scans the complete graph.
 

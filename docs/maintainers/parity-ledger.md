@@ -24,9 +24,13 @@ The machine ledger owns individual records and coverage states; this table index
 | Numeric functions | `CSS-V011`–`CSS-V014` | `calc()`, `min()`, `max()`, `clamp()` | [typed CSS values §7 and §9](../reference/spec-values.md#7-calculations) |
 | Property grammar and keywords | `CSS-V015` | `boxShadow` property-form keywords | [typed CSS values §3](../reference/spec-values.md#3-input-law) |
 | Grid functions | `CSS-V017` | `grid.minmax()`, `grid.repeat()` | [typed CSS values §7](../reference/spec-values.md#7-calculations) |
-| Extended and raw CSS surfaces | `CSS-G001`–`CSS-G012` | alpha, device-cmyk, round/mod/rem and trig/exponential math, images, transforms, filters, shapes/paths, `attr()`, `env()`, anchor positioning, and font-face/keyframes/raw | [typed CSS values §6–12](../reference/spec-values.md#6-same-named-css-parity) · [styling and output §9](../reference/spec-css.md#9-at-rules-and-raw) |
+| Extended and raw CSS surfaces | `CSS-G001`–`CSS-G013`, `CSS-G015` | alpha, color-adjustment spelling boundaries, device-cmyk, round/mod/rem and trig/exponential math, images, transforms, filters, shapes/paths, `attr()`, `env()`, anchor positioning, and font-face/keyframes/raw | [typed CSS values §6–12](../reference/spec-values.md#6-same-named-css-parity) · [styling and output §9](../reference/spec-css.md#9-at-rules-and-raw) |
 
 Conditions, at-rules, and `color-scheme` are owned by their reference specifications rather than this value-parity ledger. `legibleOn()` is an algorithmic Vanity API, not CSS `contrast-color()`; its contract lives in [typed CSS values](../reference/spec-values.md).
+
+## Constructor taxonomy
+
+`VANITY_BUILTIN_CONSTRUCTOR_NAMES` is machine-checked against two ownership maps: `VANITY_CSS_NAMED_API_ROWS` records CSS-owned spellings, and `VANITY_COINED_CONSTRUCTOR_NAMES` records each Vanity-owned spelling with its rationale. Every builtin appears in exactly one map, so a new constructor must declare its ownership before it can pass the ledger checks.
 
 ## Keyword rule
 

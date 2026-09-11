@@ -167,7 +167,7 @@ Calling `consolidate()` from a `*.css.ts` file is a dedicated error: `VANITY_SYS
 The locked surface contains resolved reads and build and runtime families:
 
 - `t`, configured value constructors, and added utilities;
-- `class`, `rules`, `raw`, `fragment`, `omit`, `tdec`, keyframes, font faces, recipes, anatomy, ports, atoms, `inLayer`, and token projections;
+- `class`, `rules`, `raw`, `fragment`, `omit`, `tdec`, `tdec.propagated`, keyframes, font faces, recipes, anatomy, ports, atoms, `inLayer`, and token projections;
 - runtime binding, DOM-free `snapshotFrom`, reconciliation, runtime style, and runtime props;
 - normalized conditions, axes, layers, constants, and policy reads;
 - `introspect()`, `explain()`, and `audit()`.

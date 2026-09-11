@@ -100,8 +100,10 @@ export interface VanityManifestContrast extends VanitySemanticEntry {
   readonly measured: number
   /** Minimum accepted contrast value. */
   readonly min: number
-  /** Whether the measured value satisfies the guarantee. */
+  /** Whether the threshold was consciously accepted at the definition site. */
   readonly accepted: boolean
+  /** The pick used a representative target because exact folding was declined. */
+  readonly fallback?: string
 }
 
 /** Manifest record for one emitted style class. */
@@ -266,6 +268,7 @@ export function buildManifest(
           measured: record.measured,
           min: record.min,
           accepted: record.accepted,
+          ...(record.fallback === undefined ? {} : { fallback: record.fallback }),
         })
         break
       }

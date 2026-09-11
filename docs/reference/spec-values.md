@@ -140,7 +140,13 @@ An export named after a CSS function matches the platform grammar and semantics 
 
 `legibleOn()` remains distinct because it is an APCA-based algorithmic helper, not CSS `contrast-color()`. Its option is `{ contrast }`, documented as minimum APCA Lc contrast.
 
-Vanity's existing `alpha(color, amount)` is an alpha-replacement convenience, not CSS Color 5 `alpha()`. The standards function remains a separately tracked planned capability while its at-risk grammar evolves.
+Vanity's `alpha` is an alpha-channel replacement convenience, not CSS Color 5 `alpha()`. It is one color-wide top-level operation:
+
+```TS
+ds.alpha(color, 0.2)
+```
+
+`alpha` never requires `policies.color.adjustSpace`. Static leaves preserve their own notation, while live references use Vanity's documented `oklch` relative-color form. Use `<space>.from(color, { alpha })` when the emitted notation must be explicit. CSS `alpha()` remains an explicit `rawValue.color()` escape while the CSS Color 5 grammar is still marked at risk.
 
 ## 7. Calculations
 
@@ -170,6 +176,31 @@ Preserve:
 - build/live equivalence where possible;
 - support-aware contrast fallback.
 
+Color leaves preserve their authored CSS form. Parsed leaves such as `color('blue')` remain `blue`, and typed leaves such as `hsl(...)`, `lab(...)`, and `color(display-p3 ...)` retain their native function and channel spelling in tokens and declarations. Static computations fold only when equivalent to the CSS result: channel adjustments use the operation's named space, while other computed values with no preserved notation canonicalize to `oklch()`. Live, volatile, and token-referencing expressions remain native CSS. The `color()` constructor is still meaningfully typed even when its output matches a bare color literal: it carries the `<color>` contract and color operations.
+
+`colorMix()` is the CSS-shaped two-color constructor. CSS requires an interpolation method, so the unbound form is completed with `.in()`:
+
+```TS
+colorMix(['red', ['blue', 35]]).in('oklab')
+color('red').mix('blue', 35).in('oklab')
+```
+
+The free constructor and the color-value/token-handle `.mix()` method build the same node and use CSS's percentage units (`0..100`) and exactly two color items. A bound system may supply the omitted method through `policies.color.mixSpace`; an explicit `.in()` always overrides that policy. A missing method produces a cursor diagnostic whose repair is to choose `.in(space)` or declare `policies.color.mixSpace`.
+
+Build folding is intentionally conservative: an oklab mix with no hue path folds whenever CSS determines both weights without an alpha multiplier.
+
+| Authored percentages | CSS-effective weights | Build result |
+| --- | --- | --- |
+| both omitted | 50% / 50% | canonical folded color |
+| one given as `p` | `100 − p` / `p` | canonical folded color |
+| both given, sum `100` | as authored | canonical folded color |
+| both given, positive sum other than `100` | normalized, with the CSS alpha multiplier | native `color-mix()` |
+| both given, sum `0` | invalid CSS | authoring diagnostic |
+
+Other spaces, hue paths, live percentage inputs, and CSS-normalized percentage shapes remain native `color-mix()` CSS. This preserves the browser as the semantic authority when Vanity cannot prove its build-time math is identical.
+
+`legibleOn()` still needs one build-time color to choose black or white. When its target is live or a valid static color whose mix shape Vanity declines to fold, it uses a documented representative approximation rather than failing consolidation. The pick and its approximation are visible in `explain()` and the existing `contrast` audit category; a value that is not a color remains an error.
+
 Every standard relative family is available and follows one grammar:
 
 ```TS
@@ -182,6 +213,21 @@ ds.oklab.from(base, { l, a, b, alpha })
 ds.oklch.from(base, { l, c, h, alpha })
 ds.color.from(base, { space, channels, alpha })
 ```
+
+Polar namespaces also expose channel-adjust sugar next to `.from()`:
+
+```TS
+ds.oklch.lighten(color, 0.1)
+ds.hsl.saturate(color, 0.1)
+ds.lch.rotate(color, 30)
+ds.hwb.rotate(color, 30)
+```
+
+The mapping is space-owned: `lighten`/`darken` address `l` in OKLCH/LCH/HSL, `saturate`/`desaturate` address `c` in OKLCH/LCH and `s` in HSL, and `rotate` addresses `h` everywhere. HWB has no lightness or chroma/saturation channel, so its namespace exposes only `rotate`; `alpha` is the color-wide top-level operation. Bare adjustment helpers use `policies.color.adjustSpace`; explicit namespaces always win for channel adjustments.
+
+Static alpha replacement preserves the origin's native notation when it can (`color(display-p3 ...)` remains Display-P3 and `hsl(...)` remains HSL). A channel adjustment folds when its origin is static and the operation's space can represent that origin. Cross-space adjustments into unbounded `oklch` and `lch` always fold; adjustments into sRGB-bounded `hsl` and `hwb` fold only when the origin resolves inside sRGB. An out-of-gamut origin stays native relative-color CSS so its gamut and browser resolution remain intact. Folding into the operation's own space is exact — the operation defines its result there — so the result is canonicalized like any computed value. An adjustment authored in the origin's own space additionally keeps that origin's notation. Live, volatile, and referenced origins stay native relative-color CSS.
+
+Adjustment folds apply deltas in CSS relative-color channel units, including HSL's `0..100` saturation/lightness channels even though the build-time color library stores them as `0..1` fractions. Every folded channel number passes Vanity's canonical four-decimal formatter. Alpha over a parsed sRGB leaf uses the conventional `rgb(r g b / alpha)` notation; function-shaped origins keep their authored function and gamut.
 
 Omitted components inherit from the origin. Replacements accept compatible literals, references, token handles, mutable handles, calculations, and relative channel operations. `alpha` is always explicit in the relative record; `a` remains a Lab/OKLab/custom-color axis where applicable.
 

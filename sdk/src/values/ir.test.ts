@@ -7,6 +7,7 @@ import {
   calc,
   clamp,
   color,
+  colorMix,
   createCssValueSerializer,
   number as cssNumber,
   customProperty,
@@ -14,11 +15,11 @@ import {
   defineCssSupportTarget,
   defineCssValue,
   defineTokens,
+  hsl,
   hwb,
   length,
   max,
   min,
-  mix,
   oklch,
   percent,
   rawValue,
@@ -97,10 +98,10 @@ describe('the shared CSS value IR', () => {
   })
 
   it('keeps interpolation space and hue policy only on interpolation results', () => {
-    const mixed = mix('#f00', '#00f', 0.35).in('oklch', { hue: 'longer' })
-    expect(serialize(mixed)).toMatch(/^color-mix\(in oklch longer hue, oklch\(.+\), oklch\(.+\) 35%\)$/)
+    const mixed = colorMix(['#f00', ['#00f', 35]]).in('oklch', { hue: 'longer' })
+    expect(serialize(mixed)).toBe('color-mix(in oklch longer hue, #f00, #00f 35%)')
     expect('in' in oklch(0.5, 0.2, 30)).toBe(false)
-    expect(() => (mix('#f00', '#00f', 0.5) as any).in('srgb', { hue: 'shorter' })).toThrow(/no hue interpolation path/)
+    expect(() => (colorMix(['#f00', '#00f']) as any).in('srgb', { hue: 'shorter' })).toThrow(/no hue interpolation path/)
   })
 
   it('propagates CSS dimensions across comparisons and typed arithmetic', () => {
@@ -133,6 +134,11 @@ describe('the shared CSS value IR', () => {
       features: ['color-level-4', 'custom-properties'],
     })).serialize
     expect(colorOnly(alpha(oklch(0.5, 0.2, 20), 0.5))).toBe('oklch(0.5 0.2 20 / 0.5)')
+    expect(colorOnly(alpha(hsl(200, 50, 50), 0.5))).toBe('hsl(200 50% 50% / 0.5)')
+    expect(colorOnly(color('display-p3', 0.5, 0.1, 0.1).alpha(0.5)))
+      .toBe('color(display-p3 0.5 0.1 0.1 / 0.5)')
+    expect(colorOnly(hsl.lighten(hsl(200, 50, 50), 0.1)))
+      .toBe('hsl(200 50% 50.1%)')
     const channel = customProperty('--live-lightness', { type: 'number' }).$var()
     expect(() => colorOnly(alpha(oklch(channel, 0.2, 20), 0.5))).toThrow(/relative-color.*color-without-relative-syntax/)
     expect(() => colorOnly(color('display-p3-linear', 0.1, 0.2, 0.3))).toThrow(/color-level-5/)

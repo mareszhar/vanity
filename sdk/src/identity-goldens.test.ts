@@ -69,7 +69,6 @@ describe('stable emitted and runtime identities', () => {
       @layer vanity.tokens.base;
       @layer vanity.tokens.axes;
       @layer vanity.tokens.cases;
-      @layer vanity.tokens.overrides;
       @layer vanity.tokens.base {
         :root {
           --vanity-color-brand: rebeccapurple;

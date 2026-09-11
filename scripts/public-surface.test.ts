@@ -163,8 +163,6 @@ const SELF_DESCRIBING_GROUPS: readonly AllowlistGroup[] = [
       'VanityColorChannel',
       'VanityColorFunction',
       'VanityColorFunctionChannels',
-      'VanityColorMixItem',
-      'VanityColorMixPercentage',
       'VanityCssColorSpace',
       'VanityHslChannels',
       'VanityHslFunction',
@@ -194,7 +192,6 @@ const SELF_DESCRIBING_GROUPS: readonly AllowlistGroup[] = [
   {
     reason: 'Token model aliases are direct projections of authored values, traits, and handle names.',
     names: [
-      'VanityAuthoredInterpolatedColor',
       'VanityCheck',
       'VanityColorTokenHandle',
       'VanityConfiguredToken',
@@ -228,7 +225,6 @@ const SELF_DESCRIBING_GROUPS: readonly AllowlistGroup[] = [
       'customProperty',
       'darken',
       'desaturate',
-      'displayP3',
       'flex',
       'fluid',
       'frequency',
@@ -244,7 +240,6 @@ const SELF_DESCRIBING_GROUPS: readonly AllowlistGroup[] = [
       'lighten',
       'max',
       'min',
-      'mix',
       'number',
       'oklab',
       'oklch',

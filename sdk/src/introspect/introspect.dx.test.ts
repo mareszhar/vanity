@@ -26,6 +26,7 @@ describe('the audit config', () => {
       'contrast',
       'escapes',
       'scaleStrays',
+      'derivedCaseGrowth',
     ])
   })
 

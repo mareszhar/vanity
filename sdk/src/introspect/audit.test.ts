@@ -5,9 +5,13 @@
  */
 
 import type { VanityAuditFinding, VanityUnevaluatedAudit } from './audit'
+import type { VanityIntrospectionDeclaration } from './system'
 import {
   axis,
+  colorMix,
+  colorSchemes,
   createSystem,
+  data,
   defineCssValue,
   definePlugin,
   propertyAliases,
@@ -105,6 +109,22 @@ describe('contrast acceptances', () => {
     expect(findings).toHaveLength(2) // one per scheme
     expect(findings[0].message).toContain('color.onMid')
     expect(findings[0].message).toContain('APCA Lc 40')
+  })
+
+  it('surfaces representative contrast picks without inventing a new category', () => {
+    const open = createSystem()
+    const ds = locked(open.addTokens({
+      color: {
+        onMixed: open.legibleOn(open.colorMix(['white', 'red']).in('oklch')),
+      },
+    }))
+    const { manifest, css } = built(() => ds.class({ color: ds.t.color.onMixed }, 'chip'))
+
+    expect(audit(manifest, css)).toContainEqual(expect.objectContaining({
+      kind: 'contrast',
+      message: expect.stringContaining('representative approximation'),
+      fix: expect.stringContaining('exactly foldable'),
+    }))
   })
 })
 
@@ -270,7 +290,7 @@ describe('focus visibility', () => {
 })
 
 describe('system-scope audit', () => {
-  it('runs specificity, ambiguity, mutable-root, nonportable, and overwrite categories', () => {
+  it('runs specificity, ambiguity, mutable-root, nonportable, overwrite, and stale-derivation categories', () => {
     const specificDs = system({ space: { sm: '8px' } }, { root: '#application#widget' })
     expect(specificDs.audit().findings).toContainEqual(expect.objectContaining({ kind: 'specificityContexts' }))
 
@@ -352,18 +372,210 @@ describe('system-scope audit', () => {
     expect(defaulted.every((finding: VanityAuditFinding) => finding.level === 'warn' || finding.level === 'error')).toBe(true)
   })
 
-  it('shares the five system category implementations with the CLI audit', () => {
+  it('shares the seven system category implementations with the CLI audit', () => {
     const open = createSystem()
       .addTokens({ color: { brand: 'red' } })
       .overwriteTokens({ color: { brand: 'blue' } })
     const ds = locked(open)
     const { manifest, css } = built(() => ds.class({ color: ds.t.color.brand }, 'card'))
-    const kinds = new Set(['ambiguousAxes', 'mutableRootHazards', 'overwriteInventory', 'nonportableValues', 'specificityContexts'])
+    const kinds = new Set(['ambiguousAxes', 'mutableRootHazards', 'overwriteInventory', 'nonportableValues', 'specificityContexts', 'staleDerivations', 'derivedCaseGrowth'])
     const fromSystem = ds.audit().findings.filter((finding: VanityAuditFinding) => kinds.has(finding.kind))
     const fromCli = audit(manifest, css).filter(finding => kinds.has(finding.kind))
 
     expect(fromSystem).toEqual(fromCli)
     expect(runSystemAudit(manifest.system).findings.filter(finding => kinds.has(finding.kind))).toEqual(fromSystem)
+  })
+
+  it('does not flag a one-axis fold when an unchanged declaration is omitted', () => {
+    const open = createSystem().addAxis('scheme', colorSchemes())
+    const ds = locked(open.addTokens(open.defineTokens({
+      color: {
+        base: open.tdef.color({ axes: { scheme: { light: 'white', dark: '#f0f0f0' } } }),
+      },
+    }).add(m => ({ color: { onBase: open.legibleOn(m.color.base) } }))))
+
+    expect(ds.audit().findings.filter((finding: VanityAuditFinding) => finding.kind === 'staleDerivations')).toEqual([])
+
+    const semantic = ds.introspect()
+    const onBase = semantic.tokens['color.onBase']!
+    const sparse = {
+      ...semantic,
+      tokens: {
+        ...semantic.tokens,
+        'color.onBase': {
+          ...onBase,
+          declarations: onBase.declarations.filter((declaration: VanityIntrospectionDeclaration) => declaration.kind !== 'axis'),
+        },
+      },
+    }
+    expect(runSystemAudit(sparse).findings.filter((finding: VanityAuditFinding) => finding.kind === 'staleDerivations')).toEqual([])
+  })
+
+  it('keeps no-axis and changed one-axis folds silent when their delivered values are covered', () => {
+    const open = createSystem().addAxis('density', {
+      modes: {
+        cozy: data('density', 'cozy'),
+        compact: data('density', 'compact'),
+      },
+      default: 'cozy',
+    })
+    const ds = locked(open.addTokens(open.defineTokens({
+      plain: open.tdef({ val: 4, reference: 'val' }),
+      varying: open.tdef({ val: 4, axes: { density: { cozy: 4, compact: 8 } } }),
+    }).add(m => ({
+      plainDouble: open.tdef({
+        val: open.calc(m.plain).multiply(2),
+        reference: 'val',
+        emit: true,
+      }),
+      varyingDouble: open.tdef({
+        val: open.calc(m.varying).multiply(2),
+        reference: 'val',
+        emit: true,
+      }),
+    }))))
+
+    expect(ds.audit().findings.filter((finding: VanityAuditFinding) => finding.kind === 'staleDerivations')).toEqual([])
+  })
+
+  it('audits multi-axis folds from their required intersection coverage', () => {
+    const open = createSystem()
+      .addAxis('scheme', colorSchemes())
+      .addAxis('density', {
+        modes: {
+          cozy: data('density', 'cozy'),
+          compact: data('density', 'compact'),
+        },
+        default: 'cozy',
+      })
+    const ds = locked(open.addTokens(open.defineTokens({
+      color: {
+        base: open.tdef.color({
+          axes: {
+            scheme: { light: 'white', dark: 'black' },
+            density: { cozy: 'white', compact: 'white' },
+          },
+        }),
+      },
+    }).add(m => ({ color: { onBase: open.legibleOn(m.color.base) } }))))
+
+    expect(ds.audit().findings.filter((finding: VanityAuditFinding) => finding.kind === 'staleDerivations')).toEqual([])
+
+    const semantic = ds.introspect()
+    const onBase = semantic.tokens['color.onBase']!
+    expect(onBase.axisCoverage?.contributingAxes).toEqual(['scheme', 'density'])
+    expect(onBase.axisCoverage?.requiredCases).toHaveLength(2)
+
+    const missingOneCase = {
+      ...semantic,
+      tokens: {
+        ...semantic.tokens,
+        'color.onBase': {
+          ...onBase,
+          declarations: onBase.declarations.filter((declaration: VanityIntrospectionDeclaration) =>
+            declaration.kind !== 'case'
+            || declaration.when?.density !== 'compact'),
+        },
+      },
+    }
+    expect(runSystemAudit(missingOneCase).findings).toContainEqual(expect.objectContaining({
+      kind: 'staleDerivations',
+      level: 'error',
+      message: expect.stringContaining('color.onBase'),
+    }))
+  })
+
+  it('does not flag live derivations whose previews happen to be concrete', () => {
+    const open = createSystem().addAxis('scheme', colorSchemes())
+    const tokens = open.defineTokens({
+      color: {
+        base: open.tdef.color({ axes: { scheme: { light: 'white', dark: 'black' } } }),
+      },
+    }).add(m => ({
+      color: {
+        blend: colorMix([m.color.base, 'red']).in('srgb'),
+        paired: open.lightDark(m.color.base, 'blue'),
+      },
+    }))
+    const ds = locked(open.addTokens(tokens))
+
+    expect(ds.introspect().tokens['color.blend']!.fold).toMatchObject({
+      status: 'preserved',
+      reason: 'browser-reactive color semantics',
+    })
+    expect(ds.introspect().tokens['color.paired']!.fold).toMatchObject({
+      status: 'preserved',
+      reason: 'browser-reactive color semantics',
+    })
+    expect(ds.audit().findings.filter((finding: VanityAuditFinding) => finding.kind === 'staleDerivations')).toEqual([])
+  })
+
+  it('warns when a folded derivation crosses the derived-case size budget', () => {
+    const open = createSystem()
+      .addAxis('a', {
+        modes: { m0: data('a', 'm0'), m1: data('a', 'm1'), m2: data('a', 'm2') },
+        default: 'm0',
+      })
+      .addAxis('b', {
+        modes: { m0: data('b', 'm0'), m1: data('b', 'm1'), m2: data('b', 'm2') },
+        default: 'm0',
+      })
+      .addAxis('c', {
+        modes: { m0: data('c', 'm0'), m1: data('c', 'm1'), m2: data('c', 'm2') },
+        default: 'm0',
+      })
+      .addAxis('d', {
+        modes: { m0: data('d', 'm0'), m1: data('d', 'm1'), m2: data('d', 'm2') },
+        default: 'm0',
+      })
+    const ds = locked(open.addTokens(open.defineTokens({
+      color: {
+        a: open.tdef.color({ axes: { a: { m0: 'white', m1: 'black', m2: 'red' } } }),
+        b: open.tdef.color({ axes: { b: { m0: 'white', m1: 'black', m2: 'red' } } }),
+        c: open.tdef.color({ axes: { c: { m0: 'white', m1: 'black', m2: 'red' } } }),
+        d: open.tdef.color({ axes: { d: { m0: 'white', m1: 'black', m2: 'red' } } }),
+      },
+    }).add(m => ({
+      color: {
+        paired: open.legibleOn(open.colorMix([
+          open.colorMix([m.color.a, m.color.b]).in('oklab'),
+          open.colorMix([m.color.c, m.color.d]).in('oklab'),
+        ]).in('oklab'), { contrast: 50 }),
+      },
+    }))))
+
+    const paired = ds.introspect().tokens['color.paired']!
+    expect(paired.axisCoverage?.contributingAxes).toEqual(['a', 'b', 'c', 'd'])
+    expect(paired.axisCoverage?.requiredCases.length).toBeGreaterThan(32)
+
+    const finding = ds.audit().findings.find((entry: VanityAuditFinding) => entry.kind === 'derivedCaseGrowth')
+    expect(finding).toMatchObject({
+      kind: 'derivedCaseGrowth',
+      level: 'warn',
+      message: expect.stringContaining('color.paired'),
+      fix: expect.stringContaining('reference: \'var\''),
+    })
+    expect(finding?.message).toMatch(/across a, b, c, d/)
+    expect(ds.audit({ derivedCaseGrowth: 'off' }).findings
+      .filter((entry: VanityAuditFinding) => entry.kind === 'derivedCaseGrowth')).toEqual([])
+
+    const small = createSystem()
+      .addAxis('scheme', colorSchemes())
+      .addAxis('density', {
+        modes: { cozy: data('density', 'cozy'), compact: data('density', 'compact') },
+        default: 'cozy',
+      })
+    const smallDs = locked(small.addTokens(small.defineTokens({
+      color: {
+        base: small.tdef.color({
+          axes: {
+            scheme: { light: 'white', dark: 'black' },
+            density: { cozy: 'white', compact: 'white' },
+          },
+        }),
+      },
+    }).add(m => ({ color: { onBase: small.legibleOn(m.color.base) } }))))
+    expect(smallDs.audit().findings.filter((entry: VanityAuditFinding) => entry.kind === 'derivedCaseGrowth')).toEqual([])
   })
 })
 

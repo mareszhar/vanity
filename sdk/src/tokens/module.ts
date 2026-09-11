@@ -47,7 +47,15 @@ import { isCssValue } from '../values/types'
 import { getColorRequirements, handleColorMethods, isColorValue, isContrastValue } from './color'
 import { createTokenFactory, isConfiguredToken } from './config'
 import { attachTokenDeclarationGetters } from './declarations'
-import { collectRefs, foldExpr, getExpressionTraits, serializeContrastPick, serializeExpr } from './expressions'
+import {
+  collectRefs,
+  foldColorCss,
+  getExpressionTraits,
+  hasBrowserReactiveSyntax,
+  resolveContrastPick,
+  serializeContrastPick,
+  serializeExpr,
+} from './expressions'
 import { rememberTokenFold } from './fold'
 import {
   attachAxisBranch,
@@ -61,9 +69,14 @@ import {
   updateHandle,
   VANITY_RUNTIME_ADDRESS,
 } from './handle'
-import { formatOklch, pickLegible } from './math'
 import { getTokenName } from './names'
-import { createTokenCheckResolver, resolveGraph, runTokenChecks } from './resolve'
+import {
+  createTokenCheckResolver,
+  resolveGraph,
+  resolveTokenSubstitutions,
+  resolveTokenSubstitutionsByAxisMode,
+  runTokenChecks,
+} from './resolve'
 
 const TOKEN_HANDLE_OPTIONS: VanityHandleOptions = {
   serializeFallback: value => serializeCssText(value as Parameters<typeof serializeCssText>[0]),
@@ -149,6 +162,11 @@ export interface NodeResult {
   emitted: string
   /** The `contrast-color()` upgrade a live-guarantee pairing declares under `@supports`. */
   supportsUpgrade?: string
+  /** A contrast pick made from a representative target rather than an exact fold. */
+  contrastFallback?: {
+    readonly schemes: readonly VanityScheme[]
+    readonly reason: string
+  }
 }
 
 export interface TokenGraph {
@@ -260,9 +278,13 @@ function collectColorConstructorUsages(expr: VanityColorExpr, usages: Set<string
       })
       return
     case 'mix':
-      usages.add('mix')
+      usages.add('colorMix')
       collectColorConstructorUsages(expr.input, usages)
       collectColorConstructorUsages(expr.other, usages)
+      for (const percentage of [expr.inputPercentage, expr.otherPercentage]) {
+        if (percentage && typeof percentage === 'object' && Object.hasOwn(percentage, 'type'))
+          collectNodeConstructorUsages(valueNodeOf(percentage as VanityValue), usages)
+      }
       return
     case 'scheme':
       usages.add('lightDark')
@@ -422,7 +444,6 @@ export interface VanityTokenPhaseLayers {
   readonly base: string
   readonly axes: Readonly<Record<string, string>>
   readonly cases: string
-  readonly overrides: string
 }
 
 /** Whether a value is the unfinished definition returned by `defineTokens`. */
@@ -987,7 +1008,11 @@ function mergePatchedNode(
 function getTokenBranchKey(branch: TokenBranch): string {
   return branch.kind === 'axis'
     ? `axis:${branch.axis}:${branch.mode}`
-    : `case:${Object.entries(branch.when).map(([axis, mode]) => `${axis}:${mode}`).join('|')}`
+    : `case:${getCaseAddress(branch.when)}`
+}
+
+function getCaseAddress(when: Readonly<Record<string, string>>): string {
+  return Object.entries(when).map(([axis, mode]) => `${axis}:${mode}`).join('|')
 }
 
 function assertPatchSlotAvailable(token: string, slot: string, file?: string): never {
@@ -1131,7 +1156,7 @@ function serializeBranch(definition: VanityLeafDefinition, graph: TokenGraph): s
   const traits = getExpressionTraits(definition.expr, resolver)
   return traits.cssLive || traits.volatile
     ? serializeExpr(definition.expr, resolver)
-    : formatOklch(foldExpr(definition.expr, 'light', resolver))
+    : foldColorCss(definition.expr, 'light', resolver)
 }
 
 function buildRuntimeContract(graph: TokenGraph): VanityRuntimeContract {
@@ -1223,7 +1248,7 @@ function buildRuntimeContract(graph: TokenGraph): VanityRuntimeContract {
   rootMap.set('$system', { selector: graph.root, axes: new Set() })
   // A native element-local scheme remains operational even when every color
   // was authored directly with lightDark() rather than token axis branches.
-  // Its explicit data-scheme arm still belongs to the system root.
+  // Its explicit mount-relative scheme arm still belongs to the system root.
   for (const axis of axisOrder) {
     if (graph.axes?.definitions[axis]?.native?.kind === 'scheme')
       rootMap.get('$system')!.axes.add(axis)
@@ -2025,16 +2050,21 @@ function recordGraph(graph: TokenGraph): void {
     if (definition.kind === 'literal')
       return String(definition.value)
 
-    if (definition.kind === 'value')
+    if (definition.kind === 'value') {
+      if (node.contract.reference === 'val')
+        return resolvers[scheme].foldValue?.(definition.value, scheme) ?? serializeTokenCss(graph, definition.value)
       return serializeTokenCss(graph, definition.value)
+    }
 
     if (definition.kind === 'none')
       return ''
 
-    if (definition.kind === 'contrast')
-      return pickLegible(foldExpr(definition.expr.target, scheme, resolvers[scheme])).keyword
+    if (definition.kind === 'contrast') {
+      const resolved = resolveContrastPick(definition.expr, resolvers[scheme])
+      return (scheme === 'light' ? resolved.light : resolved.dark).keyword
+    }
 
-    return formatOklch(foldExpr(definition.expr, scheme, resolvers[scheme]))
+    return foldColorCss(definition.expr, scheme, resolvers[scheme])
   }
 
   const previewOf = (node: TokenNode): import('../introspect/records').VanityTokenPreviewRecord => {
@@ -2047,6 +2077,21 @@ function recordGraph(graph: TokenGraph): void {
     }
     if (definition.kind === 'value') {
       const valueNode = valueNodeOf(definition.value)
+      if (node.contract.reference === 'val') {
+        try {
+          return {
+            status: 'available',
+            light: getSchemeValue(node, 'light'),
+            dark: getSchemeValue(node, 'dark'),
+          }
+        }
+        catch (error) {
+          return {
+            status: 'unavailable',
+            reason: error instanceof Error ? error.message : 'value expression cannot be previewed',
+          }
+        }
+      }
       if (valueNode.dependencies.length > 0)
         return { status: 'unavailable', reason: 'runtime dependency' }
       if (valueNode.kind !== 'literal')
@@ -2098,12 +2143,12 @@ function recordGraph(graph: TokenGraph): void {
 
     const requirements = new Set(node.definition.kind === 'value'
       ? [...collectNodeRequirements(valueNodeOf(node.definition.value))]
-      : node.definition.kind === 'literal' || node.definition.kind === 'none' ? [] : [...getColorRequirements(node.definition.expr)])
+      : node.definition.kind === 'literal' || node.definition.kind === 'none' ? [] : [...getColorRequirements(node.definition.expr, graph.policies?.color.adjustSpace)])
     for (const branch of node.branches) {
       if (branch.definition.kind === 'value')
         collectNodeRequirements(valueNodeOf(branch.definition.value)).forEach(requirement => requirements.add(requirement))
       else if (branch.definition.kind !== 'literal' && branch.definition.kind !== 'none')
-        getColorRequirements(branch.definition.expr).forEach(requirement => requirements.add(requirement))
+        getColorRequirements(branch.definition.expr, graph.policies?.color.adjustSpace).forEach(requirement => requirements.add(requirement))
     }
     const preview = previewOf(node)
     const plan = planTokenEmission(node, graph)
@@ -2208,6 +2253,7 @@ function recordGraph(graph: TokenGraph): void {
     const expression = getExpressionRecord(node.definition, result, graph)
     const portability = getPortability(node, graph)
     const fold = foldRecord(node, result, preview)
+    const axisCoverage = getTokenAxisCoverage(node, graph)
     const supportPath = getValueSupportPath(node.definition, graph, result)
 
     record({
@@ -2249,6 +2295,7 @@ function recordGraph(graph: TokenGraph): void {
         expression,
         inference: node.contract.inference,
         fold,
+        ...(axisCoverage === undefined ? {} : { axisCoverage }),
         dependencies,
         support: {
           ...(graph.support === undefined ? {} : { target: graph.support.id }),
@@ -2287,9 +2334,10 @@ function recordGraph(graph: TokenGraph): void {
 
     if (node.definition.kind === 'contrast') {
       const { expr } = node.definition
+      const resolved = resolveContrastPick(expr, resolvers.light)
 
       for (const scheme of ['light', 'dark'] as const) {
-        const pick = pickLegible(foldExpr(expr.target, scheme, resolvers[scheme]))
+        const pick = scheme === 'light' ? resolved.light : resolved.dark
 
         record({
           kind: 'contrast',
@@ -2301,6 +2349,7 @@ function recordGraph(graph: TokenGraph): void {
           measured: Math.round(Math.abs(pick.lc) * 10) / 10,
           min: expr.contrast,
           accepted: expr.explicitContrast,
+          ...(resolved.fallbackSchemes.includes(scheme) ? { fallback: resolved.fallbackReason } : {}),
         })
       }
     }
@@ -2382,7 +2431,12 @@ function getExpressionRecord(
   }
   if (definition.kind === 'value')
     return getExpressionNodeRecord(valueNodeOf(definition.value), result.emitted)
-  return getColorExpressionRecord(definition.expr, result.emitted, graph)
+  return getColorExpressionRecord(
+    definition.expr,
+    result.emitted,
+    graph,
+    result.contrastFallback,
+  )
 }
 
 function getExpressionNodeRecord(
@@ -2446,6 +2500,7 @@ function getColorExpressionRecord(
   expr: VanityColorExpr,
   css: string | undefined,
   graph: TokenGraph,
+  contrastFallback?: NodeResult['contrastFallback'],
 ): import('../introspect/records').VanityTokenExpressionRecord {
   const children: import('../introspect/records').VanityTokenExpressionRecord[] = []
   const detail: Record<string, string | number | boolean | null> = { operation: expr.kind }
@@ -2486,8 +2541,12 @@ function getColorExpressionRecord(
       children.push(getColorExpressionRecord(expr.input, undefined, graph))
       break
     case 'mix':
-      detail.amount = expr.amount
-      detail.space = expr.space
+      if (expr.inputPercentage !== undefined)
+        detail.inputPercentage = typeof expr.inputPercentage === 'number' ? expr.inputPercentage : String(expr.inputPercentage)
+      if (expr.otherPercentage !== undefined)
+        detail.otherPercentage = typeof expr.otherPercentage === 'number' ? expr.otherPercentage : String(expr.otherPercentage)
+      if (expr.space !== undefined)
+        detail.space = expr.space
       if (expr.hue !== undefined)
         detail.hue = expr.hue
       children.push(getColorExpressionRecord(expr.input, undefined, graph), getColorExpressionRecord(expr.other, undefined, graph))
@@ -2498,6 +2557,9 @@ function getColorExpressionRecord(
     case 'contrast':
       detail.contrast = expr.contrast
       detail.explicitContrast = expr.explicitContrast
+      if (contrastFallback !== undefined) {
+        detail.fallback = `${contrastFallback.reason} in ${contrastFallback.schemes.join(', ')} scheme${contrastFallback.schemes.length === 1 ? '' : 's'}`
+      }
       children.push(getColorExpressionRecord(expr.target, undefined, graph))
       return { kind: 'contrast', type: 'color', detail, children }
   }
@@ -2519,6 +2581,8 @@ function foldRecord(
   if (node.definition.kind === 'literal')
     return { status: 'folded', val: node.definition.value }
   if (node.definition.kind === 'value') {
+    if (node.contract.reference === 'val' && preview.status === 'available')
+      return { status: 'folded', val: preview.light }
     const expression = valueNodeOf(node.definition.value)
     if (expression.kind === 'literal')
       return { status: 'folded', val: expression.value }
@@ -2529,7 +2593,19 @@ function foldRecord(
   }
   if (node.definition.expr.kind === 'ref')
     return { status: 'preserved', reason: 'token aliases remain visible as graph edges' }
-  if (result.traits.cssLive || result.traits.volatile || result.traits.conditional)
+  if (node.definition.kind === 'contrast' && result.contrastFallback !== undefined && preview.status === 'available') {
+    return {
+      status: 'folded',
+      val: preview.light,
+      reason: `${result.contrastFallback.reason} in ${result.contrastFallback.schemes.join(', ')} scheme${result.contrastFallback.schemes.length === 1 ? '' : 's'}`,
+    }
+  }
+  if (node.definition.kind === 'contrast'
+    && preview.status === 'available'
+    && !hasBrowserReactiveSyntax(result.emitted)) {
+    return { status: 'folded', val: preview.light }
+  }
+  if (result.traits.cssLive || result.traits.volatile)
     return { status: 'preserved', reason: 'browser-reactive color semantics' }
   if (preview.status === 'available')
     return { status: 'folded', val: preview.light }
@@ -2661,6 +2737,307 @@ export interface PlannedTokenEmission {
   readonly upgrade?: string
 }
 
+interface TokenSubstitutionResolution {
+  readonly axes: ReadonlyMap<string, ReadonlyMap<string, ReadonlyMap<string, string>>>
+  readonly cases: ReadonlyMap<string, {
+    readonly when: Readonly<Record<string, string>>
+    readonly declarations: ReadonlyMap<string, string>
+  }>
+  readonly axisCoverage: ReadonlyMap<string, {
+    readonly contributingAxes: readonly string[]
+    readonly requiredCases: readonly Readonly<Record<string, string>>[]
+  }>
+}
+
+const TOKEN_SUBSTITUTION_RESOLUTION_CACHE = new WeakMap<TokenGraph, TokenSubstitutionResolution>()
+const TOKEN_CONTRIBUTING_AXES_CACHE = new WeakMap<TokenGraph, ReadonlyMap<string, readonly string[]>>()
+
+/** Find the token paths referenced by a node's base and authored branches. */
+function getNodeDependencyPaths(node: TokenNode): ReadonlySet<string> {
+  const paths = new Set<string>()
+  const collect = (definition: VanityLeafDefinition): void => {
+    if (definition.kind === 'value') {
+      for (const dependency of valueNodeOf(definition.value).dependencies) {
+        if (dependency.path !== undefined)
+          paths.add(dependency.path)
+      }
+      return
+    }
+    if (definition.kind === 'literal' || definition.kind === 'none')
+      return
+    collectRefs(definition.expr, paths)
+  }
+
+  collect(node.definition)
+  for (const branch of node.branches)
+    collect(branch.definition)
+  return paths
+}
+
+/** Return the declared axes carried by a node's own branches and dependencies. */
+function getTokenContributingAxes(graph: TokenGraph): ReadonlyMap<string, readonly string[]> {
+  const cached = TOKEN_CONTRIBUTING_AXES_CACHE.get(graph)
+  if (cached)
+    return cached
+
+  const axesByToken = new Map<string, readonly string[]>()
+  for (const node of graph.nodes.values()) {
+    const axes = new Set<string>()
+    const visited = new Set<string>()
+    for (const branch of node.branches) {
+      if (branch.kind === 'axis')
+        axes.add(branch.axis)
+    }
+    const visit = (path: string): void => {
+      if (visited.has(path))
+        return
+      visited.add(path)
+      const dependency = graph.nodes.get(path)
+      if (!dependency)
+        return
+
+      for (const branch of dependency.branches) {
+        if (branch.kind === 'axis')
+          axes.add(branch.axis)
+      }
+      for (const nested of getNodeDependencyPaths(dependency))
+        visit(nested)
+    }
+
+    for (const dependency of getNodeDependencyPaths(node))
+      visit(dependency)
+
+    axesByToken.set(node.key, Object.freeze((graph.axes?.order ?? []).filter(axis => axes.has(axis))))
+  }
+
+  const resolved = new Map<string, readonly string[]>(axesByToken)
+  TOKEN_CONTRIBUTING_AXES_CACHE.set(graph, resolved)
+  return resolved
+}
+
+/** Identify a derived token whose emitted value is a build-time fold. */
+function isBuildFoldedToken(node: TokenNode, result: NodeResult): boolean {
+  if (!node.derived || !node.contract.emit)
+    return false
+  if (node.definition.kind === 'contrast')
+    return !hasBrowserReactiveSyntax(result.emitted)
+  return !result.traits.cssLive && !result.traits.volatile && !result.traits.conditional
+}
+
+/** Generate reachable case addresses for a set of contributing axes. */
+function getDerivedCaseWhens(
+  graph: TokenGraph,
+  axes: readonly string[],
+): readonly Readonly<Record<string, string>>[] {
+  const selectableAxes = axes.filter(axis =>
+    graph.axes?.definitions[axis]?.modeOrder.some((mode: string) => graph.axes!.definitions[axis]!.modes[mode]!.arms.length > 0),
+  )
+  if (selectableAxes.length < 2)
+    return []
+
+  let combinations: Readonly<Record<string, string>>[] = [{}]
+  for (const axis of graph.axes?.order ?? []) {
+    if (!selectableAxes.includes(axis))
+      continue
+    const definition = graph.axes!.definitions[axis]!
+    combinations = combinations.flatMap(when => definition.modeOrder
+      .filter((mode: string) => definition.modes[mode]!.arms.length > 0)
+      .map((mode: string) => ({ ...when, [axis]: mode })))
+  }
+  return combinations
+}
+
+/** Resolve every declared variation once so emission and introspection share the same diff. */
+function getTokenSubstitutionResolution(graph: TokenGraph): TokenSubstitutionResolution {
+  const cached = TOKEN_SUBSTITUTION_RESOLUTION_CACHE.get(graph)
+  if (cached)
+    return cached
+
+  const axes = new Map<string, ReadonlyMap<string, ReadonlyMap<string, string>>>()
+  const cases = new Map<string, {
+    readonly when: Readonly<Record<string, string>>
+    readonly declarations: ReadonlyMap<string, string>
+  }>()
+  const diagnostics: import('../diagnostics').VanityDiagnosticInput[] = []
+  const nodes = [...graph.nodes.values()]
+  const contributingAxes = getTokenContributingAxes(graph)
+  const derivedFoldedAxes = new Map<string, readonly string[]>()
+  const requiredCases = new Map<string, Map<string, Readonly<Record<string, string>>>>()
+  for (const node of nodes) {
+    const result = graph.results.get(node.key)
+    const axesForNode = contributingAxes.get(node.key) ?? []
+    if (result !== undefined && isBuildFoldedToken(node, result) && axesForNode.length >= 2) {
+      derivedFoldedAxes.set(node.key, axesForNode)
+      requiredCases.set(node.key, new Map())
+    }
+  }
+
+  const axisResolutions = resolveTokenSubstitutionsByAxisMode(
+    graph,
+    new Map(),
+    (axis, mode) => `axis "${axis}" mode "${mode}"`,
+  )
+  diagnostics.push(...axisResolutions.diagnostics)
+
+  for (const resolution of axisResolutions.resolutions) {
+    const modes = new Map<string, ReadonlyMap<string, string>>(axes.get(resolution.axis) ?? [])
+    const changed = new Map<string, string>()
+    for (const [name, value] of resolution.declarations) {
+      const node = nodes.find(candidate => candidate.name === name)
+      if (node)
+        changed.set(node.key, value)
+    }
+    if (changed.size > 0)
+      modes.set(resolution.mode, changed)
+
+    if (modes.size > 0)
+      axes.set(resolution.axis, modes)
+    else
+      axes.delete(resolution.axis)
+  }
+
+  const caseWhens = new Map<string, Readonly<Record<string, string>>>()
+  const derivedCaseAddresses = new Set<string>()
+  for (const node of nodes) {
+    for (const branch of node.branches) {
+      if (branch.kind === 'case')
+        caseWhens.set(getCaseAddress(branch.when), branch.when)
+    }
+  }
+
+  for (const axesForNode of derivedFoldedAxes.values()) {
+    for (const when of getDerivedCaseWhens(graph, axesForNode)) {
+      const address = getCaseAddress(when)
+      caseWhens.set(address, caseWhens.get(address) ?? when)
+      derivedCaseAddresses.add(address)
+    }
+  }
+
+  for (const [address, when] of caseWhens) {
+    const derived = derivedCaseAddresses.has(address)
+    const substitutions = new Map<string, VanityLeafDefinition>()
+    for (const node of nodes) {
+      const caseBranch = node.branches.find(branch => branch.kind === 'case'
+        && getCaseAddress(branch.when) === address)
+      if (caseBranch) {
+        if (caseBranch.definition.kind !== 'none')
+          substitutions.set(node.key, caseBranch.definition)
+        continue
+      }
+
+      if (derived) {
+        let selected: VanityLeafDefinition | undefined
+        // A node that carries branches on several axes follows the declared
+        // axis order; the last matching branch is the value the cascade wins.
+        for (const axis of graph.axes?.order ?? []) {
+          const mode = when[axis]
+          if (mode === undefined)
+            continue
+          const branch = node.branches.find(candidate => candidate.kind === 'axis'
+            && candidate.axis === axis
+            && candidate.mode === mode)
+          if (branch !== undefined && branch.definition.kind !== 'none')
+            selected = branch.definition
+        }
+        if (selected !== undefined)
+          substitutions.set(node.key, selected)
+        continue
+      }
+
+      const axisBranches = Object.entries(when).flatMap(([axis, mode]) => {
+        const branch = node.branches.find(candidate => candidate.kind === 'axis'
+          && candidate.axis === axis
+          && candidate.mode === mode)
+        return branch === undefined ? [] : [branch]
+      })
+      // A full cross-axis effective value needs an authored case. A single
+      // matching axis branch is nevertheless a useful scoped substitution for
+      // a sparse case that only names one source axis.
+      if (axisBranches.length === 1 && axisBranches[0]!.definition.kind !== 'none')
+        substitutions.set(node.key, axisBranches[0]!.definition)
+    }
+
+    if (substitutions.size === 0)
+      continue
+
+    const resolved = resolveTokenSubstitutions(graph, substitutions, `case "${address}"`)
+    diagnostics.push(...resolved.diagnostics)
+    const changed = new Map<string, string>()
+    if (derived) {
+      for (const node of nodes) {
+        const axesForNode = derivedFoldedAxes.get(node.key)
+        if (!axesForNode || !axesForNode.every(axis => Object.hasOwn(when, axis)))
+          continue
+        const resolvedValue = resolved.declarations.get(node.name as `--${string}`)
+          ?? graph.results.get(node.key)?.emitted
+        if (resolvedValue === undefined || resolvedValue.length === 0)
+          continue
+        if (resolvedValue !== getAxisCascadeValue(node, when, graph, axes)) {
+          changed.set(node.key, resolvedValue)
+          requiredCases.get(node.key)?.set(address, when)
+        }
+      }
+    }
+    else {
+      for (const [name, value] of resolved.declarations) {
+        const node = nodes.find(candidate => candidate.name === name)
+        if (node)
+          changed.set(node.key, value)
+      }
+    }
+    if (changed.size > 0)
+      cases.set(address, { when, declarations: changed })
+  }
+
+  if (diagnostics.length > 0)
+    throw new VanityError(diagnostics)
+
+  const axisCoverage = new Map<string, {
+    readonly contributingAxes: readonly string[]
+    readonly requiredCases: readonly Readonly<Record<string, string>>[]
+  }>()
+  for (const [key, axesForNode] of derivedFoldedAxes) {
+    axisCoverage.set(key, {
+      contributingAxes: axesForNode,
+      requiredCases: [...(requiredCases.get(key)?.values() ?? [])],
+    })
+  }
+
+  const resolution = { axes, cases, axisCoverage }
+  TOKEN_SUBSTITUTION_RESOLUTION_CACHE.set(graph, resolution)
+  return resolution
+}
+
+function getTokenAxisCoverage(
+  node: TokenNode,
+  graph: TokenGraph,
+): import('../introspect/records').VanityTokenSemanticRecord['axisCoverage'] {
+  return getTokenSubstitutionResolution(graph).axisCoverage.get(node.key)
+}
+
+/** Read the value the base and per-axis layers deliver before case emission. */
+function getAxisCascadeValue(
+  node: TokenNode,
+  when: Readonly<Record<string, string>>,
+  graph: TokenGraph,
+  axes: ReadonlyMap<string, ReadonlyMap<string, ReadonlyMap<string, string>>>,
+): string {
+  let value = graph.results.get(node.key)?.emitted ?? ''
+  for (const axis of graph.axes?.order ?? []) {
+    const mode = when[axis]
+    if (mode === undefined)
+      continue
+    const definition = graph.axes!.definitions[axis]!
+    const trigger = definition.modes[mode]!
+    if (definition.defaultMode === mode && trigger.arms.length === 0)
+      continue
+    const changed = axes.get(axis)?.get(mode)?.get(node.key)
+    if (changed !== undefined && changed.length > 0)
+      value = changed
+  }
+  return value
+}
+
 export function planTokenEmission(node: TokenNode, graph: TokenGraph): PlannedTokenEmission {
   const result = graph.results.get(node.key)!
   const baseVars: Record<string, string> = {}
@@ -2759,59 +3136,70 @@ export function planTokenEmission(node: TokenNode, graph: TokenGraph): PlannedTo
       const value = branch
         ? serializeBranchExpression(node, branch, graph, incoming)
         : serializeNativeSourceExpression(node, nativeSource!, graph, incoming)
-      for (const arm of trigger.arms) {
-        if (nativeForAxis && arm.mechanism !== 'selector')
+      axisDeclarations.push(...planAxisDeclarations(node, graph, axis, mode, value, stageName, nativeForAxis !== undefined))
+    }
+  }
+
+  const substitutions = getTokenSubstitutionResolution(graph)
+  const replacedAxisModes = new Set<string>()
+  const replacementAxisDeclarations: PlannedConditionalDeclaration[] = []
+  if (node.contract.emit && !hasMutableSlots(node)) {
+    for (const axis of graph.axes?.order ?? []) {
+      // A native scheme token already has its own guarded light-dark()/selector
+      // lowering. Its downstream folded derivations still use this diff.
+      if (native?.axis === axis)
+        continue
+
+      for (const [mode, changed] of substitutions.axes.get(axis) ?? []) {
+        const value = changed.get(node.key)
+        if (value === undefined || value.length === 0)
           continue
-        assertMutablePlacement(node, arm)
-        const resolved = resolveArm(node.root, arm, graph.root)
-        axisDeclarations.push({
-          node,
-          axis,
-          mode,
-          mechanism: arm.mechanism,
-          locality: arm.locality,
-          placement: arm.placement,
-          name: stageName,
-          value,
-          root: resolved.selector,
-          ...(resolved.media === undefined ? {} : { media: resolved.media }),
-          ...(resolved.supports === undefined ? {} : { supports: resolved.supports }),
-          ...(resolved.container === undefined ? {} : { container: resolved.container }),
-          ...((node.scopes?.length ?? 0) + (resolved.scopes?.length ?? 0) === 0
-            ? {}
-            : { scopes: [...node.scopes ?? [], ...resolved.scopes ?? []] }),
-          priority: arm.priority,
-          modeOrder: definition.modeOrder.indexOf(mode),
-          tokenOrder: [...graph.nodes.keys()].indexOf(node.key),
-        })
+        const entries = planAxisDeclarations(node, graph, axis, mode, value, node.name, false)
+        if (entries.length === 0)
+          continue
+        replacedAxisModes.add(`${axis}\0${mode}`)
+        replacementAxisDeclarations.push(...entries)
       }
     }
+  }
+  if (replacedAxisModes.size > 0) {
+    const retained = axisDeclarations.filter(entry => entry.node.key !== node.key
+      || !replacedAxisModes.has(`${entry.axis}\0${entry.mode}`))
+    axisDeclarations.length = 0
+    axisDeclarations.push(...retained, ...replacementAxisDeclarations)
   }
 
   if (node.contract.emit && priorExpression !== undefined)
     baseVars[node.name] = priorExpression
 
   for (const branch of cases) {
-    const arms = getCaseArms(node, branch, graph)
     const fallback = priorExpression
     const value = serializeBranchExpression(node, branch, graph, fallback)
-    for (const arm of arms) {
-      caseDeclarations.push({
-        node,
-        axis: '$case',
-        when: branch.when,
-        name: node.name,
-        value,
-        root: arm.selector,
-        ...(arm.media === undefined ? {} : { media: arm.media }),
-        ...(arm.supports === undefined ? {} : { supports: arm.supports }),
-        ...(arm.container === undefined ? {} : { container: arm.container }),
-        ...(arm.scopes === undefined ? {} : { scopes: arm.scopes }),
-        priority: arm.priority,
-        modeOrder: 0,
-        tokenOrder: [...graph.nodes.keys()].indexOf(node.key),
-      })
+    caseDeclarations.push(...planCaseDeclarations(node, graph, branch.when, value))
+  }
+
+  const replacedCases = new Set<string>()
+  const replacementCaseDeclarations: PlannedConditionalDeclaration[] = []
+  if (node.contract.emit && !hasMutableSlots(node)) {
+    for (const [address, substitution] of substitutions.cases) {
+      const value = substitution.declarations.get(node.key)
+      if (value === undefined || value.length === 0)
+        continue
+      const hasAuthoredCase = node.branches.some(branch => branch.kind === 'case'
+        && getCaseAddress(branch.when) === address)
+      const entries = planCaseDeclarations(node, graph, substitution.when, value, !hasAuthoredCase)
+      if (entries.length === 0)
+        continue
+      replacedCases.add(address)
+      replacementCaseDeclarations.push(...entries)
     }
+  }
+  if (replacedCases.size > 0) {
+    const retained = caseDeclarations.filter(entry => entry.node.key !== node.key
+      || entry.when === undefined
+      || !replacedCases.has(getCaseAddress(entry.when)))
+    caseDeclarations.length = 0
+    caseDeclarations.push(...retained, ...replacementCaseDeclarations)
   }
 
   const registration = getRegistration(node, graph, result.emitted, native)
@@ -2824,6 +3212,76 @@ export function planTokenEmission(node: TokenNode, graph: TokenGraph): PlannedTo
     ...(native === undefined ? {} : { native: { axis: native.axis, locality: native.definition.native!.locality } }),
     ...(result.supportsUpgrade === undefined ? {} : { upgrade: result.supportsUpgrade }),
   }
+}
+
+function planAxisDeclarations(
+  node: TokenNode,
+  graph: TokenGraph,
+  axis: string,
+  mode: string,
+  value: string,
+  name: string,
+  native: boolean,
+): PlannedConditionalDeclaration[] {
+  const definition = graph.axes?.definitions[axis]
+  const trigger = definition?.modes[mode]
+  if (!definition || !trigger)
+    return []
+  if (definition.defaultMode === mode && trigger.arms.length === 0)
+    return []
+
+  const tokenOrder = [...graph.nodes.keys()].indexOf(node.key)
+  return trigger.arms.flatMap((arm: VanityAxisTriggerArm) => {
+    if (native && arm.mechanism !== 'selector')
+      return []
+    assertMutablePlacement(node, arm)
+    const resolved = resolveArm(node.root, arm, graph.root)
+    return [{
+      node,
+      axis,
+      mode,
+      mechanism: arm.mechanism,
+      locality: arm.locality,
+      placement: arm.placement,
+      name,
+      value,
+      root: resolved.selector,
+      ...(resolved.media === undefined ? {} : { media: resolved.media }),
+      ...(resolved.supports === undefined ? {} : { supports: resolved.supports }),
+      ...(resolved.container === undefined ? {} : { container: resolved.container }),
+      ...((node.scopes?.length ?? 0) + (resolved.scopes?.length ?? 0) === 0
+        ? {}
+        : { scopes: [...node.scopes ?? [], ...resolved.scopes ?? []] }),
+      priority: arm.priority,
+      modeOrder: definition.modeOrder.indexOf(mode),
+      tokenOrder,
+    }]
+  })
+}
+
+function planCaseDeclarations(
+  node: TokenNode,
+  graph: TokenGraph,
+  when: Readonly<Record<string, string>>,
+  value: string,
+  derived = false,
+): PlannedConditionalDeclaration[] {
+  const tokenOrder = [...graph.nodes.keys()].indexOf(node.key)
+  return getCaseArms(node, { when }, graph, derived).map(arm => ({
+    node,
+    axis: '$case',
+    when,
+    name: node.name,
+    value,
+    root: arm.selector,
+    ...(arm.media === undefined ? {} : { media: arm.media }),
+    ...(arm.supports === undefined ? {} : { supports: arm.supports }),
+    ...(arm.container === undefined ? {} : { container: arm.container }),
+    ...(arm.scopes === undefined ? {} : { scopes: arm.scopes }),
+    priority: arm.priority,
+    modeOrder: 0,
+    tokenOrder,
+  }))
 }
 
 function planNativeScheme(
@@ -3069,8 +3527,9 @@ function assertMutablePlacement(node: TokenNode, arm: VanityAxisTriggerArm): voi
 
 function getCaseArms(
   node: TokenNode,
-  branch: TokenBranch & { kind: 'case' },
+  branch: { readonly when: Readonly<Record<string, string>> },
   graph: TokenGraph,
+  derived = false,
 ): readonly {
   readonly selector: string
   readonly media?: string
@@ -3106,7 +3565,7 @@ function getCaseArms(
     }
     combinations = combinations.flatMap(existing => trigger.arms.map((arm: VanityAxisTriggerArm) => {
       assertMutablePlacement(node, arm)
-      const resolved = resolveArm(node.root, arm, graph.root)
+      const resolved = resolveDerivedCaseArm(node, graph, axis, mode, arm, derived)
       return {
         selectors: [...existing.selectors, resolved.selector],
         media: combineQuery(existing.media, resolved.media),
@@ -3128,6 +3587,88 @@ function getCaseArms(
     ...(combination.scopes === undefined ? {} : { scopes: combination.scopes }),
     priority: combination.priority,
   }))
+}
+
+/**
+ * Resolve one case arm without changing the source axis declaration. Derived
+ * cases live in a later layer than axis arms, so an unconditional fallback
+ * must carry the sibling exclusions that specificity supplied in its source
+ * axis layer. Authored cases intentionally continue through `resolveArm`
+ * unchanged; their broad fallback semantics are part of the existing author
+ * contract until a separate case-addressing design is introduced.
+ */
+function resolveDerivedCaseArm(
+  node: TokenNode,
+  graph: TokenGraph,
+  axis: string,
+  mode: string,
+  arm: VanityAxisTriggerArm,
+  derived: boolean,
+): ReturnType<typeof resolveArm> {
+  const resolved = resolveArm(node.root, arm, graph.root)
+  if (!derived || !isUnconditionalFallbackArm(node, arm, resolved))
+    return resolved
+
+  const siblingSelectors = getDiscriminatingSiblingSelectors(node, graph, axis, mode)
+  if (siblingSelectors.length === 0) {
+    assertValidTrait(
+      node.key,
+      `cases.when.${axis}.${mode}`,
+      `the fallback mode cannot be addressed exactly; give its sibling modes selectors that can be negated`,
+    )
+  }
+
+  return {
+    ...resolved,
+    selector: `${resolved.selector}:not(${siblingSelectors.join(', ')})`,
+  }
+}
+
+function isUnconditionalFallbackArm(
+  node: TokenNode,
+  arm: VanityAxisTriggerArm,
+  resolved: ReturnType<typeof resolveArm>,
+): boolean {
+  if (arm.media !== undefined || arm.supports !== undefined || arm.container !== undefined)
+    return false
+  if ((arm.scopes?.length ?? 0) > 0)
+    return false
+  if (arm.selector === undefined || arm.selector === '&')
+    return true
+  return resolved.selector === node.root || resolved.selector === `:is(${node.root})`
+}
+
+function getDiscriminatingSiblingSelectors(
+  node: TokenNode,
+  graph: TokenGraph,
+  axis: string,
+  mode: string,
+): readonly string[] {
+  const definition = graph.axes?.definitions[axis]
+  if (definition === undefined)
+    return []
+
+  const selectors = new Set<string>()
+  for (const sibling of definition.modeOrder) {
+    if (sibling === mode)
+      continue
+    const trigger = definition.modes[sibling]!
+    for (const arm of trigger.arms) {
+      const resolved = resolveArm(node.root, arm, graph.root)
+      if (isUnconditionalFallbackArm(node, arm, resolved))
+        continue
+      if (resolved.media !== undefined || resolved.supports !== undefined
+        || resolved.container !== undefined || (resolved.scopes?.length ?? 0) > 0) {
+        assertValidTrait(
+          node.key,
+          `cases.when.${axis}.${mode}`,
+          `the fallback mode cannot be addressed exactly because sibling '${sibling}' uses a query or scope; use a negatable selector arm`,
+        )
+      }
+      selectors.add(resolved.selector)
+    }
+  }
+  return [...selectors]
 }
 
 function combineQuery(left: string | undefined, right: string | undefined): string | undefined {

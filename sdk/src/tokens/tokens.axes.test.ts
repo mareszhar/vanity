@@ -2,7 +2,6 @@ import {
   axis,
   colorSchemes,
   createSystem,
-  darken,
   data,
   defineCssSupportTarget,
   length,
@@ -110,7 +109,7 @@ describe('axis declarations and contexts', () => {
       },
       default: 'light',
       derive: {
-        dark: ({ light }) => darken(light, 0.35),
+        dark: ({ light }) => oklch.darken(light, 0.35),
       },
     }))
     const { returned: ds } = emit(() => inSystemScope(() => emitSystem(open.addTokens({

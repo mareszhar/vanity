@@ -2,13 +2,13 @@ import type { VanityCssValue, VanitySelfValue, VanityValue } from '@mszr/vanity'
 import {
   angle,
   calc,
+  colorMix,
   number as cssNumber,
   customProperty,
   defineTokens,
   hwb,
   length,
   min,
-  mix,
   oklch,
   percent,
 } from '@mszr/vanity'
@@ -55,9 +55,11 @@ describe('typed CSS value contracts', () => {
     oklch(0.5, 0.2, percent(20))
     void oklch(0.5, 0.2, angle.deg(285))
 
-    mix('#fff', '#000', 0.5).in('oklch', { hue: 'shorter' })
+    colorMix(['#fff', ['#000', 50]]).in('oklch', { hue: 'shorter' })
     // @ts-expect-error — a rectangular color space has no hue path
-    mix('#fff', '#000', 0.5).in('srgb', { hue: 'shorter' })
+    colorMix(['#fff', '#000']).in('srgb', { hue: 'shorter' })
+    // @ts-expect-error — color-mix() requires exactly two items.
+    colorMix(['#fff'])
     // @ts-expect-error — a color constructor is not an interpolation operation
     oklch(0.5, 0.2, 20).in('oklab')
   })
