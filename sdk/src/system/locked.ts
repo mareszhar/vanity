@@ -749,6 +749,7 @@ function materializeLockedSystem<
     globalDefaultLayer: layers.includes('reset') ? 'reset' : layers[0],
     layerRoot: prefix,
     ...(aliasConfig === undefined ? {} : { propertyAliases: aliasConfig }),
+    policies: valueContext.policies,
     resolveTokenDeclarations: (input: object) =>
       createTokenDeclarations(tokens as any, input as any),
     serializeValue: (value: unknown) => serializeSystemValue(value),

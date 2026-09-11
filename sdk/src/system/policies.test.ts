@@ -80,6 +80,50 @@ describe('policy as system law', () => {
       .toThrow(/adjustSpace/)
   })
 
+  it('carries the color adjust and mix policy into every style emitter', () => {
+    const ds = createSystem({ color: { adjustSpace: 'hsl', mixSpace: 'oklab' } })
+      .addTokens({ color: { brand: oklch(0.63, 0.25, 29), ink: oklch(0.2, 0, 0) } })
+      .consolidate({ prefix: 'style' })
+
+    // A static-origin adjustment folds through the configured space at the cursor.
+    expect(emit(() => ds.class({ color: ds.lighten('red', 0.1) }, 'static-adjust')).css)
+      .toContain('color: hsl(0 100% 50.1%);')
+
+    // The method-chain form over a token reference stays live and still uses the
+    // configured space — the case the constructor's own type cannot yet gate.
+    expect(emit(() => ds.class({ color: ds.t.color.brand.lighten(0.1) }, 'live-adjust')).css)
+      .toContain('color: hsl(from var(--style-color-brand) h s calc(l + 0.1));')
+
+    // colorMix() carries mixSpace into rule position the same way.
+    expect(emit(() => ds.class({ color: ds.colorMix([ds.t.color.brand, ds.t.color.ink]) }, 'mix')).css)
+      .toContain('color: color-mix(in oklab, var(--style-color-brand), var(--style-color-ink));')
+
+    // The policy reaches rules(), recipe(), anatomy(), and atoms() through the same context.
+    const expected = 'color: hsl(from var(--style-color-brand) h s calc(l + 0.1));'
+    expect(emit(() => ds.rules({ '.probe': { color: ds.lighten(ds.t.color.brand, 0.1) } })).css)
+      .toContain(expected)
+    expect(emit(() => ds.recipe({ base: { color: ds.lighten(ds.t.color.brand, 0.1) } }, 'card')).css)
+      .toContain(expected)
+    expect(emit(() => ds.anatomy({ parts: ['root'], base: { root: { color: ds.lighten(ds.t.color.brand, 0.1) } } }, 'dialog')).css)
+      .toContain(expected)
+    expect(emit(() => ds.atoms({ properties: { color: { hi: ds.lighten(ds.t.color.brand, 0.1) } } }, 'util')).css)
+      .toContain(expected)
+  })
+
+  it('keeps the missing-adjust-space diagnostic in rule position when no policy is set', () => {
+    const ds = createSystem()
+      .addTokens({ color: { brand: oklch(0.63, 0.25, 29) } })
+      .consolidate({ prefix: 'nopolicy' })
+
+    // A bare adjustment with no namespace and no policy must fail the same way at
+    // a style-emitter cursor as it does through serialize(); an explicit
+    // namespace still resolves without a policy.
+    expect(() => emit(() => ds.class({ color: ds.t.color.brand.lighten(0.1) }, 'card')))
+      .toThrow(/adjustSpace/)
+    expect(emit(() => ds.class({ color: ds.oklch.lighten(ds.t.color.brand, 0.1) }, 'ok')).css)
+      .toMatch(/color: oklch\(from var\(--nopolicy-color-brand\)/)
+  })
+
   it('resolves portable adaptive lengths at the host border and preserves explicit units', () => {
     const portable = defineTokens({
       space: {

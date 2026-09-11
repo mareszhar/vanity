@@ -9,6 +9,7 @@
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
 import type { VanityInternalTokenHandle } from '../tokens/handle'
 import type { VanityResolver } from '../tokens/resolve'
+import type { VanityResolvedPolicies } from '../values/policies'
 import { VanityError } from '../diagnostics'
 import { isPort } from '../ports/port'
 import { isColorValue, isContrastValue } from '../tokens/color'
@@ -18,6 +19,8 @@ import { isCssValue } from '../values/types'
 
 export interface VanityValueContext {
   file?: string
+  /** Resolved system policy; a rule-position color adjustment reads `color.adjustSpace` from it, matching token-graph resolution. */
+  policies?: VanityResolvedPolicies
   /** Resolve system-relative expression references through the locked token module. */
   serializeValue?: (value: unknown) => string | number
 }
@@ -86,6 +89,7 @@ function resolveValue(path: string, ctx: VanityValueContext): VanityResolver {
     ...(ctx.serializeValue === undefined
       ? {}
       : { serializeValue: value => String(ctx.serializeValue!(value)) }),
+    ...(ctx.policies === undefined ? {} : { policies: ctx.policies }),
     getRefTraits: handle => ({
       cssLive: handle.$reference === 'var',
       volatile: handle.$mutable,

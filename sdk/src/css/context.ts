@@ -1,4 +1,5 @@
 import type { VanityFileScope } from '../substrate'
+import type { VanityResolvedPolicies } from '../values/policies'
 import type { VanityPropertyAliasMap, VanityPropertyAliasMode } from './types'
 import { VanityError } from '../diagnostics'
 import { substrate } from '../substrate'
@@ -15,6 +16,8 @@ export interface VanitySystemContext {
     aliases: VanityPropertyAliasMap
     expose: VanityPropertyAliasMode
   }
+  /** Resolved system policy, so a style emitter resolves `color.adjustSpace` for bare channel adjustments exactly as token-graph resolution does. */
+  policies?: VanityResolvedPolicies
 }
 
 export function createLayerContext(system: VanitySystemContext, name: string): VanitySystemContext {
