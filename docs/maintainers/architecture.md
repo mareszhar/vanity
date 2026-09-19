@@ -43,13 +43,15 @@ Style sources use the ecosystem-standard `*.css.ts` / `*.css.js` suffix. Plain `
 
 The compiler:
 
-- emits system CSS once per CSS-artifact fingerprint;
+- evaluates each configured system entry independently of style-module request order and emits system CSS once per CSS-artifact fingerprint;
 - keeps system CSS separate from per-style-module CSS;
-- imports the system CSS virtual module from each style module and relies on module-ID deduplication;
+- imports the system CSS virtual module from each style module that reaches that system and relies on module-ID deduplication;
 - keeps lazy style CSS in the lazy chunk;
 - owns a separate first-loaded cross-system cascade prelude;
 - generates browser and SSR modules from portable data, never by trusting tree-shaking of the in-process contract;
 - lowers or executes all closures before serialization;
+- resolves configured entries through the build host while retaining configured spelling, physical module identity, and authored source as separate facts;
+- instruments source-shipping authoring modules by role, including linked and physically installed packages, while leaving unrelated dependencies and raw Vanilla Extract modules to their own loaders;
 - tracks attempted transforms and their dependency graphs even when the first transform fails;
 - retains the last good artifact set after an error;
 - replaces artifacts atomically on recovery;
@@ -83,12 +85,14 @@ One fingerprint cannot serve all consumers. Each ID is a hash of its complete no
 
 | Identity | Projection | Invalidates |
 | --- | --- | --- |
-| compatibility ID | structural public schema, policies, plugin IDs/versions/options, recorded overwrites | duplicate-package/HMR compatibility and package composition |
-| CSS-artifact fingerprint | complete emission IR: values, names, roots, scopes, axes, layers, registrations, fallbacks | system CSS |
-| runtime schema ID | mutable slots, roots/query strategies, controls, validators, hydration addresses | runtime-controller and snapshot compatibility |
+| compatibility ID | structural public schema, named-rule names/order, policies, plugin IDs/versions/options, recorded overwrites; excludes token values, descriptions, authored paths, and object identity | duplicate-package/HMR compatibility and package composition |
+| CSS-artifact fingerprint | complete emission IR: values, names, roots, scopes, axes, layers, registrations, fallbacks, named-rule selectors/declarations; excludes descriptions and documentation metadata | system CSS |
+| runtime schema ID | mutable slots, roots/query strategies, controls, validators, hydration addresses, app-visible conditions/layers/consts | runtime-controller and snapshot compatibility |
 | docs/provenance revision | descriptions, source locations, explanations, documentation metadata | manifest/docs only |
 
-A token value edit changes CSS identity without invalidating runtime shape. A description edit changes only documentation identity and must not rewrite CSS or churn mtimes.
+A token value edit changes CSS identity without invalidating runtime shape. A description edit changes only documentation identity and must not rewrite CSS, send a CSS update, or churn CSS mtimes. Named-rule names remain structural documentation/compatibility data but do not become CSS bytes when the emitted rule is unchanged. The generated application backing is selected by runtime-schema identity; each resolved source module receives a separate export-namespace projection over that backing, so a configured barrel and its leaf can share runtime state without sharing JavaScript exports. Actual system exports use the generated backing; ordinary exports remain host-module edges so objects, callables, and live bindings retain JavaScript module semantics.
+
+The configured authored system module is a module-role boundary. It may export the evaluated system and values taken from that system, including renamed destructured members; an unrelated application export receives `VANITY_APP_EXPORT_IN_SYSTEM_MODULE` with the small move-and-import fix. Pure ordinary modules and re-export barrels remain in the host graph unchanged, so their objects, callables, closures, and live bindings keep native module semantics.
 
 Physical paths, object references, function source, and package-install location never establish compatibility.
 
@@ -109,7 +113,7 @@ The two published command-line/tooling entries remain JavaScript by host contrac
 
 They are intentionally exempt from the SDK TypeScript program because their host APIs are runtime-injected and their implementation is shipped as source. The naming-law audit includes both files explicitly so the repository-wide naming rule still applies to them.
 
-The compiler validates that build JavaScript and adjacent portable data agree. A stale pair fails with package name, both identities, and a rebuild fix.
+The compiler validates that build JavaScript and adjacent portable data agree across all four identities. A stale pair fails with package name, the mismatching identities, and a rebuild fix; a docs-only source edit can therefore require regeneration even when the resulting CSS bytes are unchanged.
 
 ## 5. CSS ownership
 
@@ -134,6 +138,8 @@ The host integration emits the cross-system order prelude before any system or l
 ```css
 @layer vendor, library, app;
 ```
+
+Configured system CSS is a semantic system artifact, addressed by its CSS identity and owned independently of the style module that first reaches it. A style retains an edge to every configured system it uses; materializing a configured system does not make unrelated system or component CSS eager. Shared CSS identities keep all current system and style owners, and an artifact is retired only after its last owner and any required graph transition release it.
 
 ## 6. Type architecture
 
@@ -173,7 +179,7 @@ Every styling emitter lowers to one ordered, lossless rule IR supporting:
 
 `@property` is unlayered and resolves duplicate registrations by stylesheet order. `@font-face` and `@keyframes` may live inside layers, where layer priority participates in name collision resolution. The IR records those differences explicitly.
 
-Named system rules sit above rule IR. Their name and metadata are shape/provenance; `css` lowers into the same ordered IR as every emitter. The versioned portable contract currently stores this low-level shape in `ruleGroups`; the exact named-rule grammar belongs to [spec-system-authoring.md §9](../reference/spec-system-authoring.md#9-named-system-rules). The system artifact records fingerprints and emits each named rule once, independent of how many styling surfaces are evaluated.
+Named system rules sit above rule IR. Their name is structural, their description is documentation, and their effective layer/order and `css` lower into the same ordered IR as every emitter. The versioned portable contract currently stores this low-level shape in `ruleGroups`; the exact named-rule grammar belongs to [spec-system-authoring.md §9](../reference/spec-system-authoring.md#9-named-system-rules). The system artifact records fingerprints and emits each named rule once, independent of how many styling surfaces are evaluated.
 
 Relative colors add a value-IR node carrying the selected color space, origin, component map, and alpha. Component expressions retain references, liveness, requirements, and constructor provenance; serialization chooses native relative syntax or an exact fold. No intermediate stage stringifies a live value.
 
@@ -196,6 +202,10 @@ Required recovery sequences:
 3. contract edit changes the relevant identities only;
 4. docs-only edit updates the manifest without touching CSS;
 5. incompatible export-shape change performs the documented reload rather than serving stale state.
+
+Candidates are built completely—CSS, portable data, build exports, inspection records, namespace membership, runtime lookup, and serialized artifact—before accepted compiler state changes. A failed candidate leaves the last-good system and CSS virtual modules addressable, restores evaluation state, and remains watchable for a retry. CSS-identity changes switch style edges to the new virtual module and retire the old one only when no owner or transition still needs it; same-identity docs changes update the manifest without a CSS notification.
+
+Persisted candidates are staged as a complete file set before replacement. Existing regular files are backed up, and a later write failure or a candidate that is no longer current restores every already-replaced file before any new in-memory generation is accepted. This is failure-atomic within the running process, not a guarantee against power loss or process termination during the rename sequence; an incomplete rollback reports its recovery files.
 
 ## 9. Trust boundaries
 
@@ -228,7 +238,7 @@ The source tree follows the mental model of the system:
 | CSS | `context.ts`, `class.ts`, `rules.ts`, `raw.ts`, `tokens.ts`, `compile.ts`, `emit.ts`, `validation.ts`, and the focused value/rule modules for neutral styling semantics and emission |
 | runtime | `contract.ts` for serializable runtime data; `controller.ts` for roots, axes, snapshots, hydration, reconciliation, HMR, and inspection |
 | introspection | `system.ts` for the canonical semantic map; `manifest.ts` and `manifestValidation.ts` for manifest production and reading; `dtcg.ts` and `interchange.ts` for DTCG orchestration and codec contracts |
-| compiler | `core/` for host-neutral system/source transforms, `modules/` for style-source bundling and evaluation, `projection/` for system-to-artifact source, `hmr/` for invalidation, `auto-imports/` for routing, and `hosts/` for host integration |
+| compiler | `core/` for host-neutral system/source transforms, `modules/` for style-source bundling and evaluation, `projection/` for system-to-artifact source including `systemCss.ts`, `hmr/` for CSS ownership/invalidation and host notifications, `auto-imports/` for routing, `hosts/` for host integration, and root-level `publication.ts` for failure-atomic artifact publication |
 | substrate | `types.ts` for the portable module contract and explicitly Vanilla Extract-bound lifecycle contract; `index.ts` for selection; `vanilla-extract/adapter.ts` for all backend-specific integration |
 | styling domains | `recipes/`, `atoms/`, and `ports/` remain separate because their authoring and projection semantics differ; `plugins/` and `presets/` likewise retain their domain boundaries |
 
@@ -245,9 +255,11 @@ The substrate keeps its portability boundary explicit:
 
 ### Compiler and Vite boundaries
 
-The compiler owns Vanity's pipeline, while a host adapter owns how that pipeline is mounted. In particular, `compiler/modules/` answers the complete question “how does this style source become a live system?”: bundling and evaluation stay together. `compiler/projection/` answers “how does this resolved system become browser or SSR artifact source?”: runtime module generation is projection and is not Vite-specific.
+The compiler owns Vanity's pipeline, while a host adapter owns how that pipeline is mounted. In particular, `compiler/modules/` answers the complete question “how does this style source become a live system?”: bundling and evaluation stay together, while resolved-input ownership remains broader than source instrumentation. `compiler/projection/` answers “how does this resolved system become browser or SSR artifact source?”: runtime module generation and `systemCss.ts` are projections and are not Vite-specific. `compiler/hmr/` owns virtual-ID ownership and transition state; the host adapter supplies graph APIs, base-less graph/HMR addresses, based browser URLs, and transport notifications.
 
-`vite.ts` owns only the Vite lifecycle: the plugin factory and hooks, auto-import plugin composition, Vite/Rollup id and path normalization, and Vite-shaped diagnostics and build errors. Its hooks delegate style bundling, source transforms, evaluation, HMR, and runtime artifact generation to `compiler/`. A helper belongs in the host adapter only when its answer would change for a different bundler; otherwise it belongs with the Vanity operation it serves.
+Two host seams need stating because a reader would otherwise assume simpler mechanics. Vite exposes no single public operation that removes one accepted module from every environment graph while retaining modules other systems still own, so the adapter invalidates through Vite first and then updates the graph indexes retirement requires; those structures are checked before use and the seam fails with a focused error rather than silently keeping stale CSS. Separately, the adapter holds a small, short-lived copy of the previous CSS bytes outside the ownership and module graphs, so a browser already revalidating the old stylesheet URL can finish a transition. That copy can neither restore ownership nor recreate a retired node. The supported-major graph matrix is exercised against real client and SSR graphs and is kept aligned with the published peer range.
+
+`vite.ts` owns only the Vite lifecycle: the plugin factory and hooks, auto-import plugin composition, Vite/Rollup resolution and id/path normalization, browser URL construction, and Vite-shaped diagnostics and build errors. Its hooks delegate style bundling, source transforms, evaluation, HMR, and runtime artifact generation to `compiler/`. A helper belongs in the host adapter only when its answer would change for a different bundler; otherwise it belongs with the Vanity operation it serves.
 
 ### External format boundaries
 

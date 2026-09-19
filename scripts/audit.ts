@@ -276,6 +276,12 @@ const NAMING_VERB_PREFIXES = [
   'reject',
 ] as const
 
+/** Host-protocol names are exceptions only inside the adapter that owns them. */
+const NAMING_FILE_ALLOWLIST = new Map([
+  ['vite.ts', new Set(['watchChange'])],
+  ['compiler/hosts/viteHmr.ts', new Set(['invalidateModule'])],
+])
+
 /** Concrete names owned by public DSLs, host protocols, and serialized contracts. */
 const NAMING_ALLOWLIST = new Set([
   'class',
@@ -378,8 +384,10 @@ const NAMING_ALLOWLIST = new Set([
   // Public labeled escape constructor and external Oxc visitor hook names.
   'value',
   'VariableDeclarator',
+  'ImportDeclaration',
   'ImportSpecifier',
   'CallExpression',
+  'Identifier',
   'Declaration',
   'dec',
   // Public authoring vocabulary and protocol-compatible method names.
@@ -618,7 +626,9 @@ export function findNamingLawViolations(file: string, source: string, root = pac
       violations.push(`${relative(root, file)}:${position} ${value} (boolean operation must use a predicate name)`)
       return
     }
-    if (value.startsWith('$') || value === 'constructor' || NAMING_ALLOWLIST.has(value))
+    const sourcePath = relative(packageSourceRoot, file).replaceAll('\\', '/')
+    const hostProtocolName = NAMING_FILE_ALLOWLIST.get(sourcePath)?.has(value) ?? false
+    if (value.startsWith('$') || value === 'constructor' || NAMING_ALLOWLIST.has(value) || hostProtocolName)
       return
     if (NAMING_VERB_PREFIXES.some(prefix => value === prefix
       || (value.startsWith(prefix) && /^[A-Z]/.test(value.slice(prefix.length))))) {

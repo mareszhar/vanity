@@ -48,8 +48,13 @@ When the brief requires maintainer approval, obtain an explicit answer before tr
 | The compiler owns CSS and portable projection. | Build-only closures remain in the in-process contract; browser and SSR modules contain data-only projections. |
 | Compatibility, CSS, runtime, and documentation identities are separate. | Each consumer invalidates only for the change that affects it. |
 | System CSS and style-module CSS are separate virtual modules. | System CSS deduplicates while component CSS preserves lazy splitting. |
+| Configured entry, resolved module identity, authored source, CSS identity, virtual ID, and browser URL remain distinct facts. | A barrel, symlink, package export, or host URL can change without changing which semantic system owns the artifact or where diagnostics point. |
+| Configured system CSS is projected independently, while reachability is recorded per style importer. | System emission no longer depends on the first style evaluation, and unrelated configured systems remain lazy. |
+| Runtime namespace projections replace only actual system exports; ordinary exports stay on resolved host-module edges. | Shared system backing does not reconstruct application objects, functions, closures, or live bindings, and build-time authoring remains outside browser/SSR output. |
+| A configured system module exports its system and values taken from that system; an unrelated runtime export is a diagnostic, not a source rewrite. | Module roles remain predictable at the file boundary, while the one-file system shape retains its low-ceremony ergonomics and ordinary modules keep native host semantics. |
 | CSS namespace ownership is stricter than runtime compatibility. | Compatible runtime controllers never mask colliding emitted CSS. |
-| Artifacts are atomic, last-good, byte-stable, and write-on-change. | Errors do not publish partial state or create watcher noise. |
+| Artifacts are complete before publication, failure-atomic across staged files, last-good, byte-stable, and write-on-change; shared CSS tracks every owner. | Later write failures and stale candidates restore accepted files and in-memory state; stale transitions do not delete a remaining owner's CSS, and watchers see only meaningful bytes. |
+| Named-rule names/order are structural, emitted rule data is CSS identity, and descriptions are docs identity only. | Metadata edits do not cause CSS namespace conflicts or unnecessary CSS updates. |
 | A versioned serialized contract never changes shape under its existing discriminator. | A changed field or semantics takes a new version, so a consumer pinned to a version stays correct. |
 
 ## Styling and runtime

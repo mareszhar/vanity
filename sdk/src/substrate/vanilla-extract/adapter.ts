@@ -28,7 +28,13 @@ import {
   style,
 } from '@vanilla-extract/css'
 import { appendCss as appendCssToAdapter, removeAdapter, setAdapter } from '@vanilla-extract/css/adapter'
-import { endFileScope, getFileScope, hasFileScope, setFileScope } from '@vanilla-extract/css/fileScope'
+import {
+  endFileScope,
+  getAndIncrementRefCounter,
+  getFileScope,
+  hasFileScope,
+  setFileScope,
+} from '@vanilla-extract/css/fileScope'
 import { addFunctionSerializer } from '@vanilla-extract/css/functionSerializer'
 import { transformCss } from '@vanilla-extract/css/transformCss'
 import {
@@ -50,6 +56,7 @@ type VanillaCss = Parameters<typeof transformCss>[0]['cssObjs'][number]
 type VanillaComposition = Parameters<Adapter['registerComposition']>[0]
 
 let substrateRequire: ReturnType<typeof createRequire> | undefined
+let scopeTransactionId = 0
 
 export function createVanillaExtractSubstrate(): VanitySubstrate {
   const css = createCssSubstrate()
@@ -116,20 +123,66 @@ function createModuleSubstrate(): {
 } {
   const runInFileScope = <Result>(scope: VanityFileScope, operation: () => Result): Result => {
     const previous = hasFileScope() ? createVanityFileScope(getFileScope()) : undefined
+    // Vanilla Extract keeps both its scope stack and its identifier counter in
+    // module-global state. A generated style bundle can add several scopes
+    // after this function starts and can skip their generated end calls when
+    // evaluation throws. Keep a private marker below the logical scope so
+    // cleanup can stop at the exact boundary without popping an enclosing
+    // caller-owned scope.
+    const previousRefCounter = getAndIncrementRefCounter()
+    const marker = `\0vanity-scope-transaction-${scopeTransactionId++}`
+    const logicalScope = {
+      filePath: scope.filePath,
+      ...(scope.packageName === undefined
+        ? (previous?.packageName === undefined ? {} : { packageName: previous.packageName })
+        : { packageName: scope.packageName }),
+    }
+    const markerScope = {
+      filePath: scope.filePath,
+      packageName: marker,
+    }
 
-    if (previous?.filePath === scope.filePath)
-      return operation()
-
-    if (previous)
-      endFileScope()
-    setFileScope(scope.filePath, scope.packageName ?? previous?.packageName)
+    setFileScope(markerScope.filePath, markerScope.packageName)
+    setFileScope(logicalScope.filePath, logicalScope.packageName)
     try {
       return operation()
     }
     finally {
-      endFileScope()
-      if (previous)
-        setFileScope(previous.filePath, previous.packageName)
+      // Drain scopes opened by the operation, including a source-level scope
+      // whose `endFileScope()` was skipped by an exception. The marker is
+      // below the logical scope and all generated dependency scopes, so the
+      // prior scope stack is never guessed at or reconstructed.
+      let logicalScopeRemoved = false
+      while (hasFileScope()) {
+        const current = getFileScope()
+        if (current.filePath === markerScope.filePath && current.packageName === markerScope.packageName) {
+          endFileScope()
+          break
+        }
+        if (!logicalScopeRemoved
+          && current.filePath === logicalScope.filePath
+          && current.packageName === logicalScope.packageName) {
+          endFileScope()
+          logicalScopeRemoved = true
+          continue
+        }
+        if (previous !== undefined
+          && current.filePath === previous.filePath
+          && current.packageName === previous.packageName) {
+          // A malformed generated bundle may over-close its own scopes. Stop
+          // at the caller's actual scope rather than popping an enclosing
+          // transaction as a best-effort cleanup.
+          break
+        }
+        endFileScope()
+      }
+
+      // `setFileScope()` and `endFileScope()` reset the backend counter. The
+      // public backend exposes its current value only through the increment
+      // operation, so restore the snapshot after the marker is removed. This
+      // keeps identifiers deterministic for an enclosing evaluation.
+      for (let index = 0; index < previousRefCounter; index++)
+        getAndIncrementRefCounter()
     }
   }
 

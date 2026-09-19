@@ -45,19 +45,24 @@
  * 2. The vanilla-extract plugin itself, for any `*.css.ts` files that coexist.
  */
 
-import type { Plugin, PluginOption, ResolvedConfig, ViteDevServer } from 'vite'
+import type { ModuleNode, Plugin, PluginOption, ResolvedConfig, ViteDevServer } from 'vite'
 import type { autoImportDelegateHooks } from './compiler/auto-imports/autoImportDelegate'
-import type { EvaluatedSystem, NormalizedSystemSource } from './compiler/core/systems'
+import type { PreparedSystem } from './compiler/core/registration'
+import type {
+  EvaluatedSystem,
+  NormalizedSystemSource,
+  ResolvedConfiguredSystemImport,
+} from './compiler/core/systems'
 import type { StyleAutoImportInjection } from './compiler/core/transform'
+import type { RuntimeNamespaceHmrRecord } from './compiler/hmr/update'
 import type {
   VanityAppAutoImports,
   VanityConfig,
 } from './config'
 import type { VanityInspectRecord } from './introspect/records'
 import type { VanityPortableSystem } from './system/contract'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, posix, resolve } from 'node:path'
-import { pid } from 'node:process'
 import autoImportVite from 'unplugin-auto-import/vite'
 import { isPackageSpecifier, resolveAppAutoImports } from './compiler/auto-imports/applicationImports'
 import {
@@ -66,10 +71,22 @@ import {
   planStyleAutoImports,
 } from './compiler/auto-imports/autoImportPlan'
 import { writeAutoImportDeclarationFiles, writeAutoImportDeclarations } from './compiler/auto-imports/autoImportWriter'
-import { normalizePath } from './compiler/core/path'
+import {
+  rememberStyleDependencies,
+  rememberStyleSystems,
+  rememberSystemDependencies,
+} from './compiler/core/ownership'
+import { getRootRelativeModulePath, normalizePath } from './compiler/core/path'
+import {
+  createSystemRecordFromPortable,
+  createSystemRegistrationQueue,
+} from './compiler/core/registration'
 import {
   assertFreshPortablePair,
-  assertNamespaceOwnership,
+  clearConfiguredSystemResolutionCache,
+  createConfiguredSystemResolutionCache,
+  findConfiguredSystemInModuleGraph,
+  getConfiguredSystemModuleFiles,
   getRuntimeIdentity,
   normalizeSystemSources,
   resolveConfiguredSystemImport,
@@ -77,14 +94,29 @@ import {
 import { transformStyleModule } from './compiler/core/transform'
 import { resolveCssVirtualAlias } from './compiler/hmr/state'
 import { handleHotUpdate } from './compiler/hmr/update'
+import {
+  createViteHmrHost,
+  createVitePendingCssResponseCache,
+  resolveViteVirtualId,
+} from './compiler/hosts/viteHmr'
 import { vanityViteHost } from './compiler/hosts/viteHost'
 import { buildStyleModule, convertViteAliasesToEsbuild } from './compiler/modules/build'
 import { executeBundle } from './compiler/modules/evaluate'
 import {
+  containsVanityAuthoring,
   getStyleAutoImportAliases,
 } from './compiler/modules/source'
-import { getExportModuleFilesFromFile } from './compiler/projection/exportNames'
-import { buildRuntimeSystemModule } from './compiler/projection/runtimeModule'
+import {
+  getExportModuleFilesFromFile,
+  normalizeModuleIdentity,
+} from './compiler/projection/exportNames'
+import {
+  buildRuntimeSystemModule,
+  buildRuntimeSystemNamespaceModule,
+  getRuntimeSystemNamespaceProjection,
+} from './compiler/projection/runtimeModule'
+import { emitSystemCss } from './compiler/projection/systemCss'
+import { writeFileArtifacts } from './compiler/publication'
 import { reportDiagnostics, VanityError } from './diagnostics'
 import { renderDevtoolsPage } from './introspect/devtools'
 import { buildManifest } from './introspect/manifest'
@@ -93,7 +125,6 @@ import { substrate } from './substrate'
 import {
   assertPortableSystem,
   getSystemContract,
-  serializePortableSystem,
 } from './system/contract'
 
 export {
@@ -124,6 +155,7 @@ const styleFileFilter = /\.css\.(?:js|cjs|mjs|jsx|ts|tsx)(?:\?used)?$/
 /** The stable virtual stylesheet a compiled style module imports; content lives in the store. */
 const virtualExt = '.vanity.css'
 const runtimeVirtualPrefix = '\0vanity:system-runtime:'
+const runtimeNamespaceVirtualPrefix = '\0vanity:system-namespace:'
 const cascadeUrl = '/__vanity/cascade.css'
 const cascadeFileName = 'assets/vanity-cascade.css'
 
@@ -153,12 +185,19 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   let server: ViteDevServer | undefined
   let clientServer: ViteDevServer | undefined
   let systemSources: NormalizedSystemSource[] = []
+  let systemResolutionCache = createConfiguredSystemResolutionCache()
+  const configuredImportResolutionCache = new Map<string, ResolvedConfiguredSystemImport | null>()
+  let systemSourcesReady: Promise<void> = Promise.resolve()
   let cascadeCss = ''
 
   /** Stable virtual id → the CSS it currently serves. */
   const cssByVirtualId = new Map<string, string>()
+  /** Every style and accepted system generation that still needs each CSS id. */
+  const cssOwnersByVirtualId = new Map<string, Set<string>>()
   /** Style module → its last successful CSS virtual ids (last-good on failure). */
   const cssVirtualIdsByEntry = new Map<string, Set<string>>()
+  /** Configured system entry → its accepted semantic CSS virtual id. */
+  const systemCssVirtualIdsByEntry = new Map<string, Set<string>>()
   /** Style module → its sorted top-level exports, for shape comparison. */
   const exportSignatures = new Map<string, string>()
   /** Bundled dependency → the style modules built on it, for HMR fan-out. */
@@ -171,14 +210,33 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const recordsByFile = new Map<string, VanityInspectRecord[]>()
   /** Full plain-system entry → its last successfully validated portable data. */
   const systemsByEntry = new Map<string, EvaluatedSystem>()
-  /** compatibility + runtime identity → one portable runtime virtual module. */
+  /** Application runtime identity → one portable runtime virtual module. */
   const systemsByRuntimeId = new Map<string, EvaluatedSystem>()
   /** Runtime virtual module ids already resolved by a browser or SSR graph. */
   const runtimeVirtualIds = new Set<string>()
+  /** Whether a configured graph file contains Vanity's build-time authoring. */
+  const systemAuthoringByFile = new Map<string, boolean>()
+  /** Module-specific runtime projections, keyed by their stable virtual id. */
+  const runtimeNamespaceProjections = new Map<string, {
+    readonly system: EvaluatedSystem
+    readonly target: 'browser' | 'ssr'
+    readonly moduleFile: string
+  }>()
+  /** Application namespace ids observed for each configured system entry. */
+  const runtimeNamespaceIdsByEntry = new Map<string, Map<string, RuntimeNamespaceHmrRecord>>()
   /** Attempted system dependency → configured entries, including failed attempts. */
   const systemDependentsByFile = new Map<string, Set<string>>()
   /** Namespace owner key → last-good systems, recomputed after successful updates. */
   const namespaceOwners = new Map<string, Map<string, VanityPortableSystem>>()
+  /** Pending initial evaluations are shared by concurrent style requests. */
+  const pendingSystemsByEntry = new Map<string, Promise<EvaluatedSystem>>()
+  /** Monotonic attempt generations prevent stale async work from publishing. */
+  const systemGenerationsByEntry = new Map<string, number>()
+  /** Host-neutral candidate validation and publication serialize per compiler. */
+  const registerSystemCandidates = createSystemRegistrationQueue()
+  /** Initial eager evaluations may fail while the dev server remains repairable. */
+  const systemReadinessFailures = new Map<string, unknown>()
+  const pendingCssResponseCache = createVitePendingCssResponseCache()
   /** `.css.ts` entries claimed by Vanity rather than raw vanilla-extract. */
   const vanityOwnedStyleModules = new Set<string>()
   /** Style module → configured build-time systems it imports. */
@@ -187,6 +245,25 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const styleEntriesBySystem = new Map<string, Set<string>>()
   /** Local source graph files whose exports can change an auto-import declaration. */
   let appAutoImportSourceFiles = new Set<string>()
+
+  const isAuthoredSystemModule = async (moduleFile: string): Promise<boolean> => {
+    const normalized = normalizePath(moduleFile)
+    const cached = systemAuthoringByFile.get(normalized)
+    if (cached !== undefined)
+      return cached
+
+    let authored = false
+    try {
+      authored = containsVanityAuthoring(await readFile(moduleFile, 'utf8'), moduleFile)
+    }
+    catch {
+      // The host has already resolved this module. A source that cannot be
+      // read is not eligible for the authoring projection; let the host report
+      // its ordinary module error instead.
+    }
+    systemAuthoringByFile.set(normalized, authored)
+    return authored
+  }
 
   /** The manifest as last written, so unchanged builds skip the write. */
   let writtenManifest: string | undefined
@@ -233,99 +310,9 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       return
 
     const path = join(config.root, '.vanity', 'manifest.json')
-    await writeIfChanged(path, json)
+    await writeFileArtifacts([{ file: path, contents: json }])
     writtenManifest = json
   }
-
-  const getArtifactDirectory = () => resolve(
-    config.root,
-    compiler.artifactDirectory ?? '.vanity',
-  )
-
-  const rememberSystemDependencies = (source: NormalizedSystemSource, files: Iterable<string>): void => {
-    for (const dependency of source.dependencies) {
-      const dependents = systemDependentsByFile.get(dependency)
-      dependents?.delete(source.entry)
-      if (dependents?.size === 0)
-        systemDependentsByFile.delete(dependency)
-    }
-
-    source.dependencies = new Set([...files].map(normalizePath))
-    source.dependencies.add(source.entry)
-    if (source.artifact)
-      source.dependencies.add(source.artifact)
-
-    for (const dependency of source.dependencies) {
-      const dependents = systemDependentsByFile.get(dependency) ?? new Set<string>()
-      dependents.add(source.entry)
-      systemDependentsByFile.set(dependency, dependents)
-    }
-  }
-
-  const registerSystem = async (
-    source: NormalizedSystemSource,
-    evaluated: EvaluatedSystem,
-  ): Promise<EvaluatedSystem> => {
-    assertNamespaceOwnership(source.entry, evaluated.portable, namespaceOwners)
-    systemsByEntry.set(source.entry, evaluated)
-
-    const runtimeId = getRuntimeIdentity(evaluated.portable)
-    const duplicate = systemsByRuntimeId.get(runtimeId)
-    if (duplicate && duplicate.portable.identities.css !== evaluated.portable.identities.css) {
-      // Equal runtime semantics with distinct CSS is valid only while CSS owns
-      // a distinct namespace. Same-namespace conflicts were rejected above.
-    }
-    systemsByRuntimeId.set(runtimeId, duplicate ?? evaluated)
-
-    const artifact = join(
-      getArtifactDirectory(),
-      'systems',
-      `${evaluated.portable.identities.compatibility}.json`,
-    )
-    await writeIfChanged(artifact, serializePortableSystem(evaluated.portable))
-    return evaluated
-  }
-
-  const evaluateConfiguredSystem = async (
-    source: NormalizedSystemSource,
-  ): Promise<EvaluatedSystem> => {
-    let bundled: Awaited<ReturnType<typeof buildStyleModule>>
-    try {
-      bundled = await buildStyleModule({
-        filePath: source.entry,
-        root: config.root,
-        alias: convertViteAliasesToEsbuild(config),
-      })
-      rememberSystemDependencies(source, bundled.watchFiles)
-    }
-    catch (error) {
-      rememberSystemDependencies(source, buildFailureFiles(error, config.root))
-      const failure = createStyleBuildError(error, source.entry, config.root)
-      reportFailure(failure)
-      throw failure
-    }
-
-    const inProcess = evaluateSystemModule(bundled.source, source.entry)
-    let portable = inProcess.portable
-
-    if (source.artifact) {
-      const parsed: unknown = JSON.parse(await readFile(source.artifact, 'utf-8'))
-      assertPortableSystem(parsed)
-      const owner = source.packageName ?? substrate.backend.getPackageName(dirname(source.entry)) ?? source.entry
-      assertFreshPortablePair(source, inProcess.portable, parsed, owner)
-      portable = parsed
-    }
-
-    return registerSystem(source, {
-      portable,
-      exportNames: inProcess.exportNames,
-      contractExport: source.exportName ?? inProcess.contractExport,
-      buildExports: inProcess.buildExports,
-    })
-  }
-
-  const ensureConfiguredSystem = async (source: NormalizedSystemSource): Promise<EvaluatedSystem> =>
-    systemsByEntry.get(source.entry) ?? evaluateConfiguredSystem(source)
 
   /** Dev regenerates on change, debounced across a save's fan-out of transforms. */
   const scheduleManifest = (): void => {
@@ -336,60 +323,201 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const getIdentifierOption = () =>
     compiler.identifiers ?? (config.mode === 'production' ? 'short' : 'debug')
 
-  const rememberDependencies = (
-    entry: string,
-    files: Iterable<string>,
-    preserveKnown: boolean,
-  ): Set<string> => {
-    const previous = dependenciesByEntry.get(entry) ?? new Set<string>()
-    const next = new Set(preserveKnown ? previous : [])
+  const getArtifactDirectory = () => resolve(
+    config.root,
+    compiler.artifactDirectory ?? '.vanity',
+  )
 
-    for (const file of files) {
-      const normalized = normalizePath(file)
-      if (!normalized.includes('node_modules') && normalized !== entry)
-        next.add(normalized)
+  const createHmrHost = (
+    activeServer = server,
+    activeClientServer = clientServer,
+  ) => createViteHmrHost({
+    root: config.root,
+    base: config.base,
+    server: activeServer,
+    clientServer: activeClientServer,
+  })
+
+  /**
+   * Let Vite resolve configured entries before the compiler assigns physical
+   * identities. Node remains the fallback for hosts that cannot resolve a
+   * source during configuration, while aliases/export conditions/symlinks
+   * observed by Vite win whenever it returns a physical module.
+   */
+  const resolveConfiguredSystemSources = async (): Promise<void> => {
+    const values = compiler.system === undefined
+      ? []
+      : Array.isArray(compiler.system) ? compiler.system : [compiler.system]
+    const resolvedEntries = new Map<string, string>()
+    const hostResolver = config.createResolver({ asSrc: true })
+
+    for (const value of values) {
+      const configuredEntry = typeof value === 'string' ? value : value.entry
+      const resolved = await hostResolver(
+        configuredEntry,
+        join(config.root, 'package.json'),
+        false,
+        config.build.ssr === true,
+      )
+      const physical = getPhysicalResolvedPath(resolved)
+      if (physical !== undefined)
+        resolvedEntries.set(configuredEntry, physical)
     }
 
-    if (!preserveKnown) {
-      for (const removed of previous) {
-        if (next.has(removed))
-          continue
-        const dependents = dependentsByFile.get(removed)
-        dependents?.delete(entry)
-        if (dependents?.size === 0)
-          dependentsByFile.delete(removed)
-      }
-    }
-
-    dependenciesByEntry.set(entry, next)
-    for (const dependency of next) {
-      const dependents = dependentsByFile.get(dependency) ?? new Set()
-      dependents.add(entry)
-      dependentsByFile.set(dependency, dependents)
-    }
-
-    return next
+    systemSources = normalizeSystemSources(compiler.system, config.root, resolvedEntries)
+    systemResolutionCache = createConfiguredSystemResolutionCache()
+    configuredImportResolutionCache.clear()
   }
 
-  const rememberStyleSystems = (entry: string, systems: Iterable<string>): void => {
-    const previous = systemsByStyleEntry.get(entry) ?? new Set<string>()
-    const next = new Set([...systems].map(normalizePath))
+  const sendSystemCssUpdate = (virtualId: string, previous: string | undefined, next: string): void => {
+    if (previous === undefined || previous === next || clientServer === undefined)
+      return
 
-    for (const removed of previous) {
-      if (next.has(removed))
-        continue
-      const dependents = styleEntriesBySystem.get(removed)
-      dependents?.delete(entry)
-      if (dependents?.size === 0)
-        styleEntriesBySystem.delete(removed)
+    createHmrHost().updateCssModule(virtualId)
+  }
+
+  const clearRetiredCss = (virtualIds: ReadonlySet<string>): void => {
+    if (virtualIds.size === 0)
+      return
+
+    createHmrHost().removeCssModules(virtualIds)
+  }
+
+  const prepareConfiguredSystem = async (
+    source: NormalizedSystemSource,
+  ): Promise<PreparedSystem> => {
+    const generation = (systemGenerationsByEntry.get(source.entry) ?? 0) + 1
+    systemGenerationsByEntry.set(source.entry, generation)
+    let dependencies: string[] = []
+
+    try {
+      const bundled = await buildStyleModule({
+        filePath: source.entry,
+        root: config.root,
+        alias: convertViteAliasesToEsbuild(config),
+        namespaceFiles: [...getConfiguredSystemModuleFiles(source, config.root, systemResolutionCache)],
+        preserveAuthoredSource: source.artifact !== undefined,
+      })
+      dependencies = bundled.watchFiles
+      const inProcess = evaluateSystemModule(bundled.source, source.entry)
+      let portable = inProcess.portable
+
+      if (source.artifact) {
+        const parsed: unknown = JSON.parse(await readFile(source.artifact, 'utf-8'))
+        assertPortableSystem(parsed)
+        const owner = source.packageName ?? substrate.backend.getPackageName(dirname(source.entry)) ?? source.entry
+        assertFreshPortablePair(source, inProcess.portable, parsed, owner)
+        portable = parsed
+      }
+
+      const projected = emitSystemCss(
+        inProcess.contract,
+        {
+          filePath: source.entry,
+          ...(source.packageName === undefined ? {} : { packageName: source.packageName }),
+        },
+        getIdentifierOption(),
+      )
+
+      return {
+        source,
+        generation,
+        dependencies,
+        evaluated: {
+          portable,
+          contract: inProcess.contract,
+          exportNames: inProcess.exportNames,
+          contractExport: source.exportName ?? inProcess.contractExport,
+          buildExports: inProcess.buildExports,
+          moduleExports: inProcess.moduleExports,
+          records: [...inProcess.records, ...projected.records],
+          css: projected.css,
+        },
+      }
+    }
+    catch (error) {
+      if (systemGenerationsByEntry.get(source.entry) === generation) {
+        rememberSystemDependencies(
+          source,
+          dependencies.length > 0 ? dependencies : buildFailureFiles(error, config.root),
+          systemDependentsByFile,
+        )
+      }
+      const failure = createStyleBuildError(error, source.entry, config.root)
+      reportFailure(failure)
+      throw failure
+    }
+  }
+
+  const registerSystems = async (
+    candidates: readonly PreparedSystem[],
+  ): Promise<EvaluatedSystem[]> => {
+    const result = await registerSystemCandidates(candidates, {
+      root: config.root,
+      artifactDirectory: getArtifactDirectory(),
+      virtualExtension: virtualExt,
+      state: {
+        ownership: {
+          cssByVirtualId,
+          cssOwnersByVirtualId,
+          systemCssVirtualIdsByEntry,
+          systemsByEntry,
+          systemsByRuntimeId,
+        },
+        namespaceOwners,
+        systemGenerationsByEntry,
+        systemDependentsByFile,
+        readinessFailures: systemReadinessFailures,
+        recordsByFile,
+      },
+    })
+
+    if (result.committed && result.ownershipUpdate !== undefined) {
+      scheduleManifest()
+      for (const id of result.ownershipUpdate.nextCss.keys())
+        pendingCssResponseCache.clear(id)
+      for (const [id, contents] of result.ownershipUpdate.pendingCssResponses)
+        pendingCssResponseCache.remember(id, contents)
+      clearRetiredCss(result.ownershipUpdate.retiredCssIds)
+      for (const update of result.ownershipUpdate.cssUpdates)
+        sendSystemCssUpdate(update.id, update.previous, update.next)
     }
 
-    systemsByStyleEntry.set(entry, next)
-    for (const system of next) {
-      const dependents = styleEntriesBySystem.get(system) ?? new Set<string>()
-      dependents.add(entry)
-      styleEntriesBySystem.set(system, dependents)
+    return [...result.systems]
+  }
+
+  const evaluateConfiguredSystem = async (
+    source: NormalizedSystemSource,
+  ): Promise<EvaluatedSystem> => {
+    const [accepted] = await registerSystems([await prepareConfiguredSystem(source)])
+    return accepted!
+  }
+
+  const evaluateConfiguredSystems = async (
+    sources: readonly NormalizedSystemSource[],
+  ): Promise<EvaluatedSystem[]> => {
+    const unique = [...new Map(sources.map(source => [source.entry, source])).values()]
+    return registerSystems(await Promise.all(unique.map(prepareConfiguredSystem)))
+  }
+
+  const ensureConfiguredSystem = (source: NormalizedSystemSource): Promise<EvaluatedSystem> => {
+    const accepted = systemsByEntry.get(source.entry)
+    if (accepted !== undefined) {
+      systemReadinessFailures.delete(source.entry)
+      return Promise.resolve(accepted)
     }
+
+    const pending = pendingSystemsByEntry.get(source.entry)
+    if (pending !== undefined)
+      return pending
+
+    const evaluation = evaluateConfiguredSystem(source)
+    pendingSystemsByEntry.set(source.entry, evaluation)
+    void evaluation.then(() => {}, () => {}).finally(() => {
+      if (pendingSystemsByEntry.get(source.entry) === evaluation)
+        pendingSystemsByEntry.delete(source.entry)
+    })
+    return evaluation
   }
 
   /** The auto-import shim's last written content, so unchanged runs skip the write. */
@@ -478,7 +606,23 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
 
     configResolved(resolvedConfig) {
       config = resolvedConfig
-      systemSources = normalizeSystemSources(compiler.system, config.root)
+      systemReadinessFailures.clear()
+      systemSourcesReady = resolveConfiguredSystemSources().then(async () => {
+        // Nuxt can render from its SSR environment before a client style
+        // module has been requested. Project every configured system during
+        // readiness so its semantic CSS already exists for both graphs.
+        await Promise.all(systemSources.map(async (source) => {
+          try {
+            await ensureConfiguredSystem(source)
+          }
+          catch (error) {
+            // Keep readiness itself fulfilled so a dev server can retry the
+            // same configured entry after its source is repaired. buildStart
+            // still surfaces the original failure for an initial build.
+            systemReadinessFailures.set(source.entry, error)
+          }
+        }))
+      })
     },
 
     configureServer(devServer) {
@@ -490,6 +634,9 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       // no browser listens to. Plain Vite's consumer is `client` too.
       if (devServer.config.build.ssr !== true)
         clientServer = devServer
+
+      if (devServer.config.build.ssr !== true)
+        pendingCssResponseCache.addMiddleware(devServer, config.root, config.base)
 
       // The manifest, live — what the DevTools tab (and any tool) reads.
       devServer.middlewares.use('/__vanity', (req, res, next) => {
@@ -516,23 +663,39 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         next()
       })
 
-      for (const source of systemSources)
-        devServer.watcher.add([source.entry, ...(source.artifact ? [source.artifact] : [])])
+      void systemSourcesReady.then(() => {
+        for (const source of systemSources)
+          devServer.watcher.add([source.entry, ...(source.artifact ? [source.artifact] : [])])
+      }, () => {
+        // buildStart/transform owns the actionable configuration error; the
+        // watcher setup must not create a second unhandled rejection.
+      })
     },
 
     async buildStart() {
+      await systemSourcesReady
       if (nativeTypeHost !== 'nuxt') {
         const result = await writeAutoImportDeclarations(options, { root: config.root })
         rememberAppAutoImportSourceFiles(result.plan)
       }
 
       for (const source of systemSources) {
+        if (systemReadinessFailures.has(source.entry)) {
+          // A dev server must stay alive so its first source repair can be
+          // handled by HMR. A production build has no repair boundary and
+          // should fail its buildStart hook with the original diagnostic.
+          if (!server)
+            throw systemReadinessFailures.get(source.entry)
+          continue
+        }
         const system = await ensureConfiguredSystem(source)
         for (const dependency of source.dependencies) {
           this.addWatchFile(dependency)
           server?.watcher.add(dependency)
         }
-        recordsByFile.set(source.entry, [createSystemRecordFromPortable(system.portable)])
+        recordsByFile.set(source.entry, system.records.length > 0
+          ? system.records
+          : [createSystemRecordFromPortable(system.portable)])
       }
 
       cascadeCss = renderCascadePrelude(
@@ -576,6 +739,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     },
 
     async transform(_code, id, transformOptions) {
+      await systemSourcesReady
       const [validId] = id.split('?')
       if (!styleFileFilter.test(validId))
         return null
@@ -583,13 +747,16 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         root: config.root,
         styleFileFilter,
         virtualExtension: virtualExt,
-        server,
-        clientServer,
+        isDev: server !== undefined,
+        host: createHmrHost(),
         systemSources,
         namespaceOwners,
         recordsByFile,
         cssByVirtualId,
         cssVirtualIdsByEntry,
+        cssOwnersByVirtualId,
+        rememberPendingCssResponse: pendingCssResponseCache.remember,
+        clearPendingCssResponse: pendingCssResponseCache.clear,
         exportSignatures,
         failedStyleEntries,
         setStyleModuleOwnership: (filePath, owned) => {
@@ -602,8 +769,19 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         injectShimFor,
         buildStyleModule,
         alias: convertViteAliasesToEsbuild(config),
-        rememberStyleSystems,
-        rememberDependencies,
+        rememberStyleSystems: (entry, systems) => rememberStyleSystems(
+          entry,
+          systems,
+          systemsByStyleEntry,
+          styleEntriesBySystem,
+        ),
+        rememberDependencies: (entry, files, preserveKnown) => rememberStyleDependencies(
+          entry,
+          files,
+          preserveKnown,
+          dependenciesByEntry,
+          dependentsByFile,
+        ),
         addWatchFile: file => this.addWatchFile(file),
         buildFailureFiles,
         createStyleBuildError,
@@ -614,16 +792,42 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     },
 
     async handleHotUpdate({ file, server: devServer, modules }) {
-      return handleHotUpdate({ file, server: devServer, modules }, {
-        root: config.root,
+      await systemSourcesReady
+      const normalizedFile = normalizePath(file)
+      const generatedArtifactDirectory = normalizePath(getArtifactDirectory()).replace(/\/$/, '')
+      const isConfiguredArtifact = systemSources.some(source => source.artifact === normalizedFile)
+      if (
+        !isConfiguredArtifact
+        && (normalizedFile === normalizePath(join(config.root, '.vanity', 'manifest.json'))
+          || normalizedFile.startsWith(`${generatedArtifactDirectory}/`))
+      ) {
+        // Compiler-owned writes are already published before the accepted
+        // generation is swapped. Letting Vite treat their watcher events as
+        // ordinary source edits can reload an application in the middle of a
+        // system transition, before its namespace projection is retired.
+        return []
+      }
+      // A changed source may add/remove a re-export without changing the
+      // configured entry spelling. Re-resolve the next graph generation
+      // rather than allowing a cached safe miss or stale owner to linger.
+      clearConfiguredSystemResolutionCache(systemResolutionCache)
+      systemAuthoringByFile.clear()
+      configuredImportResolutionCache.clear()
+      return await handleHotUpdate({ file, modules }, {
+        host: createHmrHost(devServer, clientServer),
         runtimeVirtualPrefix,
         systemSources,
         systemDependentsByFile,
         systemsByEntry,
-        recordsByFile,
         dependentsByFile,
         styleEntriesBySystem,
         runtimeVirtualIds,
+        runtimeNamespaceIdsByEntry,
+        clearRuntimeNamespaceProjection: (id) => {
+          runtimeNamespaceProjections.delete(id)
+        },
+        getRuntimeNamespaceIdentity: (system, moduleFile) =>
+          getRuntimeSystemNamespaceProjection(system, moduleFile)?.identity,
         failedStyleEntries,
         refreshAppAutoImports: nativeTypeHost !== 'nuxt' && appAutoImports !== undefined
           && appAutoImportSourceFiles.size > 0
@@ -635,37 +839,106 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
             rememberAppAutoImportSourceFiles(result.plan)
           }
           : undefined,
-        evaluateConfiguredSystem,
-        createSystemRecord: createSystemRecordFromPortable,
-      })
+        evaluateConfiguredSystems,
+      }) as ModuleNode[] | undefined
+    },
+
+    watchChange(id) {
+      // Import resolution can change when an unresolved package/file appears,
+      // even when the current export graph does not include it.
+      configuredImportResolutionCache.clear()
+      if (systemSources.some(source =>
+        source.entry === normalizePath(id)
+        || source.dependencies.has(normalizePath(id)))) {
+        // Rollup/Vite reports create and delete events here as well as source
+        // updates. A re-export graph fact is generation-scoped, so additions,
+        // removals, and repairs all invalidate the same safe-hit/miss cache.
+        clearConfiguredSystemResolutionCache(systemResolutionCache)
+        systemAuthoringByFile.clear()
+      }
     },
 
     async resolveId(source, importer, resolveOptions) {
+      await systemSourcesReady
       const [validId, query] = source.split('?')
 
       if (validId.startsWith(runtimeVirtualPrefix))
         return validId
 
-      const systemSource = resolveConfiguredSystemImport(
-        validId,
-        importer,
-        systemSources,
-        config.root,
-      )
+      // A generated namespace re-exports ordinary bindings from the real
+      // source module. Let that edge pass through unchanged; only the
+      // module's actual system exports belong on the generated backing.
+      if (importer?.startsWith(runtimeNamespaceVirtualPrefix))
+        return null
+
+      let systemSource: NormalizedSystemSource | undefined
+      let resolvedModuleFile: string | undefined
+      if (systemSources.length > 0) {
+        // Let Vite resolve aliases, export conditions, extensions, and
+        // symlinks first. The compiler fallback remains for host requests
+        // that do not yield a physical id, while graph facts stay cached for
+        // the current configuration generation.
+        const resolutionKey = `${validId}\0${importer ?? ''}\0${JSON.stringify(resolveOptions ?? {})}`
+        if (configuredImportResolutionCache.has(resolutionKey)) {
+          const cached = configuredImportResolutionCache.get(resolutionKey) ?? undefined
+          systemSource = cached?.system
+          resolvedModuleFile = cached?.moduleFile
+        }
+        else {
+          const resolved = getPhysicalResolvedPath(
+            (await this.resolve(validId, importer, { skipSelf: true }))?.id,
+          )
+          const match: ResolvedConfiguredSystemImport | undefined = resolved === undefined
+            ? resolveConfiguredSystemImport(
+                validId,
+                importer,
+                systemSources,
+                config.root,
+                systemResolutionCache,
+              )
+            : (() => {
+                const system = findConfiguredSystemInModuleGraph(
+                  resolved,
+                  systemSources,
+                  config.root,
+                  systemResolutionCache,
+                )
+                return system === undefined ? undefined : { system, moduleFile: resolved }
+              })()
+          systemSource = match?.system
+          resolvedModuleFile = match?.moduleFile
+          configuredImportResolutionCache.set(resolutionKey, match ?? null)
+        }
+      }
       if (systemSource) {
         const evaluated = await ensureConfiguredSystem(systemSource)
         const target = resolveOptions?.ssr || config.build.ssr === true ? 'ssr' : 'browser'
         const runtimeId = getRuntimeIdentity(evaluated.portable)
-        const id = `${runtimeVirtualPrefix}${target}:${runtimeId}`
-        systemsByRuntimeId.set(runtimeId, evaluated)
-        runtimeVirtualIds.add(id)
+        const backingId = `${runtimeVirtualPrefix}${target}:${runtimeId}`
+        runtimeVirtualIds.add(backingId)
+        const moduleFile = resolvedModuleFile ?? systemSource.entry
+        const namespace = getRuntimeSystemNamespaceProjection(evaluated, moduleFile)
+        if (namespace === undefined)
+          return null
+        if (!(await isAuthoredSystemModule(moduleFile)))
+          return null
+        const id = `${runtimeNamespaceVirtualPrefix}${target}:${runtimeId}:${namespace.identity}:${encodeURIComponent(getRootRelativeModulePath(moduleFile, config.root))}`
+        runtimeNamespaceProjections.set(id, { system: evaluated, target, moduleFile })
+        const namespaces = runtimeNamespaceIdsByEntry.get(systemSource.entry) ?? new Map()
+        namespaces.set(id, {
+          id,
+          moduleFile,
+          identity: namespace.identity,
+          runtimeId,
+        })
+        runtimeNamespaceIdsByEntry.set(systemSource.entry, namespaces)
         return id
       }
 
       if (!validId.endsWith(virtualExt))
         return null
 
-      const absoluteId = getAbsoluteVirtualId(validId, config.root)
+      const absoluteId = resolveViteVirtualId(validId, config.root, config.base)
 
       if (!resolveCssVirtualAlias(absoluteId, config.root, virtualExt, cssByVirtualId, namespaceOwners))
         return null
@@ -674,8 +947,28 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       return query ? `${absoluteId}?${query}` : absoluteId
     },
 
-    load(id) {
+    async load(id) {
+      await systemSourcesReady
       const [validId] = id.split('?')
+
+      if (validId.startsWith(runtimeNamespaceVirtualPrefix)) {
+        const projection = runtimeNamespaceProjections.get(validId)
+        if (projection === undefined) {
+          throw new VanityError({
+            code: 'VANITY_VITE_BUILD_FAILED',
+            message: `missing runtime namespace projection '${validId}'`,
+            path: ['runtime', validId],
+            fix: 'retry the application module after the configured system has been evaluated',
+          })
+        }
+        const runtimeId = getRuntimeIdentity(projection.system.portable)
+        const backingId = `${runtimeVirtualPrefix}${projection.target}:${runtimeId}`
+        return buildRuntimeSystemNamespaceModule(
+          projection.system,
+          projection.moduleFile,
+          backingId,
+        )
+      }
 
       if (validId.startsWith(runtimeVirtualPrefix)) {
         const payload = validId.slice(runtimeVirtualPrefix.length)
@@ -697,7 +990,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       if (!validId.endsWith(virtualExt))
         return null
 
-      const absoluteId = getAbsoluteVirtualId(validId, config.root)
+      const absoluteId = resolveViteVirtualId(validId, config.root, config.base)
       const resolved = resolveCssVirtualAlias(absoluteId, config.root, virtualExt, cssByVirtualId, namespaceOwners)
       return resolved === undefined ? null : cssByVirtualId.get(resolved) ?? null
     },
@@ -880,8 +1173,14 @@ function invokePluginHook<K extends AutoImportDelegateHook>(
 }
 
 function evaluateSystemModule(source: string, filePath: string): EvaluatedSystem {
-  const { result: exports } = collectInspection(() => executeBundle(source, filePath))
-  const contracts = Object.entries(exports)
+  const { result: exports, records } = collectInspection(() => executeBundle(source, filePath))
+  const entryExports = isRecord(exports.__vanityEntry) ? exports.__vanityEntry : exports
+  const moduleExports = isRecord(exports.__vanityModules)
+    ? new Map(Object.entries(exports.__vanityModules)
+        .filter((entry): entry is [string, Record<string, unknown>] => isRecord(entry[1]))
+        .map(([file, value]) => [normalizePath(file), value]))
+    : new Map([[normalizePath(filePath), entryExports]])
+  const contracts = Object.entries(entryExports)
     .map(([name, value]) => ({ name, value, contract: getSystemContract(value) }))
     .filter((entry): entry is {
       name: string
@@ -898,23 +1197,35 @@ function evaluateSystemModule(source: string, filePath: string): EvaluatedSystem
       fix: 'export the result of createSystem().addTokens(...).consolidate() from this plain system module',
     })
   }
-  if (contracts.length > 1) {
+  // Count systems, not export names: one system exported under several names is
+  // an ordinary alias, while two systems in one entry leaves no way to say which
+  // one this configuration means.
+  const distinctSystems = new Set(contracts.map(entry => entry.value))
+  if (distinctSystems.size > 1) {
     throw new VanityError({
       code: 'VANITY_VITE_BUILD_FAILED',
-      message: `${filePath} exports more than one consolidated Vanity system`,
+      message: `${filePath} exports ${distinctSystems.size} different consolidated Vanity systems`,
       file: filePath,
-      detail: contracts.map(entry => `contract export: ${entry.name}`),
-      fix: 'configure each consolidated system through its own plain system entry',
+      detail: contracts.map(entry => `system export: ${entry.name}`),
+      fix: 'give each consolidated system its own system module and configure them separately',
     })
   }
 
   const [entry] = contracts
   return {
     portable: entry.contract.portable,
-    exportNames: Object.keys(exports).sort(),
+    contract: entry.contract,
+    exportNames: Object.keys(entryExports).sort(),
     contractExport: entry.name,
-    buildExports: exports,
+    buildExports: entryExports,
+    moduleExports,
+    records,
+    css: '',
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function renderCascadePrelude(roots: readonly string[]): string {
@@ -922,44 +1233,13 @@ function renderCascadePrelude(roots: readonly string[]): string {
   return unique.length === 0 ? '' : `@layer ${unique.join(', ')};\n`
 }
 
-function createSystemRecordFromPortable(system: VanityPortableSystem): VanityInspectRecord {
-  return {
-    kind: 'system',
-    file: system.source,
-    prefix: system.prefix,
-    root: system.root,
-    ...(system.tokenLayer === undefined ? {} : { tokenLayer: system.tokenLayer }),
-    capabilitySignature: system.capabilities.signature,
-    supportTarget: system.capabilities.supportTarget,
-    layers: [...system.layers],
-    conditions: { ...system.conditions },
-    conditionArms: { ...system.conditionArms },
-    conditionAsts: { ...system.conditionAsts },
-    ...(system.axes === undefined ? {} : { axes: system.axes }),
-    runtime: {
-      protocol: system.runtime.protocol,
-      system: system.runtime.system,
-      root: system.runtime.root,
-    },
-    identities: system.identities,
-    portable: system,
-  }
-}
+function getPhysicalResolvedPath(resolved: string | undefined): string | undefined {
+  if (resolved === undefined || resolved.startsWith('\0'))
+    return undefined
 
-async function writeIfChanged(file: string, contents: string): Promise<boolean> {
-  try {
-    if (await readFile(file, 'utf-8') === contents)
-      return false
-  }
-  catch {
-    // Missing is the ordinary first-write case.
-  }
-
-  await mkdir(dirname(file), { recursive: true })
-  const temporary = `${file}.tmp-${pid}`
-  await writeFile(temporary, contents)
-  await rename(temporary, file)
-  return true
+  const clean = resolved.replace(/[?#].*$/, '')
+  const physical = clean.startsWith('/@fs/') ? clean.slice('/@fs/'.length) : clean
+  return isAbsolute(physical) ? normalizeModuleIdentity(physical) : undefined
 }
 
 /** Files named by an esbuild failure, including note locations. */
@@ -1036,34 +1316,6 @@ function createStyleBuildError(error: unknown, entry: string, root: string): unk
 function getAuthoredFile(file: string, root: string): string {
   const relative = normalizePath(posix.relative(normalizePath(root), normalizePath(file)))
   return relative.startsWith('..') ? normalizePath(file) : relative
-}
-
-// Vite rewrites absolute module ids to root-relative browser URLs in dev and
-// Nuxt serves those URLs beneath its `/_nuxt/` base. Resolve both spellings to
-// the one absolute key used by the CSS store. This mirrors the substrate Vite
-// plugin's id normalization; without it SSR can render valid-looking
-// `<link>`s whose browser requests miss the store and 404, causing a FOUC.
-const viteIdPrefix = /^\/?@id\//
-const slashPrefixedDrive = /^\/([a-z]:\/)/i
-const windowsAbsolutePath = /^[a-z]:\//i
-
-function getAbsoluteVirtualId(filePath: string, root: string): string {
-  const unwrapped = filePath
-    .replace(viteIdPrefix, '')
-    .replace(slashPrefixedDrive, '$1')
-  const resolved = posix.isAbsolute(unwrapped) || windowsAbsolutePath.test(unwrapped)
-    ? unwrapped
-    : filePath
-
-  if (
-    windowsAbsolutePath.test(resolved)
-    || resolved.startsWith(root)
-    || (posix.isAbsolute(resolved) && resolved.split(posix.sep)[1] === root.split(posix.sep)[1])
-  ) {
-    return normalizePath(resolved)
-  }
-
-  return normalizePath(posix.join(root, resolved))
 }
 
 // ─── Introspection: manifests and audits derive during the build ─────────────

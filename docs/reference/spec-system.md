@@ -185,11 +185,16 @@ The locked object owns a private immutable in-process system contract:
 ```ts
 interface VanityInProcessSystemContract {
   readonly portable: VanityPortableSystem
-  readonly emit: () => void
+  readonly emit: (scope?: VanityEmissionScope) => void
+}
+
+interface VanityEmissionScope {
+  readonly filePath: string
+  readonly packageName?: string
 }
 ```
 
-The emission closure is compiler-only. Its portable system contract is validated, cycle-free JSON data with format discriminator `vanity.system/2`. It contains normalized policies, explicit capabilities and origins, extensions, axes, conditions, token restoration data, token semantic records, runtime contract, constants, ownership, provenance, and four identities. It contains no functions. This interchange form is private compiler restoration data rather than the public tool schema.
+The emission closure and optional compiler-owned emission scope are compiler-only. The scope identifies physical ownership while projecting a system without a style importer; it is not authored provenance and does not replace the source recorded by authoring instrumentation. Its portable system contract is validated, cycle-free JSON data with format discriminator `vanity.system/2`. It contains normalized policies, explicit capabilities and origins, extensions, axes, conditions, token restoration data, token semantic records, runtime contract, constants, ownership, provenance, and four identities. It contains no functions. This interchange form is private compiler restoration data rather than the public tool schema.
 
 `ds.introspect()` projects that contract into the normalized, versioned `vanity.introspection/2` semantic map. Manifest v4's primary `system` field is byte-order/deep-equal to that map. The compiler continues to materialize a portable JSON artifact under `.vanity/systems/` when application/SSR restoration needs it; tools never need to interpret its private handle records.
 
@@ -197,12 +202,27 @@ The emission closure is compiler-only. Its portable system contract is validated
 
 | Identity | Includes | Excludes | Consumer |
 | --- | --- | --- | --- |
-| compatibility | policy, extension identities, token/axis/condition shape, ownership | token values, docs, object/path identity | composition and duplicate-package resolution |
-| CSS | namespace, layers, roots, emitted token values/branches/registration | docs and runtime-only behavior | one system CSS virtual module |
-| runtime schema | semantic runtime contract, app-visible consts, required handle projection | docs and build-only CSS values | browser/SSR runtime controller |
+| compatibility | policy, extension identities, token/axis/condition shape, named-rule names/order, ownership | token values, descriptions, object/path identity | composition and duplicate-package resolution |
+| CSS | namespace, layers, roots, emitted token values/branches/registration, named-rule selectors/declarations | descriptions and runtime-only behavior | one system CSS virtual module |
+| runtime schema | semantic runtime contract, app-visible conditions/layers/consts, required handle projection | docs and build-only CSS values | browser/SSR runtime controller |
 | docs | descriptions, metadata, provenance, authored source | CSS/runtime implementation | manifest/documentation revision |
 
-A token-value-only change leaves compatibility, runtime-schema, and docs identities stable. A description-only change changes only docs identity. Physical copies with equal normalized semantics deduplicate even when object and source identities differ.
+A token-value-only change leaves compatibility, runtime-schema, and docs identities stable. A description-only change changes only docs identity and keeps CSS bytes and the CSS virtual ID stable. Physical copies with equal normalized semantics deduplicate even when object and source identities differ. A build-JS/portable pair must still match all four identities, so an existing portable artifact may need regeneration after a docs-only source edit.
+
+Named-rule changes project according to their actual contract and output:
+
+| Mutation | CSS bytes | Compatibility identity | CSS identity | Runtime identity | Docs identity |
+| --- | --- | --- | --- | --- | --- |
+| Description | Stable | Stable | Stable | Stable | Changes |
+| Rule name | Stable | Changes | Stable | Stable | Changes |
+| Selector or declaration value | Changes | Changes | Changes | Stable | Changes |
+| Effective layer | Changes | Changes | Changes | Stable | Changes |
+| Effective numeric order | Changes only when the emitted sequence changes | Changes | Changes only when the emitted sequence changes | Stable | Changes |
+| Omitted layer vs its explicit effective default; omitted order vs zero | Stable | Stable | Stable | Stable | Changes |
+| Rule insertion or removal | Changes when emitted data changes | Changes | Changes when emitted data changes | Stable | Changes |
+| Registration permutation at equal effective layer/order | Changes | Changes | Changes | Stable | Changes |
+
+The CSS identity follows emitted semantics, not metadata: moving a lone rule without changing its output does not create a new CSS artifact. Compatibility still records the effective numeric order, while registration order contributes when equal-priority rules make it observable. The docs projection retains authored metadata, so explicit and omitted defaults may have distinct documentation identities while remaining the same CSS and compatibility contract.
 
 ## 9. Compiler projection
 
@@ -219,7 +239,9 @@ vanityPlugin({
 
 For a style transform the compiler executes the full in-process contract, emits its system declarations once under a virtual module keyed by CSS identity, and emits style declarations under a virtual module keyed by source. Eager importers share system CSS; a lazy style retains only its own async CSS.
 
-For ordinary browser and SSR imports of the configured `system.ts`, Vite replaces the source with an application-system projection generated from portable data. The source module, authoring closures, compiler, Vanilla Extract, and Node-only code never enter those graphs.
+For ordinary browser and SSR imports of a configured system module, Vite projects only the exports that represent the evaluated system onto generated portable-data backing. The build-time implementation that creates the system—its authoring closures, compiler, Vanilla Extract, and Node-only code—never enters those graphs. Ordinary exports and re-export edges remain in the host module graph, so application objects, functions, closures, reference identity, and live bindings retain JavaScript module semantics. A configured barrel can therefore share one system backing with its leaf without substituting the barrel's namespace for the leaf's namespace.
+
+The configured authored system module may export the consolidated system and values taken from it, including renamed destructured members. An unrelated runtime export raises `VANITY_APP_EXPORT_IN_SYSTEM_MODULE`; move that declaration into another ordinary module and import it normally. Type-only exports do not participate in this rule. Ordinary modules and pure re-export barrels stay in the host graph, so application bindings are never reconstructed as serialized values.
 
 A compiler-owned cascade prelude is emitted as the first stylesheet. `compiler.layerOrder` optionally supplies its ordered CSS layer roots; when omitted, Vanity derives the order from the configured systems' roots. Set it when the build also contains external layers whose precedence must be explicit.
 
@@ -248,7 +270,7 @@ Artifacts are written atomically and only when bytes change.
 
 Two systems may not claim the same prefix/root/layer namespace with different CSS identities. The compiler reports both owners and fingerprints.
 
-Semantically identical physical package copies are valid. Compatibility plus runtime identity selects one application-system projection; CSS identity selects one system stylesheet. Source path and object reference never prevent deduplication.
+Semantically identical physical package copies are valid. Runtime-schema identity selects one browser/SSR backing controller; each resolved module gets its own export-namespace projection over that backing, while CSS identity selects one system stylesheet. A configured barrel and its leaf therefore share the same system object without substituting one module's exports for the other. Source path and object reference never prevent deduplication.
 
 ## 12. HMR and last-good state
 

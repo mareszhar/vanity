@@ -11,9 +11,12 @@ import type { VanityAxisRegistryDescription } from './axes'
 import type { VanityConditionArm, VanityConditionAst } from './conditions'
 import { VanityError } from '../diagnostics'
 import { assertPortableSystemShape } from './contractValidation'
+import { orderSystemRules } from './rules'
 
 export const VANITY_PORTABLE_SYSTEM_FORMAT = 'vanity.system/2' as const
 export const VANITY_IN_PROCESS_SYSTEM = Symbol.for('vanity.inProcessSystem')
+/** Internal retry hook used when a compiler projection rejects captured bytes. */
+export const VANITY_RETRY_SYSTEM_EMISSION = Symbol.for('vanity.retrySystemEmission')
 
 /** Deterministic identities for the contract's compatibility, CSS, runtime, and docs projections. */
 export interface VanitySystemIdentities {
@@ -25,6 +28,12 @@ export interface VanitySystemIdentities {
   readonly runtime: `vanity-runtime-schema-1-${string}`
   /** Identity of the introspection and documentation projection. */
   readonly docs: `vanity-docs-1-${string}`
+}
+
+/** Compiler-owned file scope used when projecting a system without a style importer. */
+export interface VanityEmissionScope {
+  readonly filePath: string
+  readonly packageName?: string
 }
 
 /** Provenance for an additive refinement or replacement of named system data. */
@@ -172,7 +181,9 @@ export interface VanityInProcessSystemContract {
   /** Data-only contract safe to serialize or hand to another consumer. */
   readonly portable: VanityPortableSystem
   /** Compiler-only emission closure. Never copied into portable data. */
-  readonly emit: () => void
+  readonly emit: (scope?: VanityEmissionScope) => void
+  /** Compiler-only rollback hook; absent from the portable contract. */
+  readonly [VANITY_RETRY_SYSTEM_EMISSION]?: () => void
 }
 
 type VanitySystemContractOptionalKey
@@ -191,7 +202,9 @@ export type VanitySystemContractInput = Omit<
   VanityPortableSystem,
   'format' | 'layerRoot' | 'identities' | VanitySystemContractOptionalKey
 > & Partial<Pick<VanityPortableSystem, VanitySystemContractOptionalKey>> & {
-  readonly emit: () => void
+  readonly emit: (scope?: VanityEmissionScope) => void
+  /** @internal */
+  readonly clearEmission?: () => void
 }
 
 export function createSystemContract(input: VanitySystemContractInput): VanityInProcessSystemContract {
@@ -231,7 +244,13 @@ export function createSystemContract(input: VanitySystemContractInput): VanityIn
   // above and its identities were derived from those exact normalized bytes.
   // Re-running the external trust-boundary validator here would traverse and
   // hash a large resolved token structure a second time during every consolidation.
-  return Object.freeze({ portable, emit: input.emit })
+  return Object.freeze({
+    portable,
+    emit: input.emit,
+    ...(input.clearEmission === undefined
+      ? {}
+      : { [VANITY_RETRY_SYSTEM_EMISSION]: input.clearEmission }),
+  })
 }
 
 export function getSystemContract(value: unknown): VanityInProcessSystemContract | undefined {
@@ -300,7 +319,7 @@ function getSystemIdentities(
     axes: normalized.axes,
     plugins: normalized.plugins,
     utilities: normalized.utilities,
-    ruleGroups: normalized.ruleGroups,
+    ruleGroups: projectRuleGroups(normalized.ruleGroups, normalized.layers, 'compatibility'),
     tokens: normalized.tokens.map(token => ({
       path: token.path,
       type: token.type,
@@ -320,7 +339,7 @@ function getSystemIdentities(
     conditions: normalized.conditionArms,
     conditionAsts: normalized.conditionAsts,
     axes: normalized.axes,
-    ruleGroups: normalized.ruleGroups,
+    ruleGroups: projectRuleGroups(normalized.ruleGroups, normalized.layers, 'css'),
     tokens: normalized.tokenRecords.map(token => ({
       path: token.path,
       var: token.var,
@@ -334,6 +353,12 @@ function getSystemIdentities(
     })),
   }
   const runtimeProjection = {
+    // These values are exported by the application projection alongside the
+    // restored runtime contract. Keep them in the runtime identity so two
+    // generated modules cannot share a backing system with different static
+    // application semantics.
+    conditions: normalized.conditions,
+    layers: normalized.layers,
     contract: {
       protocol: normalized.runtime.protocol,
       system: normalized.runtime.system,
@@ -367,7 +392,7 @@ function getSystemIdentities(
     source: normalized.source,
     consts: normalized.consts,
     utilities: normalized.utilities,
-    ruleGroups: normalized.ruleGroups,
+    ruleGroups: projectRuleGroups(normalized.ruleGroups, normalized.layers, 'docs'),
     plugins: normalized.plugins,
     owners: normalized.owners,
     audits: normalized.audits,
@@ -385,6 +410,34 @@ function getSystemIdentities(
     runtime: createIdentity('runtime-schema', runtimeProjection),
     docs: createIdentity('docs', docsProjection),
   })
+}
+
+type NamedRuleGroup = VanityPortableSystem['ruleGroups'][number]
+
+/**
+ * Keep named-rule metadata in the projection that owns it. Rule names and
+ * descriptions explain the contract; only layer/order and emitted rule data
+ * affect CSS. An omitted layer/order is normalized to the emitter's effective
+ * default so equivalent authoring forms retain one identity.
+ */
+function projectRuleGroups(
+  groups: readonly NamedRuleGroup[],
+  layers: readonly string[],
+  kind: 'compatibility' | 'css' | 'docs',
+): readonly unknown[] {
+  if (kind === 'docs')
+    return groups
+
+  return orderSystemRules(groups, layers).map(({ rule: group, position }) => ({
+    ...(kind === 'compatibility' ? { name: group.name } : {}),
+    ...(position.layer === undefined ? {} : { layer: position.layer }),
+    // Numeric order is structural compatibility data. CSS identity instead
+    // records the resulting output sequence below, so moving a lone rule
+    // within an otherwise empty layer does not churn bytes.
+    ...(kind === 'compatibility' ? { order: position.order } : {}),
+    selectors: [...group.selectors],
+    fingerprint: group.fingerprint,
+  }))
 }
 
 function createIdentity<Kind extends 'compatibility' | 'css' | 'runtime-schema' | 'docs'>(

@@ -1,9 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { parseSync } from 'oxc-parser'
 import { VanityError } from '../../diagnostics'
+import { normalizePath } from '../core/path'
 
 const moduleExtensions = ['.mts', '.cts', '.ts', '.tsx', '.mjs', '.cjs', '.js', '.jsx']
 const styleModuleFile = /\.css\.(?:js|cjs|mjs|jsx|ts|tsx)$/
@@ -14,13 +15,13 @@ const styleModuleFile = /\.css\.(?:js|cjs|mjs|jsx|ts|tsx)$/
  * user code during configuration.
  */
 export function getExportNamesFromFile(filePath: string, baseDir = process.cwd()): string[] {
-  return [...collectExportNames(resolveModuleFile(filePath, baseDir), new Set<string>())].sort()
+  return [...collectExportNames(resolveModuleIdentity(filePath, baseDir), new Set<string>())].sort()
 }
 
 /** Return every value re-export module reached while discovering a source's exports. */
 export function getExportModuleFilesFromFile(filePath: string, baseDir = process.cwd()): string[] {
   const files = new Set<string>()
-  collectExportNames(resolveModuleFile(filePath, baseDir), new Set<string>(), files, new Set<string>())
+  collectExportNames(resolveModuleIdentity(filePath, baseDir), new Set<string>(), files, new Set<string>())
   return [...files].sort()
 }
 
@@ -40,7 +41,8 @@ export function isPackageSpecifier(value: string): boolean {
 /**
  * Resolve a module named in Vanity configuration without changing the source
  * provenance used in generated declarations. Package sources remain bare;
- * local paths become their canonical absolute file.
+ * local paths retain the caller's filesystem spelling; physical identity is
+ * canonicalized separately when the compiler builds its evaluation index.
  */
 export function resolveConfiguredModuleSource(
   value: string,
@@ -62,7 +64,7 @@ export function resolveConfiguredModuleSource(
   }
 
   try {
-    return { from: value, file: resolveModuleFile(value, baseDir) }
+    return { from: value, file: resolveModuleIdentity(value, baseDir) }
   }
   catch (error) {
     if (isBarePath(value)) {
@@ -88,7 +90,7 @@ function collectExportNames(
   files?: Set<string>,
   reexportSeen = new Set<string>(),
 ): Set<string> {
-  const resolved = resolveModuleFile(filePath)
+  const resolved = resolveModuleIdentity(filePath)
   if (seen.has(resolved))
     return new Set()
   seen.add(resolved)
@@ -147,7 +149,7 @@ function collectReexportFiles(
   seen: Set<string>,
   files: Set<string>,
 ): void {
-  const resolved = resolveModuleFile(filePath)
+  const resolved = resolveModuleIdentity(filePath)
   if (seen.has(resolved))
     return
   seen.add(resolved)
@@ -173,33 +175,53 @@ function resolveModuleRequest(specifier: string, importer: string): string {
   return createRequire(importer).resolve(specifier)
 }
 
-/** Resolve a local path or package specifier to the module file Node would load. */
-function resolveModuleFile(filePath: string, baseDir = process.cwd()): string {
+/**
+ * Return the physical module identity without pretending a missing path has
+ * already been resolved. Symlink spelling is useful in diagnostics, but one
+ * evaluated module must have one identity when the host follows the link.
+ */
+export function normalizeModuleIdentity(filePath: string): string {
+  const absolute = resolve(filePath)
+
+  try {
+    return normalizePath(realpathSync(absolute))
+  }
+  catch (error) {
+    if (error !== null && typeof error === 'object' && 'code' in error
+      && (error.code === 'ENOENT' || error.code === 'ENOTDIR')) {
+      return normalizePath(absolute)
+    }
+    throw error
+  }
+}
+
+/** Resolve a physical or package request using the compiler's Node fallback. */
+export function resolveModuleIdentity(filePath: string, baseDir = process.cwd()): string {
   if (existsSync(filePath) && extname(filePath) !== '')
-    return resolve(filePath)
+    return normalizeModuleIdentity(filePath)
 
   if (existsSync(filePath) && !extname(filePath)) {
     for (const extension of moduleExtensions) {
       if (existsSync(`${filePath}${extension}`))
-        return resolve(`${filePath}${extension}`)
+        return normalizeModuleIdentity(`${filePath}${extension}`)
     }
   }
 
   for (const extension of moduleExtensions) {
     if (existsSync(`${filePath}${extension}`))
-      return resolve(`${filePath}${extension}`)
+      return normalizeModuleIdentity(`${filePath}${extension}`)
   }
 
   for (const extension of moduleExtensions) {
     const index = join(filePath, `index${extension}`)
     if (existsSync(index))
-      return resolve(index)
+      return normalizeModuleIdentity(index)
   }
 
   if (isAbsolute(filePath))
-    return resolve(filePath)
+    return normalizeModuleIdentity(filePath)
 
-  return createRequire(resolve(baseDir, 'package.json')).resolve(filePath)
+  return normalizeModuleIdentity(createRequire(resolve(baseDir, 'package.json')).resolve(filePath))
 }
 
 function isBarePath(value: string): boolean {

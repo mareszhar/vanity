@@ -54,6 +54,10 @@ Every accepted change remains an independently verifiable vertical slice. The pu
 
 Every required evidence dimension is green before release acceptance. Slower promotion matrices run on their defined schedule and remain green. The practices in [§1.1](#11-total-space-enforcement) apply to the gate itself: manual re-reading during review does not count as a control.
 
+A change carrying several obligations keeps a requirement-to-evidence ledger: one row per obligation, naming the owning code, the exact test, what it observes, its positive and negative controls, and any remaining gap.
+
+Derive expected behavior independently of the implementation helper under test, and include same-environment recovery wherever the contract promises it. A green existing suite proves regression coverage and nothing more — it never stands in for a newly required browser, packaging, or host scenario.
+
 ## 2. Fixture families
 
 Maintain one vocabulary across fixtures while varying scale.
@@ -316,6 +320,21 @@ The permanent matrix enforces the following integration contracts:
 - repeated start/stop does not leak watchers or ports;
 - modern CSS emitted by values/axes survives every supported optimizer without invalid rewrites or unexplained warnings;
 - source/export discovery and debug-name transforms keep adversarial AST fixtures for aliases, destructuring, re-exports, comments, and new syntax.
+
+One projection's passing test does not close a cross-cutting requirement. Record separate evidence for every lane it reaches — style evaluation, browser application, SSR application, packaging — and keep those observations distinct from aggregate suite counts. Each kind of test carries its own control:
+
+- identity tests compare emitted output under equivalent *and* distinguishing inputs;
+- HMR tests assert the browser request and the resulting computed value;
+- recovery tests pair a repair that succeeds with a failure that is deliberate.
+
+Every published benchmark number points to a timestamped measurement receipt and is mechanically checked against it.
+
+Application namespace evidence uses one topology matrix rather than a proxy fixture — a separate ordinary module, a pure re-export barrel, and a one-file system exporting the system plus destructured members:
+
+- the one-file case proves style evaluation, both application projections, shared runtime identity, and build-time authoring exclusion;
+- the separate and pure cases keep object, callable, live-binding, renamed-export, and same-server HMR controls;
+- an unrelated runtime export is the diagnostic control, and a type-only export the positive one;
+- a changed ordinary namespace is asserted through the refreshed export, never through a stable system identity alone.
 
 Supported version matrices are recorded in package metadata and CI. A valid browser value that produces warnings in a default supported stack is a red integration gate until vanity configures, preserves, or sharply documents the limitation.
 

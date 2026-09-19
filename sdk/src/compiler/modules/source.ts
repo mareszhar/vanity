@@ -6,6 +6,29 @@ import { parseSync, Visitor } from 'oxc-parser'
 import { renderStyleAutoImportDeclarations as renderStyleAutoImportDeclarationsFromSources } from '../auto-imports/autoImportDeclarations'
 import { normalizePath } from '../core/path'
 
+const authoringNames = new Set([
+  'port',
+  'class',
+  'recipe',
+  'anatomy',
+  'keyframes',
+  'fontFace',
+  'atoms',
+])
+const sourceAuthoringNames = new Set([
+  ...authoringNames,
+  'rules',
+  'raw',
+  'fragment',
+  'tdec',
+  'createSystem',
+  'consolidate',
+  'defineTokens',
+  'addTokens',
+  'add',
+])
+const tokenBuilderMethodNames = new Set(['add'])
+
 // ─── Export-name detection ───────────────────────────────────────────────────
 
 /**
@@ -48,6 +71,46 @@ export function renderStyleAutoImportDeclarations(
   options: { relativeTo?: string } = {},
 ): string {
   return renderStyleAutoImportDeclarationsFromSources(sources, options)
+}
+
+export interface VanityImportedBinding {
+  readonly local: string
+  readonly imported: string
+  readonly source: string
+}
+
+/** Read value import bindings so a source barrel can preserve exported authoring names. */
+export function readValueImportBindings(
+  source: string,
+  fileName: string,
+): VanityImportedBinding[] {
+  const parsed = parseSync(fileName, source)
+
+  if (parsed.errors.some(error => error.severity === 'Error'))
+    return []
+
+  const bindings: VanityImportedBinding[] = []
+  new Visitor({
+    ImportDeclaration(node) {
+      if (node.importKind === 'type')
+        return
+
+      for (const specifier of node.specifiers) {
+        if (specifier.type !== 'ImportSpecifier' || specifier.importKind === 'type')
+          continue
+        const imported = specifier.imported.type === 'Identifier'
+          ? specifier.imported.name
+          : String(specifier.imported.value)
+        bindings.push({
+          local: specifier.local.name,
+          imported,
+          source: node.source.value,
+        })
+      }
+    },
+  }).visit(parsed.program)
+
+  return bindings
 }
 
 // ─── The debug-name transform ────────────────────────────────────────────────
@@ -116,28 +179,35 @@ export function applyDebugNamesWithAliases(
   return applyInsertions(source, edits)
 }
 
-const authoringNames = new Set([
-  'port',
-  'class',
-  'recipe',
-  'anatomy',
-  'keyframes',
-  'fontFace',
-  'atoms',
-])
-const sourceAuthoringNames = new Set([
-  ...authoringNames,
-  'rules',
-  'raw',
-  'fragment',
-  'tdec',
-  'createSystem',
-  'consolidate',
-  'defineTokens',
-  'addTokens',
-  'add',
-])
-const tokenBuilderMethodNames = new Set(['add'])
+/**
+ * Identify a module that participates in Vanity authoring without executing
+ * it. The compiler uses this to select authored system projections and to
+ * decide which package edges deserve provenance instrumentation; the source
+ * transforms below remain syntax-aware and preserve the author's runtime
+ * semantics.
+ */
+export function containsVanityAuthoring(
+  source: string,
+  fileName: string,
+  ambientAliases?: ReadonlyMap<string, string>,
+): boolean {
+  const parsed = parseSync(fileName, source)
+
+  if (parsed.errors.some(error => error.severity === 'Error'))
+    return false
+
+  const aliases = getAuthoringAliases(parsed.program, sourceAuthoringNames, ambientAliases)
+  let found = false
+
+  new Visitor({
+    CallExpression(node) {
+      if (getAuthoringCallee(node.callee, aliases, sourceAuthoringNames) !== undefined)
+        found = true
+    },
+  }).visit(parsed.program)
+
+  return found
+}
 
 /**
  * Resolve the configured barrel's exported local names back to authoring

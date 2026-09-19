@@ -213,9 +213,13 @@ function getRuleFingerprint(value: unknown, file?: string): string {
       return { token: String((input as any).$path) }
     if ('css' in input && typeof (input as any).css === 'string')
       return { value: (input as any).css }
+    // CSS object order is semantic: the cascade observes declaration order
+    // within a rule, as well as the order of nested selectors and at-rules.
+    // Keep that order in the fingerprint. Unordered contract metadata is
+    // canonicalized separately by `system/contract.ts`.
     const normalized = Array.isArray(input)
       ? input.map(normalize)
-      : Object.fromEntries(Object.keys(input).sort().map(key => [key, normalize((input as any)[key])]))
+      : Object.fromEntries(Object.entries(input).map(([key, value]) => [key, normalize(value)]))
     seen.delete(input)
     return normalized
   }

@@ -2,13 +2,12 @@
 
 import type { VanityIdentifierMode } from '../../config'
 import type { VanityInspectRecord } from '../../introspect/records'
-import type { VanityVanillaExtractCapture } from '../../substrate'
 import { createRequire } from 'node:module'
-import { dirname, posix } from 'node:path'
+import { dirname } from 'node:path'
 import { clearDiagnosticSources } from '../../diagnostics'
 import { collectInspection } from '../../introspect/records'
 import { substrate } from '../../substrate'
-import { normalizePath } from '../core/path'
+import { createStyleCssCapture, getUnusedCompositionRegex } from './capture'
 
 // ─── Evaluation ──────────────────────────────────────────────────────────────
 
@@ -33,43 +32,9 @@ export function evaluateStyleModule(
   identOption: VanityIdentifierMode,
   externalModules: ReadonlyMap<string, Record<string, unknown>> = new Map(),
 ): EvaluatedStyleModule {
-  const cssObjsByFileScope = new Map<string, unknown[]>()
-  const localClassNames = new Set<string>()
-  const composedClassLists: Array<{ identifier: string, classList: string }> = []
-  const usedCompositions = new Set<string>()
+  const captured = createStyleCssCapture(identOption)
 
-  const capture: VanityVanillaExtractCapture = {
-    appendCss: (css, fileScope) => {
-      const serializedFileScope = substrate.backend.serializeFileScope(fileScope)
-      const cssObjs = cssObjsByFileScope.get(serializedFileScope) ?? []
-      cssObjs.push(css)
-      cssObjsByFileScope.set(serializedFileScope, cssObjs)
-    },
-    registerClassName: className => void localClassNames.add(className),
-    registerComposition: composition => void composedClassLists.push(composition as { identifier: string, classList: string }),
-    markCompositionUsed: identifier => void usedCompositions.add(identifier),
-    // Vanity already injects the semantic declaration name. In debug mode,
-    // prefer that exact name over vanilla-extract's `file_export` prefix;
-    // when no declaration label exists, the `.css.ts` basename remains the
-    // useful fallback. This keeps `button.css.ts` / `button` from surfacing as
-    // the noisy `button_button` while retaining deterministic scoped hashes.
-    getIdentOption: () => identOption === 'short'
-      ? 'short'
-      : ({ hash, debugId, filePath: scopedFile }: {
-          hash: string
-          debugId?: string
-          filePath: string
-          packageName?: string
-        }) => {
-          const fileLabel = posix.basename(normalizePath(scopedFile)).replace(/\.css\.[^.]+$/, '')
-          const semanticLabel = (debugId ?? fileLabel)
-            .replaceAll(/[^\w$-]+/g, '_')
-            .replace(/^([^a-z_$])/, '_$1')
-          return `${semanticLabel || 'style'}__${hash}`
-        },
-  }
-
-  substrate.backend.installCapture(capture)
+  substrate.backend.installCapture(captured.capture)
 
   const cssByFileScope = new Map<string, string>()
 
@@ -81,26 +46,20 @@ export function evaluateStyleModule(
       // helpers such as `ds.t` while it is initialized.
       substrate.modules.runInFileScope({ filePath }, () => executeBundle(source, filePath, externalModules)))
 
-    for (const [serializedFileScope, cssObjs] of cssObjsByFileScope) {
+    for (const [serializedFileScope, cssObjs] of captured.cssObjsByFileScope) {
       const css = substrate.modules.transformStyleModule({
         cssObjects: cssObjs,
-        localClassNames: [...localClassNames],
-        composedClassLists,
+        localClassNames: [...captured.localClassNames],
+        composedClassLists: captured.composedClassLists,
       }).css
 
       cssByFileScope.set(serializedFileScope, css)
     }
 
-    const unusedCompositions = composedClassLists
-      .filter(({ identifier }) => !usedCompositions.has(identifier))
-      .map(({ identifier }) => identifier)
-
     return {
       exports,
       cssByFileScope,
-      unusedCompositionRegex: unusedCompositions.length > 0
-        ? new RegExp(`(${unusedCompositions.join('|')})\\s`, 'g')
-        : null,
+      unusedCompositionRegex: getUnusedCompositionRegex(captured),
       records,
     }
   }

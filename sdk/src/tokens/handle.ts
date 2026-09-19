@@ -211,7 +211,7 @@ export function updateHandle(handle: VanityInternalTokenHandle, update: Partial<
 }
 
 /** Read the private metadata used by graph and runtime internals. */
-export function readHandleMeta(handle: VanityInternalTokenHandle): VanityHandleMeta {
+function readHandleMeta(handle: VanityInternalTokenHandle): VanityHandleMeta {
   const meta = (handle as unknown as Record<symbol, VanityHandleMeta | undefined>)[handleMetadataSymbol()]
   if (!meta) {
     // Internal invariant: all canonical handles are created by createHandle().
@@ -225,7 +225,7 @@ export function readHandleMeta(handle: VanityInternalTokenHandle): VanityHandleM
   return meta
 }
 
-export function readHandleName(handle: VanityInternalTokenHandle): string {
+function readHandleName(handle: VanityInternalTokenHandle): string {
   return readHandleMeta(handle).name
 }
 

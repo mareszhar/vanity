@@ -2,9 +2,11 @@ import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { evaluateStyleModule } from '../compiler/modules/evaluate'
 import { getStyleModuleFile, hasStyleModuleFile, requireStyleModuleFile } from '../css/context'
 import { VanityError } from '../diagnostics'
 import { substrate } from './index'
+import { createVanillaExtractSubstrate } from './vanilla-extract/adapter'
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const adapterRoot = resolve(sourceRoot, 'substrate/vanilla-extract')
@@ -63,8 +65,10 @@ describe('substrate boundary', () => {
   it('keeps backend lifecycle references in the declared infrastructure boundary', async () => {
     const allowedCallers = new Set([
       'compiler/core/transform.ts',
+      'compiler/modules/capture.ts',
       'compiler/modules/build.ts',
       'compiler/modules/evaluate.ts',
+      'compiler/projection/systemCss.ts',
       'test-support/emit.ts',
       'testing.ts',
       'vite.ts',
@@ -104,6 +108,109 @@ describe('substrate boundary', () => {
       expect(getStyleModuleFile()).toEqual(scope)
       expect(requireStyleModuleFile('boundary')).toBe(scope.filePath)
     })
+    expect(hasStyleModuleFile()).toBe(false)
+  })
+
+  it('restores an enclosing scope and its identifier counter after nested failure', () => {
+    const scope = { filePath: 'src/substrate/recovery.css.ts', packageName: '@vanity/fixture' }
+    const expected = substrate.modules.runInFileScope(scope, () => {
+      substrate.css.createCustomProperty('before')
+      return substrate.css.createCustomProperty('after')
+    })
+
+    const recovered = substrate.modules.runInFileScope(scope, () => {
+      substrate.css.createCustomProperty('before')
+      expect(() => substrate.modules.runInFileScope(
+        { filePath: 'src/substrate/nested.css.ts', packageName: '@vanity/fixture' },
+        () => {
+          // Model a generated source scope whose end call is skipped by a
+          // throw. The transaction must drain it without touching `scope`.
+          substrate.backend.setFileScope({ filePath: 'src/substrate/generated.css.ts', packageName: '@vanity/fixture' })
+          throw new Error('nested failure')
+        },
+      )).toThrow('nested failure')
+      expect(getStyleModuleFile()).toEqual(scope)
+      return substrate.css.createCustomProperty('after')
+    })
+
+    expect(recovered).toBe(expected)
+    expect(hasStyleModuleFile()).toBe(false)
+  })
+
+  it('restores an empty boundary after a failure before and after authoring', () => {
+    expect(() => substrate.modules.runInFileScope(
+      { filePath: 'src/substrate/early-failure.css.ts' },
+      () => { throw new Error('early failure') },
+    )).toThrow('early failure')
+    expect(hasStyleModuleFile()).toBe(false)
+
+    expect(() => substrate.modules.runInFileScope(
+      { filePath: 'src/substrate/late-failure.css.ts' },
+      () => {
+        substrate.css.createCustomProperty('late')
+        throw new Error('late failure')
+      },
+    )).toThrow('late failure')
+    expect(hasStyleModuleFile()).toBe(false)
+    expect(() => requireStyleModuleFile('after recovery')).toThrow(/VANITY_VITE_PLUGIN_MISSING/)
+
+    const first = substrate.modules.runInFileScope(
+      { filePath: 'src/substrate/repeat.css.ts' },
+      () => substrate.css.createCustomProperty('repeat'),
+    )
+    const second = substrate.modules.runInFileScope(
+      { filePath: 'src/substrate/repeat.css.ts' },
+      () => substrate.css.createCustomProperty('repeat'),
+    )
+    expect(first).toBe(second)
+  })
+
+  it('restores state when an imported style dependency throws', () => {
+    const dependency = {
+      fail: () => {
+        substrate.backend.setFileScope({ filePath: 'src/substrate/imported.css.ts' })
+        throw new Error('imported style failure')
+      },
+    }
+
+    expect(() => evaluateStyleModule(
+      `const { fail } = require('nested-style')
+fail()
+`,
+      resolve('src/substrate/importing.css.ts'),
+      'debug',
+      new Map([['nested-style', dependency]]),
+    )).toThrow('imported style failure')
+    expect(hasStyleModuleFile()).toBe(false)
+
+    const recovered = evaluateStyleModule(
+      'module.exports = { recovered: true }\n',
+      resolve('src/substrate/recovered.css.ts'),
+      'debug',
+    )
+    expect(recovered.exports).toEqual({ recovered: true })
+    expect(hasStyleModuleFile()).toBe(false)
+    expect(() => requireStyleModuleFile('after imported recovery')).toThrow(/VANITY_VITE_PLUGIN_MISSING/)
+  })
+
+  it('restores shared backend state across independent compiler instances', () => {
+    const first = createVanillaExtractSubstrate()
+    const second = createVanillaExtractSubstrate()
+    const outer = { filePath: 'src/substrate/first.css.ts', packageName: '@vanity/first' }
+
+    expect(() => first.modules.runInFileScope(outer, () =>
+      second.modules.runInFileScope(
+        { filePath: 'src/substrate/second.css.ts', packageName: '@vanity/second' },
+        () => {
+          second.backend.setFileScope({ filePath: 'src/substrate/generated.css.ts', packageName: '@vanity/second' })
+          throw new Error('second compiler failure')
+        },
+      ))).toThrow('second compiler failure')
+    expect(hasStyleModuleFile()).toBe(false)
+
+    const firstName = first.modules.runInFileScope(outer, () => first.css.createCustomProperty('shared'))
+    const secondName = second.modules.runInFileScope(outer, () => second.css.createCustomProperty('shared'))
+    expect(secondName).toBe(firstName)
     expect(hasStyleModuleFile()).toBe(false)
   })
 })

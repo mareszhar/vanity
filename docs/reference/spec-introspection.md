@@ -160,7 +160,7 @@ For offline editor validation, associate `.vanity/manifest.json` with the schema
 
 This keeps validation available without network access and selects the schema version installed by the project. The manifest identifier and retrieval policy are recorded in the [decision register](../maintainers/decisions.md#deliberate-boundaries).
 
-The normalized model carries the full manifest meaning; portable, system, and token projections are not duplicated.
+The normalized model carries the full manifest meaning; portable, system, and token projections are not duplicated. The private build-JS/portable-system pair is strict across all four identities, so a docs-only source edit can require artifact regeneration even though the manifest's CSS identity and CSS bytes remain stable.
 
 ## 6. CLI
 

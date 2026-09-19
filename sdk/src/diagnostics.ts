@@ -60,10 +60,12 @@ export type VanityDiagnosticCode
     | 'VANITY_VITE_BUILD_FAILED'
     | 'VANITY_VITE_PLUGIN_MISSING'
     | 'VANITY_STYLE_MODULE_MISUSE'
+    | 'VANITY_APP_EXPORT_IN_SYSTEM_MODULE'
     | 'VANITY_AMBIENT_SOURCE_DECLARATION'
     | 'VANITY_AUTO_IMPORT_INVALID'
     | 'VANITY_APP_AUTO_IMPORT_STYLE_MODULE'
     | 'VANITY_AUTO_IMPORT_DECLARATIONS_NOT_INCLUDED'
+    | 'VANITY_ARTIFACT_TARGET_INVALID'
     | 'VANITY_CLI_INVALID_USAGE'
     | 'VANITY_COMPILER_INVALID_INPUT'
     | 'VANITY_CONFIG_INVALID'
@@ -254,10 +256,16 @@ export function clearDiagnosticSources(): void {
   state[SOURCE_MAPS] = new Map<string, VanitySourceContext>()
   state[CURRENT_SOURCE] = undefined
   state[WITH_SOURCE] = <T>(context: VanitySourceContext, key: string, run: () => T): T => {
+    const previous = state[CURRENT_SOURCE] as VanitySourceContext | undefined
     state[CURRENT_SOURCE] = context
     const maps = state[SOURCE_MAPS] as Map<string, VanitySourceContext>
     maps.set(key, context)
-    return run()
+    try {
+      return run()
+    }
+    finally {
+      state[CURRENT_SOURCE] = previous
+    }
   }
 }
 

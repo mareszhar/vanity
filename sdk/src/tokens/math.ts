@@ -9,6 +9,7 @@
 
 import type { VanityPolarColorSpace } from './types'
 import { converter, interpolate, parse, oklch as toOklch, rgb as toRgb } from 'culori'
+import { VanityError } from '../diagnostics'
 
 export interface VanityOklch {
   l: number
@@ -162,7 +163,7 @@ export function formatColorInSpace(color: VanityOklch, space: VanityPolarColorSp
     ? color as unknown as Record<string, number | undefined>
     : converter(space)(getOklch(color)) as unknown as Record<string, number | undefined>
   if (converted === undefined)
-    throw new Error(`culori could not convert oklch to ${space}`)
+    throw new TypeError(`no conversion from oklch to ${space} is available`)
   return formatPreservedPolarColor(space, converted)
 }
 
@@ -241,21 +242,26 @@ export function applyOklchAdjustment(
   delta: number,
 ): VanityOklch {
   const scale = COLOR_RELATIVE_CHANNEL_FOLD_SCALES[space][channel]
-  if (scale === undefined)
-    throw new Error(`${space} has no '${channel}' channel for this adjustment`)
+  if (scale === undefined) {
+    throw new VanityError({
+      code: 'VANITY_TOKENS_INVALID_COLOR',
+      message: `${space} has no '${channel}' channel for this adjustment`,
+      fix: `adjust a channel ${space} declares, or choose a space that declares '${channel}'`,
+    })
+  }
 
   if (space === 'oklch')
     return { ...color, [channel]: color[channel as 'l' | 'c' | 'h'] + delta * scale }
 
   const converted = converter(space)(toOklch({ mode: 'oklch', l: color.l, c: color.c, h: color.h, alpha: color.alpha })) as unknown as Record<string, number | undefined>
   if (converted === undefined)
-    throw new Error(`culori could not convert oklch to ${space}`)
+    throw new TypeError(`no conversion from oklch to ${space} is available`)
 
   const current = converted[channel] ?? (channel === 'h' ? 0 : 0)
   const adjusted = { ...converted, [channel]: current + delta * scale }
   const result = toOklch(adjusted as never)
   if (result === undefined)
-    throw new Error(`culori could not convert ${space} back to oklch`)
+    throw new TypeError(`no conversion from ${space} back to oklch is available`)
 
   const { l, c, h = 0, alpha } = result
   return { l, c, h, ...(alpha === undefined || alpha === 1 ? {} : { alpha }) }
@@ -266,7 +272,7 @@ function getOklch({ l, c, h, alpha }: VanityOklch) {
 }
 
 /** Return whether a canonical color converts into sRGB without gamut loss. */
-export function isColorInSrgbGamut(color: VanityOklch): boolean {
+function isColorInSrgbGamut(color: VanityOklch): boolean {
   const converted = toRgb(getOklch(color))
   return [converted.r, converted.g, converted.b].every((channel) => {
     return Number.isFinite(channel)

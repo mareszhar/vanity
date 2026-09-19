@@ -79,6 +79,8 @@ This is separate from `pnpm run upi`: `pnpm:self-update` changes the package man
 
 ### Dependency policy
 
+`pnpm-workspace.yaml` holds pnpm's own settings, in camelCase. The pinned pnpm reads its configuration there and ignores pnpm keys left in `.npmrc`, which keeps only genuine npm settings such as `registry` — a pnpm setting placed in `.npmrc` is silently inert, so it reads as protection that is not in force. `verifyDepsBeforeRun: false` is set deliberately: a Git hook has no TTY, so pnpm's pre-run dependency check can abort a commit when it decides to auto-install. Dependency integrity is gated explicitly by `pnpm install --frozen-lockfile` in `check` and in CI, which fails on real lockfile or manifest drift rather than on a benign manifest edit.
+
 Third-party version ranges live in `pnpm-workspace.yaml`. The default `catalog` is the exact maintainer test matrix consumed with `catalog:`; the named `peers` catalog is the broader SDK compatibility contract consumed with `catalog:peers`. This keeps “what this checkout verifies” separate from “what consumers may install” without duplicating either policy across package manifests.
 
 Packing and publication use pnpm, which natively materializes both catalog and workspace references as ordinary npm-compatible ranges inside the artifact. It does not rewrite `sdk/package.json` on disk, so the authored manifest and Git always retain `catalog:` references—even after an interrupted pack or publish. Fresh-package smoke tests inspect and install that real tarball outside the workspace.
@@ -152,6 +154,8 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run bench:fixtures:check` | fail when generated fixtures drift |
 | `pnpm run bench:resolution` | compare resolution-type encodings |
 | `pnpm run bench:baseline` | build the SDK and record the current benchmark protocol |
+| `pnpm run bench:docs:update` | render the measurement tables on the benchmark page from the recorded receipt |
+| `pnpm run bench:docs:check` | fail when the benchmark page and the recorded receipt disagree |
 | `pnpm run fresh:smoke` | pack the SDK and prove fresh strict testing-kit, Vite, and Nuxt consumers |
 | `pnpm run publish:sdk:dry-run` | run the full gate and package rehearsal without changing versions |
 | `pnpm run publish:sdk:patch` / `:minor` / `:major` | release: preflight, gate, rehearse, bump, publish, await npm, commit, tag, and push |

@@ -66,6 +66,7 @@ import type {
 } from './conditions'
 import type {
   VanityCapabilityOrigin,
+  VanityEmissionScope,
   VanityOverwriteProvenance,
   VanityPortableSystem,
 } from './contract'
@@ -124,6 +125,7 @@ import {
   VANITY_IN_PROCESS_SYSTEM,
 } from './contract'
 import { resolvePolicies } from './policies'
+import { orderSystemRules } from './rules'
 
 /** Default nested cascade order: `createSystem().consolidate({ layerOrder: VANITY_DEFAULT_LAYERS })`. */
 export const VANITY_DEFAULT_LAYERS = ['reset', 'tokens', 'recipes', 'utilities', 'overrides'] as const
@@ -870,12 +872,15 @@ function materializeLockedSystem<
   )
   let emitted = false
   let ensureSystemEmitted = (): void => {}
-  const emitSystem = () => {
+  const emitSystem = (scope?: VanityEmissionScope) => {
     if (emitted)
       return
 
-    const activeFile = requireStyleModuleFile('locked system authoring')
-    substrate.modules.runInFileScope({ filePath: file ?? activeFile }, () => {
+    const activeFile = scope?.filePath ?? requireStyleModuleFile('locked system authoring')
+    substrate.modules.runInFileScope({
+      filePath: scope?.filePath ?? file ?? activeFile,
+      ...(scope?.packageName === undefined ? {} : { packageName: scope.packageName }),
+    }, () => {
       // Establish the complete layer order before token/style declarations.
       substrate.css.emitLayer({ name: prefix })
       for (const layer of layers)
@@ -1050,6 +1055,7 @@ function materializeLockedSystem<
     ...(options.audit === undefined ? {} : { audits: options.audit }),
     ...(mode.overwrites === undefined ? {} : { overwrites: mode.overwrites }),
     emit: emitSystem,
+    clearEmission: () => { emitted = false },
   })
   ensureSystemEmitted = (): void => {
     if (emitted)
@@ -1202,16 +1208,8 @@ function emitSystemRules(
   layers: readonly string[],
 ): void {
   const layerIndex = new Map(layers.map((layer, index) => [layer, index]))
-  const ordered = Object.entries(rules)
-    .map(([name, rule], registration) => ({ name, registration, rule }))
-    .sort((left, right) => {
-      const leftLayer = layerIndex.get(left.rule.layer ?? '') ?? Number.MAX_SAFE_INTEGER
-      const rightLayer = layerIndex.get(right.rule.layer ?? '') ?? Number.MAX_SAFE_INTEGER
-      return leftLayer - rightLayer
-        || (left.rule.order ?? 0) - (right.rule.order ?? 0)
-        || left.registration - right.registration
-    })
-  for (const { name, rule } of ordered) {
+  const entries = Object.entries(rules)
+  for (const [name, rule] of entries) {
     if (rule.layer !== undefined && !layerIndex.has(rule.layer)) {
       throw new VanityError({
         code: 'VANITY_SYSTEM_UNKNOWN_LAYER',
@@ -1220,9 +1218,12 @@ function emitSystemRules(
         fix: 'declare the layer in layerOrder before emitting this rule',
       })
     }
-    const emitter = rule.layer === undefined
+  }
+  const ordered = orderSystemRules(entries.map(([, rule]) => rule), layers)
+  for (const { rule, position } of ordered) {
+    const emitter = position.layer === undefined
       ? createRulesEmitter(system)
-      : createRulesEmitter(createLayerContext(system, rule.layer))
+      : createRulesEmitter(createLayerContext(system, position.layer))
     emitter(rule.css)
   }
 }

@@ -1,12 +1,15 @@
 /**
- * Publication smoke: pack the SDK, install that tarball into two tiny apps,
- * then exercise strict types, production builds, and real dev HTTP lifecycles.
- * No workspace link or source alias is allowed to make this pass.
+ * Fresh-package smoke: install the packed SDK in strict Vite/Nuxt/testing-kit
+ * consumers, plus source-shipping packages consumed through both a workspace
+ * link and a package tarball. Inspect each document's linked CSS graph and run
+ * real dev HTTP lifecycles; no SDK workspace link or source alias can mask a
+ * packaging failure.
  */
 
 import type { ChildProcess } from 'node:child_process'
 import { execFileSync, spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { readdir, realpath } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
@@ -20,6 +23,9 @@ const root = mkdtempSync(join(tmpdir(), 'vanity-fresh-'))
 const plainDir = join(root, 'plain-vite')
 const nuxtDir = join(root, 'nuxt-app')
 const testingDir = join(root, 'testing-kit')
+const sourcePackageDir = join(root, 'packages', 'source-design')
+const sourceConsumerDir = join(root, 'source-consumer')
+const installedConsumerDir = join(root, 'installed-consumer')
 
 /** Mirror the workspace's own pnpm pin so the fresh consumer matches the repo toolchain. */
 const rootPackageManager = (
@@ -35,6 +41,98 @@ interface DevPort {
 function write(path: string, source: string): void {
   mkdirSync(join(path, '..'), { recursive: true })
   writeFileSync(path, source)
+}
+
+function writeSourceConsumer(
+  directory: string,
+  designDependency: string,
+  packedDependency: string,
+  name: string,
+): void {
+  write(join(directory, 'package.json'), JSON.stringify({
+    name,
+    private: true,
+    type: 'module',
+    dependencies: {
+      '@fixture/design': designDependency,
+      '@mszr/vanity': packedDependency,
+    },
+    devDependencies: { vite: '8.1.5' },
+  }, null, 2))
+  write(join(directory, 'vite.config.ts'), `import { defineConfig } from 'vite'
+import { vanityPlugin } from '@mszr/vanity/vite'
+
+export default defineConfig({
+  plugins: [vanityPlugin({
+    compiler: { system: '@fixture/design/system' },
+    autoImports: { style: '@fixture/design/authoring' },
+  })],
+  build: { rollupOptions: { input: ['index.html', 'second.html'] } },
+})
+`)
+  write(join(directory, 'index.html'), '<!doctype html><html><body><main id="app"></main><script type="module" src="/src/main.ts"></script></body></html>\n')
+  write(join(directory, 'second.html'), '<!doctype html><html><body><main id="app"></main><script type="module" src="/src/second.ts"></script></body></html>\n')
+  write(join(directory, 'src/first.css.ts'), `export const first = theme.class({ color: theme.t.color.brand, padding: '8px' })
+export const sourceMarker = renamedSourceMarker
+`)
+  write(join(directory, 'src/second.css.ts'), `export const second = theme.class({ color: theme.t.color.brand, margin: '6px' })
+`)
+  write(join(directory, 'src/main.ts'), `import { first, sourceMarker } from './first.css.ts'
+document.querySelector('#app')!.className = first
+document.querySelector('#app')!.textContent = sourceMarker
+`)
+  write(join(directory, 'src/second.ts'), `import { second } from './second.css.ts'
+document.querySelector('#app')!.className = second
+`)
+}
+
+async function filesBelow(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const files = entries.filter(entry => entry.isFile()).map(entry => join(directory, entry.name))
+  const nested = await Promise.all(entries.filter(entry => entry.isDirectory())
+    .map(entry => filesBelow(join(directory, entry.name))))
+  return [...files, ...nested.flat()]
+}
+
+function linkedStylesheetPaths(html: string, dist: string): string[] {
+  const paths: string[] = []
+  for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
+    const tag = match[0]
+    const relation = tag.match(/\brel=["']([^"']+)["']/i)?.[1]
+    const href = tag.match(/\bhref=["']([^"']+)["']/i)?.[1]
+    if (relation?.split(/\s+/).includes('stylesheet') && href !== undefined) {
+      const pathname = decodeURIComponent(new URL(href, 'https://vanity.invalid').pathname)
+      paths.push(join(dist, pathname.replace(/^\/+/, '')))
+    }
+  }
+  return paths
+}
+
+async function assertSourcePackageCss(directory: string): Promise<void> {
+  const dist = join(directory, 'dist')
+  const cases = [
+    { html: 'index.html', declaration: /padding:\s*8px/, label: 'first-page padding' },
+    { html: 'second.html', declaration: /margin:\s*6px/, label: 'second-page margin' },
+  ]
+
+  for (const scenario of cases) {
+    const html = readFileSync(join(dist, scenario.html), 'utf8')
+    const stylesheets = linkedStylesheetPaths(html, dist)
+    if (stylesheets.length === 0)
+      throw new Error(`${scenario.html} does not link a stylesheet`)
+    const css = stylesheets.map(path => readFileSync(path, 'utf8')).join('\n')
+    if (!/--source-shipping-color-brand\s*:\s*#13579b\b/i.test(css))
+      throw new Error(`${scenario.html}'s linked CSS is missing the source-package token declaration`)
+    if (!/color:\s*var\(--source-shipping-color-brand\)/.test(css))
+      throw new Error(`${scenario.html}'s linked CSS is missing its consuming token reference`)
+    if (!scenario.declaration.test(css))
+      throw new Error(`${scenario.html}'s linked CSS is missing ${scenario.label}`)
+  }
+
+  const scripts = (await filesBelow(dist)).filter(path => path.endsWith('.js'))
+  const javascript = scripts.map(path => readFileSync(path, 'utf8')).join('\n')
+  if (!javascript.includes('source-package-barrel-export'))
+    throw new Error('the unrelated renamed package export did not survive the style build')
 }
 
 function run(command: string, args: string[], cwd = root): void {
@@ -186,7 +284,41 @@ async function main(): Promise<void> {
   const packedDependency = `file:${tarball}`
 
   write(join(root, 'package.json'), JSON.stringify({ private: true, packageManager: rootPackageManager }, null, 2))
-  write(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - plain-vite\n  - nuxt-app\n  - testing-kit\n')
+  write(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - plain-vite\n  - nuxt-app\n  - testing-kit\n  - packages/*\n  - source-consumer\n  - installed-consumer\n')
+
+  write(join(sourcePackageDir, 'package.json'), JSON.stringify({
+    name: '@fixture/design',
+    version: '0.0.0',
+    type: 'module',
+    files: ['src'],
+    exports: {
+      './system': './src/system.ts',
+      './authoring': './src/authoring.ts',
+    },
+    dependencies: { '@mszr/vanity': packedDependency },
+  }, null, 2))
+  write(join(sourcePackageDir, 'src/leaf.ts'), [
+    'import { createSystem } from \'@mszr/vanity\'',
+    '',
+    'export const ds = createSystem()',
+    '  .addTokens({ color: { brand: \'#13579b\' } })',
+    '  .consolidate({ prefix: \'source-shipping\' })',
+    '',
+  ].join('\n'))
+  write(join(sourcePackageDir, 'src/constants.ts'), 'export const sourceMarker = \'source-package-barrel-export\'\n')
+  write(join(sourcePackageDir, 'src/system.ts'), 'export { ds as theme } from \'./leaf\'\nexport { sourceMarker as renamedSourceMarker } from \'./constants\'\n')
+  write(join(sourcePackageDir, 'src/authoring.ts'), 'export { theme, renamedSourceMarker } from \'./system\'\n')
+
+  const sourceTarballName = execFileSync('pnpm', [
+    '--dir',
+    sourcePackageDir,
+    'pack',
+    '--pack-destination',
+    root,
+  ], { cwd: root, encoding: 'utf-8' }).trim().split('\n').at(-1)!
+  const sourceTarball = isAbsolute(sourceTarballName) ? sourceTarballName : join(root, sourceTarballName)
+  writeSourceConsumer(sourceConsumerDir, 'workspace:*', packedDependency, 'vanity-fresh-source-consumer')
+  writeSourceConsumer(installedConsumerDir, `file:${sourceTarball}`, packedDependency, 'vanity-fresh-installed-consumer')
 
   write(join(plainDir, 'package.json'), JSON.stringify({
     name: 'vanity-fresh-plain',
@@ -409,6 +541,20 @@ describe('packed consumer testing kit', () => {
   run('pnpm', ['--dir', testingDir, 'exec', 'tsc', '--noEmit'])
   run('pnpm', ['--dir', testingDir, 'exec', 'vitest', 'run'])
   console.log('✓ fresh testing kit: packed emit/fold/render and Selenita DX')
+
+  const sourcePackageRealPath = await realpath(sourcePackageDir)
+  const linkedSourcePackage = await realpath(join(sourceConsumerDir, 'node_modules/@fixture/design'))
+  const installedSourcePackage = await realpath(join(installedConsumerDir, 'node_modules/@fixture/design'))
+  if (linkedSourcePackage !== sourcePackageRealPath)
+    throw new Error('the workspace consumer did not resolve the linked source package')
+  if (installedSourcePackage === sourcePackageRealPath)
+    throw new Error('the packed source consumer resolved the workspace package instead of its installed copy')
+
+  for (const directory of [sourceConsumerDir, installedConsumerDir]) {
+    run('pnpm', ['--dir', directory, 'exec', 'vite', 'build'])
+    await assertSourcePackageCss(directory)
+  }
+  console.log('✓ packed SDK: workspace-linked and physically installed source packages, real export maps, ambient authoring, two-page linked CSS')
 
   run('pnpm', ['--dir', plainDir, 'exec', 'vanity', 'prepare'])
   run('pnpm', ['--dir', plainDir, 'exec', 'tsc', '--noEmit'])

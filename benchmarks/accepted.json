@@ -1,6 +1,6 @@
 {
   "package": {
-    "rootBytes": 620865,
+    "rootBytes": 623976,
     "presetsBytes": 31202,
     "runtimeBytes": 65808,
     "runtimeMinifiedBytes": 38155,
@@ -11,22 +11,22 @@
       "declarationsBytes": 40184,
       "cssBytes": 4461,
       "cssGzipBytes": 812,
-      "manifestBytes": 153572,
-      "manifestGzipBytes": 7225
+      "manifestBytes": 153571,
+      "manifestGzipBytes": 7227
     },
     "medium": {
       "declarationsBytes": 107485,
       "cssBytes": 24712,
       "cssGzipBytes": 2978,
-      "manifestBytes": 1169492,
-      "manifestGzipBytes": 32638
+      "manifestBytes": 1169491,
+      "manifestGzipBytes": 32637
     },
     "large": {
       "declarationsBytes": 588958,
       "cssBytes": 208567,
       "cssGzipBytes": 21445,
       "manifestBytes": 11386892,
-      "manifestGzipBytes": 255925
+      "manifestGzipBytes": 255924
     }
   }
 }

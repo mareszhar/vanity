@@ -54,7 +54,7 @@ test('benchmark page assertion is reachable and reports its contract', () => {
     })
     const originalDocument = readFileSync(documentPath, 'utf8')
     const originalAccepted = readFileSync(acceptedPath, 'utf8')
-    const documentedRoot = originalDocument.match(/The current package root entry is ([\d,]+) B raw\./)
+    const documentedRoot = originalDocument.match(/Package entries: root ([\d,]+) B raw;/)
     assert.ok(documentedRoot)
     const documentedRootBytes = Number(documentedRoot[1]!.replaceAll(',', ''))
     const staleRootBytes = documentedRootBytes - 1

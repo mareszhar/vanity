@@ -567,12 +567,13 @@ describe('hmr', () => {
     server = undefined
   })
 
-  async function serveFixtureCopy() {
+  async function serveFixtureCopy(prepare?: (root: string) => Promise<void>) {
     // realpath: Vite resolves modules to real paths; macOS tmpdir is a symlink.
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-hmr-')))
     await cp(local('./test-support/vite-app'), root, { recursive: true })
     // The substrate walks up for a named package.json; the copy needs its own.
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-hmr-fixture", "type": "module" }')
+    await prepare?.(root)
 
     const warnings: string[] = []
     const logger = createLogger('silent')
@@ -769,6 +770,38 @@ export const first = ds.class({ color })
     await expect(devServer.transformRequest('/first.css.ts')).resolves.toBeTruthy()
     const css = await devServer.transformRequest(`${entry}.vanity.css`)
     expect(css?.code).toContain('color: rebeccapurple')
+  })
+
+  it('recovers a first-ever failed configured system on the same dev server', async () => {
+    const dependency = 'initial-system-value.ts'
+    const { root, server: devServer } = await serveFixtureCopy(async (fixtureRoot) => {
+      await writeFile(join(fixtureRoot, dependency), `export const color = '#cc0000'
+throw new Error('initial configured system failure')
+`)
+      await writeFile(join(fixtureRoot, 'system.ts'), `import { createSystem } from '@mszr/vanity'
+import { color } from './${dependency}'
+
+export const ds = createSystem()
+  .addTokens({
+    color: { brand: color, surface: '#f4f4f6' },
+    space: { sm: '8px' },
+  })
+  .consolidate({ prefix: 'initial' })
+`)
+    })
+
+    await expect(devServer.transformRequest('/progress.css.ts')).rejects.toThrow()
+
+    const valueFile = join(root, dependency)
+    await writeFile(valueFile, 'export const color = \'#00aa55\'\n')
+    await expect(hotUpdate(devServer, valueFile)).resolves.toBeDefined()
+
+    const transformed = await devServer.transformRequest('/progress.css.ts')
+    expect(transformed?.code).toContain('/progress.css.ts.vanity.css')
+    const systemCssUrl = transformed?.code.match(/import "([^"]+\.vanity\.css)"/)?.[1]
+    expect(systemCssUrl).toBeDefined()
+    expect((await devServer.transformRequest(systemCssUrl!))?.code)
+      .toContain('#00aa55')
   })
 })
 

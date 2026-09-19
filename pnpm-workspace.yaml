@@ -2,6 +2,12 @@ catalogMode: strict
 
 minimumReleaseAge: 4320
 shellEmulator: true
+# A git hook has no TTY, so pnpm's pre-run dependency check can abort a commit
+# when it decides to auto-install. Keep runs clean and installs explicit;
+# dependency integrity is gated by `pnpm install --frozen-lockfile` in `check`
+# and in CI, which fails on real lockfile/manifest drift rather than on a
+# benign manifest bump.
+verifyDepsBeforeRun: false
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - semver

@@ -325,14 +325,14 @@ function parseBenchmarkDocumentation(
   scaleNames: readonly string[],
   failures: string[],
 ): BenchmarkByteFacts | undefined {
-  const rootBytes = parseDocumentedNumber(document, /The current package root entry is ([\d,]+) B raw\./, 'the package root entry', failures)
-  const runtime = document.match(/The runtime entry is\s+([\d,]+)\s+B\s+raw,\s+([\d,]+)\s+B\s+minified,\s+and\s+([\d,]+)\s+B\s+min\+gzipped\./)
+  const rootBytes = parseDocumentedNumber(document, /Package entries:\s+root\s+([\d,]+)\s+B\s+raw;/, 'the package root entry', failures)
+  const runtime = document.match(/Package entries:[^\n]*runtime\s+([\d,]+)\s+B\s+raw,\s+([\d,]+)\s+B\s+minified,\s+and\s+([\d,]+)\s+B\s+min\+gzip;/)
   if (runtime === null)
     failures.push('benchmarks.md is missing the runtime entry measurements')
   const runtimeBytes = runtime === null ? undefined : Number(runtime[1]!.replaceAll(',', ''))
   const runtimeMinifiedBytes = runtime === null ? undefined : Number(runtime[2]!.replaceAll(',', ''))
   const runtimeMinGzipBytes = runtime === null ? undefined : Number(runtime[3]!.replaceAll(',', ''))
-  const presetsBytes = parseDocumentedNumber(document, /The Hail presets entry is\s+([\d,]+)\s+B\s+raw,/, 'the Hail presets entry', failures)
+  const presetsBytes = parseDocumentedNumber(document, /Package entries:[^\n]*Hail presets\s+([\d,]+)\s+B\s+raw\./, 'the Hail presets entry', failures)
   const rows = tableRows(document, 'Declaration emit / bytes')
   const scales: Record<string, BenchmarkScaleByteFacts> = {}
 

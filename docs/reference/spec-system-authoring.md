@@ -233,9 +233,9 @@ createSystem().addRules({
 })
 ```
 
-Rule identity is its name. Duplicate add fails. Cross-rule order is layer order; within a layer registration order is the default and numeric `order` is the deliberate escape. Rules may contain any number of selectors and nested rules; that is expressibility within one named contribution, not a separate public grouping concept. Named rules appear in compatibility/CSS/docs identities, the portable contract, `introspect()`, provenance, and diffs.
+Rule identity is its name. Duplicate add fails. An omitted `layer` resolves to the system's global-rule default: `reset` when that layer is declared, otherwise the first declared layer. Writing that effective layer explicitly is equivalent to omitting it. This default is distinct from the default layer used by class-style emitters. Cross-rule order follows declared layer order; within one effective layer and numeric `order`, registration order is stable, with `order` as the deliberate escape. Rules may contain any number of selectors and nested rules; that is expressibility within one named contribution, not a separate public grouping concept. Named rules appear in compatibility/CSS/docs identities, the portable contract, `introspect()`, provenance, and diffs.
 
-`overwriteRule(s)` patches metadata and replaces `css` when supplied. Styling emitters do not cause a named rule to emit more than once.
+`overwriteRule(s)` patches metadata and replaces `css` when supplied. A rule name and effective order are structural contract data; its layer, selectors, declarations, registration order, and supported at-rule payloads affect CSS identity when they change. Declaration order, nested selector/at-rule order, and fallback-array order are preserved because they can change the browser cascade; `description` is documentation-only. Styling emitters do not cause a named rule to emit more than once.
 
 ## 10. Requirements and plugin ownership
 

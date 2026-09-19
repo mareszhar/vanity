@@ -1,67 +1,94 @@
 /** Compiler-owned dependency fan-out and stable CSS HMR updates. */
 
-import type { ModuleNode, ViteDevServer } from 'vite'
-import type { VanityInspectRecord } from '../../introspect/records'
-import type { VanityPortableSystem } from '../../system/contract'
 import type { EvaluatedSystem, NormalizedSystemSource } from '../core/systems'
-import { readFile } from 'node:fs/promises'
-import { posix } from 'node:path'
+import type { CompilerHmrHost } from './host'
 import { normalizePath } from '../core/path'
 import { getRuntimeIdentity } from '../core/systems'
-import { replaceEntryVirtualIds as replaceVirtualIds } from './state'
 
 export interface StyleHotUpdateContext {
   readonly file: string
-  readonly server: ViteDevServer
-  readonly modules: readonly ModuleNode[]
+  readonly modules: readonly object[]
+}
+
+/** A resolved application namespace projection for one system. */
+export interface RuntimeNamespaceHmrRecord {
+  readonly id: string
+  readonly moduleFile: string
+  readonly identity: string
+  readonly runtimeId: string
 }
 
 export interface StyleHotUpdateState {
-  readonly root: string
+  readonly host: CompilerHmrHost
   readonly runtimeVirtualPrefix: string
   readonly systemSources: readonly NormalizedSystemSource[]
   readonly systemDependentsByFile: Map<string, Set<string>>
   readonly systemsByEntry: Map<string, EvaluatedSystem>
-  readonly recordsByFile: Map<string, VanityInspectRecord[]>
   readonly dependentsByFile: Map<string, Set<string>>
   readonly styleEntriesBySystem: Map<string, Set<string>>
   readonly runtimeVirtualIds: Set<string>
+  readonly runtimeNamespaceIdsByEntry: Map<string, Map<string, RuntimeNamespaceHmrRecord>>
+  readonly clearRuntimeNamespaceProjection: (id: string) => void
+  readonly getRuntimeNamespaceIdentity: (system: EvaluatedSystem, moduleFile: string) => string | undefined
   readonly failedStyleEntries: Set<string>
   readonly refreshAppAutoImports?: () => Promise<void>
-  readonly evaluateConfiguredSystem: (source: NormalizedSystemSource) => Promise<EvaluatedSystem>
-  readonly createSystemRecord: (system: VanityPortableSystem) => VanityInspectRecord
+  readonly evaluateConfiguredSystems: (sources: readonly NormalizedSystemSource[]) => Promise<EvaluatedSystem[]>
 }
 
 /** Recompile affected style entries and invalidate dependent runtime modules. */
 export async function handleHotUpdate(
   context: StyleHotUpdateContext,
   state: StyleHotUpdateState,
-): Promise<ModuleNode[] | undefined> {
+): Promise<object[] | undefined> {
   const normalizedFile = normalizePath(context.file)
   await state.refreshAppAutoImports?.()
 
   const affectedSystems = [...state.systemDependentsByFile.get(normalizedFile) ?? []]
   const invalidatedRuntimeIdentities = new Set<string>()
+  const invalidatedRuntimeNamespaceIds = new Set<string>()
   const failures: unknown[] = []
-
-  for (const entry of affectedSystems) {
+  const affected = new Set(context.modules)
+  const affectedSources = affectedSystems.flatMap((entry) => {
     const source = state.systemSources.find(candidate => candidate.entry === entry)
-    if (!source)
-      continue
+    return source === undefined ? [] : [source]
+  })
+  const previousSystems = new Map(affectedSources.map(source => [
+    source.entry,
+    state.systemsByEntry.get(source.entry),
+  ]))
+
+  if (affectedSources.length > 0) {
     try {
-      const previous = state.systemsByEntry.get(entry)
-      const system = await state.evaluateConfiguredSystem(source)
-      state.recordsByFile.set(source.entry, [state.createSystemRecord(system.portable)])
-      if (
-        previous !== undefined
-        && getRuntimeIdentity(previous.portable) !== getRuntimeIdentity(system.portable)
-      ) {
-        invalidatedRuntimeIdentities.add(getRuntimeIdentity(previous.portable))
+      const systems = await state.evaluateConfiguredSystems(affectedSources)
+      for (const [index, system] of systems.entries()) {
+        const source = affectedSources[index]
+        const previous = source === undefined ? undefined : previousSystems.get(source.entry)
+        if (
+          previous !== undefined
+          && getRuntimeIdentity(previous.portable) !== getRuntimeIdentity(system.portable)
+        ) {
+          invalidatedRuntimeIdentities.add(getRuntimeIdentity(previous.portable))
+        }
+        if (source === undefined)
+          continue
+        const namespaceRecords = state.runtimeNamespaceIdsByEntry.get(source.entry)
+        if (namespaceRecords === undefined)
+          continue
+        const nextRuntimeId = getRuntimeIdentity(system.portable)
+        for (const record of namespaceRecords.values()) {
+          const nextIdentity = state.getRuntimeNamespaceIdentity(system, record.moduleFile)
+          if (record.runtimeId !== nextRuntimeId || record.identity !== nextIdentity) {
+            invalidatedRuntimeNamespaceIds.add(record.id)
+            namespaceRecords.delete(record.id)
+          }
+        }
+        if (namespaceRecords.size === 0)
+          state.runtimeNamespaceIdsByEntry.delete(source.entry)
       }
     }
     catch (error) {
-      // Preserve the last-good application projection, CSS, artifact, and manifest. The
-      // changed entry/style transform reports the fresh compiler error.
+      // Keep the last accepted generation live; the failed candidate must not
+      // invalidate the application's existing runtime or CSS projection.
       failures.push(error)
     }
   }
@@ -70,9 +97,6 @@ export async function handleHotUpdate(
   if (!dependents?.size && affectedSystems.length === 0)
     return undefined
 
-  // A bundled dependency changed: every style module built on it
-  // re-evaluates, so its fresh CSS lands under the same stable ids.
-  const affected = new Set(context.modules)
   const entries = new Set(dependents ?? [])
   for (const system of affectedSystems) {
     for (const entry of state.styleEntriesBySystem.get(system) ?? [])
@@ -84,55 +108,54 @@ export async function handleHotUpdate(
     const runtimeId = payload.slice(payload.indexOf(':') + 1)
     if (!invalidatedRuntimeIdentities.has(runtimeId))
       continue
-    const runtimeModule = context.server.moduleGraph.getModuleById(id)
-    if (runtimeModule) {
-      context.server.moduleGraph.invalidateModule(runtimeModule)
+    for (const runtimeModule of state.host.findModulesById(id)) {
+      state.host.markModuleInvalid(runtimeModule)
       affected.add(runtimeModule)
     }
+    for (const runtimeModule of state.host.markModulesInvalidById(id))
+      affected.add(runtimeModule)
+  }
+
+  if (invalidatedRuntimeNamespaceIds.size > 0) {
+    state.host.removeRuntimeModules(invalidatedRuntimeNamespaceIds)
+    for (const id of invalidatedRuntimeNamespaceIds)
+      state.clearRuntimeNamespaceProjection(id)
+  }
+  if (invalidatedRuntimeNamespaceIds.size > 0) {
+    // Application namespace value/interface changes cannot be applied through
+    // the stable system CSS update channel. Reload so every importer resolves
+    // the new module-specific namespace and keeps shared runtime identity.
+    state.host.sendFullReload()
   }
 
   for (const dependent of entries) {
-    const url = `/${posix.relative(normalizePath(state.root), dependent)}`
-    let dependentModules = [...context.server.moduleGraph.getModulesByFile(dependent) ?? []]
-    const urlModule = await context.server.moduleGraph.getModuleByUrl(url)
-    if (urlModule !== undefined && !dependentModules.includes(urlModule))
-      dependentModules.push(urlModule)
+    const dependentModules = new Set(state.host.findModulesByFile(dependent))
+    const firstModule = dependentModules.values().next().value as object | undefined
+    const graphUrl = state.host.getGraphModuleUrl(
+      dependent,
+      firstModule === undefined ? undefined : state.host.getModuleUrl(firstModule),
+    )
 
-    // Vite 8's compatibility graph and environment graphs do not always
-    // share invalidation state for dependencies bundled outside Vite.
-    // Invalidate the concrete environment entry as well as the wrapper.
-    for (const environment of Object.values(context.server.environments)) {
-      const environmentModule = await environment.moduleGraph.getModuleByUrl(url)
-      if (environmentModule !== undefined)
-        environment.moduleGraph.invalidateModule(environmentModule)
-    }
+    for (const entryModule of await state.host.findModulesByUrl(graphUrl))
+      dependentModules.add(entryModule)
 
-    // A first-ever failed transform may not have a healthy module-graph
-    // node. Materialize one from the attempted entry we track outside
-    // Vite's graph so the repaired dependency can invalidate/retry it on
-    // this same server.
-    if (dependentModules.length === 0 && state.failedStyleEntries.has(dependent))
-      dependentModules = [await context.server.moduleGraph.ensureEntryFromUrl(url)]
+    // Vite does not retain a healthy node after a failed first transform. Keep
+    // the attempted entry separately so a repaired dependency can materialize
+    // the graph address and recover without a server restart.
+    if (dependentModules.size === 0 && state.failedStyleEntries.has(dependent))
+      dependentModules.add(await state.host.ensureEntryFromUrl(graphUrl))
 
     for (const dependentModule of dependentModules) {
-      // Bundled dependencies are deliberately invisible to Vite's import
-      // graph, so its ordinary file walk cannot invalidate this entry for
-      // us. Clear the cached transform here before returning the boundary.
-      context.server.moduleGraph.invalidateModule(dependentModule)
+      state.host.markModuleInvalid(dependentModule)
       affected.add(dependentModule)
     }
   }
 
-  // Vite cannot see bundled import edges and may soft-reuse a last-good
-  // transform even after its compatibility graph reports hard
-  // invalidation. Recompile each known entry eagerly through the active
-  // environment: errors reach the overlay now; a later repair retries on
-  // the same server; stable CSS ids keep serving their last-good bytes
-  // until the whole evaluation succeeds.
+  // Bundled edges are intentionally absent from Vite's source graph, so
+  // invalidate and re-run each known consumer through the active host pipeline.
   for (const dependent of entries) {
     try {
-      const source = await readFile(dependent, 'utf-8')
-      await context.server.environments.client.pluginContainer.transform(source, dependent)
+      await state.host.compileStyle(dependent)
     }
     catch (error) {
       failures.push(error)
@@ -142,22 +165,16 @@ export async function handleHotUpdate(
   if (failures.length > 0)
     throw failures[0]
 
-  return [...affected]
+  const returnedByUrl = new Map<string, object>()
+  const withoutUrl: object[] = []
+  for (const module of affected) {
+    const url = state.host.getModuleUrl(module)
+    if (url === undefined) {
+      withoutUrl.push(module)
+      continue
+    }
+    if (!returnedByUrl.has(url))
+      returnedByUrl.set(url, module)
+  }
+  return [...returnedByUrl.values(), ...withoutUrl]
 }
-
-/** Send a stable virtual CSS update that replaces the browser's existing style tag. */
-export function sendCssUpdate(server: ViteDevServer, url: string, timestamp: number): void {
-  server.hot.send({
-    type: 'update',
-    updates: [{
-      type: 'js-update',
-      timestamp,
-      path: url,
-      acceptedPath: url,
-      explicitImportRequired: false,
-      isWithinCircularImport: false,
-    }],
-  })
-}
-
-export { replaceVirtualIds as replaceEntryVirtualIds }

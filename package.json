@@ -40,6 +40,8 @@
     "bench:fixtures:check": "tsx scripts/generate-benchmarks.ts --check",
     "bench:resolution": "tsx scripts/benchmark-resolution.ts",
     "bench:baseline": "pnpm run sdk:build && pnpm run bench:fixtures:check && tsx scripts/benchmark.ts",
+    "bench:docs:check": "tsx scripts/check-benchmark-doc.ts",
+    "bench:docs:update": "tsx scripts/check-benchmark-doc.ts --write",
     "docs:examples": "tsx scripts/check-doc-examples.ts",
     "readme:sync": "tsx scripts/sync-package-readme.ts",
     "readme:check": "tsx scripts/sync-package-readme.ts --check",

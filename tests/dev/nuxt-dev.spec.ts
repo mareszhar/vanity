@@ -95,6 +95,9 @@ test('Nuxt dev keeps first paint styled and HMR deterministic', async ({ page })
     await page.waitForTimeout(750)
     expect(await loadCount(page)).toBe(loadsBeforeHmr + 1)
 
+    const systemStylesheets = stylesheets.filter(({ url }) => url.includes('/.vanity/virtual/system/'))
+    expect(systemStylesheets.filter(({ status }) => status >= 400)).toEqual([])
+    expect(new Set(systemStylesheets.map(({ url }) => new URL(url).pathname)).size).toBeGreaterThan(1)
     expect(browserErrors, browserErrors.join('\n')).toEqual([])
   }
   finally {

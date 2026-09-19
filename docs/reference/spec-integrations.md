@@ -211,6 +211,27 @@ The shared style-module pipeline:
 - generates browser and SSR projections from portable data; and
 - supports precompiled package contracts.
 
+`compiler.system` names the entry the compiler evaluates. It may be a system module or a static barrel that re-exports one, and the host resolves the spelling you write using its own aliases, export conditions, extension rules, directory indexes, and symlink policy — so a package export or a symlinked path resolves the same way your application imports resolve. An arbitrary host virtual module is not a substitute for a real module.
+
+That module may export the consolidated system and values taken from it, including renamed destructured members:
+
+```TS
+// src/design/ds.ts — a valid compiler.system entry
+export const ds = createSystem()
+  .addTokens({ color: { brand: '#635bff' } })
+  .consolidate({ prefix: 'app' })
+
+export const { class: cls, rules, t } = ds
+```
+
+Application code receives a generated projection of that module, so an export that is neither the system nor a value taken from it has nowhere to travel: Vanity raises `VANITY_APP_EXPORT_IN_SYSTEM_MODULE`, names the export and the fix, and asks you to move the declaration into any other module and import it normally. Type-only exports are erased and never rejected. Ordinary modules and pure re-export barrels pass through the host graph untouched, so their objects, functions, closures, and live bindings keep ordinary JavaScript semantics — and a barrel and the module it re-exports share one system without sharing one export namespace.
+
+System CSS is emitted once per CSS identity, independently of which style module reaches the system first, and every style that uses a system keeps an edge to it. Component CSS stays lazy, and systems you never reach stay unemitted.
+
+Vanity watches every resolved input a style module depends on, including data imports such as JSON, and stops at its own package boundary so its implementation dependencies never land in your watch set.
+
+The supported Vite range is `^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0`.
+
 `compiler.layerOrder` establishes the host-wide order of CSS layer roots; its detailed semantics live in [spec-system.md §9](./spec-system.md#9-compiler-projection).
 
 ### Module roles and type consumers
@@ -229,6 +250,8 @@ autoImports: {
   app: ['core', 'vue'],
 }
 ```
+
+When a source-shipping package also publishes build JavaScript plus a portable system artifact, the consumer pairs them through the configured `system` object. The strict reader compares compatibility, CSS, runtime, and docs identities; a description-only source edit keeps CSS bytes stable but still requires the pair to be regenerated when its docs identity changes. The diagnostic names the package and the identities that disagree.
 
 `shared` expands into both module roles and creates no third declaration file. `style` targets only `*.css.ts`; `app` targets only application modules. A direct source string is shorthand for `shared`.
 
@@ -261,6 +284,8 @@ The type half and value half are distinct. A host injects the real value import 
 | Explicit barrel import | `import { cls, t } from '@acme/design/authoring'` | None outside the file. | A package with a handful of style modules. |
 | Per-package host wiring | Nothing | Each TypeScript program reaching a style file prepares declarations. | A styling-heavy package scaffolded with its host setup. |
 | Type-only unlock | `import type {} from '@acme/design/vanity-style-auto-imports'` | Nothing for consumers. | A source-shipping package that keeps its declaration requirement local. |
+
+Vanity recognizes authoring sources by their role rather than by their location, so a package keeps its export-derived class names and source-local diagnostics whether it is linked from a workspace or installed under `node_modules`. Unrelated dependencies and raw Vanilla Extract modules keep their own processing.
 
 These are trade-offs, not a ranking, and one workspace may mix them. A package publishing the generated style declaration exports it as a bare package specifier, so the unlock import resolves in every consuming program.
 
@@ -320,7 +345,7 @@ Preserve:
 
 Both HMR recovery sequences are mandatory: a dependency failure repaired in place, and a dependency introduced after a successful transform.
 
-The Vite integration tracks attempted style entries and their dependencies, preserves last-good CSS, invalidates environment module graphs, and eagerly retries affected entries on the same server. Both recovery orders are permanent compiler-projection fixtures.
+The Vite integration tracks attempted style entries and their dependencies, preserves last-good CSS, uses Vite's `watchChange` hook and `ModuleGraph.invalidateModule` only at the host boundary, and eagerly retries affected entries on the same server. A value edit that changes CSS identity follows the new browser module URL and removes stale ownership, including under a non-root `base`; a docs-only edit updates the manifest without sending a CSS update. Both recovery orders are permanent compiler-projection fixtures.
 
 ## 10. Demos
 
@@ -361,5 +386,9 @@ Elevation reuses a compatible host `scheme` axis or contributes the canonical on
 - Hail public-contract dogfood, selection, ownership, and packed consumption;
 - generated auto-import declaration text, regeneration, and no-`any` Selenita tests;
 - Vite/Nuxt build, dev, SSR, HMR, optimizer, and packed-app gates;
+- system CSS ownership across independent documents, linked and installed source packages, and shared CSS identities;
+- module-role diagnostics and export-namespace projection through style, browser, and SSR graphs;
+- failure-atomic artifact publication and same-server recovery;
+- HMR under root and non-root public bases, and client and SSR module graphs on each supported Vite major;
 - canary throughout the refactor;
 - reinstated demos with the preserved capability walk.
