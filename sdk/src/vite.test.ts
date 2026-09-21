@@ -10,10 +10,10 @@
 import type { AddressInfo } from 'node:net'
 import type { Rollup, ViteDevServer } from 'vite'
 import { Buffer } from 'node:buffer'
-import { cp, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   applyDebugNames,
@@ -23,6 +23,7 @@ import {
 } from '@mszr/vanity/vite'
 import { build, createLogger, createServer } from 'vite'
 import { afterEach, describe, expect, it } from 'vitest'
+import { resolveViteVirtualId } from './compiler/hosts/viteHmr'
 import { VanityError } from './index'
 import { planAutoImportDeclarations } from './prepare'
 
@@ -622,19 +623,21 @@ describe('hmr', () => {
   it('a style edit serves fresh CSS under the same virtual id — swap in place, never stack', async () => {
     const { root, server: devServer } = await serveFixtureCopy()
     const styleUrl = '/progress.css.ts'
-    const virtualId = `${join(root, 'progress.css.ts')}.vanity.css`
 
     const first = await devServer.transformRequest(styleUrl)
-    // Vite serves the stable id root-relative — no content hash in the URL.
-    expect(first?.code).toContain('import "/progress.css.ts.vanity.css"')
+    // The style import is a stable artifact address — no content hash in the URL.
+    const cssUrl = first?.code.match(/import "([^"]*\/style\/[^"]+\.vanity\.css)"/)?.[1]
+    expect(cssUrl).toBeDefined()
+    const virtualId = resolveViteVirtualId(cssUrl!, root)
+    expect(virtualId).toBeDefined()
     expect(first?.code).toContain('import.meta.hot.accept()')
 
-    // Browser requests use Vite's root-relative spelling (and Nuxt prefixes
-    // it with `/_nuxt/`). It must resolve to the absolute store key too; the
-    // An absolute-only resolver would make every SSR stylesheet link return 404.
-    expect((await devServer.transformRequest('/progress.css.ts.vanity.css'))?.code)
+    // The emitted browser address resolves to the registered store key too;
+    // an address that resolves anywhere else would make every stylesheet
+    // request miss, including SSR links.
+    expect((await devServer.transformRequest(cssUrl!))?.code)
       .toContain('block-size: 100%')
-    expect((await devServer.transformRequest(virtualId))?.code).toContain('block-size: 100%')
+    expect((await devServer.transformRequest(virtualId!))?.code).toContain('block-size: 100%')
 
     const file = join(root, 'progress.css.ts')
     await writeFile(file, (await readFile(file, 'utf-8')).replace('\'100%\'', '\'50%\''))
@@ -642,9 +645,9 @@ describe('hmr', () => {
 
     const second = await devServer.transformRequest(styleUrl)
     // The import is the same stable id — the client's style tag gets replaced.
-    expect(second?.code).toContain('import "/progress.css.ts.vanity.css"')
+    expect(second?.code).toContain(`import "${cssUrl}"`)
 
-    const refreshed = await devServer.transformRequest(virtualId)
+    const refreshed = await devServer.transformRequest(virtualId!)
     expect(refreshed?.code).toContain('block-size: 50%')
     expect(refreshed?.code).not.toContain('block-size: 100%')
   })
@@ -660,12 +663,14 @@ describe('hmr', () => {
   })
 
   it('dev CSS names its style module, and /__vanity serves the live manifest', async () => {
-    const { root, server: devServer } = await serveFixtureCopy()
+    const { server: devServer } = await serveFixtureCopy()
 
-    await devServer.transformRequest('/progress.css.ts')
+    const transformed = await devServer.transformRequest('/progress.css.ts')
+    const cssUrl = transformed?.code.match(/import "([^"]*\/style\/[^"]+\.vanity\.css)"/)?.[1]
+    expect(cssUrl).toBeDefined()
 
     // Provenance: the served stylesheet opens with its origin.
-    const served = await devServer.transformRequest(`${join(root, 'progress.css.ts')}.vanity.css`)
+    const served = await devServer.transformRequest(cssUrl!)
     expect(served?.code).toContain('progress.css.ts · vanity')
 
     // The manifest endpoint reflects what dev has evaluated so far.
@@ -707,7 +712,7 @@ describe('hmr', () => {
     const transformed = await devServer.transformRequest('/progress.css.ts')
     if (transformed?.code === undefined)
       throw new Error('missing transformed progress module')
-    const systemCssUrl = transformed.code.match(/import "([^"]+\.vanity\.css)"/)?.[1]
+    const systemCssUrl = transformed.code.match(/import "([^"]*\/system\/[^"]+\.vanity\.css)"/)?.[1]
     expect(systemCssUrl).toBeDefined()
     const refreshed = await devServer.transformRequest(systemCssUrl!)
     expect(refreshed?.code).toContain('#ff0000')
@@ -717,7 +722,6 @@ describe('hmr', () => {
     const { root, server: devServer } = await serveFixtureCopy()
     const dependency = join(root, 'lifecycle-value.ts')
     const entry = join(root, 'lifecycle.css.ts')
-    const virtualId = `${entry}.vanity.css`
 
     await writeFile(dependency, 'export const color = \'#635bff\'\n')
     await writeFile(join(root, 'lifecycle-system.ts'), `import { createSystem } from '@mszr/vanity'
@@ -729,21 +733,23 @@ import { color } from './lifecycle-value'
 export const lifecycle = ds.class({ color })
 `)
 
-    await devServer.transformRequest('/lifecycle.css.ts')
-    const lastGood = await devServer.transformRequest(virtualId)
+    const accepted = await devServer.transformRequest('/lifecycle.css.ts')
+    const cssUrl = accepted?.code.match(/import "([^"]*\/style\/[^"]+\.vanity\.css)"/)?.[1]
+    expect(cssUrl).toBeDefined()
+    const lastGood = await devServer.transformRequest(cssUrl!)
     expect(lastGood?.code).toContain('#635bff')
 
     await writeFile(dependency, 'export const color =\n')
     await expect(hotUpdate(devServer, dependency)).rejects.toThrow()
 
     // A failed attempt never replaces the bytes served by the stable CSS id.
-    expect((await devServer.transformRequest(virtualId))?.code).toContain('#635bff')
+    expect((await devServer.transformRequest(cssUrl!))?.code).toContain('#635bff')
 
     await writeFile(dependency, 'export const color = \'#00aa55\'\n')
     const affected = await hotUpdate(devServer, dependency)
     expect((affected ?? []).map(moduleNode => moduleNode.file).filter(file => file?.includes('.css.'))).toEqual([entry])
 
-    expect((await devServer.transformRequest(virtualId))?.code).toContain('#00aa55')
+    expect((await devServer.transformRequest(cssUrl!))?.code).toContain('#00aa55')
   })
 
   it('recovers a first-ever failed style transform when its dependency is fixed', async () => {
@@ -768,9 +774,80 @@ export const first = ds.class({ color })
     expect((affected ?? []).map(moduleNode => moduleNode.file)).toEqual([entry])
 
     await expect(devServer.transformRequest('/first.css.ts')).resolves.toBeTruthy()
-    const css = await devServer.transformRequest(`${entry}.vanity.css`)
+    const accepted = await devServer.transformRequest('/first.css.ts')
+    const cssUrl = accepted?.code.match(/import "([^"]*\/style\/[^"]+\.vanity\.css)"/)?.[1]
+    expect(cssUrl).toBeDefined()
+    const css = await devServer.transformRequest(cssUrl!)
     expect(css?.code).toContain('color: rebeccapurple')
   })
+
+  it('recovers first-ever failed style entries inside and outside the root when their dependency is fixed', async () => {
+    const base = await realpath(await mkdtemp(join(tmpdir(), 'vanity-hmr-recovery-')))
+    const appRoot = join(base, 'app')
+    const outsideRoot = join(base, 'packages', 'ui')
+    await mkdir(appRoot, { recursive: true })
+    await mkdir(outsideRoot, { recursive: true })
+    await writeFile(join(appRoot, 'package.json'), '{ "name": "recovery-app", "type": "module" }')
+    await writeFile(join(outsideRoot, 'package.json'), '{ "name": "recovery-ui", "type": "module" }')
+    const system = join(appRoot, 'system.ts')
+    await writeFile(system, `import { createSystem } from '@mszr/vanity'
+export const ds = createSystem().consolidate({ prefix: 'recovery' })
+`)
+    const specifier = (entry: string): string => {
+      const rel = relative(dirname(entry), system).split(sep).join('/')
+      return rel.startsWith('.') ? rel : `./${rel}`
+    }
+    // The outside entry is seeded by its absolute path: SSR and absolute-id
+    // transforms leave the node carrying that path as its URL, which is the
+    // shape that travels the graph-lookup branch.
+    const cases = [
+      { dir: appRoot, name: 'entry', url: '/entry.css.ts', color: 'rebeccapurple' },
+      { dir: outsideRoot, name: 'card', url: join(outsideRoot, 'card.css.ts'), color: 'darkorange' },
+    ]
+    for (const { dir, name } of cases) {
+      await writeFile(join(dir, `${name}-value.ts`), 'export const color =\n')
+      await writeFile(join(dir, `${name}.css.ts`), `import { ds } from '${specifier(join(dir, `${name}.css.ts`))}'
+import { color } from './${name}-value'
+
+export const spot = ds.class({ color })
+`)
+    }
+
+    const fresh = await createServer({
+      configFile: false,
+      logLevel: 'silent',
+      root: appRoot,
+      plugins: [vanityPlugin({ compiler: { identifiers: 'debug', system } })],
+      resolve: { alias: aliases },
+      server: { middlewareMode: true, hmr: false, ws: false, watch: null, fs: { allow: [base] } },
+      optimizeDeps: { noDiscovery: true },
+    })
+    server = fresh
+
+    try {
+      for (const { dir, name, url, color } of cases) {
+        const dependency = join(dir, `${name}-value.ts`)
+        const entry = join(dir, `${name}.css.ts`)
+
+        await expect(fresh.transformRequest(url)).rejects.toThrow()
+
+        await writeFile(dependency, `export const color = '${color}'\n`)
+        const affected = await hotUpdate(fresh, dependency)
+        expect((affected ?? []).map(moduleNode => moduleNode.file)).toEqual([entry])
+
+        const accepted = await fresh.transformRequest(url)
+        expect(accepted).toBeTruthy()
+        const cssUrl = accepted?.code.match(/import "([^"]*\/style\/[^"]+\.vanity\.css)"/)?.[1]
+        expect(cssUrl).toBeDefined()
+        expect((await fresh.transformRequest(cssUrl!))?.code).toContain(`color: ${color}`)
+      }
+    }
+    finally {
+      await server?.close()
+      server = undefined
+      await rm(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  }, 180000)
 
   it('recovers a first-ever failed configured system on the same dev server', async () => {
     const dependency = 'initial-system-value.ts'
@@ -797,8 +874,7 @@ export const ds = createSystem()
     await expect(hotUpdate(devServer, valueFile)).resolves.toBeDefined()
 
     const transformed = await devServer.transformRequest('/progress.css.ts')
-    expect(transformed?.code).toContain('/progress.css.ts.vanity.css')
-    const systemCssUrl = transformed?.code.match(/import "([^"]+\.vanity\.css)"/)?.[1]
+    const systemCssUrl = transformed?.code.match(/import "([^"]*\/system\/[^"]+\.vanity\.css)"/)?.[1]
     expect(systemCssUrl).toBeDefined()
     expect((await devServer.transformRequest(systemCssUrl!))?.code)
       .toContain('#00aa55')

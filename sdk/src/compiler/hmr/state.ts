@@ -1,9 +1,7 @@
 /** Stable virtual-CSS ownership and dependency state used by compiler HMR. */
 
-import type { VanityPortableSystem } from '../../system/contract'
-import { join, resolve } from 'node:path'
-import { normalizePath } from '../core/path'
-import { isSameAuthoredFile } from '../core/systems'
+import { isAbsolute, join, resolve } from 'node:path'
+import { getRootRelativeModulePath, normalizePath } from '../core/path'
 
 /** Return the one canonical virtual module address for a system CSS identity. */
 export function getSystemCssVirtualId(
@@ -17,6 +15,46 @@ export function getSystemCssVirtualId(
     'virtual',
     'system',
     `${cssIdentity}${virtualExtension}`,
+  ))
+}
+
+/**
+ * Return the one canonical virtual module address for a style source.
+ *
+ * The address encodes the source's root-relative path as an up-level count
+ * plus the remaining segments, so every source maps to exactly one address
+ * under the artifact directory and the address maps back to exactly one
+ * source. It is derived from the source path, never from the stylesheet's
+ * content: the address must stay stable across edits so a save replaces the
+ * browser's style tag instead of appending a second one.
+ *
+ * `sourcePath` is the file scope's path, root-relative or absolute — a bare
+ * relative path is already relative to the root, while an absolute one is
+ * made relative. Either spelling of one source names one address.
+ */
+export function getStyleCssVirtualId(
+  sourcePath: string,
+  root: string,
+  virtualExtension: string,
+): string {
+  const relative = normalizePath(isAbsolute(sourcePath)
+    ? getRootRelativeModulePath(sourcePath, root)
+    : sourcePath)
+  const segments = relative.split('/')
+  let ups = 0
+  while (segments[ups] === '..')
+    ups += 1
+  const rest = segments.slice(ups)
+  if (rest.length === 0 || rest.some(segment => segment.length === 0))
+    throw new TypeError(`Vanity cannot address a stylesheet for '${sourcePath}': it names no source file`)
+  return normalizePath(join(
+    resolve(root),
+    '.vanity',
+    'virtual',
+    'style',
+    String(ups),
+    ...rest.slice(0, -1),
+    `${rest[rest.length - 1]}${virtualExtension}`,
   ))
 }
 
@@ -76,28 +114,4 @@ export function replaceEntryVirtualIds(
   }
 
   return retired
-}
-
-/** Resolve a requested authored stylesheet path to its semantic system id. */
-export function resolveCssVirtualAlias(
-  requested: string,
-  root: string,
-  virtualExtension: string,
-  css: ReadonlyMap<string, string>,
-  namespaces: ReadonlyMap<string, ReadonlyMap<string, VanityPortableSystem>>,
-): string | undefined {
-  if (css.has(requested))
-    return requested
-
-  const authored = requested.slice(0, -virtualExtension.length)
-  for (const owners of namespaces.values()) {
-    for (const system of owners.values()) {
-      if (!isSameAuthoredFile(authored, system.source, root))
-        continue
-      const semantic = getSystemCssVirtualId(system.identities.css, root, virtualExtension)
-      if (css.has(semantic))
-        return semantic
-    }
-  }
-  return undefined
 }

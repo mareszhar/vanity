@@ -542,8 +542,9 @@ export const proof = renamedUnrelated
       expect((await server.transformRequest(firstSystemImport!))?.code).toContain('#123456')
       await server.transformRequest(firstSystemImport!, { ssr: true })
       const firstVirtualId = resolveViteVirtualId(firstSystemImport!, root)
+      expect(firstVirtualId).toBeDefined()
       expect(Object.values(server.environments).every(environment =>
-        (environment.moduleGraph.getModulesByFile(firstVirtualId)?.size ?? 0) > 0)).toBe(true)
+        (environment.moduleGraph.getModulesByFile(firstVirtualId!)?.size ?? 0) > 0)).toBe(true)
 
       const firstApplication = await server.ssrLoadModule('/entry.ts') as {
         shared: boolean
@@ -587,7 +588,7 @@ export const proof = renamedUnrelated
       expect(secondSystemImport).not.toBe(firstSystemImport)
       expect((await server.transformRequest(secondSystemImport!))?.code).toContain('#445566')
       expect(Object.values(server.environments).every(environment =>
-        (environment.moduleGraph.getModulesByFile(firstVirtualId)?.size ?? 0) === 0)).toBe(true)
+        (environment.moduleGraph.getModulesByFile(firstVirtualId!)?.size ?? 0) === 0)).toBe(true)
     }
     finally {
       await server?.close()

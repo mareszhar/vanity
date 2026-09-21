@@ -26,6 +26,7 @@ interface BrowserFixture {
   readonly constants: string
   readonly style: string
   readonly secondStyle: string
+  readonly outsideStyle: string
   readonly brokenStyle: string
   readonly watchEvents: string[]
   readonly hmrUpdates: string[]
@@ -66,7 +67,7 @@ async function startFixture(base: string): Promise<BrowserFixture> {
   await put(designRoot, 'package.json', JSON.stringify({
     name: '@fixture/design',
     type: 'module',
-    exports: { './system': './system.ts', './barrel': './barrel.ts' },
+    exports: { './system': './system.ts', './barrel': './barrel.ts', './spot.css.ts': './spot.css.ts' },
   }))
   await mkdir(join(appRoot, 'node_modules/@fixture'), { recursive: true })
   await symlink(designRoot, join(appRoot, 'node_modules/@fixture/design'), 'dir')
@@ -108,12 +109,20 @@ export const card = ds.class({
 
 export const card = ds.class({ color: ds.t.color.brand })
 `)
+  const outsideStyle = await put(designRoot, 'spot.css.ts', `import { ds } from './system'
+
+export const spot = ds.class({
+  color: ds.t.color.brand,
+  padding: '4px',
+})
+`)
   const brokenStyle = await put(appRoot, 'broken.css.ts', `import { ds } from '@fixture/design/system'
 
 export const broken = ds.class({ color: ds.t.color.brand
 `)
   await put(appRoot, 'main.ts', `import { card } from './style.css.ts'
 import { card as second } from './second.css.ts'
+import { spot } from '@fixture/design/spot.css.ts'
 import { ds } from '@fixture/design/system'
 import { theme, renamedUnrelated } from '@fixture/design/barrel'
 import * as applicationNamespace from '@fixture/design/barrel'
@@ -129,9 +138,10 @@ runtime.t.color.brand.$set('#778899')
   variable: theme.t.color.brand.$name,
   added: Reflect.get(applicationNamespace, 'added') ?? null,
 }
-document.body.innerHTML = '<main><div id="first"></div><div id="second"></div><div id="order-probe"></div></main>'
+document.body.innerHTML = '<main><div id="first"></div><div id="second"></div><div id="third"></div><div id="order-probe"></div></main>'
 document.querySelector('#first')!.className = card
 document.querySelector('#second')!.className = second
+document.querySelector('#third')!.className = spot
 document.body.insertAdjacentHTML('beforeend', '<output id="namespace-proof"></output>')
 document.querySelector('#namespace-proof')!.textContent = JSON.stringify((globalThis as any).__vanityNamespace)
 `)
@@ -173,6 +183,7 @@ document.querySelector('#namespace-proof')!.textContent = JSON.stringify((global
     constants,
     style,
     secondStyle,
+    outsideStyle,
     brokenStyle,
     watchEvents,
     hmrUpdates,
@@ -326,6 +337,8 @@ async function loadFixture(page: Page, fixture: BrowserFixture) {
     .toBe('rgb(119, 136, 153)')
   await expect.poll(() => page.locator('#second').evaluate(element => getComputedStyle(element).color))
     .toBe('rgb(119, 136, 153)')
+  await expect.poll(() => page.locator('#third').evaluate(element => getComputedStyle(element).padding))
+    .toBe('4px')
   await expect(page.locator('#namespace-proof')).toHaveText(
     JSON.stringify({ shared: true, unrelated: 'kept', variable: '--browser-hmr-color-brand', added: null }),
   )
@@ -405,6 +418,26 @@ test('root and non-root bases apply local CSS edits through real browser request
         .toBe('2px')
       expect(await loadCount(page)).toBe(loads)
       expect(cssRequests.some(url => new URL(url).pathname.startsWith(base))).toBe(true)
+      expect(failures, failures.join('\n')).toEqual([])
+    }
+    finally {
+      await stopFixture(fixture)
+    }
+  }
+})
+
+test('out-of-root style edits hot-swap computed style without reload', async ({ page }) => {
+  for (const base of ['/', '/dashboard/']) {
+    const fixture = await startFixture(base)
+    try {
+      const { failures } = await loadFixture(page, fixture)
+      const loads = await loadCount(page)
+
+      const source = await readFile(fixture.outsideStyle, 'utf8')
+      await writeFile(fixture.outsideStyle, source.replace('padding: \'4px\'', 'padding: \'6px\''))
+      await expect.poll(() => page.locator('#third').evaluate(element => getComputedStyle(element).padding))
+        .toBe('6px')
+      expect(await loadCount(page)).toBe(loads)
       expect(failures, failures.join('\n')).toEqual([])
     }
     finally {

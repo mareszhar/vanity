@@ -14,10 +14,11 @@
  * plugin can move over without a public change.
  *
  * **HMR is in-place, never stacked.** Each style file's CSS lives behind a
- * stable* virtual id (`/path/File.css.ts.vanity.css`) whose content is
- * served from an in-memory store — so when a save changes the CSS, the same
- * id delivers the new text and Vite's client replaces the existing style tag
- * instead of appending a second one. Style modules self-accept in dev (an
+ * stable* virtual id (`.vanity/virtual/style/<up-count>/<root-relative path>.vanity.css`,
+ * under the build root wherever the style source itself sits) whose content
+ * is served from an in-memory store — so when a save changes the CSS, the
+ * same id delivers the new text and Vite's client replaces the existing style
+ * tag instead of appending a second one. Style modules self-accept in dev (an
  * edit that only moves declarations swaps CSS with no reload); when the
  * export shape* changes, importers hold stale bindings, so the plugin sends
  * one full reload instead. Files a style module bundles in (tokens, shared
@@ -92,7 +93,6 @@ import {
   resolveConfiguredSystemImport,
 } from './compiler/core/systems'
 import { transformStyleModule } from './compiler/core/transform'
-import { resolveCssVirtualAlias } from './compiler/hmr/state'
 import { handleHotUpdate } from './compiler/hmr/update'
 import {
   createViteHmrHost,
@@ -940,7 +940,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
 
       const absoluteId = resolveViteVirtualId(validId, config.root, config.base)
 
-      if (!resolveCssVirtualAlias(absoluteId, config.root, virtualExt, cssByVirtualId, namespaceOwners))
+      if (absoluteId === undefined || !cssByVirtualId.has(absoluteId))
         return null
 
       // Keep the query — Vite's HMR timestamps ride it.
@@ -991,8 +991,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         return null
 
       const absoluteId = resolveViteVirtualId(validId, config.root, config.base)
-      const resolved = resolveCssVirtualAlias(absoluteId, config.root, virtualExt, cssByVirtualId, namespaceOwners)
-      return resolved === undefined ? null : cssByVirtualId.get(resolved) ?? null
+      return absoluteId === undefined ? null : cssByVirtualId.get(absoluteId) ?? null
     },
   }
 
@@ -1233,13 +1232,19 @@ function renderCascadePrelude(roots: readonly string[]): string {
   return unique.length === 0 ? '' : `@layer ${unique.join(', ')};\n`
 }
 
+/**
+ * Narrow a host resolution to the physical module it names.
+ *
+ * The input is resolver output — an absolute path or a virtual id — never a
+ * browser URL. Converting between an id and a URL belongs to the host
+ * boundary and happens once on each side, so nothing is unwrapped here.
+ */
 function getPhysicalResolvedPath(resolved: string | undefined): string | undefined {
   if (resolved === undefined || resolved.startsWith('\0'))
     return undefined
 
   const clean = resolved.replace(/[?#].*$/, '')
-  const physical = clean.startsWith('/@fs/') ? clean.slice('/@fs/'.length) : clean
-  return isAbsolute(physical) ? normalizeModuleIdentity(physical) : undefined
+  return isAbsolute(clean) ? normalizeModuleIdentity(clean) : undefined
 }
 
 /** Files named by an esbuild failure, including note locations. */

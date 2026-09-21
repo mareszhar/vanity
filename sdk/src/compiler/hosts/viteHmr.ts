@@ -3,12 +3,13 @@
 import type { ViteDevServer } from 'vite'
 import type { CompilerHmrHost } from '../hmr/host'
 import { readFile } from 'node:fs/promises'
-import { isAbsolute, posix, resolve } from 'node:path'
+import { posix, resolve } from 'node:path'
 import { normalizePath } from '../core/path'
 
 /**
  * Return the base-less URL used by Vite's module graph for a compiler-owned
- * module. HMR payloads and graph lookups use this spelling.
+ * stylesheet ID. HMR payloads use this spelling. Style source paths are not
+ * owned addresses and go through the host hook's own adapter below.
  */
 export function getViteGraphModuleUrl(
   id: string,
@@ -20,10 +21,7 @@ export function getViteGraphModuleUrl(
   const normalizedRoot = normalizeViteFilePath(resolve(root)).replace(/\/$/, '')
   if (cleanGraphUrl !== undefined && cleanGraphUrl.startsWith('/')) {
     const normalizedGraphFile = normalizeViteFilePath(cleanGraphUrl)
-    const graphUrlIsPhysical = normalizedGraphFile === cleanId
-      || normalizedGraphFile === normalizedRoot
-      || normalizedGraphFile.startsWith(`${normalizedRoot}/`)
-    if (!graphUrlIsPhysical)
+    if (!normalizedGraphFile.startsWith(`${normalizedRoot}/`))
       return cleanGraphUrl
     return getViteUrlForFileId(normalizedGraphFile, normalizedRoot)
   }
@@ -31,11 +29,34 @@ export function getViteGraphModuleUrl(
   return getViteUrlForFileId(cleanId, normalizedRoot)
 }
 
-function getViteUrlForFileId(file: string, normalizedRoot: string): string {
-  const relative = posix.relative(normalizedRoot, file)
+/**
+ * Return the base-less URL Vite's module graph uses for a style source file.
+ *
+ * A source file legitimately lives outside the root, so an out-of-root path
+ * keeps Vite's own filesystem spelling instead of raising the owned-address
+ * guard: that guard is for generated stylesheets with no file, not for real
+ * files on disk.
+ */
+function getViteSourceModuleUrl(sourcePath: string, root: string, graphUrl?: string): string {
+  const cleanGraphUrl = graphUrl?.replace(/[?#].*$/, '')
+  if (cleanGraphUrl !== undefined && cleanGraphUrl.startsWith('/'))
+    return cleanGraphUrl
+  const normalized = normalizeViteFilePath(sourcePath.replace(/[?#].*$/, ''))
+  const normalizedRoot = normalizeViteFilePath(resolve(root)).replace(/\/$/, '')
+  const relative = posix.relative(normalizedRoot, normalized)
+  // Built the way the host builds it: `posix.join` keeps the separator on
+  // both platforms, where the two hand-concatenations each fail on one. The
+  // inputs are already resolved, so its collapsing is what is wanted here.
   return relative.length > 0 && !relative.startsWith('..') && !posix.isAbsolute(relative)
     ? `/${relative}`
-    : `/@fs/${file}`
+    : posix.join('/@fs/', normalized)
+}
+
+function getViteUrlForFileId(file: string, normalizedRoot: string): string {
+  const relative = posix.relative(normalizedRoot, file)
+  if (relative.length === 0 || relative.startsWith('..') || posix.isAbsolute(relative))
+    throw new TypeError(`Vanity cannot address a stylesheet outside the build root: ${file}`)
+  return `/${relative}`
 }
 
 function normalizeViteFilePath(file: string): string {
@@ -62,37 +83,32 @@ export function getViteBrowserModuleUrl(
   return `${normalizedBase}${graphPath === '/' ? '' : graphPath}` || '/'
 }
 
-/** Remove the public base and Vite wrappers from a requested virtual id. */
+/** Resolve a browser request URL to its compiler-owned virtual ID, or `undefined` when Vanity owns no such address. */
 export function resolveViteVirtualId(
   filePath: string,
   root: string,
   base = '/',
-): string {
+): string | undefined {
   const normalizedRoot = normalizePath(resolve(root)).replace(/\/$/, '')
-  const normalizedBase = normalizeViteBase(base)
+  const ownedPrefix = `${normalizedRoot}/.vanity/virtual/`
   const clean = filePath.replace(/[?#].*$/, '')
   const withoutIdPrefix = clean.replace(/^\/?@id\//, '')
-  const hasFsPrefix = withoutIdPrefix.startsWith('/@fs/')
-  let unwrapped = hasFsPrefix
-    ? withoutIdPrefix.slice('/@fs'.length)
+  const normalizedBase = normalizeViteBase(base)
+  const withoutBase = normalizedBase !== '/' && (withoutIdPrefix === normalizedBase || withoutIdPrefix.startsWith(`${normalizedBase}/`))
+    ? withoutIdPrefix.slice(normalizedBase.length) || '/'
     : withoutIdPrefix
 
-  if (normalizedBase !== '/' && (unwrapped === normalizedBase || unwrapped.startsWith(`${normalizedBase}/`)))
-    unwrapped = unwrapped.slice(normalizedBase.length) || '/'
-
+  let unwrapped = withoutBase
   if (/^\/[a-z]:\//i.test(unwrapped))
     unwrapped = unwrapped.slice(1)
 
-  const windowsAbsolute = /^[a-z]:\//i.test(unwrapped)
-  const physical = hasFsPrefix
-    || windowsAbsolute
-    || unwrapped === normalizedRoot
-    || unwrapped.startsWith(`${normalizedRoot}/`)
-
-  if (physical || (isAbsolute(unwrapped) && windowsAbsolute))
+  // An owned address is recognized by the namespace Vanity owns, never by
+  // the shape of the string — so parsing an ID returns it unchanged.
+  if (unwrapped.startsWith(ownedPrefix))
     return normalizePath(unwrapped)
-
-  return normalizePath(posix.join(normalizedRoot, unwrapped))
+  if (unwrapped.startsWith('/.vanity/virtual/'))
+    return normalizePath(posix.join(normalizedRoot, unwrapped))
+  return undefined
 }
 
 function normalizeViteBase(base: string): string {
@@ -147,6 +163,10 @@ export function createVitePendingCssResponseCache() {
       }
 
       const virtualId = resolveViteVirtualId(request.url ?? '/', root, base)
+      if (virtualId === undefined) {
+        next()
+        return
+      }
       const contents = read(virtualId)
       if (contents === undefined) {
         next()
@@ -232,7 +252,7 @@ export function createViteHmrHost(options: {
     ensureEntryFromUrl: url => getServerModuleGraph(requireServer(updateServer)).ensureEntryFromUrl(url),
     markModuleInvalid: module => getServerModuleGraph(requireServer(updateServer)).invalidateModule(module as never),
     getModuleUrl: module => getModuleUrl(module),
-    getGraphModuleUrl: (id, graphUrl) => getViteGraphModuleUrl(id, options.root, graphUrl),
+    getGraphModuleUrl: (sourcePath, graphUrl) => getViteSourceModuleUrl(sourcePath, options.root, graphUrl),
     compileStyle: async (file) => {
       const server = requireServer(options.server ?? options.clientServer)
       const environments = getViteEnvironments(server)

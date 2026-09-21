@@ -201,6 +201,7 @@ The root `.gitignore` is the single ignore authority. Generated or machine-local
 - `node_modules/`, `dist/`, `.nuxt/`, `.output/`, and `styled-system/`;
 - `.turbo/`, coverage, Playwright results, and TypeScript build info; `.pnpm-store/` remains ignored only as a safeguard against pnpm's filesystem fallback and should not appear in a normal checkout;
 - `.vanity/` manifests, benchmark measurements, release validation receipts, and in-flight release records;
+- `__temp__/`, which holds the handoff, execution tracker, and changelog for a release in flight — ignored deliberately, for the reason [handoffs §3](./handoffs.md#3-why-none-of-this-is-tracked) gives;
 - generated auto-import declarations.
 
 The validation entrypoints clear the exact ignored application-generated declaration, adapter-cache, and `.vanity/` paths before typechecking. This prevents stale ambient files or generated contracts from masking a removed or renamed import while preserving the root `.vanity/` receipts, benchmark measurements, and resumable release records.
@@ -223,6 +224,10 @@ Both jobs install from the root lockfile. The workflow carries read-only reposit
 ## 8. Releases
 
 The SDK package metadata points to `https://github.com/mareszhar/vanity` and declares `sdk/` as its repository directory.
+
+A version numbers the contract, not the diff. A release that rewrites an internal mechanism end to end is still a patch when no public surface, emitted identity, or artifact name moves; the size of the change is the changelog's story, not the version's. [Handoffs](./handoffs.md) covers how a change reaches that point.
+
+Before `1.0.0`, the leading zero absorbs incompatibility: `:minor` carries new capability and breaking change alike, and `:patch` is reserved for fixes that move nothing an adopter depends on and require no migration. A breaking change therefore ships as a minor and says so in the changelog rather than waiting for a major.
 
 Release tooling is intentionally review-first, and a release is one command, happy path included. The one precondition it asks of the maintainer: the working tree must be clean before `pnpm run publish:sdk:patch`, `:minor`, or `:major` starts — whatever history led there, squashed or not.
 

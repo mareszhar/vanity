@@ -1,11 +1,11 @@
 import type { ViteDevServer } from 'vite'
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { vanityPlugin } from '@mszr/vanity/vite'
 import { describe, expect, it } from 'vitest'
-import { resolveViteVirtualId } from './viteHmr'
+import { createViteHmrHost, resolveViteVirtualId } from './viteHmr'
 
 const vanityRoot = fileURLToPath(new URL('../../', import.meta.url))
 const alias = {
@@ -184,10 +184,11 @@ export const card = ds.class({ color: ds.t.color.brand })
       await server.transformRequest(firstSystemUrl, { ssr: true })
 
       const firstVirtualId = resolveViteVirtualId(firstSystemUrl, root)
+      expect(firstVirtualId).toBeDefined()
       const graphs = graphEnvironments(server)
       expect(graphs.map(({ name, moduleGraph }) => ({
         name,
-        loaded: (moduleGraph.getModulesByFile(firstVirtualId)?.size ?? 0) > 0,
+        loaded: (moduleGraph.getModulesByFile(firstVirtualId!)?.size ?? 0) > 0,
       }))).toEqual(graphs.map(({ name }) => ({ name, loaded: true })))
 
       await writeFile(system, (await readFile(system, 'utf8')).replace('#123456', '#445566'))
@@ -216,7 +217,7 @@ export const card = ds.class({ color: ds.t.color.brand })
 
       expect(graphs.map(({ name, moduleGraph }) => ({
         name,
-        retired: moduleGraph.getModulesByFile(firstVirtualId)?.size ?? 0,
+        retired: moduleGraph.getModulesByFile(firstVirtualId!)?.size ?? 0,
       }))).toEqual(graphs.map(({ name }) => ({ name, retired: 0 })))
 
       const next = await server.transformRequest('/style.css.ts')
@@ -230,4 +231,21 @@ export const card = ds.class({ color: ds.t.color.brand })
       await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
     }
   }, 60000)
+
+  it('addresses style source paths for graph lookup inside and outside the root', () => {
+    const host = createViteHmrHost({ root: '/app', base: '/' })
+    expect(host.getGraphModuleUrl('/app/entry.css.ts', undefined)).toBe('/entry.css.ts')
+    // A URL the host already holds passes through verbatim on every route.
+    expect(host.getGraphModuleUrl('/app/entry.css.ts', '/app/entry.css.ts')).toBe('/app/entry.css.ts')
+    expect(host.getGraphModuleUrl('/packages/ui/card.css.ts', undefined))
+      .toBe(posix.join('/@fs/', '/packages/ui/card.css.ts'))
+    expect(host.getGraphModuleUrl('/packages/ui/card.css.ts', '/@fs/packages/ui/card.css.ts'))
+      .toBe('/@fs/packages/ui/card.css.ts')
+    // The shape that breaks: a node seeded by an absolute-path transform
+    // carries its own absolute path as its URL, and the lookup must keep it.
+    expect(host.getGraphModuleUrl('/packages/ui/card.css.ts', '/packages/ui/card.css.ts'))
+      .toBe('/packages/ui/card.css.ts')
+    expect(host.getGraphModuleUrl('C:/ws/packages/ui/card.css.ts', undefined))
+      .toBe(posix.join('/@fs/', 'C:/ws/packages/ui/card.css.ts'))
+  })
 })

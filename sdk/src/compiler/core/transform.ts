@@ -14,6 +14,7 @@ import type { EvaluatedSystem, NormalizedSystemSource } from './systems'
 import { isAbsolute, resolve } from 'node:path'
 import { substrate } from '../../substrate'
 import {
+  getStyleCssVirtualId,
   getSystemCssVirtualId,
   replaceEntryVirtualIds,
 } from '../hmr/state'
@@ -213,11 +214,8 @@ export async function transformStyleModule(
     const system = portableSystems.find(portable =>
       !isSameAuthoredFile(fileScope.filePath, filePath, root)
       && isSameAuthoredFile(fileScope.filePath, portable.source, root))
-    const scopePath = normalizePath(isAbsolute(fileScope.filePath)
-      ? fileScope.filePath
-      : resolve(root, fileScope.filePath))
     const virtualId = system === undefined
-      ? `${scopePath}${context.virtualExtension}`
+      ? getStyleCssVirtualId(fileScope.filePath, root, context.virtualExtension)
       : getSystemCssVirtualId(system.identities.css, root, context.virtualExtension)
     // Provenance in dev: the stylesheet names its style module up front.
     const served = context.isDev ? `/* ${fileScope.filePath} · vanity */\n${css}` : css

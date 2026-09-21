@@ -25,8 +25,8 @@ export interface CompilerHmrHost {
   readonly markModuleInvalid: (module: object) => void
   /** The graph URL stored on a module node, if it has been created. */
   readonly getModuleUrl: (module: object) => string | undefined
-  /** Convert a compiler id and optional graph URL into the host graph address. */
-  readonly getGraphModuleUrl: (id: string, graphUrl?: string) => string
+  /** Convert a style source path and optional graph URL into the host graph address. */
+  readonly getGraphModuleUrl: (sourcePath: string, graphUrl?: string) => string
   /** Re-run one dependent style transform through the active client pipeline. */
   readonly compileStyle: (file: string) => Promise<void>
 }

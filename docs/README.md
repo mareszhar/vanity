@@ -36,7 +36,7 @@ These records govern implementation, evidence, and the repository rather than co
 - [Decisions](./maintainers/decisions.md)
 - [Capability-preservation matrix](./maintainers/capability-matrix.md) and [CSS parity ledger](./maintainers/parity-ledger.md)
 - [Testing and evidence](./maintainers/testing.md), [benchmarks](./maintainers/benchmarks.md), and [demos](./maintainers/demo.md)
-- [Workspace manual](./maintainers/workspace.md)
+- [Workspace manual](./maintainers/workspace.md) and [handoffs and round reports](./maintainers/handoffs.md)
 
 ## Contract status
 

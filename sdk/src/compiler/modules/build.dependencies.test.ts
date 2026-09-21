@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { vanityPlugin } from '@mszr/vanity/vite'
 import { createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
+import { resolveViteVirtualId } from '../hosts/viteHmr'
 import { buildStyleModule } from './build'
 
 const alias = {
@@ -95,7 +96,7 @@ export const card = ds.class({ color: config.color, background: installedColor, 
       await put(root, 'system.ts', `import { createSystem } from '@mszr/vanity'
 export const ds = createSystem().consolidate({ prefix: 'data-hmr' })
 `)
-      const style = await put(root, 'style.css.ts', `import config from './color.json'
+      await put(root, 'style.css.ts', `import config from './color.json'
 import { ds } from './system'
 export const card = ds.class({ color: config.color })
 `)
@@ -108,18 +109,21 @@ export const card = ds.class({ color: config.color })
         server: { middlewareMode: true, hmr: false, ws: false, watch: null },
       })
 
-      await server.transformRequest('/style.css.ts')
-      const virtualId = `${style}.vanity.css`
-      expect((await server.transformRequest(virtualId))?.code).toContain('#112233')
+      const accepted = await server.transformRequest('/style.css.ts')
+      const cssUrl = accepted?.code.match(/import "([^"]*\/style\/[^"]+\.vanity\.css)"/)?.[1]
+      expect(cssUrl).toBeDefined()
+      const virtualId = resolveViteVirtualId(cssUrl!, root)
+      expect(virtualId).toBeDefined()
+      expect((await server.transformRequest(virtualId!))?.code).toContain('#112233')
 
       const data = join(root, 'color.json')
       await writeFile(data, '{ "color": "#445566" }')
       await hotUpdate(server, data)
-      expect((await server.transformRequest(virtualId))?.code).toContain('#445566')
+      expect((await server.transformRequest(virtualId!))?.code).toContain('#445566')
 
       const vanityEngineDependency = require.resolve('known-css-properties')
       expect(await hotUpdate(server, vanityEngineDependency)).toBeUndefined()
-      expect((await server.transformRequest(virtualId))?.code).toContain('#445566')
+      expect((await server.transformRequest(virtualId!))?.code).toContain('#445566')
     }
     finally {
       await server?.close()

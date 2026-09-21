@@ -1,13 +1,16 @@
 /** Compiler integration coverage for configured and source-shipping systems. */
 
+import type { AddressInfo } from 'node:net'
 import type { Rollup } from 'vite'
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { createServer as createHttpServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { vanityPlugin } from '@mszr/vanity/vite'
-import { build } from 'vite'
+import { build, createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
+import { getViteGraphModuleUrl, resolveViteVirtualId } from './hosts/viteHmr'
 
 function local(path: string): string {
   return fileURLToPath(new URL(path, import.meta.url))
@@ -38,6 +41,53 @@ function getLinkedCss(
     .filter(asset => links.includes(asset.fileName))
     .map(asset => String(asset.source))
     .join('\n')
+}
+
+/** An application root with a sibling source-shipping package outside it. */
+async function writeOutsideStyleFixture(): Promise<{
+  readonly base: string
+  readonly app: string
+  readonly system: string
+}> {
+  const base = await realpath(await mkdtemp(join(tmpdir(), 'vanity-outside-style-')))
+  const app = join(base, 'apps/web')
+  const ui = join(base, 'packages/ui')
+
+  await writeFixture(base, 'package.json', '{ "name": "vanity-outside-style-fixture", "type": "module" }')
+  await writeFixture(ui, 'package.json', '{ "name": "ui-pkg", "type": "module" }')
+  await writeFixture(app, 'package.json', '{ "name": "vanity-outside-style-app", "type": "module" }')
+  const system = await writeFixture(app, 'system.ts', `import { createSystem } from '@mszr/vanity'
+export const ds = createSystem()
+  .addTokens({ color: { brand: '#123456', accent: '#654321' } })
+  .consolidate({ prefix: 'outside', root: ':root' })
+`)
+  await writeFixture(ui, 'Button.css.ts', `import { ds } from '../../apps/web/system.ts'
+export const button = ds.class({ color: ds.t.color.brand })
+`)
+  await writeFixture(ui, 'Card.css.ts', `import { ds } from '../../apps/web/system.ts'
+export const card = ds.class({ background: ds.t.color.accent })
+`)
+  await writeFixture(app, 'local.css.ts', `import { ds } from './system.ts'
+export const local = ds.class({ color: ds.t.color.accent })
+`)
+  await writeFixture(app, 'entry.ts', `import { button } from 'ui/Button.css.ts'
+import { card } from 'ui/Card.css.ts'
+import { local } from './local.css.ts'
+export { button, card, local }
+`)
+  await mkdir(join(app, 'node_modules'), { recursive: true })
+  await symlink(ui, join(app, 'node_modules/ui'), 'dir')
+
+  return { base, app, system }
+}
+
+/** Each style module's own rule carries its debug class and its token reference. */
+function expectOutsideStyleCss(css: string): void {
+  expect(css).toContain('--outside-color-brand:')
+  const buttonRule = css.match(/[^{]*button[^{]*\{[^}]*\}/)?.[0] ?? ''
+  expect(buttonRule).toContain('var(--outside-color-brand)')
+  const cardRule = css.match(/[^{]*card[^{]*\{[^}]*\}/)?.[0] ?? ''
+  expect(cardRule).toContain('var(--outside-color-accent)')
 }
 
 describe('configured system CSS ownership', () => {
@@ -242,4 +292,114 @@ export const card = ds.class({ color: ds.t.color.brand })
       await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
     }
   }, 60000)
+
+  it('emits out-of-root style CSS in production at root, non-root, and relative bases', async () => {
+    for (const base of ['/', '/_nuxt/', '.']) {
+      const fixture = await writeOutsideStyleFixture()
+
+      try {
+        const result = await build({
+          configFile: false,
+          logLevel: 'silent',
+          root: fixture.app,
+          base,
+          plugins: [vanityPlugin({ compiler: { identifiers: 'debug', system: fixture.system } })],
+          resolve: { alias: aliases },
+          build: {
+            write: false,
+            minify: false,
+            lib: { entry: join(fixture.app, 'entry.ts'), formats: ['es'], fileName: 'entry' },
+          },
+        })
+        const output = (Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput
+        const css = getAssets(output)
+          .filter(asset => asset.fileName.endsWith('.css'))
+          .map(asset => String(asset.source))
+          .join('\n')
+
+        expectOutsideStyleCss(css)
+      }
+      finally {
+        await rm(fixture.base, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+      }
+    }
+  }, 180000)
+
+  it('serves out-of-root style CSS over HTTP in development at root and non-root bases', async () => {
+    for (const base of ['/', '/_nuxt/']) {
+      const fixture = await writeOutsideStyleFixture()
+      const prefix = base === '/' ? '/' : `${base.replace(/\/$/, '')}/`
+
+      const server = await createServer({
+        configFile: false,
+        logLevel: 'silent',
+        root: fixture.app,
+        base,
+        plugins: [vanityPlugin({ compiler: { identifiers: 'debug', system: fixture.system } })],
+        resolve: { alias: aliases },
+        server: {
+          middlewareMode: true,
+          hmr: false,
+          ws: false,
+          watch: null,
+          fs: { allow: [fixture.base] },
+        },
+        optimizeDeps: { noDiscovery: true },
+      })
+      const httpServer = createHttpServer(server.middlewares)
+      await new Promise<void>(resolve => httpServer.listen(0, resolve))
+
+      try {
+        const { port } = httpServer.address() as AddressInfo
+        const fetchBody = async (url: string): Promise<{ readonly status: number, readonly body: string }> => {
+          const response = await fetch(`http://localhost:${port}${url}`)
+          return { status: response.status, body: await response.text() }
+        }
+        const styleHrefs = (code: string, suffix: string): string[] =>
+          [...code.matchAll(/"([^"]+)"/g)].map(match => match[1]).filter(href => href.endsWith(suffix))
+
+        const entry = await fetchBody(`${prefix}entry.ts`)
+        expect(entry.status).toBe(200)
+        const styleUrls = styleHrefs(entry.body, '.css.ts')
+          .filter(href => href.includes('Button') || href.includes('Card') || href.endsWith('local.css.ts'))
+        expect(styleUrls).toHaveLength(3)
+
+        const cssBodies: string[] = []
+        const styleCssUrls: string[] = []
+        for (const styleUrl of styleUrls) {
+          const style = await fetchBody(styleUrl)
+          expect(style.status).toBe(200)
+          const cssUrls = styleHrefs(style.body, '.vanity.css')
+          expect(cssUrls.length).toBeGreaterThan(0)
+          for (const cssUrl of cssUrls) {
+            const css = await fetchBody(cssUrl)
+            expect(css.status).toBe(200)
+            cssBodies.push(css.body)
+            if (cssUrl.includes('/style/'))
+              styleCssUrls.push(cssUrl)
+          }
+        }
+
+        expectOutsideStyleCss(cssBodies.join('\n'))
+
+        // The HMR payload path equals the URL the host module graph actually
+        // holds, for in-root and out-of-root sources alike.
+        expect(styleCssUrls).toHaveLength(3)
+        for (const cssUrl of styleCssUrls) {
+          const virtualId = resolveViteVirtualId(cssUrl, fixture.app, base)
+          expect(virtualId).toBeDefined()
+          const modules = server.moduleGraph.getModulesByFile(virtualId!)
+          expect((modules?.size ?? 0)).toBeGreaterThan(0)
+          for (const module of modules ?? []) {
+            expect(getViteGraphModuleUrl(virtualId!, fixture.app, module.url)).toBe(module.url)
+          }
+        }
+      }
+      finally {
+        await new Promise(resolve => httpServer.close(resolve))
+        await server.close()
+        await rm(fixture.base, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+      }
+    }
+  }, 180000)
 })

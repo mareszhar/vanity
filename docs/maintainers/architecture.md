@@ -59,6 +59,8 @@ The compiler:
 
 This model is proven in [`spikes/compiler-projection`](../../spikes/compiler-projection/README.md) and the permanent compiler integration suite.
 
+Every compiler-owned stylesheet is addressed under the artifact directory inside the build root: system CSS at `.vanity/virtual/system/`, style CSS at `.vanity/virtual/style/`. `.vanity/virtual/` is an address namespace and is never written to disk — unlike `.vanity/manifest.json` beside it. The host boundary owns both conversions between a compiler-owned ID and a browser URL: each happens once, ID to URL where a string is handed to the browser and URL to ID where a request arrives, and the two are exact inverses. An address outside the root is a contract violation rather than a case to handle. A style module's own source path is not one of these addresses: it names a real file that may legitimately sit outside the root, so the host adapter converts it on its own route and keeps the host's filesystem spelling.
+
 ### Actors and hosts
 
 ```text
@@ -255,7 +257,7 @@ The substrate keeps its portability boundary explicit:
 
 ### Compiler and Vite boundaries
 
-The compiler owns Vanity's pipeline, while a host adapter owns how that pipeline is mounted. In particular, `compiler/modules/` answers the complete question “how does this style source become a live system?”: bundling and evaluation stay together, while resolved-input ownership remains broader than source instrumentation. `compiler/projection/` answers “how does this resolved system become browser or SSR artifact source?”: runtime module generation and `systemCss.ts` are projections and are not Vite-specific. `compiler/hmr/` owns virtual-ID ownership and transition state; the host adapter supplies graph APIs, base-less graph/HMR addresses, based browser URLs, and transport notifications.
+The compiler owns Vanity's pipeline, while a host adapter owns how that pipeline is mounted. In particular, `compiler/modules/` answers the complete question “how does this style source become a live system?”: bundling and evaluation stay together, while resolved-input ownership remains broader than source instrumentation. `compiler/projection/` answers “how does this resolved system become browser or SSR artifact source?”: runtime module generation and `systemCss.ts` are projections and are not Vite-specific. `compiler/hmr/` owns virtual-ID ownership and transition state; the host adapter supplies graph APIs, base-less graph/HMR addresses, based browser URLs, and transport notifications. The host boundary owns both conversions between a compiler-owned ID and a browser URL, so no compiler-owned address is ever resolved by guessing from a string's shape.
 
 Two host seams need stating because a reader would otherwise assume simpler mechanics. Vite exposes no single public operation that removes one accepted module from every environment graph while retaining modules other systems still own, so the adapter invalidates through Vite first and then updates the graph indexes retirement requires; those structures are checked before use and the seam fails with a focused error rather than silently keeping stale CSS. Separately, the adapter holds a small, short-lived copy of the previous CSS bytes outside the ownership and module graphs, so a browser already revalidating the old stylesheet URL can finish a transition. That copy can neither restore ownership nor recreate a retired node. The supported-major graph matrix is exercised against real client and SSR graphs and is kept aligned with the published peer range.
 

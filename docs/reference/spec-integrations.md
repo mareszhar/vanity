@@ -206,10 +206,13 @@ The shared style-module pipeline:
 
 - evaluates `*.css.ts` and imports a locked system from plain `system.ts`;
 - emits one system CSS artifact and one CSS artifact per style source while preserving lazy splitting;
+- loads each style source's generated CSS in development and in production, under any public base;
 - writes the manifest and provides stable development endpoints and DevTools;
 - recovers from dependency errors without a restart;
 - generates browser and SSR projections from portable data; and
 - supports precompiled package contracts.
+
+None of this depends on where a style source sits. A source outside the build root — the shape a source-shipping component library takes, where a package's `*.css.ts` files are compiled by the application consuming them — is evaluated, addressed, served, hot-updated, and recovered exactly like one inside it.
 
 `compiler.system` names the entry the compiler evaluates. It may be a system module or a static barrel that re-exports one, and the host resolves the spelling you write using its own aliases, export conditions, extension rules, directory indexes, and symlink policy — so a package export or a symlinked path resolves the same way your application imports resolve. An arbitrary host virtual module is not a substitute for a real module.
 
@@ -339,7 +342,7 @@ Preserve:
 - server projection of runtime slots and mode attributes;
 - hydration without redundant rewrites;
 - compatible runtime state across HMR;
-- style dependency edits updating affected modules;
+- style and style dependency edits updating affected modules;
 - export-shape changes following one documented reload rule;
 - process and watcher cleanup.
 

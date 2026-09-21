@@ -619,8 +619,11 @@ export const first = ds.class({ color })
     await writeFile(dependency, 'export const color = \'rebeccapurple\'\n')
     const affected = await hotUpdate(devServer, dependency)
     expect((affected ?? []).map(module => module.file)).toContain(entry)
-    await expect(devServer.transformRequest('/src/first.css.ts')).resolves.toBeTruthy()
-    expect((await devServer.transformRequest(`${entry}.vanity.css`))?.code)
+    const accepted = await devServer.transformRequest('/src/first.css.ts')
+    expect(accepted).toBeTruthy()
+    const cssUrl = accepted?.code.match(/import "([^"]*\/style\/[^"]+\.vanity\.css)"/)?.[1]
+    expect(cssUrl).toBeDefined()
+    expect((await devServer.transformRequest(cssUrl!))?.code)
       .toContain('color: rebeccapurple')
   })
 

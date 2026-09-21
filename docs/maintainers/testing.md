@@ -58,6 +58,26 @@ A change carrying several obligations keeps a requirement-to-evidence ledger: on
 
 Derive expected behavior independently of the implementation helper under test, and include same-environment recovery wherever the contract promises it. A green existing suite proves regression coverage and nothing more — it never stands in for a newly required browser, packaging, or host scenario.
 
+### 1.3 What earns a persisted test
+
+A persisted test is evidence for a promise Vanity makes. A check that proves an author did the work is scaffolding: run it, read it, delete it.
+
+The discriminating question is what a red result would mean. If the test fails, has Vanity broken a promise a consumer relies on, or has someone merely made a different choice they were always free to make? The second kind is a change detector: it catches no defect, fails on every honest refactor, and makes the codebase harder to change for as long as it exists.
+
+Do not persist a test whose subject is the repository rather than the behavior — asserting that a string appears nowhere, that a file exists, or that some symbol is absent. Do not persist a test whose subject is another test, or whose purpose is to remember that something still needs doing. Do not persist a test that restates the implementation, walking the same branches in the same order so that any refactor must edit both in lockstep. Do not persist a test with no assertion, or one that stubs the thing under test so it passes by construction. Do not persist a second test that cannot fail unless an existing test also fails.
+
+Before persisting a check, ask whether deleting it would make a real defect invisible. If an existing test already catches that defect, delete it instead.
+
+This composes with §1.1 rather than softening it: §1.1 governs depth within a promise, and §1.3 governs which promises earn a test at all.
+
+### 1.4 Round-trip evidence for two-sided contracts
+
+**A one-sided golden cannot close a two-sided contract.** Where one function produces a value and another consumes it, the test asserts the round trip. A constant transcribed from reading the producer records only what the producer does today; it cannot detect that the consumer disagrees, and it stays green through exactly the defect it appears to cover.
+
+A unit round trip is necessary but not sufficient whenever something outside Vanity sits between the halves: a host that rewrites a URL needs an integration assertion against the host's own state. When a development-time behavior depends on middleware, exercise it through the real transport; an in-process call that skips that middleware proves nothing about it.
+
+And the rule governs a test's inputs, not only its expectations. A request URL, module ID, or address written by hand into a test is a transcribed constant in the same way a golden is: it records what someone believed the producer emits. If the producer emits something else, the test passes and proves nothing. Derive the input from the emitter, or assert against a value the host actually produced.
+
 ## 2. Fixture families
 
 Maintain one vocabulary across fixtures while varying scale.
