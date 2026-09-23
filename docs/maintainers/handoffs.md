@@ -21,6 +21,8 @@ A round report reviews one execution: what was built well, what is wrong, what e
 
 A changelog tells a consumer what moved between versions, in their vocabulary rather than the mechanism's.
 
+A **probe** is not a record but the scratch execution behind one: a script or fixture any role writes to establish a fact — a count, a host behavior, a reproduction — for a plan, a review, or an execution. A release's probes live in `__temp__/<version>-probes/`, one directory per question, named for it. A probe may import the SDK, and a comment saying how to run it is all the ceremony it needs. No record depends on one: a handoff carries each fact and its own reproduction, so a probe only spares the next reader the rebuild. A probe whose finding will govern a standing design is not promoted as it stands; it is rewritten as a [spike](./workspace.md#51-spikes).
+
 ## 2. What belongs where
 
 One boundary carries most of the value:
@@ -45,13 +47,15 @@ Each rule prevents a failure a green suite does not report.
 
 **Establish a domain before prescribing a fix.** A plan derived from a single reproduction describes that reproduction. Before writing a correction, a constant, a spelling, or a guard into a handoff, state the full set of inputs it must hold over — every caller of the function, both platforms, each shape a host can hand you. A guard placed without its domain breaks a caller nobody enumerated.
 
+**Prove unproven host behavior before building on it.** When a design rests on what a host, bundler, or runtime does and nothing has shown it yet, the plan opens with a spike, and each claim states beforehand what the plan does if it fails: continue on a named fallback, or stop and raise it. An implementer who meets a surprise then already knows its consequence instead of improvising one.
+
 **A fact established by execution belongs in the handoff, not just the conclusion drawn from it.** A reviewer who verifies how a host rewrites a URL, and then writes only "fix the cache," has withheld the half that makes the fix testable.
 
 **Prove each change is load-bearing before acceptance.** Revert every behavioral change alone against the finished tree and confirm a named test turns red, then restore it. A change that cannot be made to fail is either untested or unnecessary. This is scaffolding under [testing §1.3](./testing.md#13-what-earns-a-persisted-test) — run it, read it, discard it — and never a persisted test.
 
 **Check that a new export has a caller before the phase closes.** A mechanism can be created dead as easily as broken silently, and no suite reports it.
 
-**Disclose a weak evidence leg.** Saying which leg of an argument is thin is what lets the next reviewer aim at it. A summary that reads as uniformly strong hides the one place worth looking.
+**Disclose a weak evidence leg.** Saying which leg of an argument is thin is what lets the next reviewer aim at it. A summary that reads as uniformly strong hides the one place worth looking. In a handoff, that means separating facts established by running something, with the environment and a reproduction, from facts found only by reading code, which the implementer confirms before relying on them.
 
 **Challenge the plan.** An implementer who senses a step is wrong says so before building it. Silent compliance and silent deviation are both failures; raising the concern is the guard.
 

@@ -58,6 +58,8 @@ A change carrying several obligations keeps a requirement-to-evidence ledger: on
 
 Derive expected behavior independently of the implementation helper under test, and include same-environment recovery wherever the contract promises it. A green existing suite proves regression coverage and nothing more — it never stands in for a newly required browser, packaging, or host scenario.
 
+A fixture that turns off a host default — disabling dependency discovery, or symlinking a package that consumers install — proves nothing about that default. The departure is legitimate for speed or determinism, but the default path then needs evidence of its own in the same lane.
+
 ### 1.3 What earns a persisted test
 
 A persisted test is evidence for a promise Vanity makes. A check that proves an author did the work is scaffolding: run it, read it, delete it.

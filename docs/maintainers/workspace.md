@@ -192,7 +192,7 @@ Four rules keep spikes durable:
 
 A README carries: the question, how to run it, the setup, a results table, what the results establish and what they do not, and the footguns hit along the way. Cross-references to product code are welcome as context and should describe rather than cite paths, which rot.
 
-Spikes are permanent references, not scratch work. When a spike's finding still governs a design decision, [architecture.md](./architecture.md) links it.
+Spikes are permanent references, not scratch work. When a spike's finding still governs a design decision, [architecture.md](./architecture.md) links it. Scratch execution that establishes a fact for one release's plan or review is a probe, and [handoffs §1](./handoffs.md#1-the-four-records) gives its home.
 
 ## 6. Generated and local state
 
@@ -201,7 +201,7 @@ The root `.gitignore` is the single ignore authority. Generated or machine-local
 - `node_modules/`, `dist/`, `.nuxt/`, `.output/`, and `styled-system/`;
 - `.turbo/`, coverage, Playwright results, and TypeScript build info; `.pnpm-store/` remains ignored only as a safeguard against pnpm's filesystem fallback and should not appear in a normal checkout;
 - `.vanity/` manifests, benchmark measurements, release validation receipts, and in-flight release records;
-- `__temp__/`, which holds the handoff, execution tracker, and changelog for a release in flight — ignored deliberately, for the reason [handoffs §3](./handoffs.md#3-why-none-of-this-is-tracked) gives;
+- `__temp__/`, which holds the handoff, execution tracker, changelog, and probes for a release in flight — ignored deliberately, for the reason [handoffs §3](./handoffs.md#3-why-none-of-this-is-tracked) gives;
 - generated auto-import declarations.
 
 The validation entrypoints clear the exact ignored application-generated declaration, adapter-cache, and `.vanity/` paths before typechecking. This prevents stale ambient files or generated contracts from masking a removed or renamed import while preserving the root `.vanity/` receipts, benchmark measurements, and resumable release records.
