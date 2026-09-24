@@ -10,14 +10,14 @@ The method does not assume who does the work. A planner, an implementer, and a r
 | --- | --- | --- | --- |
 | handoff | the last release and the next one | `__temp__/<version>-handoff.md` | planner |
 | execution tracker | one execution across context compression | `__temp__/<version>-handoff-execution-tracker.md` | implementer |
-| round report | one execution pass and the next | `__temp__/<version>-round-report.md`, rewritten each round | reviewer |
+| round report | one execution pass and the next | `__temp__/<version>-round-<n>-report.md`, one per round | reviewer |
 | changelog | one released version and the next, for a consumer | `__temp__/<version>-changelog.md`, then the GitHub release | planner |
 
 A handoff states what the next release changes about the released one: the defects it removes, the behavior it requires, the design it commits to, the evidence that closes it, and the sequence to reach it. It is written against the released state, so it reads the same on the first pass and the fourth.
 
 An execution tracker is the implementer's own record and the thing that survives a compressed context. Everything needed to resume belongs in it rather than in recollection. It names files, commands, and decisions as they were at the time; it is not maintained after the change ships.
 
-A round report reviews one execution: what was built well, what is wrong, what evidence proves or fails to prove, and what in the working tree needs realigning before the next pass. It also summarizes any change made to the handoff, so the implementer knows what moved under them.
+A round report reviews one execution: what was built well, what is wrong, what evidence proves or fails to prove, and what in the working tree needs realigning before the next pass. It also summarizes any change made to the handoff, so the implementer knows what moved under them. Each round gets its own report, and none is rewritten afterwards. When an initiative takes more rounds than expected, the sequence of reports is the evidence a fresh reviewer uses to see why, and it exists nowhere else. Once the release ships, its round reports have done their job and are deleted; the handoff, tracker, and changelog remain.
 
 A changelog tells a consumer what moved between versions, in their vocabulary rather than the mechanism's.
 
