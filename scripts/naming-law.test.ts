@@ -26,6 +26,15 @@ test('naming audit accepts verb-led local operations', async () => {
   assert.deepEqual(findNamingLawViolations(file, source, fileURLToPath(new URL('../', import.meta.url))), [])
 })
 
+test('naming audit keeps Vite lifecycle names inside the Vite adapter', () => {
+  const adapter = fileURLToPath(new URL('../sdk/src/vite.ts', import.meta.url))
+  const elsewhere = fileURLToPath(new URL('./fixtures/host-hook.ts', import.meta.url))
+  assert.deepEqual(findNamingLawViolations(adapter, 'function closeWatcher() {}\nfunction closeBundle() {}'), [])
+  assert.deepEqual(findNamingLawViolations(elsewhere, 'function closeWatcher() {}'), [
+    '../scripts/fixtures/host-hook.ts:1 closeWatcher',
+  ])
+})
+
 test('naming audit requires predicate names for explicit boolean operations', async () => {
   const file = fileURLToPath(new URL('./fixtures/naming-law-predicate-invalid.ts', import.meta.url))
   const source = await readFile(file, 'utf8')

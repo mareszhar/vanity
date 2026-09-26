@@ -152,7 +152,7 @@ export const minTarget = 'min-target'
     }
   })
 
-  it('keeps source-shipping ambient declarations local to their author across A → B → C', async () => {
+  it('keeps source package ambient declarations local to their author across A → B → C', async () => {
     const root = await fixtureRoot()
     const design = join(root, 'node_modules', '@acme', 'design')
     const library = join(root, 'node_modules', '@acme', 'library')
@@ -196,7 +196,7 @@ export const buttonClass = cls(t.color.brand)
     expect(typeErrors([join(root, 'app.ts'), join(root, 'host-auto-imports.d.ts')])).toEqual([])
   })
 
-  it('runs prepare before packing a source-shipping type-only unlock', async () => {
+  it('runs prepare before packing a source package type-only unlock', async () => {
     const root = await fixtureRoot()
     await mkdir(join(root, 'src'), { recursive: true })
     await writeFile(join(root, '.gitignore'), '.vanity/\n')

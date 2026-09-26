@@ -1,12 +1,13 @@
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
-import * as exportNames from '../projection/exportNames'
+import { describe, expect, it } from 'vitest'
 import {
   clearConfiguredSystemResolutionCache,
+  computeConfiguredSystemMemberChanges,
+  computeConfiguredSystemMembers,
   createConfiguredSystemResolutionCache,
-  findConfiguredSystemInModuleGraph,
+  getConfiguredSystemModuleFiles,
   normalizeSystemSources,
 } from './systems'
 
@@ -18,81 +19,48 @@ async function put(root: string, file: string, contents: string): Promise<string
 }
 
 describe('configured system resolution facts', () => {
-  it('caches multi-system graph reads across many unrelated imports', async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-resolution-cost-')))
-
-    try {
-      const entries = await Promise.all(Array.from({ length: 3 }, async (_, index) => {
-        await put(root, `system-${index}.ts`, `export const ds${index} = {}\n`)
-        return put(root, `barrel-${index}.ts`, `export { ds${index} } from './system-${index}'\n`)
-      }))
-      const unrelated = await Promise.all(Array.from({ length: 40 }, (_, index) =>
-        put(root, `imports/import-${index}.ts`, `export const value${index} = true\n`)))
-      const systems = normalizeSystemSources(entries, root)
-      const parseGraphs = vi.spyOn(exportNames, 'getExportModuleFilesFromFile')
-
-      try {
-        for (const file of unrelated)
-          expect(findConfiguredSystemInModuleGraph(file, systems, root)).toBeUndefined()
-        const uncachedGraphReads = parseGraphs.mock.calls.length
-
-        parseGraphs.mockClear()
-        const cache = createConfiguredSystemResolutionCache()
-        for (const file of unrelated)
-          expect(findConfiguredSystemInModuleGraph(file, systems, root, cache)).toBeUndefined()
-        const cachedGraphReads = parseGraphs.mock.calls.length
-
-        expect(uncachedGraphReads).toBe(120)
-        expect(cachedGraphReads).toBe(3)
-        expect(cachedGraphReads).toBeLessThan(uncachedGraphReads)
-
-        clearConfiguredSystemResolutionCache(cache)
-        expect(findConfiguredSystemInModuleGraph(unrelated[0], systems, root, cache)).toBeUndefined()
-        expect(parseGraphs).toHaveBeenCalledTimes(6)
-      }
-      finally {
-        parseGraphs.mockRestore()
-      }
-    }
-    finally {
-      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
-    }
-  })
-
-  it('caches graph matches and re-evaluates safe misses after invalidation', async () => {
+  it('recomputes configured member files after graph-generation invalidation', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-resolution-')))
 
     try {
-      const leaf = await put(root, 'system.ts', 'export const ds = {}\n')
-      const unrelated = await put(root, 'unrelated.ts', 'export const value = true\n')
+      const leaf = await put(root, 'system.ts', 'import { createSystem } from \'@mszr/vanity\'\nexport const ds = createSystem()\n')
       const entry = await put(root, 'barrel.ts', 'export const unrelated = true\n')
       const [system] = normalizeSystemSources(entry, root)
       const cache = createConfiguredSystemResolutionCache()
+      const authoredByFile = new Map<string, boolean>()
+      const previousAuthored = await computeConfiguredSystemMembers([system!], root, cache, authoredByFile)
 
-      expect(findConfiguredSystemInModuleGraph(unrelated, [], root, cache)).toBeUndefined()
-      expect(cache.systemMatchesByFile.size).toBe(0)
-      expect(cache.exportedFilesByEntry.size).toBe(0)
-
-      expect(findConfiguredSystemInModuleGraph(unrelated, [system!], root, cache)).toBeUndefined()
-      expect(cache.systemMatchesByFile.get(unrelated)).toBeNull()
-      expect(findConfiguredSystemInModuleGraph(leaf, [system!], root, cache)).toBeUndefined()
+      const previousMembers = getConfiguredSystemModuleFiles(system!, root, cache)
+      expect(previousMembers.has(leaf)).toBe(false)
+      expect(previousAuthored.byFile.size).toBe(0)
       expect(cache.exportedFilesByEntry.size).toBe(1)
-      const miss = cache.exportedFilesByEntry.get(system!.entry)
-      expect(findConfiguredSystemInModuleGraph(leaf, [system!], root, cache)).toBeUndefined()
-      expect(cache.exportedFilesByEntry.get(system!.entry)).toBe(miss)
 
       await writeFile(entry, 'export { ds } from \'./system\'\n')
-      // The old safe miss remains valid until the host announces the new
-      // graph generation; invalidation is the explicit ownership boundary.
-      expect(findConfiguredSystemInModuleGraph(leaf, [system!], root, cache)).toBeUndefined()
+      // A cached member set belongs to the previous graph until the host
+      // announces a new generation.
+      expect(getConfiguredSystemModuleFiles(system!, root, cache)).toBe(previousMembers)
+      expect(getConfiguredSystemModuleFiles(system!, root, cache).has(leaf)).toBe(false)
 
       clearConfiguredSystemResolutionCache(cache)
-      expect(findConfiguredSystemInModuleGraph(leaf, [system!], root, cache)).toBe(system)
-      expect(cache.exportedFilesByEntry.size).toBe(1)
+      const nextMembers = getConfiguredSystemModuleFiles(system!, root, cache)
+      expect(nextMembers).not.toBe(previousMembers)
+      expect(nextMembers.has(leaf)).toBe(true)
+      const authored = await computeConfiguredSystemMembers(
+        [system!],
+        root,
+        cache,
+        authoredByFile,
+      )
+      expect([...authored.byFile.keys()]).toEqual([leaf])
+      expect(authored.basenames).toEqual(new Set(['system.ts']))
+      expect(computeConfiguredSystemMemberChanges(previousAuthored.byFile.keys(), authored.byFile.keys())).toEqual(new Set([leaf]))
 
       await writeFile(entry, 'export const unrelated = true\n')
       clearConfiguredSystemResolutionCache(cache)
-      expect(findConfiguredSystemInModuleGraph(leaf, [system!], root, cache)).toBeUndefined()
+      const finalMembers = getConfiguredSystemModuleFiles(system!, root, cache)
+      expect(finalMembers.has(leaf)).toBe(false)
+      const finalAuthored = await computeConfiguredSystemMembers([system!], root, cache, authoredByFile)
+      expect(computeConfiguredSystemMemberChanges(authored.byFile.keys(), finalAuthored.byFile.keys())).toEqual(new Set([leaf]))
     }
     finally {
       await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })

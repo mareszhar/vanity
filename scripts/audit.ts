@@ -8,6 +8,7 @@
  */
 
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { cp, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -278,7 +279,7 @@ const NAMING_VERB_PREFIXES = [
 
 /** Host-protocol names are exceptions only inside the adapter that owns them. */
 const NAMING_FILE_ALLOWLIST = new Map([
-  ['vite.ts', new Set(['watchChange'])],
+  ['vite.ts', new Set(['watchChange', 'closeWatcher', 'closeBundle'])],
   ['compiler/hosts/viteHmr.ts', new Set(['invalidateModule'])],
 ])
 
@@ -725,6 +726,7 @@ async function trackedTextFiles(root: string): Promise<string[]> {
       && historyScanExtensions.has(extname(file))
       && !trackedGeneratedBundles.has(file))
     .map(file => join(root, file))
+    .filter(existsSync)
 }
 
 function isDisallowedControlCharacter(code: number): boolean {

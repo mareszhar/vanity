@@ -58,7 +58,7 @@ A change carrying several obligations keeps a requirement-to-evidence ledger: on
 
 Derive expected behavior independently of the implementation helper under test, and include same-environment recovery wherever the contract promises it. A green existing suite proves regression coverage and nothing more — it never stands in for a newly required browser, packaging, or host scenario.
 
-A fixture that turns off a host default — disabling dependency discovery, or symlinking a package that consumers install — proves nothing about that default. The departure is legitimate for speed or determinism, but the default path then needs evidence of its own in the same lane.
+A fixture that turns off a host default — disabling dependency discovery, or symlinking a package that consumers install — proves nothing about that default. The departure is legitimate for speed or determinism, but the default path then needs evidence of its own in the same lane. A fixture also proves nothing about a shape nobody ships: a call added only to satisfy a detector, or a test route that avoids a state the product cannot survive, is evidence for itself alone. Model what a consumer or package author writes, and when no such shape reaches a promise, revisit the promise.
 
 ### 1.3 What earns a persisted test
 
@@ -250,11 +250,14 @@ Required measurements:
 - diagnostic latency after a one-character typo;
 - rename latency across composed modules and consumers;
 - Vite production build time;
+- plain-Vite versus Vanity host-graph build time and cold/warm source-package declaration time;
 - Nuxt dev cold start and CSS HMR latency;
 - manifest generation time/size;
 - emitted CSS size with and without mutable slots;
 - runtime entrypoint and runtime metadata size;
 - snapshot serialize/hydrate time.
+
+The supported-major Vite graph matrix asserts that, in a one-shot build, no handler runs for modules the hook does not serve. It wraps the real host hooks in place and observes invocation counts for generated plain application modules and a physically installed dependency on every supported Vite major. The host-graph benchmark records build timings only; it does not duplicate the matrix's zero-call gate.
 
 Value-resolution changes use a dedicated propagation matrix:
 
@@ -331,9 +334,11 @@ Selectors are tested against actual DOM placement, not only string snapshots.
 
 The permanent matrix enforces the following integration contracts:
 
+- the supported-major host graph builds invoke no Vanity, vanilla-extract, or auto-import handler for generated plain modules or the physically installed plain dependency;
 - every virtual stylesheet URL requested by a browser returns 200;
 - repeated reloads preserve styled first paint;
 - dependency CSS HMR replaces in place;
+- a configured barrel's member-set change projects the new member under its own graph ID after one reload, while an unrelated application edit keeps the member set intact;
 - export-shape changes cause exactly the documented reload behavior;
 - runtime overrides survive compatible HMR or receive an explicit rebind diagnostic;
 - an equivalent re-evaluated value-capability/system pair retains compatibility without object-reference equality;

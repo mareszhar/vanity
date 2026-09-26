@@ -55,7 +55,13 @@ export function isProjectStore(root: string, storePath: string): boolean {
 
 /** Remove the workspace-local fallback store after a global relink succeeds. */
 export async function removeProjectStore(root: string): Promise<void> {
-  await rm(resolve(root, '.pnpm-store'), { force: true, recursive: true })
+  // Finder can recreate .DS_Store while this local store is being removed.
+  await rm(resolve(root, '.pnpm-store'), {
+    force: true,
+    maxRetries: 10,
+    recursive: true,
+    retryDelay: 50,
+  })
 }
 
 /** Rebuild node_modules on a new store while preserving it if installation fails. */

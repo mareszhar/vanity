@@ -2,7 +2,6 @@ import type { ViteDevServer } from 'vite'
 import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { vanityPlugin } from '@mszr/vanity/vite'
 import { createServer } from 'vite'
@@ -40,6 +39,18 @@ async function hotUpdate(server: ViteDevServer, file: string): Promise<unknown> 
     timestamp: Date.now(),
     read: () => readFile(file, 'utf8'),
   })
+}
+
+async function waitForFileContents(
+  file: string,
+  predicate: (contents: string) => boolean = contents => contents.length > 0,
+): Promise<string> {
+  let contents = ''
+  await vi.waitFor(async () => {
+    contents = await readFile(file, 'utf8').catch(() => '')
+    expect(predicate(contents)).toBe(true)
+  }, { interval: 10, timeout: 10_000 })
+  return contents
 }
 
 describe('artifact publication', () => {
@@ -104,8 +115,10 @@ export const two = second.class({ color: 'blue' })
       const vanityDirectory = join(root, '.vanity')
       const manifestPath = join(vanityDirectory, 'manifest.json')
       const directory = join(vanityDirectory, 'systems')
-      await delay(75)
-      const manifestBefore = await readFile(manifestPath, 'utf8')
+      const manifestBefore = await waitForFileContents(
+        manifestPath,
+        contents => contents.includes('style.css.ts'),
+      )
       const artifacts = await Promise.all((await readdir(directory))
         .filter(file => file.endsWith('.json'))
         .map(async file => ({
@@ -173,10 +186,12 @@ export const two = second.class({ color: 'blue' })
       // documentation while keeping the CSS identity/bytes stable.
       await rm(secondPath, { recursive: true })
       await hotUpdate(server, join(root, 'description.ts'))
-      await delay(75)
-      const afterFirst = await readFile(firstPath, 'utf8')
-      const afterSecond = await readFile(secondPath, 'utf8')
-      const manifestAfter = await readFile(manifestPath, 'utf8')
+      const [afterFirst, afterSecond, manifestAfter] = await Promise.all([
+        waitForFileContents(firstPath, contents => contents.includes('"description": "new"')),
+        waitForFileContents(secondPath, contents => contents.includes('"description": "new"')),
+        waitForFileContents(manifestPath, contents =>
+          contents !== manifestBefore && contents.includes('"description": "new"')),
+      ])
       expect(afterFirst).toContain('"description": "new"')
       expect(afterSecond).toContain('"description": "new"')
       expect(manifestAfter).not.toBe(manifestBefore)

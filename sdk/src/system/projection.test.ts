@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { vanityPlugin } from '@mszr/vanity/vite'
 import { build as esbuild } from 'esbuild'
 import { build, createServer } from 'vite'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSystemContract } from './contract'
 
 function local(path: string) {
@@ -52,6 +52,18 @@ async function temporaryApp(name: string): Promise<string> {
   const root = await realpath(await mkdtemp(join(tmpdir(), `vanity-${name}-`)))
   await writeFile(join(root, 'package.json'), '{ "name": "projection-fixture", "type": "module" }\n')
   return root
+}
+
+async function waitForFileContents(
+  file: string,
+  predicate: (contents: string) => boolean = contents => contents.length > 0,
+): Promise<string> {
+  let contents = ''
+  await vi.waitFor(async () => {
+    contents = await readFile(file, 'utf8').catch(() => '')
+    expect(predicate(contents)).toBe(true)
+  }, { interval: 10, timeout: 10_000 })
+  return contents
 }
 
 async function readPortableSystemArtifact(
@@ -575,8 +587,10 @@ export const card = ds.class({ color: 'var(--description-stable)' })
     const initialCss = await server.transformRequest(cssId)
     const initialCssCode = initialCss?.code
     const manifestFile = join(root, '.vanity/manifest.json')
-    await new Promise(resolve => setTimeout(resolve, 100))
-    const before = JSON.parse(await readFile(manifestFile, 'utf8'))
+    const before = JSON.parse(await waitForFileContents(
+      manifestFile,
+      contents => contents.includes('card.css.ts'),
+    ))
 
     const sent: unknown[] = []
     const hot = server.hot
@@ -597,8 +611,10 @@ export const card = ds.class({ color: 'var(--description-stable)' })
     expect((await server.transformRequest(cssId))?.code).toBe(initialCssCode)
     expect(sent).toEqual([])
 
-    await new Promise(resolve => setTimeout(resolve, 100))
-    const after = JSON.parse(await readFile(manifestFile, 'utf8'))
+    const after = JSON.parse(await waitForFileContents(
+      manifestFile,
+      contents => contents.includes('new description'),
+    ))
     expect(after.system.identities.css).toBe(before.system.identities.css)
     expect(after.system.identities.docs).not.toBe(before.system.identities.docs)
   })

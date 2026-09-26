@@ -3,9 +3,10 @@
 import type { VanityCompilerOptions, VanitySystemSource } from '../../config'
 import type { VanityInspectRecord } from '../../introspect/records'
 import type { VanityInProcessSystemContract, VanityPortableSystem } from '../../system/contract'
-import { createRequire } from 'node:module'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { readFile } from 'node:fs/promises'
+import { basename, isAbsolute, resolve } from 'node:path'
 import { VanityError } from '../../diagnostics'
+import { containsVanityAuthoring } from '../modules/source'
 import {
   getExportModuleFilesFromFile,
   normalizeModuleIdentity,
@@ -46,23 +47,13 @@ export interface EvaluatedSystem {
 
 /** Generation-local cache for configured-entry export graph facts. */
 export interface ConfiguredSystemResolutionCache {
-  /** Resolved module identity → configured owner, including safe misses. */
-  readonly systemMatchesByFile: Map<string, NormalizedSystemSource | null>
   /** Configured entry → canonical files reached by its static re-export graph. */
   readonly exportedFilesByEntry: Map<string, ReadonlySet<string>>
-}
-
-/** A host-resolved module request matched to one configured system owner. */
-export interface ResolvedConfiguredSystemImport {
-  readonly system: NormalizedSystemSource
-  /** Canonical physical module whose namespace was requested. */
-  readonly moduleFile: string
 }
 
 /** Create an empty cache for one resolved compiler configuration generation. */
 export function createConfiguredSystemResolutionCache(): ConfiguredSystemResolutionCache {
   return {
-    systemMatchesByFile: new Map(),
     exportedFilesByEntry: new Map(),
   }
 }
@@ -71,7 +62,6 @@ export function createConfiguredSystemResolutionCache(): ConfiguredSystemResolut
 export function clearConfiguredSystemResolutionCache(
   cache: ConfiguredSystemResolutionCache,
 ): void {
-  cache.systemMatchesByFile.clear()
   cache.exportedFilesByEntry.clear()
 }
 
@@ -103,85 +93,10 @@ function normalizeSystemPath(file: string, root: string): string {
   return normalizePath(resolveConfiguredModuleSource(file, root, 'compiler.system').file)
 }
 
-/** Resolve an import to one of the explicitly configured system sources. */
-export function resolveConfiguredSystemImport(
-  source: string,
-  importer: string | undefined,
-  systems: readonly NormalizedSystemSource[],
-  root: string,
-  cache?: ConfiguredSystemResolutionCache,
-): ResolvedConfiguredSystemImport | undefined {
-  if (systems.length === 0 || source.startsWith('\0') || source.startsWith('virtual:'))
-    return undefined
-  const clean = source.replace(/[?#].*$/, '')
-  const candidates: string[] = []
-  if (isAbsolute(clean)) {
-    // Vite also presents root-relative URLs as `/src/foo`. Try that host
-    // spelling before treating the value as a physical filesystem path.
-    if (clean.startsWith('/') && !clean.startsWith('//'))
-      candidates.push(resolveModuleIdentity(join(root, clean.slice(1)), root))
-    candidates.push(resolveModuleIdentity(clean, root))
-  }
-  else if (clean.startsWith('.') && importer) {
-    candidates.push(resolveModuleIdentity(resolve(dirname(importer.replace(/[?#].*$/, '')), clean), root))
-  }
-  else {
-    try {
-      candidates.push(normalizeModuleIdentity(createRequire(importer ?? join(root, 'package.json')).resolve(clean)))
-    }
-    catch {
-      return undefined
-    }
-  }
-  for (const candidate of candidates) {
-    const match = findConfiguredSystemInModuleGraph(candidate, systems, root, cache)
-    if (match)
-      return { system: match, moduleFile: candidate }
-  }
-  return undefined
-}
-
-/** Match a host-resolved module id to one configured system physical identity. */
-/**
- * Match either the resolved module itself or a configured entry's static
- * re-export graph. The bundler remains responsible for the initial
- * resolution; this small graph read only explains a barrel's role without
- * treating an unrelated consumer authoring barrel as the configured system.
- */
-export function findConfiguredSystemInModuleGraph(
-  resolved: string | undefined,
-  systems: readonly NormalizedSystemSource[],
-  root: string,
-  cache?: ConfiguredSystemResolutionCache,
-): NormalizedSystemSource | undefined {
-  if (resolved === undefined || systems.length === 0)
-    return undefined
-
-  const canonical = normalizeModuleIdentity(resolved.replace(/[?#].*$/, ''))
-  if (cache?.systemMatchesByFile.has(canonical))
-    return cache.systemMatchesByFile.get(canonical) ?? undefined
-
-  const direct = systems.find(system => system.entry === canonical)
-  if (direct !== undefined) {
-    cache?.systemMatchesByFile.set(canonical, direct)
-    return direct
-  }
-
-  for (const system of systems) {
-    const exportedFiles = getConfiguredSystemModuleFiles(system, root, cache)
-    if (exportedFiles.has(canonical)) {
-      cache?.systemMatchesByFile.set(canonical, system)
-      return system
-    }
-  }
-  cache?.systemMatchesByFile.set(canonical, null)
-  return undefined
-}
-
 /**
  * Return the canonical static re-export files for one configured entry.
- * Missing/unreadable graphs are safe misses for this generation and are
- * retried after the host invalidates the cache for a source change.
+ * The host computes this set once for a graph generation and invalidates it
+ * when a configured entry or one of its dependencies changes.
  */
 export function getConfiguredSystemModuleFiles(
   system: NormalizedSystemSource,
@@ -201,6 +116,60 @@ export function getConfiguredSystemModuleFiles(
   }
   cache?.exportedFilesByEntry.set(system.entry, files)
   return files
+}
+
+export interface ConfiguredSystemMembers {
+  readonly byFile: Map<string, NormalizedSystemSource>
+  readonly basenames: Set<string>
+}
+
+/** Compute the authored physical members for one configured graph generation. */
+export async function computeConfiguredSystemMembers(
+  sources: readonly NormalizedSystemSource[],
+  root: string,
+  cache: ConfiguredSystemResolutionCache,
+  authoredByFile: Map<string, boolean>,
+): Promise<ConfiguredSystemMembers> {
+  const byFile = new Map<string, NormalizedSystemSource>()
+  const basenames = new Set<string>()
+
+  for (const source of sources) {
+    for (const file of getConfiguredSystemModuleFiles(source, root, cache)) {
+      const canonicalFile = normalizePath(normalizeModuleIdentity(file))
+      let authored = authoredByFile.get(canonicalFile)
+      if (authored === undefined) {
+        try {
+          authored = containsVanityAuthoring(await readFile(canonicalFile, 'utf8'), canonicalFile)
+        }
+        catch {
+          // A file Vite resolved but Vanity cannot read remains the host's
+          // ordinary load error rather than becoming an owned projection.
+          authored = false
+        }
+        authoredByFile.set(canonicalFile, authored)
+      }
+      if (!authored)
+        continue
+
+      byFile.set(canonicalFile, source)
+      basenames.add(basename(canonicalFile))
+    }
+  }
+
+  return { basenames, byFile }
+}
+
+/** Return physical member IDs added to or removed from a configured graph. */
+export function computeConfiguredSystemMemberChanges(
+  previous: Iterable<string>,
+  next: Iterable<string>,
+): Set<string> {
+  const previousFiles = new Set(previous)
+  const nextFiles = new Set(next)
+  return new Set([
+    ...[...previousFiles].filter(file => !nextFiles.has(file)),
+    ...[...nextFiles].filter(file => !previousFiles.has(file)),
+  ])
 }
 
 export function assertFreshPortablePair(

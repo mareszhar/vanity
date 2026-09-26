@@ -8,12 +8,13 @@
  */
 
 import type { AddressInfo } from 'node:net'
-import type { Rollup, ViteDevServer } from 'vite'
+import type { Plugin, Rollup, ViteDevServer } from 'vite'
 import { Buffer } from 'node:buffer'
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
+import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import {
   applyDebugNames,
@@ -22,7 +23,8 @@ import {
   vanityPlugin,
 } from '@mszr/vanity/vite'
 import { build, createLogger, createServer } from 'vite'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import * as systemGraphs from './compiler/core/systems'
 import { resolveViteVirtualId } from './compiler/hosts/viteHmr'
 import { VanityError } from './index'
 import { planAutoImportDeclarations } from './prepare'
@@ -185,6 +187,50 @@ describe('the vite build', () => {
     expect(js).not.toContain('setAdapter')
     expect(js).not.toContain('createSystem')
     expect(js).not.toContain('@vanilla-extract')
+  })
+
+  it('preserves the host meaning of raw and URL queries on configured system files', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-query-')))
+
+    try {
+      await writeFile(join(root, 'package.json'), '{ "name": "vanity-system-query", "type": "module" }')
+      const system = join(root, 'system.ts')
+      await writeFile(system, `import { createSystem } from '@mszr/vanity'
+export const ds = createSystem().addTokens({ color: { brand: '#123456' } }).consolidate()
+`)
+      const entry = join(root, 'entry.ts')
+      await writeFile(entry, `import raw from './system.ts?raw'
+import systemUrl from './system.ts?url'
+export { raw, systemUrl }
+`)
+      const result = await build({
+        configFile: false,
+        logLevel: 'silent',
+        root,
+        plugins: [vanityPlugin({ compiler: { system } })],
+        resolve: { alias: aliases },
+        build: {
+          write: false,
+          minify: false,
+          ssr: true,
+          rollupOptions: { input: entry },
+        },
+      })
+      const output = (Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput
+      const code = output.output
+        .filter((item): item is Rollup.OutputChunk => item.type === 'chunk')
+        .map(chunk => chunk.code)
+        .join('\n')
+
+      // `?raw` asks for authored text, so that text retains createSystem even
+      // though an ordinary application import receives the projection.
+      expect(code).toContain('createSystem')
+      expect(code).toContain('#123456')
+      expect(code).toContain('systemUrl')
+    }
+    finally {
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
   })
 
   it('a restored recipe resolves at runtime: classes, defaults, published ports', async () => {
@@ -620,6 +666,48 @@ describe('hmr', () => {
     return affected as Array<{ file: string | null }> | undefined
   }
 
+  it('does not recompute configured-system members for an unrelated save', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-hmr-scoped-invalidation-')))
+    const system = join(root, 'system.ts')
+    const unrelated = join(root, 'unrelated.ts')
+    await writeFile(join(root, 'package.json'), '{ "name": "vanity-hmr-scoped-invalidation", "type": "module" }')
+    await writeFile(system, `import { createSystem } from '@mszr/vanity'
+export const ds = createSystem().addTokens({ color: { brand: '#123456' } }).consolidate()
+`)
+    await writeFile(unrelated, 'export const appValue = true\n')
+    server = await createServer({
+      configFile: false,
+      logLevel: 'silent',
+      root,
+      plugins: [vanityPlugin({ compiler: { system } })],
+      resolve: { alias: aliases },
+      server: { middlewareMode: true, hmr: false, ws: false, watch: null },
+    })
+    const hostPlugin = server.config.plugins.find(plugin => plugin.name === 'vanity-css-ts')
+    if (hostPlugin === undefined)
+      throw new Error('missing the Vanity host plugin')
+    const hook = hostPlugin.watchChange as {
+      handler?: (this: unknown, id: string) => unknown
+    } | ((this: unknown, id: string) => unknown)
+    const handler = typeof hook === 'function' ? hook : hook.handler
+    if (handler === undefined)
+      throw new Error('the Vanity host plugin has no watchChange handler')
+
+    const graphReads = vi.spyOn(systemGraphs, 'computeConfiguredSystemMembers')
+    try {
+      graphReads.mockClear()
+      const context = { environment: server.environments.client }
+      await Reflect.apply(handler, context, [unrelated])
+      expect(graphReads).not.toHaveBeenCalled()
+
+      await Reflect.apply(handler, context, [system])
+      expect(graphReads).toHaveBeenCalledTimes(1)
+    }
+    finally {
+      graphReads.mockRestore()
+    }
+  })
+
   it('a style edit serves fresh CSS under the same virtual id — swap in place, never stack', async () => {
     const { root, server: devServer } = await serveFixtureCopy()
     const styleUrl = '/progress.css.ts'
@@ -650,6 +738,101 @@ describe('hmr', () => {
     const refreshed = await devServer.transformRequest(virtualId!)
     expect(refreshed?.code).toContain('block-size: 50%')
     expect(refreshed?.code).not.toContain('block-size: 100%')
+  })
+
+  const authoredMember = (prefix: string, color: string) => `import { createSystem } from '@mszr/vanity'
+export const ds = createSystem()
+  .addTokens({ color: { brand: '${color}' } })
+  .consolidate({ prefix: '${prefix}' })
+`
+
+  async function expectMemberSetEdit(options: {
+    readonly initialEntry: string
+    readonly changedEntry: string
+    readonly previousMember: 'core' | 'next' | 'system'
+    readonly projectedMember: 'next' | 'system'
+    readonly runtimeIdentity: 'changed' | 'stable'
+  }) {
+    const { root, server: devServer } = await serveFixtureCopy(async (root) => {
+      await writeFile(join(root, 'core.ts'), authoredMember('member-core', '#112233'))
+      await writeFile(join(root, 'next.ts'), authoredMember('member-next', '#445566'))
+      await writeFile(join(root, 'system.ts'), options.initialEntry)
+      await writeFile(join(root, 'main.ts'), `import { ds } from './system'
+export const brand = ds.t.color.brand
+`)
+    })
+    const sent: Array<{ type?: string }> = []
+    const hot = devServer.hot as typeof devServer.hot & { send: (payload: { type?: string }) => unknown }
+    const send = hot.send.bind(hot)
+    hot.send = (payload: { type?: string }) => {
+      sent.push(payload)
+      return send(payload)
+    }
+
+    await devServer.transformRequest('/main.ts')
+    await devServer.transformRequest('/system.ts')
+    const previousProjection = await devServer.transformRequest(`/${options.previousMember}.ts`)
+    expect(previousProjection?.code).not.toContain('createSystem')
+    const previousBackingId = previousProjection?.code
+      .match(/from ["']([^"']*vanity:system-runtime:[^"']+)["']/)?.[1]
+    expect(previousBackingId).toBeDefined()
+
+    const entry = join(root, 'system.ts')
+    await writeFile(entry, options.changedEntry)
+    await hotUpdate(devServer, entry)
+
+    await devServer.transformRequest('/main.ts?t=member-set-change')
+    const configuredImportAfter = await devServer.transformRequest('/system.ts?t=member-set-change')
+    const projectedFileAfter = await devServer.transformRequest(`/${options.projectedMember}.ts?t=member-set-change`)
+    const projectionCode = options.projectedMember === 'system'
+      ? configuredImportAfter?.code
+      : projectedFileAfter?.code
+    const backingId = projectionCode?.match(/from ["']([^"']*vanity:system-runtime:[^"']+)["']/)?.[1]
+    const reloads = sent.filter(message => message.type === 'full-reload').length
+
+    if (options.projectedMember === 'system') {
+      expect(configuredImportAfter?.code).not.toContain('createSystem')
+    }
+    else {
+      expect(configuredImportAfter?.code).toContain(options.projectedMember)
+      expect(projectedFileAfter?.code).not.toContain('createSystem')
+    }
+    expect(backingId).toBeDefined()
+    if (options.runtimeIdentity === 'changed')
+      expect(backingId).not.toBe(previousBackingId)
+    else
+      expect(backingId).toBe(previousBackingId)
+    expect(reloads).toBe(1)
+  }
+
+  it('projects the new module after an application-imported barrel is repointed', async () => {
+    await expectMemberSetEdit({
+      initialEntry: `export { ds } from './core'\n`,
+      changedEntry: `export { ds } from './next'\n`,
+      previousMember: 'core',
+      projectedMember: 'next',
+      runtimeIdentity: 'changed',
+    })
+  })
+
+  it('projects the new module when an authored configured entry becomes a re-export', async () => {
+    await expectMemberSetEdit({
+      initialEntry: authoredMember('member-entry-before', '#112233'),
+      changedEntry: `export { ds } from './next'\n`,
+      previousMember: 'system',
+      projectedMember: 'next',
+      runtimeIdentity: 'changed',
+    })
+  })
+
+  it('projects the new configured entry when a re-export becomes authored', async () => {
+    await expectMemberSetEdit({
+      initialEntry: `export { ds } from './next'\n`,
+      changedEntry: authoredMember('member-next', '#445566'),
+      previousMember: 'next',
+      projectedMember: 'system',
+      runtimeIdentity: 'stable',
+    })
   })
 
   it('serves the cascade without invoking build-only asset emission', async () => {
@@ -698,6 +881,8 @@ describe('hmr', () => {
 
     await devServer.transformRequest('/progress.css.ts')
     await devServer.transformRequest('/button.css.ts')
+    const projectedSystem = await devServer.transformRequest('/system.ts')
+    expect(projectedSystem?.code).not.toContain('createSystem')
 
     const systemFile = join(root, 'system.ts')
     await writeFile(systemFile, (await readFile(systemFile, 'utf-8')).replace('#635bff', '#ff0000'))
@@ -708,6 +893,7 @@ describe('hmr', () => {
     // Both dependents re-evaluate; their fresh CSS lands under the same ids.
     expect(affectedFiles).toContain(join(root, 'progress.css.ts'))
     expect(affectedFiles).toContain(join(root, 'button.css.ts'))
+    expect(affectedFiles).not.toContain(systemFile)
 
     const transformed = await devServer.transformRequest('/progress.css.ts')
     if (transformed?.code === undefined)
@@ -882,6 +1068,143 @@ export const ds = createSystem()
 })
 
 describe('auto-imports', () => {
+  it('includes workspace-linked application modules and skips installed dependencies', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-auto-import-linked-modules-')))
+    const appRoot = join(root, 'app')
+    const linkedRoot = join(root, 'packages/linked-app')
+    const linkedFile = join(linkedRoot, 'index.ts')
+    const installedFile = join(appRoot, 'node_modules/ordinary-dependency/index.ts')
+
+    try {
+      await mkdir(join(appRoot, 'node_modules/@fixture'), { recursive: true })
+      await mkdir(join(appRoot, 'src'), { recursive: true })
+      await mkdir(linkedRoot, { recursive: true })
+      await mkdir(join(appRoot, 'node_modules/ordinary-dependency'), { recursive: true })
+      await writeFile(join(appRoot, 'package.json'), JSON.stringify({ name: 'auto-import-linked-app', type: 'module' }))
+      await writeFile(join(linkedRoot, 'package.json'), JSON.stringify({
+        name: '@fixture/linked-app',
+        type: 'module',
+        exports: './index.ts',
+      }))
+      await writeFile(linkedFile, 'export const linked = usePorts()\n')
+      await writeFile(join(appRoot, 'node_modules/ordinary-dependency/package.json'), JSON.stringify({
+        name: 'ordinary-dependency',
+        type: 'module',
+        exports: './index.ts',
+      }))
+      await writeFile(installedFile, 'export const installed = usePorts()\n')
+      await symlink(linkedRoot, join(appRoot, 'node_modules/@fixture/linked-app'), 'dir')
+      const importer = join(appRoot, 'entry.ts')
+      await writeFile(importer, `import { linked } from '@fixture/linked-app'
+import { installed } from 'ordinary-dependency'
+export const values = [linked, installed]
+`)
+      const plugins = vanityPlugin({ autoImports: { app: ['vue'] } })
+      const autoImportPlugin = plugins.find(plugin => typeof plugin === 'object' && plugin !== null
+        && !Array.isArray(plugin) && 'name' in plugin && plugin.name === 'vanity:app-auto-imports') as Plugin | undefined
+      const transformHook = autoImportPlugin?.transform as {
+        handler?: (this: unknown, code: string, id: string) => Promise<{ code: string } | undefined> | { code: string } | undefined
+      } | ((this: unknown, code: string, id: string) => Promise<{ code: string } | undefined> | { code: string } | undefined) | undefined
+      const originalTransform = typeof transformHook === 'function' ? transformHook : transformHook?.handler
+      if (autoImportPlugin === undefined || transformHook === undefined || originalTransform === undefined)
+        throw new Error('the application auto-import plugin has no transform handler')
+      const observedIds: string[] = []
+      const observedTransform = async function (this: unknown, code: string, id: string) {
+        observedIds.push(id)
+        return originalTransform.call(this, code, id)
+      }
+      if (typeof transformHook === 'function')
+        autoImportPlugin.transform = observedTransform as never
+      else
+        transformHook.handler = observedTransform
+
+      const result = await build({
+        configFile: false,
+        logLevel: 'silent',
+        root: appRoot,
+        plugins,
+        resolve: { alias: aliases },
+        build: {
+          write: false,
+          minify: false,
+          lib: { entry: importer, formats: ['es'], fileName: 'entry' },
+          rollupOptions: { external: ['@mszr/vanity/vue'] },
+        },
+      })
+      const output = (Array.isArray(result) ? result[0] : result) as Rollup.RollupOutput
+      const code = output.output
+        .filter((item): item is Rollup.OutputChunk => item.type === 'chunk')
+        .map(chunk => chunk.code)
+        .join('\n')
+      const linkedPhysicalFile = await realpath(linkedFile)
+      expect(observedIds).toContain(join(appRoot, 'entry.ts'))
+      expect(observedIds).toContain(linkedPhysicalFile)
+      expect(observedIds).not.toContain(installedFile)
+      expect(code).toMatch(/from ["']@mszr\/vanity\/vue["']/)
+      expect(code).toContain('usePorts()')
+    }
+    finally {
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  })
+
+  it('does not add a declared package auto-import source back to optimizer includes', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-auto-import-declared-package-')))
+    const originalCwd = process.cwd()
+
+    try {
+      await writeFile(join(root, 'package.json'), JSON.stringify({
+        name: 'vanity-auto-import-declared-consumer',
+        type: 'module',
+        dependencies: { '@acme/design': '1.0.0' },
+      }))
+      await mkdir(join(root, 'node_modules/@acme/design'), { recursive: true })
+      await writeFile(join(root, 'node_modules/@acme/design/package.json'), JSON.stringify({
+        name: '@acme/design',
+        type: 'module',
+        exports: { './authoring': './authoring.js' },
+        dependencies: { '@mszr/vanity': '0.6.1' },
+      }))
+      await writeFile(join(root, 'node_modules/@acme/design/authoring.js'), 'export const helper = true\n')
+      process.chdir(root)
+      const appImportPlugin = vanityPlugin({ autoImports: { app: '@acme/design/authoring' } })
+        .find((plugin) => {
+          if (typeof plugin !== 'object' || plugin === null || Array.isArray(plugin) || !('name' in plugin))
+            return false
+          return plugin.name === 'vanity:app-auto-imports'
+        }) as Plugin | undefined
+      if (appImportPlugin === undefined)
+        throw new Error('missing Vanity application auto-import plugin')
+      const configHook = typeof appImportPlugin.config === 'object'
+        ? appImportPlugin.config.handler
+        : appImportPlugin.config
+      if (configHook === undefined)
+        throw new Error('the application auto-import plugin is missing its config hook')
+      const hookContext = {}
+      const userConfig = {
+        root,
+        optimizeDeps: { exclude: ['@acme/design'] },
+      }
+      const environment = { command: 'serve', mode: 'development' }
+
+      // Creating the delegate and calling its config hook in the same Vite
+      // config turn can beat unplugin-auto-import's asynchronous import list.
+      // A later config read establishes the delegate's normal include result,
+      // which Vanity must still filter by the declared package.
+      Reflect.apply(configHook, hookContext, [userConfig, environment])
+      await new Promise(resolve => setTimeout(resolve, 0))
+      const result = await Reflect.apply(configHook, hookContext, [userConfig, environment]) as {
+        optimizeDeps?: { include?: string[] }
+      } | null | undefined
+
+      expect(result?.optimizeDeps?.include).not.toContain('@acme/design/authoring')
+    }
+    finally {
+      process.chdir(originalCwd)
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  })
+
   it('readStyleExportNames reads every export form', () => {
     const source = `
       import { createSystem } from '@mszr/vanity'

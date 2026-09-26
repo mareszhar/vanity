@@ -154,7 +154,8 @@
     "known-css-properties": "catalog:",
     "lightningcss": "catalog:",
     "oxc-parser": "catalog:",
-    "unplugin-auto-import": "catalog:"
+    "unplugin-auto-import": "catalog:",
+    "vitefu": "catalog:"
   },
   "devDependencies": {
     "@mszr/selenita": "catalog:",

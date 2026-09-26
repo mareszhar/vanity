@@ -59,7 +59,11 @@ function getViteUrlForFileId(file: string, normalizedRoot: string): string {
   return `/${relative}`
 }
 
-function normalizeViteFilePath(file: string): string {
+/**
+ * Normalize a physical Vite file ID or path. The input is a module ID, never a
+ * browser request URL.
+ */
+export function normalizeViteFilePath(file: string): string {
   const normalized = normalizePath(file)
   return /^\/[a-z]:\//i.test(normalized) ? normalized.slice(1) : normalized
 }
@@ -238,13 +242,6 @@ export function createViteHmrHost(options: {
       }
       return [...invalidated]
     },
-    removeRuntimeModules: (ids) => {
-      for (const graph of getAllViteModuleGraphs()) {
-        for (const id of ids) {
-          removeModuleFromViteGraph(graph, id, 'id')
-        }
-      }
-    },
     findModulesByUrl: async (url) => {
       const module = await getServerModuleGraph(requireServer(updateServer)).getModuleByUrl(url)
       return module === undefined ? [] : [module]
@@ -375,7 +372,6 @@ interface RetiredModuleGraph {
   readonly fileToModulesMap: Map<string, Set<RetiredModuleNode>>
   readonly _unresolvedUrlToModuleMap: Map<string, RetiredModuleNode | Promise<RetiredModuleNode>>
   readonly _hasResolveFailedErrorModules: Set<RetiredModuleNode>
-  readonly getModuleById?: (id: string) => RetiredModuleNode | undefined
   readonly getModulesByFile: (file: string) => Set<RetiredModuleNode> | undefined
   readonly invalidateModule: (module: RetiredModuleNode) => void
 }
@@ -383,7 +379,6 @@ interface RetiredModuleGraph {
 function removeModuleFromViteGraph(
   graphValue: unknown,
   virtualId: string,
-  lookup: 'file' | 'id' = 'file',
 ): void {
   const graph = graphValue as Partial<RetiredModuleGraph>
   if (
@@ -391,8 +386,7 @@ function removeModuleFromViteGraph(
     || !(graph.idToModuleMap instanceof Map)
     || !(graph.etagToModuleMap instanceof Map)
     || !(graph.fileToModulesMap instanceof Map)
-    || (lookup === 'file' && typeof graph.getModulesByFile !== 'function')
-    || (lookup === 'id' && typeof graph.getModuleById !== 'function')
+    || typeof graph.getModulesByFile !== 'function'
     || typeof graph.invalidateModule !== 'function'
     || !(graph._unresolvedUrlToModuleMap instanceof Map)
     || !(graph._hasResolveFailedErrorModules instanceof Set)
@@ -401,14 +395,7 @@ function removeModuleFromViteGraph(
   }
 
   const unresolvedUrlToModuleMap = graph._unresolvedUrlToModuleMap!
-  let modules: RetiredModuleNode[]
-  if (lookup === 'id') {
-    const module = graph.getModuleById!(virtualId)
-    modules = module === undefined ? [] : [module]
-  }
-  else {
-    modules = [...graph.getModulesByFile!(virtualId) ?? []]
-  }
+  const modules = [...graph.getModulesByFile!(virtualId) ?? []]
   for (const module of modules) {
     const importers = [...module.importers]
     const etag = module.transformResult?.etag

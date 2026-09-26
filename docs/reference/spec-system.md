@@ -239,7 +239,7 @@ vanityPlugin({
 
 For a style transform the compiler executes the full in-process contract, emits its system declarations once under a virtual module keyed by CSS identity, and emits style declarations under a virtual module keyed by source. Eager importers share system CSS; a lazy style retains only its own async CSS.
 
-For ordinary browser and SSR imports of a configured system module, Vite projects only the exports that represent the evaluated system onto generated portable-data backing. The build-time implementation that creates the system—its authoring closures, compiler, Vanilla Extract, and Node-only code—never enters those graphs. Ordinary exports and re-export edges remain in the host module graph, so application objects, functions, closures, reference identity, and live bindings retain JavaScript module semantics. A configured barrel can therefore share one system backing with its leaf without substituting the barrel's namespace for the leaf's namespace.
+For browser and SSR imports, Vanity owns a configured member when Vite loads the member from the configured entry's static re-export graph and the module contains Vanity authoring. Vanity projects only the exports that represent the evaluated system onto generated portable-data backing, under the member's own physical module ID. The build-time implementation that creates the system—its authoring closures, compiler, Vanilla Extract, and Node-only code—never enters those graphs. Ordinary exports and re-export edges remain in the host module graph, so application objects, functions, closures, reference identity, and live bindings retain JavaScript module semantics. A configured barrel can therefore share one system backing with its leaf without substituting the barrel's namespace for the leaf's namespace.
 
 The configured authored system module may export the consolidated system and values taken from it, including renamed destructured members. An unrelated runtime export raises `VANITY_APP_EXPORT_IN_SYSTEM_MODULE`; move that declaration into another ordinary module and import it normally. Type-only exports do not participate in this rule. Ordinary modules and pure re-export barrels stay in the host graph, so application bindings are never reconstructed as serialized values.
 
@@ -270,7 +270,7 @@ Artifacts are written atomically and only when bytes change.
 
 Two systems may not claim the same prefix/root/layer namespace with different CSS identities. The compiler reports both owners and fingerprints.
 
-Semantically identical physical package copies are valid. Runtime-schema identity selects one browser/SSR backing controller; each resolved module gets its own export-namespace projection over that backing, while CSS identity selects one system stylesheet. A configured barrel and its leaf therefore share the same system object without substituting one module's exports for the other. Source path and object reference never prevent deduplication.
+Semantically identical physical package copies are valid. Runtime-schema identity selects one browser/SSR backing controller; each authored member is served under its resolved module ID with its own export projection over that backing, while CSS identity selects one system stylesheet. A configured barrel and its leaf therefore share the same system object without substituting one module's exports for the other. Source path and object reference never prevent deduplication.
 
 ## 12. HMR and last-good state
 

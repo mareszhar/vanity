@@ -10,10 +10,10 @@ export interface StyleHotUpdateContext {
   readonly modules: readonly object[]
 }
 
-/** A resolved application namespace projection for one system. */
-export interface RuntimeNamespaceHmrRecord {
-  readonly id: string
+/** A physical system-member projection last served in one host environment. */
+export interface RuntimeMemberHmrRecord {
   readonly moduleFile: string
+  readonly target: 'browser' | 'ssr'
   readonly identity: string
   readonly runtimeId: string
 }
@@ -27,9 +27,9 @@ export interface StyleHotUpdateState {
   readonly dependentsByFile: Map<string, Set<string>>
   readonly styleEntriesBySystem: Map<string, Set<string>>
   readonly runtimeVirtualIds: Set<string>
-  readonly runtimeNamespaceIdsByEntry: Map<string, Map<string, RuntimeNamespaceHmrRecord>>
-  readonly clearRuntimeNamespaceProjection: (id: string) => void
-  readonly getRuntimeNamespaceIdentity: (system: EvaluatedSystem, moduleFile: string) => string | undefined
+  readonly runtimeMemberIdsByEntry: Map<string, Map<string, RuntimeMemberHmrRecord>>
+  readonly memberSetChanges?: ReadonlySet<string>
+  readonly getRuntimeMemberIdentity: (system: EvaluatedSystem, moduleFile: string) => string | undefined
   readonly failedStyleEntries: Set<string>
   readonly refreshAppAutoImports?: () => Promise<void>
   readonly evaluateConfiguredSystems: (sources: readonly NormalizedSystemSource[]) => Promise<EvaluatedSystem[]>
@@ -45,7 +45,8 @@ export async function handleHotUpdate(
 
   const affectedSystems = [...state.systemDependentsByFile.get(normalizedFile) ?? []]
   const invalidatedRuntimeIdentities = new Set<string>()
-  const invalidatedRuntimeNamespaceIds = new Set<string>()
+  const invalidatedRuntimeMemberFiles = new Set(state.memberSetChanges ?? [])
+  const projectedMemberFiles = new Set<string>()
   const failures: unknown[] = []
   const affected = new Set(context.modules)
   const affectedSources = affectedSystems.flatMap((entry) => {
@@ -71,19 +72,27 @@ export async function handleHotUpdate(
         }
         if (source === undefined)
           continue
-        const namespaceRecords = state.runtimeNamespaceIdsByEntry.get(source.entry)
-        if (namespaceRecords === undefined)
+        const memberRecords = state.runtimeMemberIdsByEntry.get(source.entry)
+        if (memberRecords === undefined)
           continue
         const nextRuntimeId = getRuntimeIdentity(system.portable)
-        for (const record of namespaceRecords.values()) {
-          const nextIdentity = state.getRuntimeNamespaceIdentity(system, record.moduleFile)
+        for (const [key, record] of memberRecords) {
+          if (state.memberSetChanges?.has(record.moduleFile)) {
+            // A departing member is absent from this generation, so it has no
+            // namespace identity to compare. The membership transition below
+            // invalidates it and reloads the application without this check.
+            memberRecords.delete(key)
+            continue
+          }
+          projectedMemberFiles.add(record.moduleFile)
+          const nextIdentity = state.getRuntimeMemberIdentity(system, record.moduleFile)
           if (record.runtimeId !== nextRuntimeId || record.identity !== nextIdentity) {
-            invalidatedRuntimeNamespaceIds.add(record.id)
-            namespaceRecords.delete(record.id)
+            invalidatedRuntimeMemberFiles.add(record.moduleFile)
+            memberRecords.delete(key)
           }
         }
-        if (namespaceRecords.size === 0)
-          state.runtimeNamespaceIdsByEntry.delete(source.entry)
+        if (memberRecords.size === 0)
+          state.runtimeMemberIdsByEntry.delete(source.entry)
       }
     }
     catch (error) {
@@ -116,15 +125,20 @@ export async function handleHotUpdate(
       affected.add(runtimeModule)
   }
 
-  if (invalidatedRuntimeNamespaceIds.size > 0) {
-    state.host.removeRuntimeModules(invalidatedRuntimeNamespaceIds)
-    for (const id of invalidatedRuntimeNamespaceIds)
-      state.clearRuntimeNamespaceProjection(id)
+  const suppressedMemberModules = new Set<object>()
+  for (const file of projectedMemberFiles) {
+    for (const module of state.host.findModulesByFile(file))
+      suppressedMemberModules.add(module)
   }
-  if (invalidatedRuntimeNamespaceIds.size > 0) {
-    // Application namespace value/interface changes cannot be applied through
-    // the stable system CSS update channel. Reload so every importer resolves
-    // the new module-specific namespace and keeps shared runtime identity.
+  for (const file of invalidatedRuntimeMemberFiles) {
+    for (const module of state.host.findModulesByFile(file)) {
+      state.host.markModuleInvalid(module)
+      suppressedMemberModules.add(module)
+    }
+  }
+  if (invalidatedRuntimeMemberFiles.size > 0) {
+    // The changed projection belongs to a real graph node. Invalidate it in
+    // every environment, then let the browser re-request the physical ID.
     state.host.sendFullReload()
   }
 
@@ -165,9 +179,17 @@ export async function handleHotUpdate(
   if (failures.length > 0)
     throw failures[0]
 
+  // A member-set transition already sent the one full reload needed to
+  // replace application bindings. Returning changed modules as well would
+  // let Vite propagate a second ordinary update for the same source event.
+  if (invalidatedRuntimeMemberFiles.size > 0)
+    return []
+
   const returnedByUrl = new Map<string, object>()
   const withoutUrl: object[] = []
   for (const module of affected) {
+    if (suppressedMemberModules.has(module))
+      continue
     const url = state.host.getModuleUrl(module)
     if (url === undefined) {
       withoutUrl.push(module)

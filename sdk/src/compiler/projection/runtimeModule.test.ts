@@ -638,11 +638,15 @@ export const result = { aliased: ds === theme, token: ds.t.color.brand.$name }
         server: { middlewareMode: true, hmr: false, ws: false, watch: null },
       })
       const transformed = await server.transformRequest('/entry.ts', { ssr: true })
-      // A virtual ID that carried an absolute path would bake one machine's
-      // directories into the graph, sourcemaps, and bundler output.
-      expect(transformed?.code).toContain('system-namespace')
+      // The import stays on the authored member's own host ID, and neither
+      // module carries a machine path into served code.
+      expect(transformed?.code).toContain('/system.ts')
       expect(transformed?.code).not.toContain(encodeURIComponent(root))
       expect(transformed?.code).not.toContain(root)
+      const projectedSystem = await server.transformRequest('/system.ts', { ssr: true })
+      expect(projectedSystem?.code).toContain('vanity:system-runtime:ssr:')
+      expect(projectedSystem?.code).not.toMatch(/createSystem|addTokens|consolidate/)
+      expect(projectedSystem?.code).not.toContain(root)
 
       const loaded = await server.ssrLoadModule('/entry.ts') as {
         result: { aliased: boolean, token: string }

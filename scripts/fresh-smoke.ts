@@ -1,6 +1,6 @@
 /**
  * Fresh-package smoke: install the packed SDK in strict Vite/Nuxt/testing-kit
- * consumers, plus source-shipping packages consumed through both a workspace
+ * consumers, plus source packages consumed through both a workspace
  * link and a package tarball. Inspect each document's linked CSS graph and run
  * real dev HTTP lifecycles; no SDK workspace link or source alias can mask a
  * packaging failure.
@@ -121,9 +121,9 @@ async function assertSourcePackageCss(directory: string): Promise<void> {
     if (stylesheets.length === 0)
       throw new Error(`${scenario.html} does not link a stylesheet`)
     const css = stylesheets.map(path => readFileSync(path, 'utf8')).join('\n')
-    if (!/--source-shipping-color-brand\s*:\s*#13579b\b/i.test(css))
+    if (!/--source-package-color-brand\s*:\s*#13579b\b/i.test(css))
       throw new Error(`${scenario.html}'s linked CSS is missing the source-package token declaration`)
-    if (!/color:\s*var\(--source-shipping-color-brand\)/.test(css))
+    if (!/color:\s*var\(--source-package-color-brand\)/.test(css))
       throw new Error(`${scenario.html}'s linked CSS is missing its consuming token reference`)
     if (!scenario.declaration.test(css))
       throw new Error(`${scenario.html}'s linked CSS is missing ${scenario.label}`)
@@ -302,7 +302,7 @@ async function main(): Promise<void> {
     '',
     'export const ds = createSystem()',
     '  .addTokens({ color: { brand: \'#13579b\' } })',
-    '  .consolidate({ prefix: \'source-shipping\' })',
+    '  .consolidate({ prefix: \'source-package\' })',
     '',
   ].join('\n'))
   write(join(sourcePackageDir, 'src/constants.ts'), 'export const sourceMarker = \'source-package-barrel-export\'\n')
@@ -325,7 +325,7 @@ async function main(): Promise<void> {
     private: true,
     type: 'module',
     dependencies: { '@mszr/vanity': packedDependency },
-    devDependencies: { typescript: '5.8.3', vite: '8.1.5' },
+    devDependencies: { typescript: '5.8.3', vite: '8.1.5', vitest: '4.1.9' },
   }, null, 2))
   write(join(plainDir, 'tsconfig.json'), JSON.stringify({
     compilerOptions: {
@@ -387,6 +387,19 @@ import { card } from './card.css.ts'
 
 void ports()
 document.querySelector('#app')!.innerHTML = '<button class="' + card + '" data-color="' + VANITY_CSS_CAPABILITIES.oklch.maturity + '">Fresh Vite</button>'
+`)
+  write(join(plainDir, 'src/testing.test.ts'), `import { createSystem } from '@mszr/vanity'
+import { emitOf } from '@mszr/vanity/testing'
+import { expect, it } from 'vitest'
+
+const ds = createSystem()
+  .addTokens({ color: { brand: '#635bff' } })
+  .consolidate({ prefix: 'app' })
+
+it('captures emitted CSS from a system created in the test', () => {
+  expect(emitOf(() => ds.class({ color: ds.t.color.brand }, 'button')))
+    .toContain('color: var(--app-color-brand)')
+})
 `)
 
   write(join(nuxtDir, 'package.json'), JSON.stringify({
@@ -537,6 +550,9 @@ describe('packed consumer testing kit', () => {
 `)
 
   run('pnpm', ['install', '--ignore-scripts'])
+
+  run('pnpm', ['--dir', plainDir, 'exec', 'vitest', 'run'])
+  console.log('✓ fresh plain-Vite consumer: documented testing-kit test through its mounted Vite config')
 
   run('pnpm', ['--dir', testingDir, 'exec', 'tsc', '--noEmit'])
   run('pnpm', ['--dir', testingDir, 'exec', 'vitest', 'run'])

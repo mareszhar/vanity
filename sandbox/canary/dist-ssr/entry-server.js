@@ -1486,7 +1486,7 @@ var _reconcileRuntimeSnapshot = restoreRuntimeReconciler(_runtimeContract);
 var _runtimeStyle = restoreRuntimeStyle(_runtimeContract);
 var _runtimeProps = restoreRuntimeProps(_runtimeContract);
 //#endregion
-//#region \0vanity:system-namespace:ssr:vanity-runtime-schema-1-3l9guy:namespace-cef9af42:src%2Fsystem.ts
+//#region src/system.ts
 var ds = Object.freeze({
 	t: Object.freeze(_t),
 	runtime: _runtime,

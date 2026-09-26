@@ -20,27 +20,31 @@ Fixtures cover open-to-locked system construction, token modules, axes and spars
 
 <!-- benchmark-receipt:start -->
 
-## Accepted baseline — 2026-09-19
+## Accepted baseline — 2026-09-26
 
-Recorded at 2026-09-19T03:07:49.141Z from the worktree based on HEAD 5cdcea95. Environment: darwin 25.4.0 arm64, Node v24.18.0, pnpm 11.25.0, TypeScript 6.0.3. Wall-clock measurements are local one-run signals. Source receipt: `.vanity/benchmarks/current.json`.
+Recorded at 2026-09-26T01:53:06.405Z from the worktree based on HEAD 0770ce7c. Environment: darwin 25.4.0 arm64, Node v24.21.0, pnpm 12.5.1, TypeScript 6.0.3. Wall-clock measurements are local one-run signals. Source receipt: `.vanity/benchmarks/current.json`.
 
 | Scale | Cold TS / wall | Instantiations | Memory | Incremental TS / wall |
 | --- | ---: | ---: | ---: | ---: |
-| Small | 0.46s / 0.982s | 34,246 | 142,215 kB | 0.24s / 0.750s |
-| Medium | 0.55s / 1.072s | 65,513 | 114,291 kB | 0.25s / 0.770s |
-| Large | 1.08s / 1.612s | 288,916 | 150,297 kB | 0.25s / 0.764s |
+| Small | 0.58s / 0.724s | 34,246 | 99,776 kB | 0.23s / 0.364s |
+| Medium | 0.50s / 0.615s | 65,513 | 102,561 kB | 0.22s / 0.339s |
+| Large | 1.03s / 1.157s | 288,916 | 147,646 kB | 0.25s / 0.379s |
 
 | Scale | Root | Deep | Axis | Case | Runtime | CSS | Diagnostic | Rename |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Small | 0.078ms | 0.131ms | 0.270ms | 0.262ms | 0.150ms | 6.865ms | 0.212ms | 1.070ms |
-| Medium | 0.079ms | 0.186ms | 0.082ms | 0.167ms | 0.113ms | 5.856ms | 0.106ms | 1.440ms |
-| Large | 0.139ms | 0.270ms | 0.136ms | 0.144ms | 0.134ms | 5.708ms | 0.108ms | 6.585ms |
+| Small | 0.099ms | 0.151ms | 0.190ms | 0.237ms | 0.309ms | 6.407ms | 0.306ms | 0.968ms |
+| Medium | 0.068ms | 0.162ms | 0.087ms | 0.148ms | 0.096ms | 5.183ms | 0.104ms | 1.210ms |
+| Large | 0.132ms | 0.243ms | 0.065ms | 0.135ms | 0.116ms | 4.853ms | 0.116ms | 5.644ms |
 
 | Scale | Declaration emit / bytes | Vite build | CSS raw / gzip | Manifest v4 raw / gzip |
 | --- | ---: | ---: | ---: | ---: |
-| Small | 1.016s / 40,184 B | 1.302s | 4,461 B / 812 B | 153,571 B / 7,227 B |
-| Medium | 1.190s / 107,485 B | 1.192s | 24,712 B / 2,978 B | 1,169,491 B / 32,637 B |
-| Large | 2.085s / 588,958 B | 5.234s | 208,567 B / 21,445 B | 11,386,892 B / 255,924 B |
+| Small | 0.579s / 40,184 B | 0.917s | 4,461 B / 812 B | 153,571 B / 7,227 B |
+| Medium | 0.723s / 107,485 B | 0.759s | 24,712 B / 2,978 B | 1,169,491 B / 32,637 B |
+| Large | 1.545s / 588,958 B | 4.930s | 208,567 B / 21,445 B | 11,386,892 B / 255,924 B |
+
+| Host graph modules | Plain Vite | Vanity | Overhead | Package declaration walk cold / warm |
+| --- | ---: | ---: | ---: | ---: |
+| 3,000 app + 128 installed | 0.167s | 0.478s | 311 ms | 331 ms / 1 ms |
 
 Package entries: root 623,976 B raw; runtime 65,808 B raw, 38,155 B minified, and 11,318 B min+gzip; Hail presets 31,202 B raw.
 
@@ -53,6 +57,8 @@ The CSS numbers are expected release evidence, not a byte-identity promise again
 Those semantic characteristics can increase or reduce fixture CSS; the raw and gzip values above are the reviewed output for this checkout.
 
 Runtime min+gzip remains subject to the 12,400 B budget enforced by `scripts/benchmark.ts`. Any future runtime-affecting change must either stay within that budget or receive an explicit benchmark review and budget decision.
+
+The host-graph row is a local timing signal. Zero handler calls for unserved modules is enforced by the supported-major Vite graph matrix, where the host is observed directly. The receipt also records cold and warm source-package declaration time on `sandbox/demo-main`'s installed tree.
 
 ## Acceptance policy
 

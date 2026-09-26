@@ -1,4 +1,4 @@
-/** Compiler integration coverage for configured and source-shipping systems. */
+/** Compiler integration coverage for configured systems and source packages. */
 
 import type { AddressInfo } from 'node:net'
 import type { Rollup } from 'vite'
@@ -43,7 +43,7 @@ function getLinkedCss(
     .join('\n')
 }
 
-/** An application root with a sibling source-shipping package outside it. */
+/** An application root with a sibling source package outside it. */
 async function writeOutsideStyleFixture(): Promise<{
   readonly base: string
   readonly app: string
@@ -214,7 +214,7 @@ export { button }
     }
   }, 60000)
 
-  it('keeps installed source-shipping style diagnostics at their authored range', async () => {
+  it('keeps installed source package style diagnostics at their authored range', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-installed-style-diagnostic-')))
 
     try {

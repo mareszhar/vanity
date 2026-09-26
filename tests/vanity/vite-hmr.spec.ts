@@ -608,7 +608,9 @@ test('documentation-only package edits refresh docs without requesting CSS', asy
     const before = await readSystemArtifact(fixture, 'browser-hmr')
     const requestsBefore = [...cssRequests]
     const source = await readFile(fixture.system, 'utf8')
+    await fixture.server.watcher.unwatch(fixture.system)
     await writeFile(fixture.system, source.replaceAll('system-docs-v1', 'system-docs-v2'))
+    emitHostFileChange(fixture.server, fixture.system)
 
     await expect.poll(async () => (await readSystemArtifact(fixture, 'browser-hmr')).identities.docs)
       .not
@@ -643,10 +645,9 @@ test('one consumer can leave a shared system stylesheet while another keeps it l
 
 export const card = alternate.class({ color: alternate.t.color.brand, padding: '3px' })
 `
+    await fixture.server.watcher.unwatch(fixture.style)
     await writeFile(fixture.style, alternateStyle)
-    await expect.poll(() => fixture.watchEvents.some(event =>
-      event.startsWith('change ') && event.endsWith(fixture.style)))
-      .toBe(true)
+    emitHostFileChange(fixture.server, fixture.style)
     await expect.poll(() => fixture.hmrUpdates.some(update => update.startsWith(fixture.style)), {
       message: fixture.hmrUpdates.join('\n'),
     }).toBe(true)
@@ -667,7 +668,9 @@ export const card = alternate.class({ color: alternate.t.color.brand, padding: '
     expect(retainedCss.css).toContain('#112233')
 
     const source = await readFile(fixture.theme, 'utf8')
+    await fixture.server.watcher.unwatch(fixture.theme)
     await writeFile(fixture.theme, source.replace('#112233', '#445566'))
+    emitHostFileChange(fixture.server, fixture.theme)
     await expect.poll(() => fixture.hmrUpdates.some(update =>
       update.startsWith(fixture.theme) && update.includes(fixture.secondStyle)))
       .toBe(true)
@@ -695,20 +698,18 @@ test('a system dependency failure keeps last-good browser CSS and repairs withou
     await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).color))
       .toBe('rgb(17, 34, 51)')
     const identitiesBefore = (await readSystemArtifact(fixture, 'browser-hmr')).identities
+    await fixture.server.watcher.unwatch(fixture.theme)
     await writeFile(fixture.theme, 'throw new Error(\'fixture dependency failure\')\n')
-    await expect.poll(() => fixture.watchEvents.some(event =>
-      event.startsWith('change ') && event.endsWith(fixture.theme)))
-      .toBe(true)
+    emitHostFileChange(fixture.server, fixture.theme)
 
     await expect(page.locator('vite-error-overlay')).toContainText('fixture dependency failure')
     expect(await page.locator('#first').evaluate(element => getComputedStyle(element).color))
       .toBe('rgb(17, 34, 51)')
     expect(await loadCount(page)).toBe(loads)
 
+    await fixture.server.watcher.unwatch(fixture.theme)
     await writeFile(fixture.theme, 'export const brand = \'#445566\'\n')
-    await expect.poll(() => fixture.watchEvents.some(event =>
-      event.startsWith('change ') && event.endsWith(fixture.theme)))
-      .toBe(true)
+    emitHostFileChange(fixture.server, fixture.theme)
     await expect.poll(async () => (await readSystemArtifact(fixture, 'browser-hmr')).identities.css)
       .not
       .toBe(identitiesBefore.css)

@@ -5,6 +5,11 @@
  * classes, ports, recipes, and metadata, and its CSS arrives as a virtual
  * `.vanity.css` module the bundler treats like any stylesheet.
  *
+ * Vanity owns authored members of configured systems at their physical file
+ * IDs; Vite loads each module and receives its projection under that same ID.
+ * Hooks are narrowed to the IDs they serve wherever that set is fixed, and
+ * decide ownership before doing work wherever it can change.
+ *
  * The pipeline is the substrate's proven integration model (the one its
  * webpack/esbuild/next plugins ship on): esbuild bundles the style module
  * with debug names and file scopes injected, and the bundle is evaluated
@@ -52,19 +57,22 @@ import type { PreparedSystem } from './compiler/core/registration'
 import type {
   EvaluatedSystem,
   NormalizedSystemSource,
-  ResolvedConfiguredSystemImport,
 } from './compiler/core/systems'
 import type { StyleAutoImportInjection } from './compiler/core/transform'
-import type { RuntimeNamespaceHmrRecord } from './compiler/hmr/update'
+import type { RuntimeMemberHmrRecord } from './compiler/hmr/update'
+import type { DeclaredPackageSet } from './compiler/hosts/vitePackages'
 import type {
   VanityAppAutoImports,
   VanityConfig,
 } from './config'
+import type { VanityDiagnosticInput, VanityDiagnosticSink } from './diagnostics'
 import type { VanityInspectRecord } from './introspect/records'
 import type { VanityPortableSystem } from './system/contract'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, posix, resolve } from 'node:path'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, posix, relative, resolve } from 'node:path'
+import { cwd } from 'node:process'
 import autoImportVite from 'unplugin-auto-import/vite'
+import { searchForWorkspaceRoot } from 'vite'
 import { isPackageSpecifier, resolveAppAutoImports } from './compiler/auto-imports/applicationImports'
 import {
   getAppAutoImportsForSystem,
@@ -77,7 +85,7 @@ import {
   rememberStyleSystems,
   rememberSystemDependencies,
 } from './compiler/core/ownership'
-import { getRootRelativeModulePath, normalizePath } from './compiler/core/path'
+import { normalizePath } from './compiler/core/path'
 import {
   createSystemRecordFromPortable,
   createSystemRegistrationQueue,
@@ -85,25 +93,32 @@ import {
 import {
   assertFreshPortablePair,
   clearConfiguredSystemResolutionCache,
+  computeConfiguredSystemMemberChanges,
+  computeConfiguredSystemMembers,
   createConfiguredSystemResolutionCache,
-  findConfiguredSystemInModuleGraph,
   getConfiguredSystemModuleFiles,
   getRuntimeIdentity,
   normalizeSystemSources,
-  resolveConfiguredSystemImport,
 } from './compiler/core/systems'
 import { transformStyleModule } from './compiler/core/transform'
 import { handleHotUpdate } from './compiler/hmr/update'
 import {
   createViteHmrHost,
   createVitePendingCssResponseCache,
+  normalizeViteFilePath,
   resolveViteVirtualId,
 } from './compiler/hosts/viteHmr'
 import { vanityViteHost } from './compiler/hosts/viteHost'
+import {
+  createDeclaredPackageLoader,
+  createVitePackageDeclarations,
+  filterDeclaredPackageIncludes,
+  findDeclaredPackageOverrides,
+  readSdkVersion,
+} from './compiler/hosts/vitePackages'
 import { buildStyleModule, convertViteAliasesToEsbuild } from './compiler/modules/build'
 import { executeBundle } from './compiler/modules/evaluate'
 import {
-  containsVanityAuthoring,
   getStyleAutoImportAliases,
 } from './compiler/modules/source'
 import {
@@ -117,7 +132,7 @@ import {
 } from './compiler/projection/runtimeModule'
 import { emitSystemCss } from './compiler/projection/systemCss'
 import { writeFileArtifacts } from './compiler/publication'
-import { reportDiagnostics, VanityError } from './diagnostics'
+import { formatVanityDiagnostic, reportDiagnostics, VanityError } from './diagnostics'
 import { renderDevtoolsPage } from './introspect/devtools'
 import { buildManifest } from './introspect/manifest'
 import { collectInspection } from './introspect/records'
@@ -150,14 +165,61 @@ export type {
 export type VanityViteOptions = VanityConfig
 
 /** `*.css.ts` (and variants) — vanity's authoring file extension. */
-const styleFileFilter = /\.css\.(?:js|cjs|mjs|jsx|ts|tsx)(?:\?used)?$/
+const styleFileFilter = /\.css\.(?:js|cjs|mjs|jsx|ts|tsx)(?:\?.*)?$/
+const vanillaExtractVirtualFilter = /\.vanilla\.css(?:\?.*)?$/
 
 /** The stable virtual stylesheet a compiled style module imports; content lives in the store. */
 const virtualExt = '.vanity.css'
 const runtimeVirtualPrefix = '\0vanity:system-runtime:'
-const runtimeNamespaceVirtualPrefix = '\0vanity:system-namespace:'
+const runtimeScanPrefix = '\0vanity:system-scan:'
 const cascadeUrl = '/__vanity/cascade.css'
 const cascadeFileName = 'assets/vanity-cascade.css'
+
+type RuntimeTarget = 'browser' | 'ssr'
+
+/** The part of a Vite 6+ hook environment the adapter reads. */
+interface HookEnvironment {
+  readonly mode?: string
+  readonly config: ResolvedConfig & { readonly consumer?: 'client' | 'server' }
+  getTopLevelConfig: () => ResolvedConfig
+}
+
+interface HookEnvironmentContext {
+  readonly environment?: HookEnvironment
+}
+
+/** Vite 5 hook contexts have no environment; later majors provide one. */
+function getHookEnvironment(context: HookEnvironmentContext | undefined): HookEnvironment | undefined {
+  return context?.environment
+}
+
+interface ViteHostState {
+  readonly group: ViteHostGroup
+  readonly config: ResolvedConfig
+  readonly target: RuntimeTarget
+  systemSources: NormalizedSystemSource[]
+  systemResolutionCache: ReturnType<typeof createConfiguredSystemResolutionCache>
+  systemMembersReady: Promise<void>
+  readonly membersByFile: Map<string, NormalizedSystemSource>
+  readonly memberBasenames: Set<string>
+  readonly preserveSymlinks: boolean
+  readonly readinessFailures: Map<string, unknown>
+  server?: ViteDevServer
+}
+
+interface ViteHostGroup {
+  readonly config: ResolvedConfig
+  readonly targets: Map<RuntimeTarget, ViteHostState>
+  clientServer?: ViteDevServer
+  cascadeCss: string
+  /** The manifest as last written, so unchanged builds skip the write. */
+  writtenManifest?: string
+  manifestTimer?: ReturnType<typeof setTimeout>
+  shimContent?: string
+  systemSource?: string
+  systemDeps: Set<string>
+  appAutoImportSourceFiles: Set<string>
+}
 
 /**
  * Compile Vanity style modules and maintain CSS, portable data, and Manifest v4.
@@ -181,14 +243,56 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const appAutoImports = nativeTypeHost === 'nuxt' || autoImports.app === undefined
     ? undefined
     : getAppAutoImportsForSystem(autoImports.app, compiler.system)
-  let config: ResolvedConfig
-  let server: ViteDevServer | undefined
-  let clientServer: ViteDevServer | undefined
-  let systemSources: NormalizedSystemSource[] = []
-  let systemResolutionCache = createConfiguredSystemResolutionCache()
-  const configuredImportResolutionCache = new Map<string, ResolvedConfiguredSystemImport | null>()
-  let systemSourcesReady: Promise<void> = Promise.resolve()
-  let cascadeCss = ''
+  const loadDeclaredPackages = createDeclaredPackageLoader(readSdkVersion())
+  const getDeclaredPackages = (root: string, workspaceRoot = searchForWorkspaceRoot(root)) =>
+    loadDeclaredPackages(root, workspaceRoot)
+  /** Each resolved top-level config owns its target-specific host state. */
+  const hostGroups = new Map<ResolvedConfig, ViteHostGroup>()
+  const hostStateInitializations = new WeakMap<ViteHostState, Promise<void>>()
+  let activeVite5Host: ViteHostGroup | undefined
+  const createHostState = (group: ViteHostGroup, target: RuntimeTarget): ViteHostState => {
+    const existing = group.targets.get(target)
+    if (existing !== undefined)
+      return existing
+
+    const state: ViteHostState = {
+      group,
+      config: group.config,
+      target,
+      systemSources: [],
+      systemResolutionCache: createConfiguredSystemResolutionCache(),
+      systemMembersReady: Promise.resolve(),
+      membersByFile: new Map(),
+      memberBasenames: new Set(),
+      preserveSymlinks: group.config.resolve.preserveSymlinks,
+      readinessFailures: new Map(),
+    }
+    group.targets.set(target, state)
+    return state
+  }
+  const getHostState = (
+    context: unknown,
+    hostServer?: ViteDevServer,
+    ssrOption?: boolean,
+  ): ViteHostState => {
+    // Hook contexts differ by hook; only environment-owned hooks on Vite 6+
+    // carry an environment, and every other lookup names its server instead.
+    const environment = getHookEnvironment(context as HookEnvironmentContext | undefined)
+    const group = environment === undefined
+      ? hostServer === undefined
+        ? activeVite5Host
+        : hostGroups.get(hostServer.config) ?? activeVite5Host
+      : hostGroups.get(environment.getTopLevelConfig())
+    if (group === undefined)
+      throw new TypeError('host state was requested before configResolved')
+
+    const consumer = environment?.config.consumer
+    const target: RuntimeTarget = consumer === 'server'
+      || (consumer === undefined && (ssrOption === true || group.config.build.ssr === true))
+      ? 'ssr'
+      : 'browser'
+    return createHostState(group, target)
+  }
 
   /** Stable virtual id → the CSS it currently serves. */
   const cssByVirtualId = new Map<string, string>()
@@ -216,14 +320,8 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const runtimeVirtualIds = new Set<string>()
   /** Whether a configured graph file contains Vanity's build-time authoring. */
   const systemAuthoringByFile = new Map<string, boolean>()
-  /** Module-specific runtime projections, keyed by their stable virtual id. */
-  const runtimeNamespaceProjections = new Map<string, {
-    readonly system: EvaluatedSystem
-    readonly target: 'browser' | 'ssr'
-    readonly moduleFile: string
-  }>()
-  /** Application namespace ids observed for each configured system entry. */
-  const runtimeNamespaceIdsByEntry = new Map<string, Map<string, RuntimeNamespaceHmrRecord>>()
+  /** Module projections last served under each physical member ID and target. */
+  const runtimeMemberIdsByEntry = new Map<string, Map<string, RuntimeMemberHmrRecord>>()
   /** Attempted system dependency → configured entries, including failed attempts. */
   const systemDependentsByFile = new Map<string, Set<string>>()
   /** Namespace owner key → last-good systems, recomputed after successful updates. */
@@ -237,37 +335,15 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   /** Initial eager evaluations may fail while the dev server remains repairable. */
   const systemReadinessFailures = new Map<string, unknown>()
   const pendingCssResponseCache = createVitePendingCssResponseCache()
+  const declarationConfigRoots = new Set<string>()
+  const warnedSourcePackages = new Set<string>()
+  const filterState = createLateHookFilterState()
   /** `.css.ts` entries claimed by Vanity rather than raw vanilla-extract. */
   const vanityOwnedStyleModules = new Set<string>()
   /** Style module → configured build-time systems it imports. */
   const systemsByStyleEntry = new Map<string, Set<string>>()
   /** Configured build-time system → style modules that import it. */
   const styleEntriesBySystem = new Map<string, Set<string>>()
-  /** Local source graph files whose exports can change an auto-import declaration. */
-  let appAutoImportSourceFiles = new Set<string>()
-
-  const isAuthoredSystemModule = async (moduleFile: string): Promise<boolean> => {
-    const normalized = normalizePath(moduleFile)
-    const cached = systemAuthoringByFile.get(normalized)
-    if (cached !== undefined)
-      return cached
-
-    let authored = false
-    try {
-      authored = containsVanityAuthoring(await readFile(moduleFile, 'utf8'), moduleFile)
-    }
-    catch {
-      // The host has already resolved this module. A source that cannot be
-      // read is not eligible for the authoring projection; let the host report
-      // its ordinary module error instead.
-    }
-    systemAuthoringByFile.set(normalized, authored)
-    return authored
-  }
-
-  /** The manifest as last written, so unchanged builds skip the write. */
-  let writtenManifest: string | undefined
-  let manifestTimer: ReturnType<typeof setTimeout> | undefined
   const reportedFailures = new WeakSet<object>()
   const reportFailure = (error: unknown): void => {
     if (typeof error === 'object' && error !== null) {
@@ -290,13 +366,13 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     })
   }
 
-  const serializeManifestJson = (): string => {
+  const serializeManifestJson = (state: ViteHostState): string => {
     const records = [...recordsByFile.keys()].sort().flatMap(file => recordsByFile.get(file)!)
     const css = [...cssByVirtualId.values()].join('\n')
-    return `${JSON.stringify(buildManifest(records, css, { root: config.root }), null, 2)}\n`
+    return `${JSON.stringify(buildManifest(records, css, { root: state.config.root }), null, 2)}\n`
   }
 
-  const writeManifest = async (): Promise<void> => {
+  const writeManifest = async (state: ViteHostState): Promise<void> => {
     // A failed first evaluation has no trustworthy canonical system map.
     // Preserve the original compiler diagnostic instead of masking it with a
     // secondary manifest-construction failure; last-good artifacts remain.
@@ -304,36 +380,37 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       record.kind === 'system' && record.portable !== undefined)) {
       return
     }
-    const json = serializeManifestJson()
+    const json = serializeManifestJson(state)
 
-    if (json === writtenManifest)
+    if (json === state.group.writtenManifest)
       return
 
-    const path = join(config.root, '.vanity', 'manifest.json')
+    const path = join(state.config.root, '.vanity', 'manifest.json')
     await writeFileArtifacts([{ file: path, contents: json }])
-    writtenManifest = json
+    state.group.writtenManifest = json
   }
 
   /** Dev regenerates on change, debounced across a save's fan-out of transforms. */
-  const scheduleManifest = (): void => {
-    clearTimeout(manifestTimer)
-    manifestTimer = setTimeout(() => void writeManifest().catch(() => {}), 50)
+  const scheduleManifest = (state: ViteHostState): void => {
+    clearTimeout(state.group.manifestTimer)
+    state.group.manifestTimer = setTimeout(() => void writeManifest(state).catch(() => {}), 50)
   }
 
-  const getIdentifierOption = () =>
-    compiler.identifiers ?? (config.mode === 'production' ? 'short' : 'debug')
+  const getIdentifierOption = (hostConfig: ResolvedConfig) =>
+    compiler.identifiers ?? (hostConfig.mode === 'production' ? 'short' : 'debug')
 
-  const getArtifactDirectory = () => resolve(
-    config.root,
+  const getArtifactDirectory = (hostConfig: ResolvedConfig) => resolve(
+    hostConfig.root,
     compiler.artifactDirectory ?? '.vanity',
   )
 
   const createHmrHost = (
-    activeServer = server,
-    activeClientServer = clientServer,
+    state: ViteHostState,
+    activeServer = state.server,
+    activeClientServer = state.group.clientServer,
   ) => createViteHmrHost({
-    root: config.root,
-    base: config.base,
+    root: state.config.root,
+    base: state.config.base,
     server: activeServer,
     clientServer: activeClientServer,
   })
@@ -344,46 +421,70 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
    * source during configuration, while aliases/export conditions/symlinks
    * observed by Vite win whenever it returns a physical module.
    */
-  const resolveConfiguredSystemSources = async (): Promise<void> => {
+  const resolveConfiguredSystemSources = async (state: ViteHostState): Promise<void> => {
+    const hostConfig = state.config
+    const previousDependencies = new Map(state.systemSources.map(source => [source.entry, source.dependencies]))
     const values = compiler.system === undefined
       ? []
       : Array.isArray(compiler.system) ? compiler.system : [compiler.system]
     const resolvedEntries = new Map<string, string>()
-    const hostResolver = config.createResolver({ asSrc: true })
+    const hostResolver = hostConfig.createResolver({ asSrc: true })
 
     for (const value of values) {
       const configuredEntry = typeof value === 'string' ? value : value.entry
       const resolved = await hostResolver(
         configuredEntry,
-        join(config.root, 'package.json'),
+        join(hostConfig.root, 'package.json'),
         false,
-        config.build.ssr === true,
+        state.target === 'ssr',
       )
       const physical = getPhysicalResolvedPath(resolved)
       if (physical !== undefined)
         resolvedEntries.set(configuredEntry, physical)
     }
 
-    systemSources = normalizeSystemSources(compiler.system, config.root, resolvedEntries)
-    systemResolutionCache = createConfiguredSystemResolutionCache()
-    configuredImportResolutionCache.clear()
+    state.systemSources = normalizeSystemSources(compiler.system, hostConfig.root, resolvedEntries)
+    for (const source of state.systemSources) {
+      for (const dependency of previousDependencies.get(source.entry) ?? [])
+        source.dependencies.add(dependency)
+    }
+    state.systemResolutionCache = createConfiguredSystemResolutionCache()
+
+    const members = await computeConfiguredSystemMembers(
+      state.systemSources,
+      hostConfig.root,
+      state.systemResolutionCache,
+      systemAuthoringByFile,
+    )
+    state.membersByFile.clear()
+    for (const [file, source] of members.byFile)
+      state.membersByFile.set(file, source)
+    state.memberBasenames.clear()
+    for (const file of members.basenames)
+      state.memberBasenames.add(file)
   }
 
-  const sendSystemCssUpdate = (virtualId: string, previous: string | undefined, next: string): void => {
-    if (previous === undefined || previous === next || clientServer === undefined)
+  const sendSystemCssUpdate = (
+    state: ViteHostState,
+    virtualId: string,
+    previous: string | undefined,
+    next: string,
+  ): void => {
+    if (previous === undefined || previous === next || state.group.clientServer === undefined)
       return
 
-    createHmrHost().updateCssModule(virtualId)
+    createHmrHost(state).updateCssModule(virtualId)
   }
 
-  const clearRetiredCss = (virtualIds: ReadonlySet<string>): void => {
+  const clearRetiredCss = (state: ViteHostState, virtualIds: ReadonlySet<string>): void => {
     if (virtualIds.size === 0)
       return
 
-    createHmrHost().removeCssModules(virtualIds)
+    createHmrHost(state).removeCssModules(virtualIds)
   }
 
   const prepareConfiguredSystem = async (
+    state: ViteHostState,
     source: NormalizedSystemSource,
   ): Promise<PreparedSystem> => {
     const generation = (systemGenerationsByEntry.get(source.entry) ?? 0) + 1
@@ -393,9 +494,9 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     try {
       const bundled = await buildStyleModule({
         filePath: source.entry,
-        root: config.root,
-        alias: convertViteAliasesToEsbuild(config),
-        namespaceFiles: [...getConfiguredSystemModuleFiles(source, config.root, systemResolutionCache)],
+        root: state.config.root,
+        alias: convertViteAliasesToEsbuild(state.config),
+        namespaceFiles: [...getConfiguredSystemModuleFiles(source, state.config.root, state.systemResolutionCache)],
         preserveAuthoredSource: source.artifact !== undefined,
       })
       dependencies = bundled.watchFiles
@@ -416,7 +517,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
           filePath: source.entry,
           ...(source.packageName === undefined ? {} : { packageName: source.packageName }),
         },
-        getIdentifierOption(),
+        getIdentifierOption(state.config),
       )
 
       return {
@@ -439,22 +540,23 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       if (systemGenerationsByEntry.get(source.entry) === generation) {
         rememberSystemDependencies(
           source,
-          dependencies.length > 0 ? dependencies : buildFailureFiles(error, config.root),
+          dependencies.length > 0 ? dependencies : buildFailureFiles(error, state.config.root),
           systemDependentsByFile,
         )
       }
-      const failure = createStyleBuildError(error, source.entry, config.root)
+      const failure = createStyleBuildError(error, source.entry, state.config.root)
       reportFailure(failure)
       throw failure
     }
   }
 
   const registerSystems = async (
+    state: ViteHostState,
     candidates: readonly PreparedSystem[],
   ): Promise<EvaluatedSystem[]> => {
     const result = await registerSystemCandidates(candidates, {
-      root: config.root,
-      artifactDirectory: getArtifactDirectory(),
+      root: state.config.root,
+      artifactDirectory: getArtifactDirectory(state.config),
       virtualExtension: virtualExt,
       state: {
         ownership: {
@@ -473,34 +575,36 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     })
 
     if (result.committed && result.ownershipUpdate !== undefined) {
-      scheduleManifest()
+      scheduleManifest(state)
       for (const id of result.ownershipUpdate.nextCss.keys())
         pendingCssResponseCache.clear(id)
       for (const [id, contents] of result.ownershipUpdate.pendingCssResponses)
         pendingCssResponseCache.remember(id, contents)
-      clearRetiredCss(result.ownershipUpdate.retiredCssIds)
+      clearRetiredCss(state, result.ownershipUpdate.retiredCssIds)
       for (const update of result.ownershipUpdate.cssUpdates)
-        sendSystemCssUpdate(update.id, update.previous, update.next)
+        sendSystemCssUpdate(state, update.id, update.previous, update.next)
     }
 
     return [...result.systems]
   }
 
   const evaluateConfiguredSystem = async (
+    state: ViteHostState,
     source: NormalizedSystemSource,
   ): Promise<EvaluatedSystem> => {
-    const [accepted] = await registerSystems([await prepareConfiguredSystem(source)])
+    const [accepted] = await registerSystems(state, [await prepareConfiguredSystem(state, source)])
     return accepted!
   }
 
   const evaluateConfiguredSystems = async (
+    state: ViteHostState,
     sources: readonly NormalizedSystemSource[],
   ): Promise<EvaluatedSystem[]> => {
     const unique = [...new Map(sources.map(source => [source.entry, source])).values()]
-    return registerSystems(await Promise.all(unique.map(prepareConfiguredSystem)))
+    return registerSystems(state, await Promise.all(unique.map(source => prepareConfiguredSystem(state, source))))
   }
 
-  const ensureConfiguredSystem = (source: NormalizedSystemSource): Promise<EvaluatedSystem> => {
+  const ensureConfiguredSystem = (state: ViteHostState, source: NormalizedSystemSource): Promise<EvaluatedSystem> => {
     const accepted = systemsByEntry.get(source.entry)
     if (accepted !== undefined) {
       systemReadinessFailures.delete(source.entry)
@@ -511,7 +615,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     if (pending !== undefined)
       return pending
 
-    const evaluation = evaluateConfiguredSystem(source)
+    const evaluation = evaluateConfiguredSystem(state, source)
     pendingSystemsByEntry.set(source.entry, evaluation)
     void evaluation.then(() => {}, () => {}).finally(() => {
       if (pendingSystemsByEntry.get(source.entry) === evaluation)
@@ -520,11 +624,59 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     return evaluation
   }
 
-  /** The auto-import shim's last written content, so unchanged runs skip the write. */
-  let shimContent: string | undefined
-  /** The system module's own source and import graph — files upstream of the system never get the shim. */
-  let systemSource: string | undefined
-  let systemDeps = new Set<string>()
+  const startHostState = (state: ViteHostState): Promise<void> => {
+    const existing = hostStateInitializations.get(state)
+    if (existing !== undefined)
+      return existing
+
+    const ready = (async () => {
+      await resolveConfiguredSystemSources(state)
+      for (const source of state.systemSources) {
+        void ensureConfiguredSystem(state, source).catch((error: unknown) => {
+          state.readinessFailures.set(source.entry, error)
+          systemReadinessFailures.set(source.entry, error)
+        })
+      }
+    })()
+    hostStateInitializations.set(state, ready)
+    state.systemMembersReady = ready
+    return ready
+  }
+
+  const findMemberCandidate = (
+    state: ViteHostState,
+    id: string,
+  ): { readonly file?: string, readonly symlinkPath?: string, readonly source?: NormalizedSystemSource } | undefined => {
+    const queryStart = id.indexOf('?')
+    const fileId = queryStart === -1 ? id : id.slice(0, queryStart)
+    const query = queryStart === -1 ? '' : id.slice(queryStart + 1)
+    if (fileId === undefined || !isModuleSelfQuery(query))
+      return undefined
+
+    const normalizedId = normalizeViteFilePath(fileId)
+    if (state.preserveSymlinks) {
+      if (!state.memberBasenames.has(basename(normalizedId)))
+        return undefined
+      return { symlinkPath: normalizedId }
+    }
+
+    const source = state.membersByFile.get(normalizedId)
+    return source === undefined ? undefined : { file: normalizedId, source }
+  }
+
+  const resolveSymlinkMember = async (
+    state: ViteHostState,
+    candidate: { readonly symlinkPath: string },
+  ): Promise<{ readonly file: string, readonly source: NormalizedSystemSource } | undefined> => {
+    try {
+      const file = normalizePath(await realpath(candidate.symlinkPath))
+      const source = state.membersByFile.get(file)
+      return source === undefined ? undefined : { file, source }
+    }
+    catch {
+      return undefined
+    }
+  }
 
   /**
    * Resolve the auto-import inject shim ([spec-vue.md §4]): a one-line
@@ -535,11 +687,14 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
    * a file upstream of the system cannot use the system's bindings — injecting
    * there would only manufacture a cycle.
    */
-  const injectShimFor = async (filePath: string): Promise<StyleAutoImportInjection | undefined> => {
+  const injectShimFor = async (
+    state: ViteHostState,
+    filePath: string,
+  ): Promise<StyleAutoImportInjection | undefined> => {
     if (styleImportSources.length === 0)
       return undefined
 
-    const stylePlan = await planStyleAutoImports(styleImportSources, compiler.system, config.root)
+    const stylePlan = await planStyleAutoImports(styleImportSources, compiler.system, state.config.root)
     if (stylePlan === undefined)
       return undefined
 
@@ -552,91 +707,153 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     if (nativeTypeHost !== 'nuxt')
       await writeAutoImportDeclarationFiles([stylePlan.declaration, stylePlan.bridge])
 
-    if (source !== systemSource) {
+    if (source !== state.group.systemSource) {
       const bundles = await Promise.all(sources.map(source => buildStyleModule({
         filePath: source.file,
-        root: config.root,
-        alias: convertViteAliasesToEsbuild(config),
+        root: state.config.root,
+        alias: convertViteAliasesToEsbuild(state.config),
       })))
 
-      systemSource = source
-      systemDeps = new Set([
+      state.group.systemSource = source
+      state.group.systemDeps = new Set([
         ...sources.map(source => source.file),
         ...bundles.flatMap(bundle => bundle.watchFiles.map(normalizePath)),
       ])
     }
 
-    if (systemDeps.has(filePath))
+    if (state.group.systemDeps.has(filePath))
       return undefined
 
     const ambientAliases = new Map(sources.flatMap(source =>
       [...getStyleAutoImportAliases(sourceTexts.get(source.file)!, source.file, source.imports)],
     ))
 
-    const shim = join(config.root, 'node_modules', '.vanity', 'vanity-style-auto-imports.mjs')
+    const shim = join(state.config.root, 'node_modules', '.vanity', 'vanity-style-auto-imports.mjs')
     const content = names.length === 0
       ? 'export {}\n'
       : `${sources.map(source => `export { ${source.imports.join(', ')} } from '${source.from}'`).join('\n')}\n`
-    if (content !== shimContent) {
+    if (content !== state.group.shimContent) {
       await mkdir(dirname(shim), { recursive: true })
       await writeFile(shim, content)
-      shimContent = content
+      state.group.shimContent = content
     }
 
     return names.length === 0 ? undefined : { aliases: ambientAliases, path: shim }
   }
 
-  const rememberAppAutoImportSourceFiles = (plan: Awaited<ReturnType<typeof writeAutoImportDeclarations>>['plan']): void => {
+  const rememberAppAutoImportSourceFiles = (
+    state: ViteHostState,
+    plan: Awaited<ReturnType<typeof writeAutoImportDeclarations>>['plan'],
+  ): void => {
     const files = new Set<string>()
 
     for (const source of plan.app?.sources ?? []) {
       if (isPackageSpecifier(source.from))
         continue
 
-      for (const file of getExportModuleFilesFromFile(source.from, config.root))
+      for (const file of getExportModuleFilesFromFile(source.from, state.config.root))
         files.add(normalizePath(file))
     }
 
-    appAutoImportSourceFiles = files
+    state.group.appAutoImportSourceFiles = files
   }
 
   const cssTsPlugin: Plugin = {
     name: 'vanity-css-ts',
     enforce: 'pre',
 
-    configResolved(resolvedConfig) {
-      config = resolvedConfig
-      systemReadinessFailures.clear()
-      systemSourcesReady = resolveConfiguredSystemSources().then(async () => {
-        // Nuxt can render from its SSR environment before a client style
-        // module has been requested. Project every configured system during
-        // readiness so its semantic CSS already exists for both graphs.
-        await Promise.all(systemSources.map(async (source) => {
-          try {
-            await ensureConfiguredSystem(source)
-          }
-          catch (error) {
-            // Keep readiness itself fulfilled so a dev server can retry the
-            // same configured entry after its source is repaired. buildStart
-            // still surfaces the original failure for an initial build.
-            systemReadinessFailures.set(source.entry, error)
-          }
-        }))
+    async config(userConfig, env) {
+      const root = resolve(userConfig.root ?? cwd())
+      declarationConfigRoots.add(root)
+      filterState.configure(env.command, Boolean(userConfig.build?.watch))
+      const { declarations } = await createVitePackageDeclarations(root, {
+        isBuild: env.command === 'build',
+        userConfig,
+        getDeclaredPackages,
+        workspaceRoot: searchForWorkspaceRoot(root),
       })
+      const includes = new Set(declarations.optimizeDeps.include)
+      if (compiler.system !== undefined)
+        includes.add('@mszr/vanity/runtime')
+
+      return {
+        ...declarations,
+        optimizeDeps: {
+          ...declarations.optimizeDeps,
+          include: [...includes],
+        },
+      }
+    },
+
+    async configResolved(resolvedConfig) {
+      const resolvedRoot = resolve(resolvedConfig.root)
+      if (!declarationConfigRoots.has(resolvedRoot)) {
+        const configuredRoots = [...declarationConfigRoots]
+        const configuredRootSummary = configuredRoots.length === 0
+          ? 'no root'
+          : configuredRoots.join(', ')
+        throw new VanityError({
+          code: 'VANITY_VITE_BUILD_FAILED',
+          message: `Vanity's installed-package declarations were computed from ${configuredRootSummary}, not Vite root ${resolvedRoot}.`,
+          path: ['Vite root', resolvedRoot],
+          fix: 'restart Vite with one consistent project root',
+        })
+      }
+      filterState.recordHostCapability(resolvedConfig)
+      // Vite 5 has no environments, so its hooks cannot name their host.
+      const isVite5Host = !('environments' in resolvedConfig)
+      if (isVite5Host && activeVite5Host !== undefined && activeVite5Host.config !== resolvedConfig) {
+        throw new VanityError({
+          code: 'VANITY_VITE_BUILD_FAILED',
+          message: 'One vanityPlugin() instance cannot serve two concurrent Vite 5 hosts.',
+          path: ['Vite 5 host', resolvedRoot],
+          fix: 'create one vanityPlugin() instance for each concurrent Vite 5 host',
+        })
+      }
+      const group: ViteHostGroup = {
+        config: resolvedConfig,
+        targets: new Map(),
+        cascadeCss: '',
+        systemDeps: new Set(),
+        appAutoImportSourceFiles: new Set(),
+      }
+      hostGroups.set(resolvedConfig, group)
+      if (isVite5Host)
+        activeVite5Host = group
+      const target: RuntimeTarget = resolvedConfig.build.ssr ? 'ssr' : 'browser'
+      const state = createHostState(group, target)
+      const isWatchBuild = resolvedConfig.command === 'build' && Boolean(resolvedConfig.build.watch)
+      const targets: RuntimeTarget[] = resolvedConfig.command === 'serve'
+        ? ['browser', 'ssr']
+        : [target]
+      const declaredPackages = await getDeclaredPackages(
+        resolvedConfig.root,
+        searchForWorkspaceRoot(resolvedConfig.root),
+      )
+      reportDeclaredPackageOverrides(resolvedConfig, declaredPackages, compiler.diagnostics, warnedSourcePackages)
+      systemReadinessFailures.clear()
+      await Promise.all(targets.map((hostTarget) => {
+        const targetState = createHostState(group, hostTarget)
+        targetState.readinessFailures.clear()
+        return startHostState(targetState)
+      }))
+      if (resolvedConfig.command === 'build' && !isWatchBuild) {
+        for (const file of state.membersByFile.keys()) {
+          filterState.addBuildMember(file, state.preserveSymlinks)
+        }
+        filterState.applyBuildHookFilters()
+      }
     },
 
     configureServer(devServer) {
-      server = devServer
+      // Vite gives this lifecycle hook its configured server directly.
+      const state = getHostState(undefined, devServer)
+      state.server = devServer
 
-      // Nuxt creates distinct browser and SSR Vite servers from the same
-      // plugin instance. The latter configures last, so a single `server`
-      // reference silently routes CSS updates/full reloads to an HMR channel
-      // no browser listens to. Plain Vite's consumer is `client` too.
-      if (devServer.config.build.ssr !== true)
-        clientServer = devServer
-
-      if (devServer.config.build.ssr !== true)
-        pendingCssResponseCache.addMiddleware(devServer, config.root, config.base)
+      if (devServer.config.build.ssr !== true) {
+        state.group.clientServer = devServer
+        pendingCssResponseCache.addMiddleware(devServer, state.config.root, state.config.base)
+      }
 
       // The manifest, live — what the DevTools tab (and any tool) reads.
       devServer.middlewares.use('/__vanity', (req, res, next) => {
@@ -644,27 +861,27 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
 
         if (path === '/cascade.css') {
           res.setHeader('Content-Type', 'text/css')
-          res.end(cascadeCss)
+          res.end(state.group.cascadeCss)
           return
         }
 
         if (path === '/manifest.json') {
           res.setHeader('Content-Type', 'application/json')
-          res.end(serializeManifestJson())
+          res.end(serializeManifestJson(state))
           return
         }
 
         if (path === '/' || path === '/index.html') {
           res.setHeader('Content-Type', 'text/html')
-          res.end(renderDevtoolsPage(config.root))
+          res.end(renderDevtoolsPage(state.config.root))
           return
         }
 
         next()
       })
 
-      void systemSourcesReady.then(() => {
-        for (const source of systemSources)
+      void state.systemMembersReady.then(() => {
+        for (const source of state.systemSources)
           devServer.watcher.add([source.entry, ...(source.artifact ? [source.artifact] : [])])
       }, () => {
         // buildStart/transform owns the actionable configuration error; the
@@ -673,54 +890,69 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     },
 
     async buildStart() {
-      await systemSourcesReady
+      // Vite 6+ exposes the host through this hook's environment; Vite 5 has
+      // one active configResolved-to-closeBundle host on this plugin instance.
+      const state = getHostState(this)
       if (nativeTypeHost !== 'nuxt') {
-        const result = await writeAutoImportDeclarations(options, { root: config.root })
-        rememberAppAutoImportSourceFiles(result.plan)
+        const result = await writeAutoImportDeclarations(options, { root: state.config.root })
+        rememberAppAutoImportSourceFiles(state, result.plan)
       }
 
-      for (const source of systemSources) {
-        if (systemReadinessFailures.has(source.entry)) {
+      for (const source of state.systemSources) {
+        if (state.readinessFailures.has(source.entry)) {
           // A dev server must stay alive so its first source repair can be
           // handled by HMR. A production build has no repair boundary and
           // should fail its buildStart hook with the original diagnostic.
-          if (!server)
-            throw systemReadinessFailures.get(source.entry)
+          if (!state.server)
+            throw state.readinessFailures.get(source.entry)
           continue
         }
-        const system = await ensureConfiguredSystem(source)
+        let system: EvaluatedSystem
+        try {
+          system = await ensureConfiguredSystem(state, source)
+        }
+        catch (error) {
+          state.readinessFailures.set(source.entry, error)
+          systemReadinessFailures.set(source.entry, error)
+          if (!state.server)
+            throw error
+          continue
+        }
         for (const dependency of source.dependencies) {
           this.addWatchFile(dependency)
-          server?.watcher.add(dependency)
+          state.server?.watcher.add(dependency)
         }
         recordsByFile.set(source.entry, system.records.length > 0
           ? system.records
           : [createSystemRecordFromPortable(system.portable)])
       }
 
-      cascadeCss = renderCascadePrelude(
+      state.group.cascadeCss = renderCascadePrelude(
         compiler.layerOrder
         ?? [...new Set([...systemsByEntry.values()].map(system => system.portable.layerRoot))],
       )
       // `emitFile()` belongs to Rollup's build graph. Vite invokes buildStart
       // in serve mode too, where the cascade is served by /__vanity instead.
-      if (cascadeCss && config.command === 'build' && config.build.ssr !== true) {
+      if (state.group.cascadeCss && state.config.command === 'build' && state.target !== 'ssr') {
         this.emitFile({
           type: 'asset',
           fileName: cascadeFileName,
-          source: cascadeCss,
+          source: state.group.cascadeCss,
         })
       }
     },
 
     transformIndexHtml: {
       order: 'pre',
-      handler() {
-        if (!cascadeCss || config.build.ssr === true)
+      handler(_html, context) {
+        // Vite supplies a dev server in the transform context and a build
+        // environment on the plugin context for HTML generated by a build.
+        const state = getHostState(this, context?.server)
+        if (!state.group.cascadeCss || state.target === 'ssr')
           return undefined
-        const href = server
+        const href = state.server
           ? cascadeUrl
-          : `${config.base}${config.base.endsWith('/') ? '' : '/'}${cascadeFileName}`
+          : `${state.config.base}${state.config.base.endsWith('/') ? '' : '/'}${cascadeFileName}`
         return [{
           tag: 'link',
           // The asset is emitted by this plugin rather than resolved from the
@@ -734,240 +966,258 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
 
     // Builds write the manifest once, beside the emitted CSS.
     async buildEnd() {
-      if (!server)
-        await writeManifest()
+      const state = getHostState(this)
+      if (!state.server)
+        await writeManifest(state)
     },
 
-    async transform(_code, id, transformOptions) {
-      await systemSourcesReady
-      const [validId] = id.split('?')
-      if (!styleFileFilter.test(validId))
-        return null
-      return transformStyleModule(_code, id, transformOptions, {
-        root: config.root,
-        styleFileFilter,
-        virtualExtension: virtualExt,
-        isDev: server !== undefined,
-        host: createHmrHost(),
-        systemSources,
-        namespaceOwners,
-        recordsByFile,
-        cssByVirtualId,
-        cssVirtualIdsByEntry,
-        cssOwnersByVirtualId,
-        rememberPendingCssResponse: pendingCssResponseCache.remember,
-        clearPendingCssResponse: pendingCssResponseCache.clear,
-        exportSignatures,
-        failedStyleEntries,
-        setStyleModuleOwnership: (filePath, owned) => {
-          if (owned)
-            vanityOwnedStyleModules.add(filePath)
-          else
-            vanityOwnedStyleModules.delete(filePath)
-        },
-        ensureConfiguredSystem,
-        injectShimFor,
-        buildStyleModule,
-        alias: convertViteAliasesToEsbuild(config),
-        rememberStyleSystems: (entry, systems) => rememberStyleSystems(
-          entry,
-          systems,
-          systemsByStyleEntry,
-          styleEntriesBySystem,
-        ),
-        rememberDependencies: (entry, files, preserveKnown) => rememberStyleDependencies(
-          entry,
-          files,
-          preserveKnown,
-          dependenciesByEntry,
-          dependentsByFile,
-        ),
-        addWatchFile: file => this.addWatchFile(file),
-        buildFailureFiles,
-        createStyleBuildError,
-        reportFailure,
-        getIdentifierOption,
-        scheduleManifest,
-      })
+    closeWatcher() {
+      if (this.meta.watchMode !== true)
+        return
+      filterState.finishWatch()
+      // Vite 5 does not call closeBundle for the watch host's lifetime end.
+      // Releasing this slot here lets the same instance serve a later build.
+      if (activeVite5Host !== undefined) {
+        hostGroups.delete(activeVite5Host.config)
+        activeVite5Host = undefined
+      }
+    },
+
+    closeBundle() {
+      // Only a Vite 5 host occupies this slot; Vite 6+ hooks name their host
+      // through the environment that owns them.
+      if (activeVite5Host !== undefined) {
+        hostGroups.delete(activeVite5Host.config)
+        activeVite5Host = undefined
+      }
+    },
+
+    transform: {
+      filter: { id: styleFileFilter },
+      async handler(code, id, transformOptions) {
+        const [validId] = id.split('?')
+        if (!styleFileFilter.test(validId))
+          return null
+        // This transform runs in an environment-owned Rollup hook.
+        const state = getHostState(this)
+        return transformStyleModule(code, id, transformOptions, {
+          root: state.config.root,
+          styleFileFilter,
+          virtualExtension: virtualExt,
+          isDev: state.server !== undefined,
+          host: createHmrHost(state),
+          systemSources: state.systemSources,
+          namespaceOwners,
+          recordsByFile,
+          cssByVirtualId,
+          cssVirtualIdsByEntry,
+          cssOwnersByVirtualId,
+          rememberPendingCssResponse: pendingCssResponseCache.remember,
+          clearPendingCssResponse: pendingCssResponseCache.clear,
+          exportSignatures,
+          failedStyleEntries,
+          setStyleModuleOwnership: (filePath, owned) => {
+            if (owned)
+              vanityOwnedStyleModules.add(filePath)
+            else
+              vanityOwnedStyleModules.delete(filePath)
+          },
+          ensureConfiguredSystem: source => ensureConfiguredSystem(state, source),
+          injectShimFor: filePath => injectShimFor(state, filePath),
+          buildStyleModule,
+          alias: convertViteAliasesToEsbuild(state.config),
+          rememberStyleSystems: (entry, systems) => rememberStyleSystems(
+            entry,
+            systems,
+            systemsByStyleEntry,
+            styleEntriesBySystem,
+          ),
+          rememberDependencies: (entry, files, preserveKnown) => rememberStyleDependencies(
+            entry,
+            files,
+            preserveKnown,
+            dependenciesByEntry,
+            dependentsByFile,
+          ),
+          addWatchFile: file => this.addWatchFile(file),
+          buildFailureFiles,
+          createStyleBuildError,
+          reportFailure,
+          getIdentifierOption: () => getIdentifierOption(state.config),
+          scheduleManifest: () => scheduleManifest(state),
+        })
+      },
     },
 
     async handleHotUpdate({ file, server: devServer, modules }) {
-      await systemSourcesReady
+      // Vite passes the owning dev server on the update context.
+      const state = getHostState(this, devServer)
+      const targetStates = [...state.group.targets.values()]
       const normalizedFile = normalizePath(file)
-      const generatedArtifactDirectory = normalizePath(getArtifactDirectory()).replace(/\/$/, '')
-      const isConfiguredArtifact = systemSources.some(source => source.artifact === normalizedFile)
+      const generatedArtifactDirectory = normalizePath(getArtifactDirectory(state.config)).replace(/\/$/, '')
+      const allSources = targetStates.flatMap(targetState => targetState.systemSources)
+      const isConfiguredArtifact = allSources.some(source => source.artifact === normalizedFile)
       if (
         !isConfiguredArtifact
-        && (normalizedFile === normalizePath(join(config.root, '.vanity', 'manifest.json'))
+        && (normalizedFile === normalizePath(join(state.config.root, '.vanity', 'manifest.json'))
           || normalizedFile.startsWith(`${generatedArtifactDirectory}/`))
       ) {
         // Compiler-owned writes are already published before the accepted
         // generation is swapped. Letting Vite treat their watcher events as
         // ordinary source edits can reload an application in the middle of a
-        // system transition, before its namespace projection is retired.
+        // system transition, before its member projections are invalidated.
         return []
       }
-      // A changed source may add/remove a re-export without changing the
-      // configured entry spelling. Re-resolve the next graph generation
-      // rather than allowing a cached safe miss or stale owner to linger.
-      clearConfiguredSystemResolutionCache(systemResolutionCache)
-      systemAuthoringByFile.clear()
-      configuredImportResolutionCache.clear()
+      const memberSetChanges = new Set<string>()
+      for (const targetState of targetStates) {
+        const affected = targetState.systemSources.some(source =>
+          source.entry === normalizedFile || source.dependencies.has(normalizedFile))
+        if (!affected)
+          continue
+
+        const previousMembers = new Set(targetState.membersByFile.keys())
+        // A changed source may add/remove a re-export without changing the
+        // configured entry spelling. Resolve the next graph generation for
+        // each target before comparing its physical member set.
+        clearConfiguredSystemResolutionCache(targetState.systemResolutionCache)
+        systemAuthoringByFile.clear()
+        await resolveConfiguredSystemSources(targetState)
+        for (const memberFile of computeConfiguredSystemMemberChanges(previousMembers, targetState.membersByFile.keys()))
+          memberSetChanges.add(memberFile)
+      }
       return await handleHotUpdate({ file, modules }, {
-        host: createHmrHost(devServer, clientServer),
+        host: createHmrHost(state, devServer, state.group.clientServer),
         runtimeVirtualPrefix,
-        systemSources,
+        systemSources: allSources,
         systemDependentsByFile,
         systemsByEntry,
         dependentsByFile,
         styleEntriesBySystem,
         runtimeVirtualIds,
-        runtimeNamespaceIdsByEntry,
-        clearRuntimeNamespaceProjection: (id) => {
-          runtimeNamespaceProjections.delete(id)
-        },
-        getRuntimeNamespaceIdentity: (system, moduleFile) =>
+        runtimeMemberIdsByEntry,
+        memberSetChanges,
+        getRuntimeMemberIdentity: (system, moduleFile) =>
           getRuntimeSystemNamespaceProjection(system, moduleFile)?.identity,
         failedStyleEntries,
         refreshAppAutoImports: nativeTypeHost !== 'nuxt' && appAutoImports !== undefined
-          && appAutoImportSourceFiles.size > 0
+          && state.group.appAutoImportSourceFiles.size > 0
           ? async () => {
             const normalizedFile = normalizePath(file)
-            if (!appAutoImportSourceFiles.has(normalizedFile))
+            if (!state.group.appAutoImportSourceFiles.has(normalizedFile))
               return
-            const result = await writeAutoImportDeclarations(options, { root: config.root })
-            rememberAppAutoImportSourceFiles(result.plan)
+            const result = await writeAutoImportDeclarations(options, { root: state.config.root })
+            rememberAppAutoImportSourceFiles(state, result.plan)
           }
           : undefined,
-        evaluateConfiguredSystems,
+        evaluateConfiguredSystems: async (sources) => {
+          const unique = [...new Map(sources.map(source => [source.entry, source])).values()]
+          const sourcesByState = new Map<ViteHostState, NormalizedSystemSource[]>()
+          for (const source of unique) {
+            const sourceState = targetStates.find(targetState =>
+              targetState.systemSources.some(candidate => candidate.entry === source.entry)) ?? state
+            const group = sourcesByState.get(sourceState) ?? []
+            group.push(source)
+            sourcesByState.set(sourceState, group)
+          }
+
+          const evaluatedByEntry = new Map<string, EvaluatedSystem>()
+          for (const [sourceState, stateSources] of sourcesByState) {
+            // Accept systems that share a namespace as one generation. A
+            // per-entry registration would compare the first updated owner
+            // against the second owner's still-current output and reject it.
+            const evaluated = await evaluateConfiguredSystems(sourceState, stateSources)
+            for (const [index, system] of evaluated.entries()) {
+              const source = stateSources[index]
+              if (source !== undefined)
+                evaluatedByEntry.set(source.entry, system)
+            }
+          }
+          return unique.map(source => evaluatedByEntry.get(source.entry)!)
+        },
       }) as ModuleNode[] | undefined
     },
 
     watchChange(id) {
-      // Import resolution can change when an unresolved package/file appears,
-      // even when the current export graph does not include it.
-      configuredImportResolutionCache.clear()
-      if (systemSources.some(source =>
-        source.entry === normalizePath(id)
-        || source.dependencies.has(normalizePath(id)))) {
+      // Rollup supplies the host environment for this graph event.
+      const state = getHostState(this)
+      const normalizedId = normalizePath(id)
+      if (state.systemSources.some(source =>
+        source.entry === normalizedId
+        || source.dependencies.has(normalizedId))) {
         // Rollup/Vite reports create and delete events here as well as source
-        // updates. A re-export graph fact is generation-scoped, so additions,
-        // removals, and repairs all invalidate the same safe-hit/miss cache.
-        clearConfiguredSystemResolutionCache(systemResolutionCache)
+        // updates. Member ownership follows the static re-export graph, so
+        // additions, removals, and repairs begin a fresh graph generation.
+        clearConfiguredSystemResolutionCache(state.systemResolutionCache)
         systemAuthoringByFile.clear()
+        return resolveConfiguredSystemSources(state)
       }
     },
 
-    async resolveId(source, importer, resolveOptions) {
-      await systemSourcesReady
-      const [validId, query] = source.split('?')
+    resolveId: filterState.createResolveIdHook(async function (source, importer, resolveOptions) {
+      filterState.recordDevelopmentHookCall('resolveId', getHookEnvironment(this)?.mode)
+      // The environment tells Vite 6+ the top-level config; Vite 5's one
+      // active host is selected between configResolved and closeBundle.
+      const state = getHostState(this, undefined, (resolveOptions as { ssr?: boolean } | undefined)?.ssr)
+      const [validId, query = ''] = source.split('?', 2)
+
+      if (validId === undefined)
+        return null
 
       if (validId.startsWith(runtimeVirtualPrefix))
         return validId
 
-      // A generated namespace re-exports ordinary bindings from the real
-      // source module. Let that edge pass through unchanged; only the
-      // module's actual system exports belong on the generated backing.
-      if (importer?.startsWith(runtimeNamespaceVirtualPrefix))
-        return null
-
-      let systemSource: NormalizedSystemSource | undefined
-      let resolvedModuleFile: string | undefined
-      if (systemSources.length > 0) {
-        // Let Vite resolve aliases, export conditions, extensions, and
-        // symlinks first. The compiler fallback remains for host requests
-        // that do not yield a physical id, while graph facts stay cached for
-        // the current configuration generation.
-        const resolutionKey = `${validId}\0${importer ?? ''}\0${JSON.stringify(resolveOptions ?? {})}`
-        if (configuredImportResolutionCache.has(resolutionKey)) {
-          const cached = configuredImportResolutionCache.get(resolutionKey) ?? undefined
-          systemSource = cached?.system
-          resolvedModuleFile = cached?.moduleFile
-        }
-        else {
-          const resolved = getPhysicalResolvedPath(
-            (await this.resolve(validId, importer, { skipSelf: true }))?.id,
-          )
-          const match: ResolvedConfiguredSystemImport | undefined = resolved === undefined
-            ? resolveConfiguredSystemImport(
-                validId,
-                importer,
-                systemSources,
-                config.root,
-                systemResolutionCache,
-              )
-            : (() => {
-                const system = findConfiguredSystemInModuleGraph(
-                  resolved,
-                  systemSources,
-                  config.root,
-                  systemResolutionCache,
-                )
-                return system === undefined ? undefined : { system, moduleFile: resolved }
-              })()
-          systemSource = match?.system
-          resolvedModuleFile = match?.moduleFile
-          configuredImportResolutionCache.set(resolutionKey, match ?? null)
-        }
-      }
-      if (systemSource) {
-        const evaluated = await ensureConfiguredSystem(systemSource)
-        const target = resolveOptions?.ssr || config.build.ssr === true ? 'ssr' : 'browser'
-        const runtimeId = getRuntimeIdentity(evaluated.portable)
-        const backingId = `${runtimeVirtualPrefix}${target}:${runtimeId}`
-        runtimeVirtualIds.add(backingId)
-        const moduleFile = resolvedModuleFile ?? systemSource.entry
-        const namespace = getRuntimeSystemNamespaceProjection(evaluated, moduleFile)
-        if (namespace === undefined)
+      const scan = (resolveOptions as typeof resolveOptions & { scan?: boolean } | undefined)?.scan === true
+      if (scan) {
+        if (compiler.system === undefined)
           return null
-        if (!(await isAuthoredSystemModule(moduleFile)))
+        const resolvedId = (await this.resolve(source, importer, { ...resolveOptions, skipSelf: true }))?.id
+        if (resolvedId === undefined || resolvedId.startsWith('\0'))
           return null
-        const id = `${runtimeNamespaceVirtualPrefix}${target}:${runtimeId}:${namespace.identity}:${encodeURIComponent(getRootRelativeModulePath(moduleFile, config.root))}`
-        runtimeNamespaceProjections.set(id, { system: evaluated, target, moduleFile })
-        const namespaces = runtimeNamespaceIdsByEntry.get(systemSource.entry) ?? new Map()
-        namespaces.set(id, {
-          id,
-          moduleFile,
-          identity: namespace.identity,
-          runtimeId,
-        })
-        runtimeNamespaceIdsByEntry.set(systemSource.entry, namespaces)
-        return id
+        let resolved = normalizePath(resolvedId.replace(/[?#].*$/, ''))
+        if (state.preserveSymlinks) {
+          if (!state.memberBasenames.has(basename(resolved)))
+            return null
+          try {
+            resolved = normalizePath(await realpath(resolved))
+          }
+          catch {
+            return null
+          }
+        }
+        if (!state.membersByFile.has(resolved))
+          return null
+        return `${runtimeScanPrefix}${encodeURIComponent(resolved)}`
       }
 
+      // Application imports are resolved by Vite as usual. Only Vanity's own
+      // virtual runtime and stylesheet addresses belong to this hook.
       if (!validId.endsWith(virtualExt))
         return null
 
-      const absoluteId = resolveViteVirtualId(validId, config.root, config.base)
-
+      const absoluteId = resolveViteVirtualId(validId, state.config.root, state.config.base)
       if (absoluteId === undefined || !cssByVirtualId.has(absoluteId))
         return null
 
       // Keep the query — Vite's HMR timestamps ride it.
       return query ? `${absoluteId}?${query}` : absoluteId
-    },
+    }),
 
-    async load(id) {
-      await systemSourcesReady
-      const [validId] = id.split('?')
+    load: filterState.createLoadHook(async function (id, loadOptions) {
+      const environment = getHookEnvironment(this)
+      filterState.recordDevelopmentHookCall('load', environment?.mode)
+      // The environment and load options identify this hook's host and target.
+      const state = getHostState(this, undefined, loadOptions?.ssr)
+      const [validId] = id.split('?', 2)
+      if (validId === undefined)
+        return null
 
-      if (validId.startsWith(runtimeNamespaceVirtualPrefix)) {
-        const projection = runtimeNamespaceProjections.get(validId)
-        if (projection === undefined) {
-          throw new VanityError({
-            code: 'VANITY_VITE_BUILD_FAILED',
-            message: `missing runtime namespace projection '${validId}'`,
-            path: ['runtime', validId],
-            fix: 'retry the application module after the configured system has been evaluated',
-          })
-        }
-        const runtimeId = getRuntimeIdentity(projection.system.portable)
-        const backingId = `${runtimeVirtualPrefix}${projection.target}:${runtimeId}`
-        return buildRuntimeSystemNamespaceModule(
-          projection.system,
-          projection.moduleFile,
-          backingId,
-        )
+      if (validId.startsWith(runtimeScanPrefix)) {
+        throw new VanityError({
+          code: 'VANITY_VITE_BUILD_FAILED',
+          message: 'Vite attempted to load a dependency-scan shield ID.',
+          path: ['dependency scan', validId],
+          fix: 'keep the shield ID inside dependency scanning so it cannot become an application module',
+        })
       }
 
       if (validId.startsWith(runtimeVirtualPrefix)) {
@@ -987,12 +1237,50 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         return buildRuntimeSystemModule(system, target)
       }
 
-      if (!validId.endsWith(virtualExt))
+      if (validId.endsWith(virtualExt)) {
+        const absoluteId = resolveViteVirtualId(validId, state.config.root, state.config.base)
+        return absoluteId === undefined ? null : cssByVirtualId.get(absoluteId) ?? null
+      }
+
+      const candidate = findMemberCandidate(state, id)
+      if (candidate === undefined)
+        return null
+      const member = candidate.file !== undefined && candidate.source !== undefined
+        ? { file: candidate.file, source: candidate.source }
+        : candidate.symlinkPath === undefined
+          ? undefined
+          : await resolveSymlinkMember(state, { symlinkPath: candidate.symlinkPath })
+      if (member === undefined)
         return null
 
-      const absoluteId = resolveViteVirtualId(validId, config.root, config.base)
-      return absoluteId === undefined ? null : cssByVirtualId.get(absoluteId) ?? null
-    },
+      const system = await ensureConfiguredSystem(state, member.source)
+      const namespace = getRuntimeSystemNamespaceProjection(system, member.file)
+      if (namespace === undefined)
+        return null
+
+      const runtimeId = getRuntimeIdentity(system.portable)
+      const target = state.target
+      const backingId = `${runtimeVirtualPrefix}${target}:${runtimeId}`
+      runtimeVirtualIds.add(backingId)
+      const memberRecords = runtimeMemberIdsByEntry.get(member.source.entry) ?? new Map()
+      const recordKey = `${target}\0${member.file}`
+      memberRecords.set(recordKey, {
+        moduleFile: member.file,
+        target,
+        identity: namespace.identity,
+        runtimeId,
+      })
+      runtimeMemberIdsByEntry.set(member.source.entry, memberRecords)
+
+      const code = buildRuntimeSystemNamespaceModule(system, member.file, backingId)
+      const isDev = environment?.mode === 'dev'
+        || state.config.command === 'serve'
+      const relativeMember = normalizePath(relative(state.config.root, member.file))
+      const withComment = isDev
+        ? `/* ${relativeMember} · vanity; build-time authoring runs in the compiler */\n${code}`
+        : code
+      return { code: withComment, map: { mappings: '' } }
+    }),
   }
 
   // vanilla-extract 5.2's compiler still uses Vite 7's `server.hmr: false`.
@@ -1019,6 +1307,14 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     if (plugin.name !== 'vite-plugin-vanilla-extract' || plugin.transform === undefined)
       return plugin
 
+    const resolveHook = plugin.resolveId
+    const substrateResolveId = typeof resolveHook === 'function'
+      ? resolveHook
+      : resolveHook?.handler
+    const loadHook = plugin.load
+    const substrateLoad = typeof loadHook === 'function'
+      ? loadHook
+      : loadHook?.handler
     const substrateTransform = typeof plugin.transform === 'object'
       ? plugin.transform.handler
       : plugin.transform
@@ -1028,27 +1324,109 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       // Its transform already initializes and memoizes the compiler. Avoid an
       // eager private Vite server in projects that contain only Vanity styles.
       buildStart: undefined,
-      async transform(code, id, transformOptions) {
-        const [validId] = id.split('?')
-        if (vanityOwnedStyleModules.has(normalizePath(validId)))
-          return null
-        return substrateTransform.call(this, code, id, transformOptions)
+      resolveId: substrateResolveId === undefined
+        ? undefined
+        : {
+            filter: { id: vanillaExtractVirtualFilter },
+            handler(source, importer, resolveOptions) {
+              if (!vanillaExtractVirtualFilter.test(source))
+                return null
+              return substrateResolveId.call(this, source, importer, resolveOptions)
+            },
+          },
+      load: substrateLoad === undefined
+        ? undefined
+        : {
+            filter: { id: vanillaExtractVirtualFilter },
+            handler(id, loadOptions) {
+              if (!vanillaExtractVirtualFilter.test(id))
+                return null
+              return substrateLoad.call(this, id, loadOptions)
+            },
+          },
+      transform: {
+        filter: { id: styleFileFilter },
+        async handler(code, id, transformOptions) {
+          if (!styleFileFilter.test(id))
+            return null
+          const [validId] = id.split('?')
+          if (vanityOwnedStyleModules.has(normalizePath(validId)))
+            return null
+          return substrateTransform.call(this, code, id, transformOptions)
+        },
       },
     } satisfies Plugin
   })
 
   const applicationPlugins = appAutoImports === undefined
     ? []
-    : normalizeAutoImportPlugins(createApplicationAutoImportPlugin(appAutoImports))
+    : normalizeAutoImportPlugins(createApplicationAutoImportPlugin(appAutoImports, getDeclaredPackages))
 
-  return [cssTsPlugin, substrateCompilerTransport, ...wrappedSubstratePlugins, ...applicationPlugins]
+  const authoringImportGuard: Plugin = {
+    name: 'vanity:authoring-import-guard',
+    enforce: 'pre',
+    apply(config) {
+      // Vitest's plugin is merged into the user's Vite config before this host check.
+      // Inspect nested plugin arrays so the exemption stays scoped to that host.
+      const hasVitestPlugin = (plugins: unknown): boolean => Array.isArray(plugins)
+        ? plugins.some(hasVitestPlugin)
+        : typeof plugins === 'object'
+          && plugins !== null
+          && 'name' in plugins
+          && plugins.name === 'vitest'
+
+      return !hasVitestPlugin(config.plugins)
+    },
+    resolveId: {
+      filter: { id: /^@mszr\/vanity$/ },
+      handler(source, importer, resolveOptions) {
+        // Vite 5 does not apply resolve filters. Keep this comparison first.
+        if (source !== '@mszr/vanity')
+          return null
+        if (('scan' in resolveOptions && resolveOptions.scan === true) || importer === undefined)
+          return null
+
+        throw new VanityError({
+          code: 'VANITY_AUTHORING_IN_APP_MODULE',
+          message: `Application module '${importer}' imports Vanity's authoring entry '@mszr/vanity'.`,
+          file: importer,
+          fix: 'Move Vanity authoring into compiler.system or a *.css.ts style module, then import the configured system in application code.',
+        })
+      },
+    },
+  }
+
+  return [cssTsPlugin, substrateCompilerTransport, ...wrappedSubstratePlugins, ...applicationPlugins, authoringImportGuard]
 }
 
 function createApplicationAutoImportPlugin(
   value: VanityAppAutoImports,
+  getDeclaredPackages: (root: string) => Promise<DeclaredPackageSet>,
 ): Plugin {
   let delegate: AutoImportPlugin | undefined
   let delegateRoot: string | undefined
+  const autoImportExcludes = [styleFileFilter, /[\\/]node_modules[\\/]/, /[\\/]\.git[\\/]/]
+  const transformHook: Extract<NonNullable<Plugin['transform']>, { handler: unknown }> = {
+    filter: undefined,
+    handler(
+      code: string,
+      id: string,
+      transformOptions?: Parameters<PluginHookFunction<NonNullable<AutoImportPlugin['transform']>>>[2],
+    ) {
+      if (delegate === undefined || delegate.transformInclude?.call(this, id) !== true)
+        return
+
+      return invokePluginHook(delegate, 'transform', this, code, id, transformOptions)
+    },
+  }
+
+  const setDelegateTransformFilter = (): void => {
+    const hook = delegate?.transform
+    if (typeof hook === 'object' && hook !== null && 'filter' in hook) {
+      // Unplugin's filter also accepts patterns Vite's native HookFilter type cannot express.
+      transformHook.filter = hook.filter as typeof transformHook.filter
+    }
+  }
 
   const createDelegate = (root: string): AutoImportPlugin => {
     const normalizedRoot = normalizePath(resolve(root))
@@ -1065,7 +1443,7 @@ function createApplicationAutoImportPlugin(
       // Compiler authoring modules have their own role. Keeping application
       // imports out of `*.css.ts` prevents app presets from
       // leaking into code that Vanity evaluates in-process.
-      exclude: [styleFileFilter],
+      exclude: autoImportExcludes,
       vueTemplate: true,
     }) as AutoImportPlugin
     delegateRoot = normalizedRoot
@@ -1075,24 +1453,32 @@ function createApplicationAutoImportPlugin(
   return {
     name: 'vanity:app-auto-imports',
     enforce: 'post',
-    config(config, env) {
-      // An omitted root defaults to cwd. Defer construction until
-      // `configResolved` so an adapter-controlled root cannot split path
-      // resolution between filtered and unfiltered sources.
-      if (config.root === undefined)
-        return
+    async config(config, env) {
+      const root = resolve(config.root ?? cwd())
+      const delegateResult = await invokePluginHook(createDelegate(root), 'config', this, config, env)
+      setDelegateTransformFilter()
+      if (delegateResult === undefined || delegateResult === null)
+        return delegateResult
 
-      return invokePluginHook(createDelegate(config.root), 'config', this, config, env)
+      const includes = delegateResult.optimizeDeps?.include
+      if (!Array.isArray(includes))
+        return delegateResult
+
+      const declaredPackages = await getDeclaredPackages(root)
+      return {
+        ...delegateResult,
+        optimizeDeps: {
+          ...delegateResult.optimizeDeps,
+          include: filterDeclaredPackageIncludes(includes, declaredPackages.names),
+        },
+      }
     },
     configResolved(config) {
-      return invokePluginHook(createDelegate(config.root), 'configResolved', this, config)
+      const resolvedDelegate = createDelegate(config.root)
+      setDelegateTransformFilter()
+      return invokePluginHook(resolvedDelegate, 'configResolved', this, config)
     },
-    transform(code, id, options) {
-      if (delegate === undefined || delegate.transformInclude?.call(this, id) !== true)
-        return
-
-      return invokePluginHook(delegate, 'transform', this, code, id, options)
-    },
+    transform: transformHook,
     buildStart(options) {
       return invokePluginHook(delegate, 'buildStart', this, options)
     },
@@ -1171,6 +1557,78 @@ function invokePluginHook<K extends AutoImportDelegateHook>(
   return Reflect.apply(handler, context, args) as ReturnType<PluginHookFunction<NonNullable<AutoImportPlugin[K]>>>
 }
 
+function reportDeclaredPackageOverrides(
+  resolvedConfig: ResolvedConfig,
+  declaredPackages: DeclaredPackageSet,
+  diagnostics: VanityDiagnosticSink | undefined,
+  warnedPackages: Set<string>,
+): void {
+  const includeEntries = [
+    ...getOptimizeDepIncludes(resolvedConfig.optimizeDeps),
+    ...Object.values(resolvedConfig.environments ?? {}).flatMap(environment =>
+      getOptimizeDepIncludes(environment.optimizeDeps)),
+  ]
+  const external = resolvedConfig.ssr.external
+  const externalEntries = Array.isArray(external)
+    ? external.filter((entry): entry is string => typeof entry === 'string')
+    : typeof external === 'string' ? [external] : []
+  const serverEnvironmentExternalEntries = Object.values(resolvedConfig.environments ?? {})
+    .filter(environment => environment.consumer === 'server')
+    .flatMap(environment => Array.isArray(environment.resolve.external)
+      ? environment.resolve.external
+      : [])
+  const overrides = findDeclaredPackageOverrides(
+    [...includeEntries, ...externalEntries, ...serverEnvironmentExternalEntries],
+    declaredPackages.names,
+  )
+
+  for (const { packageName, entry } of overrides) {
+    if (warnedPackages.has(packageName))
+      continue
+    warnedPackages.add(packageName)
+    reportAdapterWarning(resolvedConfig, diagnostics, {
+      code: 'VANITY_VITE_SOURCE_PACKAGE_BYPASSED',
+      severity: 'warning',
+      message: `Configuration entry "${entry}" includes ${packageName}. Vanity source in or beneath ${packageName} will run as build-time code instead of passing through Vanity.`,
+      fix: `Remove "${entry}". If it was added for a CommonJS dependency, list that dependency as "${packageName} > <dependency>" instead.`,
+    })
+  }
+
+  for (const packageName of declaredPackages.commonJsNames) {
+    if (warnedPackages.has(packageName))
+      continue
+    warnedPackages.add(packageName)
+    reportAdapterWarning(resolvedConfig, diagnostics, {
+      code: 'VANITY_VITE_SOURCE_PACKAGE_BYPASSED',
+      severity: 'warning',
+      message: `${packageName} is CommonJS, so the host cannot route it through the SSR pipeline, and Vanity source reached through it may run as build-time code in SSR development.`,
+      fix: `Publish ${packageName} as ESM; this change belongs to the package author.`,
+    })
+  }
+}
+
+/** Send a non-error adapter diagnostic to the sink, or to Vite's logger when none is configured. */
+function reportAdapterWarning(
+  resolvedConfig: ResolvedConfig,
+  diagnostics: VanityDiagnosticSink | undefined,
+  diagnostic: VanityDiagnosticInput,
+): void {
+  if (diagnostics !== undefined) {
+    reportDiagnostics(diagnostics, diagnostic)
+    return
+  }
+  resolvedConfig.logger.warn(formatVanityDiagnostic(diagnostic))
+}
+
+function getOptimizeDepIncludes(value: unknown): string[] {
+  if (typeof value !== 'object' || value === null || !('include' in value))
+    return []
+  const includes = value.include
+  return Array.isArray(includes)
+    ? includes.filter((entry): entry is string => typeof entry === 'string')
+    : []
+}
+
 function evaluateSystemModule(source: string, filePath: string): EvaluatedSystem {
   const { result: exports, records } = collectInspection(() => executeBundle(source, filePath))
   const entryExports = isRecord(exports.__vanityEntry) ? exports.__vanityEntry : exports
@@ -1232,19 +1690,172 @@ function renderCascadePrelude(roots: readonly string[]): string {
   return unique.length === 0 ? '' : `@layer ${unique.join(', ')};\n`
 }
 
-/**
- * Narrow a host resolution to the physical module it names.
- *
- * The input is resolver output — an absolute path or a virtual id — never a
- * browser URL. Converting between an id and a URL belongs to the host
- * boundary and happens once on each side, so nothing is unwrapped here.
- */
+/** Resolve configured entries to their canonical physical modules at config time. */
 function getPhysicalResolvedPath(resolved: string | undefined): string | undefined {
   if (resolved === undefined || resolved.startsWith('\0'))
     return undefined
 
   const clean = resolved.replace(/[?#].*$/, '')
   return isAbsolute(clean) ? normalizeModuleIdentity(clean) : undefined
+}
+
+/** Vite's cache, HMR, and import stamps, which still name the module itself. */
+const moduleSelfQueryKeys = new Set(['import', 't', 'v'])
+
+/** Whether a load query still refers to the source module itself. */
+function isModuleSelfQuery(query: string): boolean {
+  if (query.length === 0)
+    return true
+
+  return query.split('&').every((part) => {
+    const [key = ''] = part.split('=', 1)
+    try {
+      return moduleSelfQueryKeys.has(decodeURIComponent(key.replace(/^\?/, '')))
+    }
+    catch {
+      return false
+    }
+  })
+}
+
+type LateLoadHook = Extract<NonNullable<Plugin['load']>, { handler: unknown }>
+type LateResolveIdHook = Extract<NonNullable<Plugin['resolveId']>, { handler: unknown }>
+
+/** Owns the two host-dependent hook filters and their named lifecycle transitions. */
+function createLateHookFilterState() {
+  let loadHook: LateLoadHook | undefined
+  let resolveIdHook: LateResolveIdHook | undefined
+  const memberUnion = new Map<string, { readonly file: string, readonly preserveSymlinks: boolean }>()
+  let developmentFilterCacheSupported: boolean | undefined
+  let loadDevelopmentHold = false
+  let resolveDevelopmentHold = false
+  let loadDevelopmentCallSeen = false
+  let resolveDevelopmentCallSeen = false
+  let watchHoldCount = 0
+  let loadFilterAssigned = false
+  let resolveIdFilterAssigned = false
+  let unionGrewSinceNarrowing = false
+
+  const createLoadHook = (handler: LateLoadHook['handler']): LateLoadHook => {
+    const hook: LateLoadHook = { handler }
+    loadHook = hook
+    return hook
+  }
+
+  const createResolveIdHook = (handler: LateResolveIdHook['handler']): LateResolveIdHook => {
+    const hook: LateResolveIdHook = { handler }
+    resolveIdHook = hook
+    return hook
+  }
+
+  const removeHostDependentFilters = (): void => {
+    if (loadHook !== undefined)
+      loadHook.filter = undefined
+    if (resolveIdHook !== undefined)
+      resolveIdHook.filter = undefined
+    loadFilterAssigned = false
+    resolveIdFilterAssigned = false
+  }
+
+  const configure = (command: string, watch: boolean): void => {
+    if (command === 'serve') {
+      removeHostDependentFilters()
+      // The version capability is learned in configResolved. Until then, hold
+      // conservatively; Vite 5 releases both holds before its server starts.
+      if (developmentFilterCacheSupported !== false) {
+        loadDevelopmentHold ||= !loadDevelopmentCallSeen
+        resolveDevelopmentHold ||= !resolveDevelopmentCallSeen
+      }
+    }
+    if (command === 'build' && watch) {
+      removeHostDependentFilters()
+      watchHoldCount++
+    }
+  }
+
+  const recordHostCapability = (config: ResolvedConfig): void => {
+    // Vite 6+ has environments and caches development filters by plugin object.
+    if (developmentFilterCacheSupported !== undefined)
+      return
+    developmentFilterCacheSupported = 'environments' in config
+    if (!developmentFilterCacheSupported) {
+      loadDevelopmentHold = false
+      resolveDevelopmentHold = false
+    }
+  }
+
+  const recordDevelopmentHookCall = (hook: 'load' | 'resolveId', mode: string | undefined): void => {
+    if (mode !== 'dev' || !developmentFilterCacheSupported)
+      return
+    if (hook === 'load') {
+      loadDevelopmentCallSeen = true
+      loadDevelopmentHold = false
+    }
+    else {
+      resolveDevelopmentCallSeen = true
+      resolveDevelopmentHold = false
+    }
+  }
+
+  const addBuildMember = (file: string, preserveSymlinks: boolean): void => {
+    const key = `${preserveSymlinks ? 'symlink' : 'real'}\0${file}`
+    if (memberUnion.has(key))
+      return
+    memberUnion.set(key, { file, preserveSymlinks })
+    unionGrewSinceNarrowing = true
+  }
+
+  const applyBuildHookFilters = (): void => {
+    if (watchHoldCount > 0)
+      return
+    const loadHeld = loadDevelopmentHold
+    const resolveIdHeld = resolveDevelopmentHold
+    if (loadHook !== undefined && !loadHeld && (unionGrewSinceNarrowing || !loadFilterAssigned)) {
+      // Some hosts compile filters by object identity. A concurrent host may
+      // read while this union grows, so publish a new filter object each time.
+      loadHook.filter = { id: createServedIdFilter([...memberUnion.values()]) }
+      loadFilterAssigned = true
+    }
+    if (resolveIdHook !== undefined && !resolveIdHeld && (unionGrewSinceNarrowing || !resolveIdFilterAssigned)) {
+      resolveIdHook.filter = { id: createServedIdFilter() }
+      resolveIdFilterAssigned = true
+    }
+    unionGrewSinceNarrowing = false
+  }
+
+  const finishWatch = (): void => {
+    watchHoldCount = Math.max(0, watchHoldCount - 1)
+  }
+
+  return {
+    createLoadHook,
+    createResolveIdHook,
+    configure,
+    recordHostCapability,
+    recordDevelopmentHookCall,
+    addBuildMember,
+    applyBuildHookFilters,
+    finishWatch,
+  }
+}
+
+/**
+ * Match the IDs a late-narrowed hook serves: Vanity's own addresses plus the
+ * given members. Vite hands these hooks resolved virtual IDs after adding
+ * `\0`, so a bare `vanity:` specifier never reaches them.
+ */
+function createServedIdFilter(
+  members: readonly { readonly file: string, readonly preserveSymlinks: boolean }[] = [],
+): RegExp {
+  const memberPatterns = members.map(({ file, preserveSymlinks }) => preserveSymlinks
+    ? `(?:^|[\\\\/])${encodeRegexLiteral(basename(file))}`
+    : encodeRegexLiteral(normalizePath(file)))
+  const addressPatterns = ['\\0vanity:[^?\\r\\n]*', `[^?\\r\\n]*${encodeRegexLiteral(virtualExt)}`]
+  return new RegExp(`^(?:${[...addressPatterns, ...memberPatterns].join('|')})(?:\\?[^\\r\\n]*)?$`)
+}
+
+function encodeRegexLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 /** Files named by an esbuild failure, including note locations. */

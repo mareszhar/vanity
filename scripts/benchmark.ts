@@ -12,6 +12,7 @@ import type {
   RenameLocation,
 } from 'typescript'
 import type { BenchmarkScale } from '../benchmarks/scales'
+import type { HostGraphMeasurement } from './benchmark-host-graph'
 import { Buffer } from 'node:buffer'
 import { spawnSync } from 'node:child_process'
 import {
@@ -40,6 +41,7 @@ import {
   formatBenchmarkByteDifferences,
   readBenchmarkByteFacts,
 } from './benchmark-facts'
+import { measureHostGraph } from './benchmark-host-graph'
 
 interface CommandMeasurement {
   output: string
@@ -114,6 +116,7 @@ interface BenchmarkResult {
   }
   protocol: 1
   scales: ScaleMeasurement[]
+  hostGraph: HostGraphMeasurement
 }
 
 interface PluginModule {
@@ -399,6 +402,11 @@ if (runtimeEntry.minGzipBytes > RUNTIME_ENTRY_MIN_GZIP_BUDGET_BYTES) {
   )
 }
 
+console.log('• host graph: plain Vite and Vanity')
+const hostGraph = await measureHostGraph(workspaceDir)
+console.log(`  plain build ${hostGraph.buildMs.plain} ms; Vanity build ${hostGraph.buildMs.vanity} ms; overhead ${hostGraph.overheadMs} ms`)
+console.log(`  package declarations cold ${hostGraph.declarationMs.cold} ms; warm ${hostGraph.declarationMs.warm} ms`)
+
 const result: BenchmarkResult = {
   environment: {
     architecture: arch(),
@@ -418,6 +426,7 @@ const result: BenchmarkResult = {
   },
   protocol: 1,
   scales: benchmarkScales.map(measureScale),
+  hostGraph,
 }
 
 const output = join(artifactsRoot, 'current.json')

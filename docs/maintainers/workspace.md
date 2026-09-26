@@ -64,8 +64,10 @@ The root `package.json` `packageManager` field is the source of truth for the pn
 To update that pin:
 
 1. Run `pnpm run pnpm:self-update`.
-2. Verify the workspace with `pnpm install --frozen-lockfile --force` under the newly selected CLI.
-3. Review the `package.json` pin separately from dependency changes.
+2. The updater selects the newest stable release older than the workspace's `minimumReleaseAge` window and writes the root `packageManager` pin.
+3. It runs one lockfile-updating install under the selected CLI.
+4. It verifies the workspace with `pnpm install --frozen-lockfile --force`.
+5. Review the new `packageManager` pin and the lockfile diff as a dependency change.
 
 The force is intentional: pnpm documents it as the repair path for modules created by an incompatible CLI or linked to a different store.
 
@@ -73,7 +75,7 @@ The update helpers use the user-level pnpm store (`$PNPM_HOME/store` when `PNPM_
 
 They fail rather than silently accepting a project-local fallback. This prevents a pnpm upgrade from making an otherwise valid workspace fail later with `ERR_PNPM_UNEXPECTED_STORE`.
 
-In a pinned project, pnpm's self-update changes the root pin rather than installing a separate global version; the next pnpm invocation automatically switches to it.
+The updater writes the package-manager pin itself, runs the install that records the selected CLI in the lockfile, and then runs a frozen install to verify the resulting workspace.
 
 This is separate from `pnpm run upi`: `pnpm:self-update` changes the package manager, while `upi` reviews registry dependencies in the default catalog. If dependency updates are also intended, run `pnpm run upi` after the pnpm update, then `pnpm run validate` before release work.
 
@@ -135,6 +137,7 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run sdk:test:dx` | run the Selenita editor-DX evidence dimension |
 | `pnpm run sdk:test:types` | run the compile-time evidence dimension |
 | `pnpm run sdk:test:watch` | run SDK tests in watch mode |
+| `pnpm run sdk:test:vite-compat` | run the real client/SSR module-graph gate against every supported Vite major |
 
 ### Demos
 
@@ -201,7 +204,7 @@ The root `.gitignore` is the single ignore authority. Generated or machine-local
 - `node_modules/`, `dist/`, `.nuxt/`, `.output/`, and `styled-system/`;
 - `.turbo/`, coverage, Playwright results, and TypeScript build info; `.pnpm-store/` remains ignored only as a safeguard against pnpm's filesystem fallback and should not appear in a normal checkout;
 - `.vanity/` manifests, benchmark measurements, release validation receipts, and in-flight release records;
-- `__temp__/`, which holds the handoff, execution tracker, changelog, and probes for a release in flight — ignored deliberately, for the reason [handoffs §3](./handoffs.md#3-why-none-of-this-is-tracked) gives;
+- `__temp__/`, which holds the handoff, execution tracker, round reports, changelog, and probes for a release in flight — ignored deliberately, for the reason [handoffs §3](./handoffs.md#3-why-none-of-this-is-tracked) gives;
 - generated auto-import declarations.
 
 The validation entrypoints clear the exact ignored application-generated declaration, adapter-cache, and `.vanity/` paths before typechecking. This prevents stale ambient files or generated contracts from masking a removed or renamed import while preserving the root `.vanity/` receipts, benchmark measurements, and resumable release records.
@@ -214,12 +217,13 @@ The canary's `sandbox/canary/dist-ssr/entry-server.js` is intentionally tracked 
 
 ## 7. CI
 
-`.github/workflows/ci.yml` runs two parallel jobs:
+`.github/workflows/ci.yml` runs three parallel jobs:
 
 1. types, tests, documentation examples, audits, lint, and benchmark drift;
-2. the permanent canary, demo builds, optimized-CSS checks, production and development browser suites, lifecycle cleanup, and fresh packed consumers.
+2. the supported Vite client/SSR module-graph matrix;
+3. the permanent canary, demo builds, optimized-CSS checks, production and development browser suites, lifecycle cleanup, and fresh packed consumers.
 
-Both jobs install from the root lockfile. The workflow carries read-only repository permissions and never publishes.
+All three jobs install from the root lockfile. The supported-major job runs the host-observed client/SSR graph assertions for every published Vite major, including the zero-handler check for unserved modules. The workflow carries read-only repository permissions and never publishes.
 
 ## 8. Releases
 

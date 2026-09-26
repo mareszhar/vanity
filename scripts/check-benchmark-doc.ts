@@ -46,6 +46,13 @@ interface BenchmarkReceipt {
     readonly runtimeMinGzipBytes: number
   }
   readonly scales: readonly BenchmarkScaleReceipt[]
+  readonly hostGraph: {
+    readonly applicationModules: number
+    readonly buildMs: { readonly plain: number, readonly vanity: number }
+    readonly declarationMs: { readonly cold: number, readonly warm: number }
+    readonly installedDependencyModules: number
+    readonly overheadMs: number
+  }
 }
 
 const workspaceDir = join(fileURLToPath(new URL('.', import.meta.url)), '..')
@@ -74,7 +81,10 @@ function editor(scale: BenchmarkScaleReceipt, name: string): string {
 }
 
 function render(receipt: BenchmarkReceipt): string {
-  const { environment, package: packageSizes, scales } = receipt
+  const { environment, hostGraph, package: packageSizes, scales } = receipt
+  const hostGraphOverhead = hostGraph.buildMs.vanity - hostGraph.buildMs.plain
+  if (hostGraph.overheadMs !== hostGraphOverhead)
+    throw new Error('The benchmark receipt host-graph overhead does not match Vanity minus plain Vite time.')
   const date = environment.timestamp.slice(0, 10)
   const typeRows = scales.map((scale) => {
     const cold = scale.typecheck.cold
@@ -83,6 +93,7 @@ function render(receipt: BenchmarkReceipt): string {
   })
   const editorRows = scales.map(scale => `| ${capitalize(scale.scale.name)} | ${editor(scale, 'root')} | ${editor(scale, 'deep')} | ${editor(scale, 'axis')} | ${editor(scale, 'case')} | ${editor(scale, 'runtime')} | ${editor(scale, 'css')} | ${number(scale.editor.diagnostic.medianMs, `${scale.scale.name} diagnostic`).toFixed(3)}ms | ${number(scale.editor.rename.medianMs, `${scale.scale.name} rename`).toFixed(3)}ms |`)
   const outputRows = scales.map(scale => `| ${capitalize(scale.scale.name)} | ${seconds(scale.declarations.wallMs, 3)} / ${bytes(scale.declarations.bytes)} B | ${seconds(scale.build.wallMs, 3)} | ${bytes(scale.build.cssBytes)} B / ${bytes(scale.build.cssGzipBytes)} B | ${bytes(scale.build.manifestBytes)} B / ${bytes(scale.build.manifestGzipBytes)} B |`)
+  const hostGraphRow = `| ${bytes(hostGraph.applicationModules)} app + ${bytes(hostGraph.installedDependencyModules)} installed | ${seconds(hostGraph.buildMs.plain, 3)} | ${seconds(hostGraph.buildMs.vanity, 3)} | ${number(hostGraphOverhead, 'host graph overhead')} ms | ${bytes(hostGraph.declarationMs.cold)} ms / ${bytes(hostGraph.declarationMs.warm)} ms |`
 
   return [
     `## Accepted baseline — ${date}`,
@@ -100,6 +111,10 @@ function render(receipt: BenchmarkReceipt): string {
     '| Scale | Declaration emit / bytes | Vite build | CSS raw / gzip | Manifest v4 raw / gzip |',
     '| --- | ---: | ---: | ---: | ---: |',
     ...outputRows,
+    '',
+    '| Host graph modules | Plain Vite | Vanity | Overhead | Package declaration walk cold / warm |',
+    '| --- | ---: | ---: | ---: | ---: |',
+    hostGraphRow,
     '',
     `Package entries: root ${bytes(packageSizes.rootBytes)} B raw; runtime ${bytes(packageSizes.runtimeBytes)} B raw, ${bytes(packageSizes.runtimeMinifiedBytes)} B minified, and ${bytes(packageSizes.runtimeMinGzipBytes)} B min+gzip; Hail presets ${bytes(packageSizes.presetsBytes)} B raw.`,
   ].join('\n')

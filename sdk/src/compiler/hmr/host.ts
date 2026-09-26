@@ -15,8 +15,6 @@ export interface CompilerHmrHost {
   readonly findModulesById: (id: string) => readonly object[]
   /** Mark every environment node for a compiler-owned runtime module invalid. */
   readonly markModulesInvalidById: (id: string) => readonly object[]
-  /** Retire every environment node for a replaced compiler-owned namespace. */
-  readonly removeRuntimeModules: (ids: ReadonlySet<string>) => void
   /** A base-less graph URL lookup across client and SSR graphs. */
   readonly findModulesByUrl: (url: string) => Promise<readonly object[]>
   /** Materialize a failed first-request entry for a same-server retry. */

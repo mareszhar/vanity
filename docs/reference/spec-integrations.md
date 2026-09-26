@@ -212,7 +212,7 @@ The shared style-module pipeline:
 - generates browser and SSR projections from portable data; and
 - supports precompiled package contracts.
 
-None of this depends on where a style source sits. A source outside the build root — the shape a source-shipping component library takes, where a package's `*.css.ts` files are compiled by the application consuming them — is evaluated, addressed, served, hot-updated, and recovered exactly like one inside it.
+None of this depends on where a style source sits. A source outside the build root, such as a package's `*.css.ts` files compiled by the consuming application, is evaluated, addressed, served, hot-updated, and recovered exactly like one inside it.
 
 `compiler.system` names the entry the compiler evaluates. It may be a system module or a static barrel that re-exports one, and the host resolves the spelling you write using its own aliases, export conditions, extension rules, directory indexes, and symlink policy — so a package export or a symlinked path resolves the same way your application imports resolve. An arbitrary host virtual module is not a substitute for a real module.
 
@@ -254,7 +254,7 @@ autoImports: {
 }
 ```
 
-When a source-shipping package also publishes build JavaScript plus a portable system artifact, the consumer pairs them through the configured `system` object. The strict reader compares compatibility, CSS, runtime, and docs identities; a description-only source edit keeps CSS bytes stable but still requires the pair to be regenerated when its docs identity changes. The diagnostic names the package and the identities that disagree.
+When a package also publishes build JavaScript plus a portable system artifact, the consumer pairs them through the configured `system` object. The strict reader compares compatibility, CSS, runtime, and docs identities; a description-only source edit keeps CSS bytes stable but still requires the pair to be regenerated when its docs identity changes. The diagnostic names the package and the identities that disagree.
 
 `shared` expands into both module roles and creates no third declaration file. `style` targets only `*.css.ts`; `app` targets only application modules. A direct source string is shorthand for `shared`.
 
@@ -278,7 +278,17 @@ Every TypeScript project that uses these generated bindings must include the gen
 
 `vanity prepare` checks this and reports `VANITY_AUTO_IMPORT_DECLARATIONS_NOT_INCLUDED` with the missing entry. Nuxt and WXT register their generated references through their native preparation hooks.
 
-### Source-shipping authoring packages
+### Source packages
+
+A **source package** ships Vanity source: `*.css.ts` style modules, a configured system module or its static re-export graph, or a precompiled system with its portable artifact. It works the same when linked from a workspace or installed from a registry.
+
+Vanity declares every package whose dependencies or peer dependencies reach `@mszr/vanity`, including packages through which an application reaches a source package. In Vite, these packages appear in the resolved `optimizeDeps.exclude` and `ssr.noExternal` settings so their source passes through Vanity. This also declares a package that uses Vanity only at runtime; that costs optimizer speed but does not change correctness. Nuxt inherits the same Vite declarations, and WXT mounts the same adapter.
+
+An explicit `optimizeDeps.include` or `ssr.external` entry for a declared package takes precedence and warns with `VANITY_VITE_SOURCE_PACKAGE_BYPASSED`: `Configuration entry "<entry>" includes <package>. Vanity source in or beneath <package> will run as build-time code instead of passing through Vanity.` Remove that entry; for a CommonJS dependency, name it as `<package> > <dependency>`. A CommonJS declared package that cannot enter the SSR transform reports the same code with a package-author fix to publish ESM. When `compiler.diagnostics` is configured, the warning goes there; otherwise the adapter writes it through Vite's logger. It warns once per package per plugin instance.
+
+When an application module imports `@mszr/vanity`, the adapter raises `VANITY_AUTHORING_IN_APP_MODULE` and names the importing module: `Application module '<importer>' imports Vanity's authoring entry '@mszr/vanity'.` Move Vanity authoring into `compiler.system` or a `*.css.ts` style module, then import the configured system in application code. The error applies to client and SSR application graphs; configured system members and style modules are handled by Vanity's compiler. Test files that Vitest runs through the application's Vite config may import `@mszr/vanity`, as the [testing kit](./testing-kit.md) does; this error does not apply when Vitest runs them.
+
+Application auto-imports transform application modules, including workspace-linked packages whose resolved files sit outside `node_modules`; they skip installed dependencies and `.git`. This keeps application auto-import parsing out of dependency code.
 
 The type half and value half are distinct. A host injects the real value import while compiling a style module. An intermediate package that only typechecks source needs declarations, not that runtime import.
 
@@ -286,9 +296,9 @@ The type half and value half are distinct. A host injects the real value import 
 | --- | --- | --- | --- |
 | Explicit barrel import | `import { cls, t } from '@acme/design/authoring'` | None outside the file. | A package with a handful of style modules. |
 | Per-package host wiring | Nothing | Each TypeScript program reaching a style file prepares declarations. | A styling-heavy package scaffolded with its host setup. |
-| Type-only unlock | `import type {} from '@acme/design/vanity-style-auto-imports'` | Nothing for consumers. | A source-shipping package that keeps its declaration requirement local. |
+| Type-only unlock | `import type {} from '@acme/design/vanity-style-auto-imports'` | Nothing for consumers. | A source package that keeps its declaration requirement local. |
 
-Vanity recognizes authoring sources by their role rather than by their location, so a package keeps its export-derived class names and source-local diagnostics whether it is linked from a workspace or installed under `node_modules`. Unrelated dependencies and raw Vanilla Extract modules keep their own processing.
+Vanity recognizes authoring sources by their role rather than by their location, so a source package keeps its export-derived class names and source-local diagnostics whether it is linked from a workspace or installed under `node_modules`. Unrelated dependencies and raw Vanilla Extract modules keep their own processing.
 
 These are trade-offs, not a ranking, and one workspace may mix them. A package publishing the generated style declaration exports it as a bare package specifier, so the unlock import resolves in every consuming program.
 
@@ -321,7 +331,7 @@ An authoring barrel such as `export const { class: cls, t } = ds` preserves its 
 
 TypeScript still owns the completion's import edit; Vanity only ranks this explicitly named source in style modules. When a generated Vanity declaration already names the barrel, the plugin discovers it and no duplicate `authoringBarrels` entry is needed.
 
-In a source-shipping package, the plugin shows an informational `VANITY_AMBIENT_SOURCE_DECLARATION` notice for an ambient style file without the unlock import. Set `"vanity": { "suppressAmbientSourceDeclarationNotice": true }` in that package's `package.json` when its chosen per-package host wiring makes the notice unhelpful.
+In a source package, the plugin shows an informational `VANITY_AMBIENT_SOURCE_DECLARATION` notice for an ambient style file without the unlock import. Set `"vanity": { "suppressAmbientSourceDeclarationNotice": true }` in that package's `package.json` when its chosen per-package host wiring makes the notice unhelpful.
 
 For document-level rules, put the selectors in the intended layer rather than hiding a second styling system:
 
