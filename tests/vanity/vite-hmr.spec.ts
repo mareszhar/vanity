@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 import { createServer } from 'vite'
+import { createViteHmrHost } from '../../sdk/src/compiler/hosts/viteHmr'
 import { vanityPlugin } from '../../sdk/src/vite'
 
 const sdkRoot = fileURLToPath(new URL('../../sdk/', import.meta.url))
@@ -58,7 +59,11 @@ async function put(root: string, file: string, source: string): Promise<string> 
   return path
 }
 
-async function startFixture(base: string, alternateLayerProbe = false): Promise<BrowserFixture> {
+async function startFixture(base: string, options: {
+  alternateLayerProbe?: boolean
+  unloadedStyleDelayMs?: number
+} = {}): Promise<BrowserFixture> {
+  const { alternateLayerProbe = false, unloadedStyleDelayMs = 0 } = options
   const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-browser-hmr-')))
   const appRoot = join(root, 'app')
   const designRoot = join(root, 'packages', 'design')
@@ -136,6 +141,9 @@ import * as applicationNamespace from '@fixture/design/barrel'
 
 const loads = Number(sessionStorage.getItem('vanity-browser-loads') ?? 0) + 1
 sessionStorage.setItem('vanity-browser-loads', String(loads))
+import.meta.hot?.on('vite:beforeFullReload', () => {
+  sessionStorage.setItem('vanity-browser-reload-target', String(loads + 1))
+})
 const runtime = ds.runtime()
 runtime.t.color.brand.$set('#778899')
 ;(globalThis as any).__vanityRuntime = runtime
@@ -165,6 +173,10 @@ document.querySelector('#namespace-proof')!.textContent = JSON.stringify((global
       vanityPlugin({ compiler: { system: ['@fixture/design/barrel', './alternate.ts'] } }),
       {
         name: 'vanity-browser-hmr-observer',
+        async transform(_source, id) {
+          if (id === join(appRoot, 'unloaded.css.ts') && unloadedStyleDelayMs > 0)
+            await new Promise(resolve => setTimeout(resolve, unloadedStyleDelayMs))
+        },
         handleHotUpdate(context) {
           hmrUpdates.push(`${context.file} → ${context.modules.map(module => module.file ?? module.url).join(', ')}`)
         },
@@ -637,7 +649,7 @@ test('a declaration-order-only system edit changes identity and shorthand cascad
 })
 
 test('a system layer-order edit applies without a reload', async ({ page }) => {
-  const fixture = await startFixture('/dashboard/', true)
+  const fixture = await startFixture('/dashboard/', { alternateLayerProbe: true })
   try {
     const alternate = join(fixture.appRoot, 'alternate.ts')
     const { failures } = await loadFixture(page, fixture)
@@ -752,49 +764,73 @@ export const card = alternate.class({ color: alternate.t.color.brand, padding: '
   }
 })
 
-test('a system dependency failure keeps last-good browser CSS and repairs without restart', async ({ page }) => {
-  const fixture = await startFixture('/dashboard/')
-  try {
-    const { cssRequests } = await loadFixture(page, fixture)
-    const loads = await loadCount(page)
-    const before = await page.locator('#first').evaluate(element => getComputedStyle(element).color)
-    await page.evaluate(() => (globalThis as any).__vanityRuntime.t.color.brand.$unset())
-    await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).color))
-      .toBe('rgb(17, 34, 51)')
-    const identitiesBefore = (await readSystemArtifact(fixture, 'browser-hmr')).identities
-    await fixture.server.watcher.unwatch(fixture.theme)
-    await writeFile(fixture.theme, 'throw new Error(\'fixture dependency failure\')\n')
-    emitHostFileChange(fixture.server, fixture.theme)
+for (const afterHotUpdate of [false, true]) {
+  test(`a system dependency failure keeps last-good browser CSS and repairs without restart (${afterHotUpdate ? 'after a hot update' : 'before the first hot update'})`, async ({ page }) => {
+    const fixture = await startFixture('/dashboard/', { unloadedStyleDelayMs: 600 })
+    try {
+      // A slow unloaded consumer keeps compilation in flight after the
+      // page's own styles are ready; recovery must still reload only once.
+      await fixture.server.transformRequest('/unloaded.css.ts')
+      // Prepare CSS before the client connects, so initial compilation
+      // notifications cannot consume Vite's first browser hot update.
+      const host = createViteHmrHost({ root: fixture.appRoot, base: fixture.base, server: fixture.server })
+      for (const source of [fixture.style, fixture.secondStyle, fixture.outsideStyle])
+        await fixture.server.transformRequest(host.getGraphModuleUrl(source))
+      const { cssRequests } = await loadFixture(page, fixture)
+      const loads = await loadCount(page)
+      if (afterHotUpdate) {
+        const source = await readFile(fixture.style, 'utf8')
+        await writeFile(fixture.style, source.replace('padding: \'1px\'', 'padding: \'2px\''))
+        await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).padding))
+          .toBe('2px')
+        expect(await loadCount(page)).toBe(loads)
+      }
+      const before = await page.locator('#first').evaluate(element => getComputedStyle(element).color)
+      await page.evaluate(() => (globalThis as any).__vanityRuntime.t.color.brand.$unset())
+      await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).color))
+        .toBe('rgb(17, 34, 51)')
+      const identitiesBefore = (await readSystemArtifact(fixture, 'browser-hmr')).identities
+      await fixture.server.watcher.unwatch(fixture.theme)
+      await writeFile(fixture.theme, 'throw new Error(\'fixture dependency failure\')\n')
+      emitHostFileChange(fixture.server, fixture.theme)
 
-    await expect(page.locator('vite-error-overlay')).toContainText('fixture dependency failure')
-    expect(await page.locator('#first').evaluate(element => getComputedStyle(element).color))
-      .toBe('rgb(17, 34, 51)')
-    expect(await loadCount(page)).toBe(loads)
+      await expect(page.locator('vite-error-overlay')).toContainText('fixture dependency failure')
+      expect(await page.locator('#first').evaluate(element => getComputedStyle(element).color))
+        .toBe('rgb(17, 34, 51)')
+      expect(await loadCount(page)).toBe(loads)
 
-    await fixture.server.watcher.unwatch(fixture.theme)
-    await writeFile(fixture.theme, 'export const brand = \'#445566\'\n')
-    emitHostFileChange(fixture.server, fixture.theme)
-    await expect.poll(async () => (await readSystemArtifact(fixture, 'browser-hmr')).identities.css)
-      .not
-      .toBe(identitiesBefore.css)
-    await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).color))
-      .toBe('rgb(119, 136, 153)')
-    await expect.poll(() => loadCount(page)).toBe(loads + 1)
-    await expect(page.locator('vite-error-overlay')).toHaveCount(0)
-    await expect.poll(async () => {
-      const identity = (await readSystemArtifact(fixture, 'browser-hmr')).identities.css
-      return cssRequests.some(url => url.includes(identity))
-    })
-      .toBe(true)
-    await page.evaluate(() => (globalThis as any).__vanityRuntime.t.color.brand.$unset())
-    await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).color))
-      .toBe('rgb(68, 85, 102)')
-    expect(before).toBe('rgb(119, 136, 153)')
-  }
-  finally {
-    await stopFixture(fixture)
-  }
-})
+      await fixture.server.watcher.unwatch(fixture.theme)
+      await writeFile(fixture.theme, 'export const brand = \'#445566\'\n')
+      emitHostFileChange(fixture.server, fixture.theme)
+      await expect.poll(async () => (await readSystemArtifact(fixture, 'browser-hmr')).identities.css)
+        .not
+        .toBe(identitiesBefore.css)
+      // An incidental overlay reload can finish while compilation is still
+      // running. Wait for the completed generation's native reload as well.
+      await page.waitForFunction(() => {
+        const target = Number(sessionStorage.getItem('vanity-browser-reload-target'))
+        return target > 0 && Number(sessionStorage.getItem('vanity-browser-loads')) >= target
+      })
+      await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).color))
+        .toBe('rgb(119, 136, 153)')
+      await expect.poll(() => loadCount(page)).toBe(loads + 1)
+      await expect(page.locator('vite-error-overlay')).toHaveCount(0)
+      await expect.poll(async () => {
+        const identity = (await readSystemArtifact(fixture, 'browser-hmr')).identities.css
+        return cssRequests.some(url => url.includes(identity))
+      })
+        .toBe(true)
+      await page.evaluate(() => (globalThis as any).__vanityRuntime.t.color.brand.$unset())
+      await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).color))
+        .toBe('rgb(68, 85, 102)')
+      expect(before).toBe('rgb(119, 136, 153)')
+      expect(await loadCount(page)).toBe(loads + 1)
+    }
+    finally {
+      await stopFixture(fixture)
+    }
+  })
+}
 
 test('an incompatible style export change triggers the documented browser reload', async ({ page }) => {
   const fixture = await startFixture('/dashboard/')

@@ -103,13 +103,11 @@ else {
       String(major),
     ], {
       // Do not let this workspace's packageManager pin force a temporary
-      // pnpm installation just to fetch the isolated Vite test host. Keep
-      // pnpm's temporary dlx cache inside the runner's writable temp root.
+      // pnpm installation just to fetch the isolated Vite test host.
+      // Preserve the caller's cache environment so browser tests find the
+      // same Playwright installation as the workspace gates.
       cwd: tmpdir(),
-      env: {
-        ...process.env,
-        XDG_CACHE_HOME: join(tmpdir(), 'vanity-vite-compat-cache'),
-      },
+      env: process.env,
       stdio: 'inherit',
     })
     if (result.error !== undefined)

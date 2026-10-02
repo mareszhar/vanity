@@ -106,6 +106,7 @@ import { handleHotUpdate } from './compiler/hmr/update'
 import { createViteCssInstallation, getCssInstallationRevision } from './compiler/hosts/viteCssInstallation'
 import {
   createViteHmrHost,
+  createViteHmrNotifications,
   createVitePendingCssResponseCache,
   normalizeViteFilePath,
   resolveViteVirtualId,
@@ -335,6 +336,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   /** Entries whose latest transform failed, including before Vite had a healthy node. */
   const failedStyleEntries = new Set<string>()
   const failedSystemEntries = new Set<string>()
+  const hmrNotifications = createViteHmrNotifications()
   /** Root-relative style module → what it recorded, replaced per evaluation. */
   const recordsByFile = new Map<string, VanityInspectRecord[]>()
   /** Full plain-system entry → its last successfully validated portable data. */
@@ -440,6 +442,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     base: state.config.base,
     server: activeServer,
     clientServer: activeClientServer,
+    sendNotification: hmrNotifications.send,
   })
 
   /**
@@ -1183,7 +1186,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         for (const memberFile of computeConfiguredSystemMemberChanges(previousMembers, targetState.membersByFile.keys()))
           memberSetChanges.add(memberFile)
       }
-      const affected = await handleHotUpdate({ file, modules }, {
+      const affected = await hmrNotifications.runUpdate(() => handleHotUpdate({ file, modules }, {
         host: createHmrHost(state, devServer, state.group.clientServer),
         runtimeVirtualPrefix,
         systemSources: allSources,
@@ -1234,7 +1237,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
           }
           return unique.map(source => evaluatedByEntry.get(source.entry)!)
         },
-      }) as ModuleNode[] | undefined
+      })) as ModuleNode[] | undefined
 
       return affected
     },

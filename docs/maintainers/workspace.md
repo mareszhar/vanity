@@ -221,7 +221,7 @@ The canary's `sandbox/canary/dist-ssr/entry-server.js` is intentionally tracked 
 2. the supported Vite client/SSR module-graph matrix;
 3. the permanent canary, demo builds, optimized-CSS checks, production and development browser suites, lifecycle cleanup, and fresh packed consumers.
 
-All three jobs install from the root lockfile. The supported-major job runs the host-observed client/SSR graph assertions for every published Vite major, including the zero-handler check for unserved modules. The workflow carries read-only repository permissions and never publishes.
+All three jobs install from the root lockfile, then install that Playwright version's Chromium and Linux dependencies. The supported-major job runs the host-observed client/SSR graph assertions for every published Vite major, including the zero-handler check for unserved modules. Its child processes inherit the cache environment so installation and browser lookup use the same location. The workflow carries read-only repository permissions and never publishes.
 
 ## 8. Releases
 

@@ -189,8 +189,8 @@ export async function handleHotUpdate(
 
   if (recoveredSystem || invalidatedRuntimeMemberFiles.size > 0 || state.hasRootOrderChanged()) {
     // One reload covers a repaired system, a changed member projection, and a
-    // new root order, and it waits until all accepted CSS is published. Vite's
-    // error-overlay recovery reloads too, but its timing is not ours to rely on.
+    // new root order, and it waits until all accepted CSS is published. The
+    // host delivers that reload instead of this generation's incremental updates.
     state.host.sendFullReload()
     return []
   }

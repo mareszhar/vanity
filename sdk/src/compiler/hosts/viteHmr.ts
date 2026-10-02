@@ -1,7 +1,8 @@
 /** Vite-specific URL and module-graph protocol for compiler-owned CSS HMR. */
 
-import type { ViteDevServer } from 'vite'
+import type { HMRPayload, ViteDevServer } from 'vite'
 import type { CompilerHmrHost } from '../hmr/host'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { readFile } from 'node:fs/promises'
 import { posix, resolve } from 'node:path'
 import { normalizePath } from '../core/path'
@@ -187,18 +188,74 @@ export function createVitePendingCssResponseCache() {
   return { remember, clear, addMiddleware }
 }
 
+type ViteHmrNotification = Extract<HMRPayload, { type: 'update' | 'full-reload' }>
+
+/**
+ * Publish notifications only after a hot update succeeds; a reload supersedes
+ * its incremental updates. Async scope keeps concurrent host updates separate.
+ */
+export function createViteHmrNotifications() {
+  const pending = new AsyncLocalStorage<Map<ViteDevServer, ViteHmrNotification[]>>()
+
+  const send = (server: ViteDevServer, message: ViteHmrNotification): void => {
+    const batch = pending.getStore()
+    if (batch === undefined) {
+      server.hot.send(message)
+      return
+    }
+    const messages = batch.get(server) ?? []
+    messages.push(message)
+    batch.set(server, messages)
+  }
+
+  const runUpdate = async <T>(update: () => Promise<T>): Promise<T> => {
+    const batch = new Map<ViteDevServer, ViteHmrNotification[]>()
+    return pending.run(batch, async () => {
+      const result = await update()
+      for (const [server, messages] of batch) {
+        // Vite can reload on an incremental update while its error overlay
+        // is visible. Deliver the completed generation through one reload.
+        if (messages.some(message => message.type === 'full-reload'))
+          server.hot.send({ type: 'full-reload' })
+        else
+          messages.forEach(message => server.hot.send(message))
+      }
+      return result
+    })
+  }
+
+  return { send, runUpdate }
+}
+
 /** Build the Vite adapter for compiler-owned style and graph HMR. */
 export function createViteHmrHost(options: {
   readonly root: string
   readonly base: string
   readonly server?: ViteDevServer
   readonly clientServer?: ViteDevServer
+  readonly sendNotification?: (server: ViteDevServer, message: ViteHmrNotification) => void
 }): CompilerHmrHost {
   const servers = [...new Set([options.server, options.clientServer]
     .filter((server): server is ViteDevServer => server !== undefined))]
   const getAllViteModuleGraphs = () => [...new Set(servers.flatMap(getViteModuleGraphs))]
   const updateServer = options.server ?? options.clientServer
   const transport = options.clientServer ?? options.server
+  const sendNotification = options.sendNotification ?? ((server, message) => server.hot.send(message))
+  const sendUpdate = (url: string): void => {
+    if (transport === undefined)
+      return
+    sendNotification(transport, {
+      type: 'update',
+      updates: [{
+        type: 'js-update',
+        timestamp: Date.now(),
+        path: url,
+        acceptedPath: url,
+        explicitImportRequired: false,
+        isWithinCircularImport: false,
+      }],
+    })
+  }
 
   return {
     resolveBrowserModuleUrl: id => getViteBrowserModuleUrl(id, options.root, options.base),
@@ -211,7 +268,7 @@ export function createViteHmrHost(options: {
       }
       const clientGraph = getClientModuleGraph(transport)
       const graphUrl = [...clientGraph.getModulesByFile(id) ?? []][0]?.url
-      sendViteCssUpdateMessage(transport, getViteGraphModuleUrl(id, options.root, graphUrl), Date.now())
+      sendUpdate(getViteGraphModuleUrl(id, options.root, graphUrl))
     },
     markCssModulesInvalid: (ids) => {
       for (const graph of getAllViteModuleGraphs()) {
@@ -236,12 +293,10 @@ export function createViteHmrHost(options: {
       }
       return [...paths]
     },
-    sendStyleModuleUpdate: (url) => {
-      if (transport !== undefined)
-        sendViteCssUpdateMessage(transport, url, Date.now())
-    },
+    sendStyleModuleUpdate: sendUpdate,
     sendFullReload: () => {
-      transport?.hot.send({ type: 'full-reload' })
+      if (transport !== undefined)
+        sendNotification(transport, { type: 'full-reload' })
     },
     // Vite's handleHotUpdate hook must return the nodes exposed by its
     // compatibility graph. Vite 8 adapts those nodes back into the client and
@@ -285,20 +340,6 @@ export function createViteHmrHost(options: {
       )
     },
   }
-}
-
-function sendViteCssUpdateMessage(server: ViteDevServer, url: string, timestamp: number): void {
-  server.hot.send({
-    type: 'update',
-    updates: [{
-      type: 'js-update',
-      timestamp,
-      path: url,
-      acceptedPath: url,
-      explicitImportRequired: false,
-      isWithinCircularImport: false,
-    }],
-  })
 }
 
 type ViteModuleGraph = ViteDevServer['moduleGraph']

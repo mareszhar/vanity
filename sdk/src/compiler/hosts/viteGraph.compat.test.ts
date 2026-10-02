@@ -153,6 +153,88 @@ function wrapHook(
 }
 
 describe('vite virtual CSS graph compatibility', () => {
+  it.each([false, true])('repairs a failed system with one reload after prior hot update: %s', async (afterHotUpdate) => {
+    const { chromium } = await import('@playwright/test')
+    const browser = await chromium.launch({ headless: true })
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-recovery-')))
+    let server: ViteDevServer | undefined
+    try {
+      await put(root, 'package.json', '{ "name": "system-recovery", "type": "module" }')
+      const theme = await put(root, 'theme.ts', 'export const brand = \'#123456\'\n')
+      await put(root, 'system.ts', `import { createSystem } from '@mszr/vanity';
+import { brand } from './theme';
+export const ds = createSystem().addTokens({ color: { brand } }).consolidate({ prefix: 'recovery' })`)
+      const styleSource = 'import { ds } from \'./system\'; export const card = ds.class({ color: ds.t.color.brand, padding: \'1px\' })'
+      const style = await put(root, 'card.css.ts', styleSource)
+      const unloadedStyle = await put(root, 'unloaded.css.ts', styleSource)
+      await put(root, 'main.ts', `import { ds } from './system';
+import { card } from './card.css.ts';
+sessionStorage.setItem('loads', String(Number(sessionStorage.getItem('loads') ?? 0) + 1));
+import.meta.hot?.on('vite:beforeFullReload', () => {
+  sessionStorage.setItem('reload-target', String(Number(sessionStorage.getItem('loads')) + 1))
+});
+document.body.innerHTML = '<p id="card">card</p>';
+document.querySelector('#card').className = card;
+document.body.dataset.token = ds.t.color.brand.$name`)
+      await put(root, 'index.html', '<script type="module" src="/main.ts"></script>')
+      server = await createServer({
+        root,
+        base: '/sub/',
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [
+          vanityPlugin({ compiler: { system: './system.ts' } }),
+          {
+            name: 'slow-unloaded-consumer',
+            async transform(_source, id) {
+              if (id === unloadedStyle)
+                await new Promise(resolve => setTimeout(resolve, 600))
+            },
+          },
+        ],
+        resolve: { alias },
+        server: { host: '127.0.0.1', port: 0, watch: null },
+        optimizeDeps: { noDiscovery: true },
+      })
+      const page = await browser.newPage()
+      const origin = await devHttpBase(server)
+      await server.transformRequest('/unloaded.css.ts')
+      await server.transformRequest('/card.css.ts')
+      await page.goto(new URL('/sub/', origin).href, { waitUntil: 'networkidle' })
+      const color = () => page.locator('#card').evaluate(element => getComputedStyle(element).color)
+      const loads = () => page.evaluate(() => Number(sessionStorage.getItem('loads')))
+      await expect.poll(color, { timeout: 10_000 }).toBe('rgb(18, 52, 86)')
+      expect(await loads()).toBe(1)
+      if (afterHotUpdate) {
+        await writeFile(style, styleSource.replace('\'1px\'', '\'2px\''))
+        server.watcher.emit('change', style)
+        await expect.poll(() => page.locator('#card').evaluate(element => getComputedStyle(element).padding), { timeout: 10_000 }).toBe('2px')
+        expect(await loads()).toBe(1)
+      }
+      await writeFile(theme, 'throw new Error(\'broken theme\')\n')
+      server.watcher.emit('change', theme)
+      await page.locator('vite-error-overlay').getByText('broken theme', { exact: false }).first().waitFor()
+      expect(await color()).toBe('rgb(18, 52, 86)')
+      expect(await loads()).toBe(1)
+      await writeFile(theme, 'export const brand = \'#654321\'\n')
+      server.watcher.emit('change', theme)
+      await page.waitForFunction(() => {
+        const target = Number(sessionStorage.getItem('reload-target'))
+        return target > 0 && Number(sessionStorage.getItem('loads')) >= target
+      })
+      await expect.poll(color, { timeout: 10_000 }).toBe('rgb(101, 67, 33)')
+      await page.waitForLoadState('networkidle')
+      expect(await loads()).toBe(2)
+      expect(await page.locator('vite-error-overlay').count()).toBe(0)
+    }
+    finally {
+      await browser.close()
+      await server?.close()
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 30_000)
+
   it.each(['/', '/sub/'])('retires only installed replacement CSS for each page under %s', async (base) => {
     const { chromium } = await import('@playwright/test')
     const browser = await chromium.launch({ headless: true })
