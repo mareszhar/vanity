@@ -1,0 +1,12 @@
+{
+  "name": "spike-capture-layer-contributions",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "@vanilla-extract/css": "1.21.2",
+    "esbuild": "0.28.0"
+  }
+}

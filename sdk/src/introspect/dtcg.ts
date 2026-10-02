@@ -13,6 +13,7 @@ import type {
 } from './interchange'
 import type { VanityTokenRecord } from './records'
 import { converter, parse as parseCssColor } from 'culori'
+import { setOwn } from '../collections'
 import { VanityError } from '../diagnostics'
 import { createPolicyState, resolvePolicies } from '../system/policies'
 import { getSystemTokenModuleRequirement } from '../system/shape'
@@ -201,8 +202,9 @@ export function exportDesignTokens(
     ...options.environment,
   }
   for (const [axis, mode] of Object.entries(environment)) {
-    const definition = resolved.graph.axes?.definitions[axis]
-    if (!definition || !(mode in definition.modes)) {
+    const definitions = resolved.graph.axes?.definitions
+    const definition = definitions && Object.hasOwn(definitions, axis) ? definitions[axis] : undefined
+    if (!definition || !Object.hasOwn(definition.modes, mode)) {
       throwDtcgError(
         'VANITY_DTCG_INVALID_VALUE',
         `DTCG export environment selects unknown axis mode '${axis}.${mode}'`,
@@ -445,8 +447,9 @@ function importAuthoredDocument(
       for (const branch of token.branches) {
         const val = branch.val.css === null ? null : decodeValue(branch.val, token.type, t, getDtcgContext(authoring))
         if (branch.address.kind === 'axis') {
-          axes[branch.address.axis] ??= {}
-          axes[branch.address.axis]![branch.address.mode] = val
+          if (!Object.hasOwn(axes, branch.address.axis))
+            setOwn(axes, branch.address.axis, {})
+          setOwn(axes[branch.address.axis]!, branch.address.mode, val)
         }
         else if (branch.address.kind === 'case') {
           cases.push({ when: branch.address.when, val })

@@ -164,11 +164,10 @@ function validatePolicies(policies: VanityPolicies): void {
   if (policies.layerOrder !== undefined) {
     if (!Array.isArray(policies.layerOrder)
       || policies.layerOrder.length === 0
-      || policies.layerOrder.some(layer => typeof layer !== 'string' || !layer.trim())
-      || new Set(policies.layerOrder).size !== policies.layerOrder.length) {
+      || policies.layerOrder.some(layer => typeof layer !== 'string')) {
       throwPolicyError(
         'VANITY_POLICY_INVALID',
-        'layerOrder policy needs at least one non-empty, unique layer name',
+        'layerOrder policy needs a non-empty array of strings',
         'layerOrder',
         'provide a non-empty layerOrder array with each layer named exactly once',
       )

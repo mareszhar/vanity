@@ -38,7 +38,152 @@ const aliases = {
   '@mszr/vanity': local('./index.ts'),
 }
 
+/** Drive one changed file through the host's actual hot-update hook. */
+async function hotUpdate(devServer: ViteDevServer, file: string) {
+  const wired = devServer.config.plugins.find(entry => entry.name === 'vanity-css-ts')!
+  const modules = [...devServer.moduleGraph.getModulesByFile(file) ?? []]
+  devServer.moduleGraph.onFileChange(file)
+  for (const environment of Object.values(devServer.environments))
+    environment.moduleGraph.onFileChange(file)
+  const handler = (typeof wired.handleHotUpdate === 'object'
+    ? wired.handleHotUpdate.handler
+    : wired.handleHotUpdate) as unknown as (ctx: object) => Promise<unknown> | unknown
+  const affected = await handler({
+    file,
+    server: devServer,
+    modules,
+    timestamp: Date.now(),
+    read: () => readFile(file, 'utf-8'),
+  })
+
+  return affected as Array<{ file: string | null }> | undefined
+}
+
 describe('the vite build', () => {
+  async function serveLayerOrderFixture(layerOrder?: string[]) {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-root-order-')))
+    await writeFile(join(root, 'package.json'), '{ "name": "root-order-fixture", "type": "module" }')
+    const first = join(root, 'first.ts')
+    const second = join(root, 'second.ts')
+    await writeFile(first, `import { createSystem } from '@mszr/vanity'\nexport const ds = createSystem().consolidate({ prefix: 'first' })\n`)
+    await writeFile(second, `import { createSystem } from '@mszr/vanity'\nexport const ds = createSystem().consolidate({ prefix: 'second' })\n`)
+    await writeFile(join(root, 'first.css.ts'), `import { ds } from './first'\nexport const card = ds.class({ color: 'red' })\n`)
+    await writeFile(join(root, 'second.css.ts'), `import { ds } from './second'\nexport const card = ds.class({ color: 'blue' })\n`)
+    const server = await createServer({
+      root,
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [vanityPlugin({ compiler: { system: [first, second], ...(layerOrder === undefined ? {} : { layerOrder }) } })],
+      resolve: { alias: aliases },
+      server: { middlewareMode: true, hmr: false, ws: false, watch: null },
+    })
+    const http = createHttpServer(server.middlewares)
+    await new Promise<void>(resolve => http.listen(0, resolve))
+    const origin = `http://127.0.0.1:${(http.address() as AddressInfo).port}`
+    const cssUrls: string[] = []
+    let secondSystemUrl: string | undefined
+    for (const style of ['first.css.ts', 'second.css.ts']) {
+      const transformed = await server.transformRequest(`/${style}`)
+      const styleUrls = [...transformed!.code.matchAll(/import "([^"]+\.vanity\.css)"/g)].map(match => match[1]!)
+      cssUrls.push(...styleUrls)
+      if (style === 'second.css.ts')
+        secondSystemUrl = styleUrls.find(url => url.includes('/system/'))
+    }
+    const readCss = async (url: string) => {
+      const response = await fetch(`${origin}${url}`, { headers: { accept: 'text/css' } })
+      expect(response.status).toBe(200)
+      const wrapper = await response.text()
+      const serialized = wrapper.match(/const __vite__css = ("[\s\S]*?")\n/)?.[1]
+      return serialized === undefined ? wrapper : JSON.parse(serialized) as string
+    }
+    return {
+      first,
+      second,
+      secondSystemUrl,
+      cssUrls: [...new Set(cssUrls)],
+      readCss,
+      server,
+      repeat: async () => {
+        for (const style of ['first.css.ts', 'second.css.ts']) {
+          for (const node of server.moduleGraph.getModulesByFile(join(root, style)) ?? [])
+            server.moduleGraph.invalidateModule(node)
+          await server.transformRequest(`/${style}`)
+        }
+      },
+      close: async () => {
+        await new Promise<void>(resolve => http.close(() => resolve()))
+        await server.close()
+        await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+      },
+    }
+  }
+
+  it.each([{ layerOrder: undefined }, { layerOrder: ['vendor'] }, { layerOrder: ['\\66 irst'] }])('serves every compiler stylesheet with the configured root order %j', async ({ layerOrder }) => {
+    const fixture = await serveLayerOrderFixture(layerOrder)
+    try {
+      expect(fixture.cssUrls.length).toBeGreaterThanOrEqual(4)
+      const expected = layerOrder?.[0] === '\\66 irst' ? `@layer ${layerOrder[0]}, second;\n` : `@layer ${layerOrder === undefined ? '' : 'vendor, '}first, second;\n`
+      for (let capture = 0; capture < 3; capture++) {
+        if (capture > 0)
+          await fixture.repeat()
+        for (const url of fixture.cssUrls) {
+          const css = await fixture.readCss(url)
+          expect(css.startsWith(expected), url).toBe(true)
+          if (url.includes('/style/')) {
+            const prefix = url.includes('first.css.ts') ? 'first' : 'second'
+            for (const layer of ['reset', 'tokens', 'recipes', 'utilities', 'overrides'])
+              expect(css, `capture ${capture + 1}: ${url}`).toContain(`@layer ${prefix}.${layer};`)
+          }
+        }
+      }
+    }
+    finally {
+      await fixture.close()
+    }
+  })
+
+  it('serves a new configured root order in another system stylesheet after a live edit', async () => {
+    const fixture = await serveLayerOrderFixture()
+    try {
+      const secondUrl = fixture.secondSystemUrl
+      expect(secondUrl).toBeDefined()
+      const before = await fixture.readCss(secondUrl!)
+      expect(before.startsWith('@layer first, second;')).toBe(true)
+      const source = await readFile(fixture.first, 'utf8')
+      await writeFile(fixture.first, source.replace('prefix: \'first\'', 'prefix: \'newfirst\''))
+      await hotUpdate(fixture.server, fixture.first)
+      await vi.waitFor(async () => {
+        expect((await fixture.readCss(secondUrl!)).startsWith('@layer newfirst, second;')).toBe(true)
+      }, { timeout: 10_000, interval: 50 })
+    }
+    finally {
+      await fixture.close()
+    }
+  })
+
+  it.each(['my layer', '1st', 'a.b', 'a,b', 'a; @layer b', 'a; .x{}', 'a;@layer parent.a.suffix;.vanity-sentinel{color:red}/*', 'a/**/', 'a/*', 'a;/*', 'a\\', 'a\0b', '\uFFFD', String.raw`a\2e b`, String.raw`\0`, ''])('rejects invalid compiler.layerOrder entry %j at the plugin boundary', (entry) => {
+    try {
+      vanityPlugin({ compiler: { layerOrder: ['vendor', entry] } })
+      throw new Error('expected invalid compiler layer order to fail')
+    }
+    catch (error) {
+      expect(error).toBeInstanceOf(VanityError)
+      expect((error as VanityError).diagnostics[0]).toMatchObject({
+        code: 'VANITY_COMPILER_INVALID_INPUT',
+        path: ['compiler', 'layerOrder', '1'],
+      })
+      expect((error as VanityError).diagnostics[0]?.message).toContain(entry)
+    }
+  })
+
+  it('rejects a repeated compiler.layerOrder entry and accepts CSS identifiers', () => {
+    expect(() => vanityPlugin({ compiler: { layerOrder: ['vendor', 'vendor'] } })).toThrow(VanityError)
+    expect(() => vanityPlugin({ compiler: { layerOrder: ['app', String.raw`\61 pp`] } })).toThrow(VanityError)
+    for (const entry of ['unset', '-x', '--x', 'é', String.raw`\61 pp`, String.raw`\31 st`, String.raw`\61 `, String.raw`a\20 b`, String.raw`a\;b`])
+      expect(() => vanityPlugin({ compiler: { layerOrder: [entry] } })).not.toThrow()
+    expect(() => vanityPlugin({ compiler: { layerOrder: [] } })).not.toThrow()
+  })
+
   async function buildFixture() {
     const result = await build({
       configFile: false,
@@ -614,7 +759,7 @@ describe('hmr', () => {
     server = undefined
   })
 
-  async function serveFixtureCopy(prepare?: (root: string) => Promise<void>) {
+  async function serveFixtureCopy(prepare?: (root: string) => Promise<void>, layerOrder?: readonly string[]) {
     // realpath: Vite resolves modules to real paths; macOS tmpdir is a symlink.
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-hmr-')))
     await cp(local('./test-support/vite-app'), root, { recursive: true })
@@ -634,6 +779,7 @@ describe('hmr', () => {
         compiler: {
           identifiers: 'debug',
           system: join(root, 'system.ts'),
+          ...(layerOrder === undefined ? {} : { layerOrder }),
         },
       })],
       resolve: { alias: aliases },
@@ -642,28 +788,6 @@ describe('hmr', () => {
     })
 
     return { root, server, warnings }
-  }
-
-  /** The changed file's HMR pass, deterministically: our hook + invalidation. */
-  async function hotUpdate(devServer: ViteDevServer, file: string) {
-    // The instance wired into the server holds the dependency index.
-    const wired = devServer.config.plugins.find(entry => entry.name === 'vanity-css-ts')!
-    const modules = [...devServer.moduleGraph.getModulesByFile(file) ?? []]
-    devServer.moduleGraph.onFileChange(file)
-    for (const environment of Object.values(devServer.environments))
-      environment.moduleGraph.onFileChange(file)
-    const handler = (typeof wired.handleHotUpdate === 'object'
-      ? wired.handleHotUpdate.handler
-      : wired.handleHotUpdate) as unknown as (ctx: object) => Promise<unknown> | unknown
-    const affected = await handler({
-      file,
-      server: devServer,
-      modules,
-      timestamp: Date.now(),
-      read: () => readFile(file, 'utf-8'),
-    })
-
-    return affected as Array<{ file: string | null }> | undefined
   }
 
   it('does not recompute configured-system members for an unrelated save', async () => {
@@ -835,8 +959,8 @@ export const brand = ds.t.color.brand
     })
   })
 
-  it('serves the cascade without invoking build-only asset emission', async () => {
-    const { server: devServer, warnings } = await serveFixtureCopy()
+  it('serves the layer-order statement without invoking build-only asset emission', async () => {
+    const { server: devServer, warnings } = await serveFixtureCopy(undefined, ['vanity'])
 
     await devServer.transformRequest('/progress.css.ts')
 

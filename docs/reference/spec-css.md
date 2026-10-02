@@ -210,7 +210,7 @@ Per-emitter `.layer(name)` may override it. No ambient `assignToLayer()` mutatio
 
 Authored styles default to the first layer after system-owned layers. Unlayered consumer CSS retains ordinary precedence over layered output.
 
-The compiler owns the first-loaded cross-system layer prelude; import order does not.
+Every stylesheet carrying a system's rules opens with that system's complete layer order. Every compiler-owned stylesheet also opens with the host's root order. Stylesheet delivery order therefore cannot change Vanity's cascade.
 
 Token emission uses the phase layers `tokens.base`, `tokens.axes.<axis>`, and `tokens.cases` beneath the system token layer. Local token declarations belong to the caller's styling emitter, and `overrides` is an ordinary top-level cascade layer.
 
@@ -269,7 +269,7 @@ Tests lock:
 - aliases plus standards/raw escape;
 - condition/selector branding and diagnostics;
 - root/scope/layer order independent of imports;
-- cross-system layer prelude first;
+- complete system and host-root layer statements in every applicable stylesheet;
 - lazy chunk CSS and system CSS deduplication;
 - every at-rule family's placement semantics;
 - parser diagnostics and author frames;

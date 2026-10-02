@@ -167,11 +167,12 @@ Test each data type against:
 - mutable `null` mode/case reservation has no authored slot value, accepts `$set()`, and `$unset()` restores the prior effective expression;
 - native scheme output composes a reserved branch fallback inside `light-dark()` and selector emission preserves the equivalent fallback behavior;
 - module composition/derivation;
+- axis derivation and `native` policy through every authoring form (direct, record, detached, complete), with authored values winning, forks isolated, and the result visible in emitted CSS, portable metadata, and generated browser/SSR consumers;
 - propagated token declaration class;
 - resolved environment snapshot;
 - manifest and DTCG projections;
 - authored DTCG plugin codecs at base, axis-mode, and case addresses, including branch-only dependency order;
-- resolved expression preview or explicit preview-unavailable reason in manifest/`ds.explain()`.
+- resolved expression preview or explicit preview-unavailable reason in manifest/`ds.explain()`;
 - `$dec` leaf/group projection across properties, aliases, custom properties, registered conditions, raw selectors, reference policies, and invalid plain namespaces.
 
 Root/condition output matrix:
@@ -218,11 +219,13 @@ For every new public API, lock:
 - unrelated graph/system isolation;
 - no `undefined` pollution in valid staged callbacks;
 - system/axis/plugin literal preservation without `as const` ceremony;
+- sparse axis derivations keep contextual sibling parameters, sibling-name completion, exact branch inference, and unknown axis/mode diagnostics, with inferred and explicit type arguments both usable;
+- an axis type promises only what its configuration supplies: known capabilities require their data, and optional fields guarantee no activation or derived branch;
 - semantically equivalent value-capability instances compose across HMR/package duplication while incompatible signatures fail locally;
 - resolved and restored `$axes`/`$case()` paths both return branch handles, with side effects present only on mutable runtime controls;
 - `transaction()` mirrors the exact runtime token/axis trees and validates every queued value/root before the first write;
 - narrow runtime setters for mutable base/mode/case handles;
-- standards-form availability under aliases-only policy.
+- standards-form availability under aliases-only policy;
 - Hail option, constructor, marker, control-resolution, conditional elevation, token-preset, and rule-preset surfaces with compact named hovers and cursor-local invalid tuple/name/conflict diagnostics.
 
 Hover fixtures evaluate the text a user actually reads. They reject leaked compiler internals, unexplained overload counts, repeated expanded shapes when a named public type can preserve the same inference, and documentation blocks too long to scan in an editor popup. When TypeScript forces a trade-off between compact presentation, inference, soundness, and compiler performance, the chosen trade-off is measured and recorded rather than accepted accidentally.
@@ -270,11 +273,11 @@ Value-resolution changes use a dedicated propagation matrix:
 Initial regression policy:
 
 - no accepted change may degrade a large-fixture editor/type metric by more than 20% without an explicit decision explaining the user-visible gain;
-- D65 applies a 1ms floor to that relative editor threshold; sub-millisecond interactions use absolute latency, repeated-run stability, and unchanged result counts because percentage deltas at timer-noise scale are not meaningful product regressions;
+- the relative editor threshold has a 1ms floor: sub-millisecond interactions are judged by absolute latency, repeated-run stability, and unchanged result counts, because percentage deltas at timer-noise scale are not product regressions;
 - completion and diagnostic interactions must remain subjectively immediate and stay within the recorded numeric baseline;
 - mutable-slot overhead is reported separately for zero, typical, and all-token mutability;
-- type-level bulk axis syntax ships only if it stays within the same budget as canonical per-token syntax.
-- D62 selected separate self/system brands plus focused overloads: at 5,000 mixed expressions the rejected generic used 1.25s TypeScript total time and 339,107 declaration bytes versus 0.77s and 279,177 bytes for the selected encoding.
+- type-level bulk axis syntax ships only if it stays within the same budget as canonical per-token syntax;
+- resolution uses separate self/system brands with focused overloads: at 5,000 mixed expressions the generic alternative measured 1.25s of TypeScript time and 339,107 declaration bytes against 0.77s and 279,177 bytes.
 
 Store machine-readable results under a generated benchmark artifact path and commit a human summary only when a new baseline is accepted.
 
@@ -300,7 +303,7 @@ Rerun sandbox-denied browser, Mach-port, or watcher failures in the supported un
 
 The maintainer loop has two honest gates. `pnpm run check:fast` uses cached lint, root tooling/browser-spec typechecking, incremental SDK typechecking, and the runtime/output evidence dimensions; `pnpm run check` adds the complete workspace typecheck, documentation, all Selenita and type assertions, audits, and benchmark-fixture drift. `pnpm run validate` adds canary, optimizer, production/development browser, and lifecycle evidence. Fast feedback never substitutes for the complete release-shaped gate.
 
-The large fixture is the accepted performance reference; its measurements live in [benchmarks.md](./benchmarks.md).
+The large fixture is the accepted performance reference; its measurements and memory-investigation method live in [benchmarks.md](./benchmarks.md).
 
 ## 7. Runtime/browser contract
 
@@ -323,9 +326,10 @@ Browser tests assert:
 - port and mutable token writes coexist;
 - runtime snapshot rendered on the server hydrates without a flash;
 - snapshot round trips preserve base, axis-mode, case, and runtime-managed mode addresses through individual and batch setters;
+- axis and mode names that match JavaScript members, such as `constructor`, survive authoring, token branches, generated restoration, selection, and hydration as own data, leaving shared objects and other systems untouched;
 - an additive runtime schema change reconciles and hydrates still-valid entries instead of rejecting the snapshot wholesale;
 - removed/type-changed/unauthored addresses are skipped with exact migration diagnostics, while unsupported protocol versions reject safely;
-- accessibility/motion/focus contracts remain intact.
+- accessibility/motion/focus contracts remain intact;
 - Hail’s mutable controls change computed output, semantic elevation reverses across schemes, and static-only Hail emits no control properties.
 
 Selectors are tested against actual DOM placement, not only string snapshots.
@@ -338,6 +342,11 @@ The permanent matrix enforces the following integration contracts:
 - every virtual stylesheet URL requested by a browser returns 200;
 - repeated reloads preserve styled first paint;
 - dependency CSS HMR replaces in place;
+- stylesheet delivery order never changes Vanity's layer order;
+- complete headers survive repeated captures through cached, independently bundled configured systems;
+- axis and mode names that match JavaScript members select the intended computed style in DOM and native SSR, through direct and prebuilt systems;
+- escaped axis names address the same generated CSS through DOM mounting and native SSR, while names that share a generated control attribute fail locally;
+- a retired development stylesheet leaves each page only after its replacement CSS is installed there, whether the replacement is delayed, the consumer is unloaded, pages differ, or responses arrive late, on every supported Vite major;
 - a configured barrel's member-set change projects the new member under its own graph ID after one reload, while an unrelated application edit keeps the member set intact;
 - export-shape changes cause exactly the documented reload behavior;
 - runtime overrides survive compatible HMR or receive an explicit rebind diagnostic;
@@ -412,7 +421,7 @@ The suite may add benchmark, conformance, and documentation commands; it must no
 
 A snippet presented as a standalone copyable example must be mirrored by a complete package-backed fixture; partial or intentionally rejected examples remain syntax fixtures and must be labeled by their surrounding prose. Parsing fragments as standalone programs with invented `any` declarations would make the number larger while weakening the evidence, so the gate reports both counts explicitly.
 
-`pnpm run css:optimizer:check` inspects both production artifacts for registrations, relative color/modern color math, mutable slots, container rules, raw future rules, and framework layers. Playwright then asserts computed scheme behavior after optimization so string survival cannot conceal a semantic rewrite.
+`pnpm run css:optimizer:check` inspects both production artifacts for registrations, relative color/modern color math, mutable slots, container rules, raw future rules, and framework layers. It also checks that each CSS asset carrying system rules, split outputs included, declares the complete layer order recorded under the current manifest’s compatibility identity. Demo build cache outputs keep the manifest and system artifacts that check reads. Playwright then asserts computed scheme behavior after optimization so string survival cannot conceal a semantic rewrite.
 
 ## 10. Maintained DX comparison
 

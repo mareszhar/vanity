@@ -427,7 +427,11 @@ type VanityConfiguredType<Config extends object>
         : 'unknown'
 
 type VanityDerivedModes<Axis>
-  = Axis extends { readonly derive: infer Derive } ? Derive : Record<never, never>
+  = Axis extends { readonly derive: infer Derive } ? {
+    readonly [Mode in keyof Derive as Derive[Mode] extends (...args: any[]) => infer Result
+      ? undefined extends Result ? never : Mode
+      : never]: Derive[Mode]
+  } : Record<never, never>
 
 type VanityDerivedAxis<Configured extends object, Axis> = Configured & {
   readonly [Mode in Exclude<keyof VanityDerivedModes<Axis>, keyof Configured>]:

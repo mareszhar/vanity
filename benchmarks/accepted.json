@@ -1,30 +1,30 @@
 {
   "package": {
-    "rootBytes": 623976,
+    "rootBytes": 630715,
     "presetsBytes": 31202,
-    "runtimeBytes": 65808,
-    "runtimeMinifiedBytes": 38155,
-    "runtimeMinGzipBytes": 11318
+    "runtimeBytes": 66344,
+    "runtimeMinifiedBytes": 38500,
+    "runtimeMinGzipBytes": 11409
   },
   "scales": {
     "small": {
       "declarationsBytes": 40184,
-      "cssBytes": 4461,
-      "cssGzipBytes": 812,
+      "cssBytes": 4441,
+      "cssGzipBytes": 808,
       "manifestBytes": 153571,
       "manifestGzipBytes": 7227
     },
     "medium": {
       "declarationsBytes": 107485,
-      "cssBytes": 24712,
-      "cssGzipBytes": 2978,
+      "cssBytes": 24691,
+      "cssGzipBytes": 2973,
       "manifestBytes": 1169491,
       "manifestGzipBytes": 32637
     },
     "large": {
       "declarationsBytes": 588958,
-      "cssBytes": 208567,
-      "cssGzipBytes": 21445,
+      "cssBytes": 208547,
+      "cssGzipBytes": 21439,
       "manifestBytes": 11386892,
       "manifestGzipBytes": 255924
     }

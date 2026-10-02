@@ -7,10 +7,11 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { orderSystemLayers } from '../sdk/src/system/layers'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-function cssIn(directory: string): string {
+function cssAssetsIn(directory: string): Array<{ file: string, css: string }> {
   const files = readdirSync(directory)
     .filter(file => file.endsWith('.css'))
     .sort()
@@ -18,7 +19,60 @@ function cssIn(directory: string): string {
   if (files.length === 0)
     throw new Error(`No built CSS found in ${directory}; run pnpm run demo:build first`)
 
-  return files.map(file => readFileSync(join(directory, file), 'utf8')).join('\n')
+  return files.map(file => ({ file, css: readFileSync(join(directory, file), 'utf8') }))
+}
+
+function cssIn(directory: string): string {
+  return cssAssetsIn(directory).map(asset => asset.css).join('\n')
+}
+
+function requireSystemOrderPerAsset(
+  assets: Array<{ file: string, css: string }>,
+  systemDirectory: string,
+  prefix: string,
+): void {
+  const manifest = JSON.parse(readFileSync(join(systemDirectory, '..', 'manifest.json'), 'utf8')) as {
+    system: { prefix: string, identities: { compatibility: string } }
+    systems: Record<string, { prefix: string, identities: { compatibility: string } }>
+  }
+  const current = [manifest.system, ...Object.values(manifest.systems)]
+    .find(candidate => candidate.prefix === prefix)
+  if (current === undefined)
+    throw new Error(`No current built system for ${prefix}`)
+  const system = JSON.parse(readFileSync(join(systemDirectory, `${current.identities.compatibility}.json`), 'utf8')) as {
+    layerRoot: string
+    layers: string[]
+    tokenLayer?: string
+    axes?: { order: string[] }
+  }
+  const expected = orderSystemLayers(
+    system.layerRoot,
+    system.layers,
+    system.tokenLayer?.slice(`${system.layerRoot}.`.length),
+    system.axes?.order ?? [],
+  )
+
+  let matched = 0
+  for (const { file, css } of assets) {
+    if (!css.includes(`@layer ${prefix}`))
+      continue
+    matched++
+    const seen = new Set<string>()
+    const appearance: string[] = []
+    for (const match of css.matchAll(/@layer[^;{]*[;{]/g)) {
+      for (const name of match[0].slice('@layer'.length, -1).trim().split(',').map(name => name.trim())) {
+        if ((name === prefix || name.startsWith(`${prefix}.`)) && !seen.has(name)) {
+          seen.add(name)
+          appearance.push(name)
+        }
+      }
+    }
+    if (expected.join('\0') !== appearance.slice(0, expected.length).join('\0')) {
+      throw new Error(`Built CSS ${file} does not establish ${prefix}'s full system layer order by first appearance: expected ${expected.join(' < ')}, found ${appearance.join(' < ')}`)
+    }
+  }
+  if (matched === 0)
+    throw new Error(`No built CSS asset carries ${prefix}'s layers`)
 }
 
 function requirePattern(css: string, pattern: RegExp, label: string): void {
@@ -57,9 +111,26 @@ function requireLayerOrder(css: string, names: readonly string[], label: string)
 }
 
 const main = cssIn(join(root, 'sandbox', 'demo-main', '.output', 'public', '_nuxt'))
-const comparisonAssets = join(root, 'sandbox', 'demo-comparisons', 'dist', 'assets')
+const comparisonDist = join(root, 'sandbox', 'demo-comparisons', 'dist')
+const comparisonAssets = join(comparisonDist, 'assets')
 const comparison = cssIn(comparisonAssets)
-const comparisonCascade = readFileSync(join(comparisonAssets, 'vanity-cascade.css'), 'utf8')
+const comparisonHtml = readFileSync(join(comparisonDist, 'index.html'), 'utf8')
+const firstStylesheet = [...comparisonHtml.matchAll(/<link\b[^>]+rel="stylesheet"[^>]*>/g)][0]?.[0]
+const firstHref = firstStylesheet?.match(/\bhref="([^"]+)"/)?.[1]
+if (firstHref === undefined)
+  throw new Error('Comparison HTML has no first stylesheet link')
+const firstPath = new URL(firstHref, 'https://fixture.test/').pathname.replace(/^\//, '')
+const comparisonLayerStatement = readFileSync(join(comparisonDist, firstPath), 'utf8')
+requireSystemOrderPerAsset(
+  cssAssetsIn(join(root, 'sandbox', 'demo-main', '.output', 'public', '_nuxt')),
+  join(root, 'sandbox', 'demo-main', 'app', '.vanity', 'systems'),
+  'prism',
+)
+requireSystemOrderPerAsset(
+  cssAssetsIn(comparisonAssets),
+  join(root, 'sandbox', 'demo-comparisons', '.vanity', 'systems'),
+  'compare',
+)
 
 // These are capability-level checks, deliberately insensitive to valid token
 // names, query syntax, and formatter choices in the demos.
@@ -80,7 +151,7 @@ requirePattern(comparison, /color-mix\([^;{}]*var\(--compare-/, 'comparison colo
 requirePattern(comparison, /(?:light-dark\(|--lightningcss-light)/, 'native or optimizer-lowered scheme selection')
 requirePattern(comparison, /--compare-v-[a-z0-9-]+/, 'comparison mutable slot')
 requireLayerOrder(
-  comparisonCascade,
+  comparisonLayerStatement,
   ['theme', 'base', 'components', 'utilities', 'panda-reset', 'panda-base', 'panda-tokens', 'panda-recipes', 'panda-utilities', 'compare'],
   'host-owned peer-to-Vanity cascade order',
 )

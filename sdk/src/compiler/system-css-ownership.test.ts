@@ -356,7 +356,7 @@ export const card = ds.class({ color: ds.t.color.brand })
           return { status: response.status, body: await response.text() }
         }
         const styleHrefs = (code: string, suffix: string): string[] =>
-          [...code.matchAll(/"([^"]+)"/g)].map(match => match[1]).filter(href => href.endsWith(suffix))
+          [...code.matchAll(/(?:from\s*|import\s*)["']([^"']+)["']/g)].map(match => match[1]).filter(href => href.endsWith(suffix))
 
         const entry = await fetchBody(`${prefix}entry.ts`)
         expect(entry.status).toBe(200)

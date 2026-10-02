@@ -149,7 +149,7 @@ describe('the permanent plain-system projection canary', () => {
     const mainCss = css.find(item => String(item.source).includes('--canary-color-brand:'))
     const lazyCss = css.find(item => String(item.source).includes('lazyPanel'))
 
-    expect(allCss.match(/@layer canary\.tokens;/g)).toHaveLength(1)
+    expect(allCss.match(/@layer canary\.tokens\.base\s*\{/g)).toHaveLength(1)
     expect(mainCss).toBeDefined()
     expect(lazyCss).toBeDefined()
     expect(String(lazyCss!.source)).not.toContain('--canary-color-brand:')
@@ -163,11 +163,31 @@ describe('the permanent plain-system projection canary', () => {
       expect(javascript).toContain(`${name}: restoreStyleAuthoringStub({ name: "${name}" })`)
 
     const html = String(assets.find(item => item.fileName === 'index.html')?.source)
-    const prelude = html.indexOf('/assets/vanity-cascade.css')
-    const entryCss = html.indexOf('.css', prelude + '/assets/vanity-cascade.css'.length)
-    expect(prelude).toBeGreaterThan(-1)
-    expect(entryCss).toBeGreaterThan(prelude)
+    const stylesheetLinks = [...html.matchAll(/<link\b[^>]+rel="stylesheet"[^>]*>/g)].map(match => match[0])
+    const firstHref = stylesheetLinks[0]?.match(/\bhref="([^"]+)"/)?.[1]
+    expect(firstHref).toBeDefined()
+    expect(stylesheetLinks.length).toBeGreaterThan(1)
+    const firstPath = new URL(firstHref!, 'https://fixture.test/').pathname.replace(/^\//, '')
+    const firstAsset = assets.find(asset => asset.fileName === firstPath)
+    expect(firstAsset?.fileName).toMatch(/^assets\/vanity-layer-order-[\w-]+\.css$/)
+    expect(String(firstAsset?.source)).toBe('@layer vendor, canary;\n')
     expect(html).not.toContain(lazyCss!.fileName)
+  })
+
+  it('does not link or emit a document-first layer asset without compiler.layerOrder', async () => {
+    const output = outputOf(await build({
+      configFile: false,
+      logLevel: 'silent',
+      root: canary,
+      plugins: [vanityPlugin({ compiler: { identifiers: 'debug', system } })],
+      resolve: { alias: aliases },
+      build: { write: false, minify: false, cssMinify: false, cssCodeSplit: true },
+    }))
+    const assets = output.filter((item): item is Rollup.OutputAsset => item.type === 'asset')
+    const html = String(assets.find(item => item.fileName === 'index.html')?.source)
+    const links = [...html.matchAll(/<link\b[^>]+rel="stylesheet"[^>]*>/g)]
+    expect(links).toHaveLength(1)
+    expect(assets.some(asset => asset.fileName.endsWith('.css') && /^@layer [^;]+;\s*$/.test(String(asset.source)))).toBe(false)
   })
 
   it('projects the same contract into DOM-free SSR and the manifest', async () => {
@@ -230,7 +250,7 @@ export const token = ds.t.color.brand.$name
         .map(item => String(item.source))
         .join('\n')
 
-      // The global layer prelude is intentional; unreachable system tokens are not.
+      // The system layer statement is intentional; unreachable system tokens are not.
       expect(css).not.toContain('--tool-color-brand:')
     }
     finally {
@@ -692,5 +712,71 @@ export const two = ds.class({ color: ds.t.color.brand })
     expect(secondOneCss).toBe(secondTwoCss)
     expect(secondOneCss).not.toBe(firstOneCss)
     expect((await server.transformRequest(secondOneCss))?.code).toContain('royalblue')
+  })
+})
+
+describe('owned generated axis records', () => {
+  it('restores own inherited names from real generated browser and SSR modules', async () => {
+    const root = await temporaryApp('record-projection')
+    try {
+      const system = join(root, 'system.ts')
+      await writeFile(system, `import { createSystem, thisMode } from '@mszr/vanity'
+const open = createSystem().addAxis('__proto__', { modes: { base: '&', ['__proto__']: thisMode, constructor: thisMode, toString: thisMode }, default: 'base' })
+export const ds = open.addTokens(h => ({ ink: h.tdef.color({ val: 'black', axes: { ['__proto__']: { ['__proto__']: 'red', constructor: 'blue', toString: 'green' } } }) })).consolidate({ prefix: 'owned' })
+`)
+      await writeFile(join(root, 'ink.css.ts'), `import { ds } from './system'; export const ink = ds.t.ink; export const card = ds.class({ color: ds.t.ink });`)
+      await writeFile(join(root, 'entry.ts'), `import { ds } from './system'; import { ink } from './ink.css'
+const snapshot = ds.snapshotFrom(rt => rt.axes.__proto__.__proto__.$activate())
+export const result = { ownAxis: Object.hasOwn(ds.t.ink.$axes, '__proto__'), ownMode: Object.hasOwn(ds.t.ink.$axes.__proto__, '__proto__'), branch: typeof ds.t.ink.$axes.__proto__.__proto__, exportedOwn: Object.hasOwn(ink.$axes, '__proto__'), exportedVal: ink.$axes.__proto__.__proto__.$val, snapshot, props: ds.runtimeProps(snapshot) }
+`)
+      for (const target of ['browser', 'ssr']) {
+        const result = await build({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } })], resolve: { alias: aliases }, build: { write: false, minify: false, ...(target === 'ssr' ? { ssr: join(root, 'entry.ts') } : { lib: { entry: join(root, 'entry.ts'), formats: ['es'], fileName: () => 'entry.js' } }) } })
+        const chunk = outputOf(result).find((item): item is Rollup.OutputChunk => item.type === 'chunk' && item.isEntry)!
+        const bundled = await esbuild({ stdin: { contents: chunk.code, resolveDir: root, loader: 'js' }, bundle: true, write: false, format: 'esm', platform: 'node', alias: { '@mszr/vanity/runtime': aliases['@mszr/vanity/runtime'] } })
+        const module = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0]!.text).toString('base64')}`)
+        expect(module.result.exportedOwn).toBe(true)
+        expect(module.result.exportedVal).toBe('red')
+        expect(module.result.ownAxis).toBe(true)
+        expect(module.result.ownMode).toBe(true)
+        expect(module.result.branch).toBe('function')
+        expect(Object.hasOwn(module.result.snapshot.modes, '__proto__')).toBe(true)
+        expect(Object.values(module.result.props.$system.attributes)).toContain('__proto__')
+      }
+    }
+    finally { await rm(root, { recursive: true, force: true }) }
+  })
+})
+
+describe('complete direct axis projections', () => {
+  it('restores derived and native direct configurations from real browser and SSR modules', async () => {
+    const root = await temporaryApp('direct-axis-projection')
+    try {
+      const system = join(root, 'system.ts')
+      await writeFile(system, `import { colorSchemes, createSystem, defineAxes, thisMode } from '@mszr/vanity'
+const scheme = colorSchemes()
+const open = createSystem().addAxis('pick', { modes: { base: '&', later: thisMode }, default: 'base', derive: { later: () => 'red' } }).addAxes(defineAxes({ scheme: { modes: scheme.modes, default: 'light', native: scheme.native } }))
+export const ds = open.addTokens({ ink: open.tdef.color({ val: 'black', axes: { pick: {} } }), authored: open.tdef.color({ val: 'black', axes: { pick: { later: 'blue' } } }), schemeInk: open.tdef.color({ axes: { scheme: { light: 'white', dark: 'black' } } }) }).consolidate({ prefix: 'direct' })
+`)
+      await writeFile(join(root, 'ink.css.ts'), `import { ds } from './system'; export const ink = ds.t.ink; export const card = ds.class({ color: ds.t.ink });`)
+      await writeFile(join(root, 'entry.ts'), `import { ds } from './system'; import { ink } from './ink.css'; export const result = { derived: typeof ds.t.ink.$axes.pick.later, authored: typeof ds.t.authored.$axes.pick.later, exported: ink.$axes.pick.later.$val };`)
+      for (const target of ['browser', 'ssr']) {
+        const result = await build({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } })], resolve: { alias: aliases }, build: { write: false, minify: false, ...(target === 'ssr' ? { ssr: join(root, 'entry.ts') } : { lib: { entry: join(root, 'entry.ts'), formats: ['es'], fileName: () => 'entry.js' } }) } })
+        const output = outputOf(result)
+        const chunk = output.find((item): item is Rollup.OutputChunk => item.type === 'chunk' && item.isEntry)!
+        const bundled = await esbuild({ stdin: { contents: chunk.code, resolveDir: root, loader: 'js' }, bundle: true, write: false, format: 'esm', platform: 'node', alias: { '@mszr/vanity/runtime': aliases['@mszr/vanity/runtime'] } })
+        const module = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0]!.text).toString('base64')}`)
+        expect(module.result).toEqual({ derived: 'function', authored: 'function', exported: 'red' })
+        const manifest = JSON.parse(await readFile(join(root, '.vanity/manifest.json'), 'utf8'))
+        const portable = await readPortableSystemArtifact(root, manifest.system.identities)
+        expect(portable.axes!.definitions.pick.modes.later.derived).toBe(true)
+        expect(portable.axes!.definitions.scheme.native).toMatchObject({ kind: 'scheme', locality: 'element', fallback: 'diagnose' })
+        if (target === 'browser') {
+          const css = output.filter((item): item is Rollup.OutputAsset => item.type === 'asset' && item.fileName.endsWith('.css')).map(item => String(item.source)).join('\n')
+          expect(css).toMatch(/:\s*red[;}]/)
+          expect(css).toContain('light-dark(')
+        }
+      }
+    }
+    finally { await rm(root, { recursive: true, force: true }) }
   })
 })

@@ -50,6 +50,7 @@ export interface StyleTransformContext {
   readonly rememberDependencies: (entry: string, files: Iterable<string>, preserveKnown: boolean) => Set<string>
   readonly rememberPendingCssResponse: (id: string, contents: string) => void
   readonly clearPendingCssResponse: (id: string) => void
+  readonly clearRetiredCssModules: (ids: ReadonlySet<string>) => void
   readonly addWatchFile: (file: string) => void
   readonly buildFailureFiles: (error: unknown, root: string) => string[]
   readonly createStyleBuildError: (error: unknown, entry: string, root: string) => unknown
@@ -260,6 +261,9 @@ export async function transformStyleModule(
     cssImports.unshift(`import '${context.host.resolveBrowserModuleUrl(virtualId)}';`)
   }
 
+  const previousVirtualIds = context.cssVirtualIdsByEntry.get(filePath)
+  const importsChanged = previousVirtualIds !== undefined
+    && (previousVirtualIds.size !== nextVirtualIds.size || [...nextVirtualIds].some(id => !previousVirtualIds.has(id)))
   const retired = replaceEntryVirtualIds(
     filePath,
     nextVirtualIds,
@@ -288,6 +292,11 @@ export async function transformStyleModule(
       context.host.sendFullReload()
     }
 
+    // A new CSS identity is imported by the source wrapper. Stable CSS has
+    // its own update; the host waits for both installation paths before prune.
+    if (importsChanged)
+      context.host.sendStyleModuleUpdate(context.host.getGraphModuleUrl(filePath))
+
     code += '\nif (import.meta.hot) { import.meta.hot.accept() }\n'
   }
 
@@ -301,5 +310,5 @@ function clearRetiredCss(
   if (retired.size === 0)
     return
 
-  context.host.removeCssModules(retired)
+  context.clearRetiredCssModules(retired)
 }

@@ -31,6 +31,8 @@ export interface StyleHotUpdateState {
   readonly memberSetChanges?: ReadonlySet<string>
   readonly getRuntimeMemberIdentity: (system: EvaluatedSystem, moduleFile: string) => string | undefined
   readonly failedStyleEntries: Set<string>
+  readonly failedSystemEntries: Set<string>
+  readonly hasRootOrderChanged: () => boolean
   readonly refreshAppAutoImports?: () => Promise<void>
   readonly evaluateConfiguredSystems: (sources: readonly NormalizedSystemSource[]) => Promise<EvaluatedSystem[]>
 }
@@ -48,6 +50,7 @@ export async function handleHotUpdate(
   const invalidatedRuntimeMemberFiles = new Set(state.memberSetChanges ?? [])
   const projectedMemberFiles = new Set<string>()
   const failures: unknown[] = []
+  let recoveredSystem = false
   const affected = new Set(context.modules)
   const affectedSources = affectedSystems.flatMap((entry) => {
     const source = state.systemSources.find(candidate => candidate.entry === entry)
@@ -61,6 +64,7 @@ export async function handleHotUpdate(
   if (affectedSources.length > 0) {
     try {
       const systems = await state.evaluateConfiguredSystems(affectedSources)
+      recoveredSystem = affectedSources.some(source => state.failedSystemEntries.has(source.entry))
       for (const [index, system] of systems.entries()) {
         const source = affectedSources[index]
         const previous = source === undefined ? undefined : previousSystems.get(source.entry)
@@ -98,6 +102,8 @@ export async function handleHotUpdate(
     catch (error) {
       // Keep the last accepted generation live; the failed candidate must not
       // invalidate the application's existing runtime or CSS projection.
+      for (const source of affectedSources)
+        state.failedSystemEntries.add(source.entry)
       failures.push(error)
     }
   }
@@ -130,16 +136,13 @@ export async function handleHotUpdate(
     for (const module of state.host.findModulesByFile(file))
       suppressedMemberModules.add(module)
   }
+  // A changed member projection belongs to a real graph node, so invalidate it
+  // in every environment; the reload that replaces it follows the style compile.
   for (const file of invalidatedRuntimeMemberFiles) {
     for (const module of state.host.findModulesByFile(file)) {
       state.host.markModuleInvalid(module)
       suppressedMemberModules.add(module)
     }
-  }
-  if (invalidatedRuntimeMemberFiles.size > 0) {
-    // The changed projection belongs to a real graph node. Invalidate it in
-    // every environment, then let the browser re-request the physical ID.
-    state.host.sendFullReload()
   }
 
   for (const dependent of entries) {
@@ -179,11 +182,18 @@ export async function handleHotUpdate(
   if (failures.length > 0)
     throw failures[0]
 
-  // A member-set transition already sent the one full reload needed to
-  // replace application bindings. Returning changed modules as well would
-  // let Vite propagate a second ordinary update for the same source event.
-  if (invalidatedRuntimeMemberFiles.size > 0)
+  if (recoveredSystem) {
+    for (const source of affectedSources)
+      state.failedSystemEntries.delete(source.entry)
+  }
+
+  if (recoveredSystem || invalidatedRuntimeMemberFiles.size > 0 || state.hasRootOrderChanged()) {
+    // One reload covers a repaired system, a changed member projection, and a
+    // new root order, and it waits until all accepted CSS is published. Vite's
+    // error-overlay recovery reloads too, but its timing is not ours to rely on.
+    state.host.sendFullReload()
     return []
+  }
 
   const returnedByUrl = new Map<string, object>()
   const withoutUrl: object[] = []

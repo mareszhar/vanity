@@ -14,7 +14,7 @@ import {
   systemRoot,
   thisMode,
 } from '@mszr/vanity'
-import { setCustomProperties, setCustomProperty, VanityRuntimeError } from '@mszr/vanity/runtime'
+import { restoreRuntimeControllerFactory, restoreRuntimeProps, restoreRuntimeReconciler, restoreSnapshotFrom, setCustomProperties, setCustomProperty, VanityRuntimeError } from '@mszr/vanity/runtime'
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
 import { customProperty } from '../index'
@@ -804,5 +804,91 @@ describe('mutable runtime', () => {
         applied: 'rebeccapurple',
       }],
     })
+  })
+})
+
+describe('owned restored axis records', () => {
+  it.each(['__proto__', 'constructor', 'toString', 'ordinary'])('restores, selects, reconciles and hydrates own %s records', (name) => {
+    const owners = [Object.prototype, Object, Object.prototype.toString]
+    const descriptors = owners.map(owner => Object.getOwnPropertyDescriptor(owner, name))
+    try {
+      const ds = createSystem().addAxis('pick', { modes: { base: '&', on: thisMode }, default: 'base' }).addTokens(h => ({ ink: h.tdef.color({ val: 'black', mutable: true, axes: { pick: { on: 'red' } } }) })).consolidate({ prefix: 'restored', root: '#app' })
+      const contract = JSON.parse(JSON.stringify(ds.introspect().runtime))
+      const definition = contract.axes.pick
+      definition.modes = ['base', name]
+      definition.attribute.values = { base: null, [name]: name }
+      contract.axes = { [name]: definition }
+      contract.axisOrder = [name]
+      for (const root of contract.roots) root.axes = [name]
+      for (const token of contract.tokens) {
+        for (const branch of token.branches) {
+          if (branch.address.kind === 'axis') {
+            branch.address.axis = name
+            if (branch.address.mode === 'on')
+              branch.address.mode = name
+          }
+        }
+      }
+      const restored = JSON.parse(JSON.stringify(contract))
+      const root = new MemoryRoot()
+      const rt = restoreRuntimeControllerFactory(restored)({ within: root }) as any
+      expect(Object.hasOwn(rt.axes, name)).toBe(true)
+      expect(Object.hasOwn(rt.axes[name], name)).toBe(true)
+      expect(Object.hasOwn(rt.t.ink.$axes, name)).toBe(true)
+      expect(typeof rt.t.ink.$axes[name][name]).toBe('function')
+      expect(rt.t.ink.$axes[name][name].$val).toBe('red')
+      rt.axes[name][name].$activate()
+      rt.t.ink.$axes[name][name].$set('blue')
+      const snapshot = JSON.parse(JSON.stringify(rt.snapshot()))
+      expect(Object.hasOwn(snapshot.modes, name)).toBe(true)
+      expect(snapshot.modes[name]).toBe(name)
+      const reconciled = restoreRuntimeReconciler(restored)(snapshot)
+      expect(reconciled.diagnostics).toEqual([])
+      expect(Object.hasOwn(reconciled.snapshot.modes, name)).toBe(true)
+      const second = restoreRuntimeControllerFactory(restored)({ within: new MemoryRoot() }) as any
+      second.hydrate(snapshot)
+      expect(second.snapshot()).toEqual(snapshot)
+      const producer = restoreSnapshotFrom(restored)((runtime: any) => runtime.axes[name].$switchTo(name))
+      expect(restoreRuntimeProps(restored)(producer).$system.attributes[definition.attribute.name]).toBe(name)
+      rt.hydrate({ ...snapshot, modes: {}, overrides: [] })
+      expect(root.attributes.has(definition.attribute.name)).toBe(false)
+      rt.axes[name].$switchTo(name)
+      rt.axes[name].$switchTo('base')
+      expect(root.attributes.has(definition.attribute.name)).toBe(false)
+      expect(owners.map(owner => Object.getOwnPropertyDescriptor(owner, name))).toEqual(descriptors)
+    }
+    finally {
+      owners.forEach((owner, index) => {
+        if (descriptors[index])
+          Object.defineProperty(owner, name, descriptors[index]!)
+        else Reflect.deleteProperty(owner, name)
+      })
+    }
+  })
+
+  it.each(['__proto__', 'constructor', 'toString', 'ordinary'])('keeps query-only mode %s unselectable', (name) => {
+    const ds = createSystem().addAxis('pick', { modes: { base: '&', on: thisMode, [name]: media('(min-width: 1px)') }, default: 'base' }).consolidate() as any
+    ds.snapshotFrom((rt: any) => {
+      expect(Object.hasOwn(rt.axes.pick, name)).toBe(false)
+      expect(() => rt.axes.pick.$switchTo(name)).toThrow(/cannot activate/)
+      expect(() => rt.axes.pick.$cycle({ exclude: ['base', 'on'] })).toThrow(/no activatable modes/)
+    })
+    const snapshot = { ...ds.snapshotFrom(() => {}), modes: { pick: name } }
+    expect(ds.reconcileRuntimeSnapshot(snapshot).diagnostics).toMatchObject([{ code: 'VANITY_RUNTIME_UNSELECTABLE_AXIS' }])
+    const controlled = createSystem().addAxis('pick', {
+      modes: { base: '&', on: thisMode, [name]: media('(min-width: 1px)') },
+      default: 'base',
+      control: { id: 'selection', read: () => undefined, activate: () => {}, project: (mode: string) => ({ attributes: { 'data-selected': mode } }) },
+    }).addTokens(h => ({ ink: h.tdef.color({ val: 'black', axes: { pick: { on: 'red' } } }) })).consolidate() as any
+    const selected = controlled.snapshotFrom((rt: any) => rt.axes.pick.$switchTo(name))
+    expect(controlled.runtimeProps(selected).$system.attributes).toEqual({ 'data-selected': name })
+  })
+
+  it('keeps unknown inherited snapshot axes diagnostic', () => {
+    const ds = createSystem().consolidate()
+    for (const name of ['__proto__', 'constructor', 'toString']) {
+      const snapshot = { ...ds.snapshotFrom(() => {}), modes: { [name]: 'on' } }
+      expect(ds.reconcileRuntimeSnapshot(snapshot).diagnostics).toMatchObject([{ code: 'VANITY_RUNTIME_UNKNOWN_MODE', axis: name }])
+    }
   })
 })

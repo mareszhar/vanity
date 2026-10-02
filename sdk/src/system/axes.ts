@@ -1,10 +1,10 @@
 /** System-defined environmental axes and their root-anchored condition IR. */
 
 import type { VanityCondition, VanityConditionArm, VanityConditionInput } from './conditions'
-import { checkQuery, checkSelector } from '../css/validation'
+import { setOwn } from '../collections'
+import { checkQuery, checkSelector, parseLayerName } from '../css/validation'
 import { VanityError } from '../diagnostics'
-import { convertToKebab } from '../tokens/names'
-import { getSchemeConditionArms } from './conditions'
+import { getDataAttribute, getSchemeConditionArms } from './conditions'
 
 /** Smallest DOM or query scope at which an axis condition can be selected. */
 export type VanityAxisLocality = 'element' | 'root' | 'subtree' | 'document' | 'absolute'
@@ -88,14 +88,14 @@ export interface VanityNativeSchemePolicy {
   readonly dark: string
 }
 
-/** Configure normalized modes, precedence, derivations, and runtime behavior for an axis. */
-export interface VanityAxisConfig<
+/** Configure normalized modes and behavior. Known control and derivation types require their fields. */
+export type VanityAxisConfig<
   Modes extends Readonly<Record<string, VanityAxisModeInput>>,
   Derive extends Partial<Record<keyof Modes & string, (
     modes: Readonly<Record<keyof Modes & string, any>>,
   ) => unknown>> = Record<never, never>,
   Control extends VanityAxisControl<keyof Modes & string> | undefined = undefined,
-> {
+> = {
   /** Named modes and their condition arms. */
   readonly modes: Modes
   /** The base relationship; `defaultMode()` is equivalent and may carry a trigger. */
@@ -110,24 +110,33 @@ export interface VanityAxisConfig<
   readonly native?: VanityNativeSchemePolicy
   /** Human-readable axis description. */
   readonly description?: string
-}
+} & (undefined extends Control ? object : { readonly control: Control })
+& (Record<never, never> extends Derive ? object : { readonly derive: Derive })
 
-/** Configure an axis before its condition inputs are normalized into triggers. */
-export interface VanityOpenAxisConfig<
+/** Configure condition inputs before normalization. Known control and derivation types require their fields. */
+export type VanityOpenAxisConfig<
   Modes extends Readonly<Record<string, VanityConditionInput | VanityAxisTrigger>>,
   Control extends VanityAxisControl<keyof Modes & string> | undefined = undefined,
-> {
+  Derive extends Partial<Record<keyof Modes & string, (
+    modes: Readonly<Record<keyof Modes & string, any>>,
+  ) => unknown>> = Record<never, never>,
+> = {
   /** Named mode inputs for the axis. */
   readonly modes: Modes
   /** Mode selected when no more specific arm applies. */
   readonly default?: keyof Modes & string
   /** Explicit precedence order for overlapping mode arms. */
   readonly modeOrder?: readonly (keyof Modes & string)[]
+  /** Missing mode values derived from authored siblings at token-finalization time. */
+  readonly derive?: Derive
+  /** Native scheme locality and support fallback policy. */
+  readonly native?: VanityNativeSchemePolicy
   /** Human-readable axis description. */
   readonly description?: string
   /** Query-free runtime controller for this axis. */
   readonly control?: Control
-}
+} & (undefined extends Control ? object : { readonly control: Control })
+& (Record<never, never> extends Derive ? object : { readonly derive: Derive })
 
 export type VanityOpenAxisModes<Modes extends Readonly<Record<string, unknown>>> = {
   readonly [Mode in keyof Modes & string]: Modes[Mode] extends VanityAxisTrigger<infer Activatable>
@@ -339,7 +348,7 @@ export function defineAxis<
       }
       markedDefault = name
     }
-    modes[name] = mode
+    setOwn(modes, name, mode)
   }
 
   const configuredDefault = config.default
@@ -514,8 +523,8 @@ export function createAxisData(
   value?: string,
   options: VanityAxisConditionOptions = {},
 ): VanityAxisTrigger<boolean> {
-  const name = `data-${convertToKebab(attribute)}`
-  const selector = value === undefined ? `[${name}]` : `[${name}='${value}']`
+  const { name, selectorName } = getDataAttribute(attribute)
+  const selector = value === undefined ? `[${selectorName}]` : `[${selectorName}='${value}']`
   const on = options.on ?? 'root'
   const trigger = createAxisCondition(selector, { ...options, on })
   if (on !== 'root')
@@ -528,7 +537,7 @@ export function createAxisData(
 
 function createAxisSchemeTrigger(mode: 'light' | 'dark', axisName = 'scheme'): VanityAxisTrigger<true> {
   const [explicit, preferred] = getSchemeConditionArms(mode, axisName)
-  const name = `data-${convertToKebab(axisName)}`
+  const { name } = getDataAttribute(axisName)
 
   return createTrigger([
     Object.freeze({
@@ -612,10 +621,13 @@ export function defineOpenAxis<
   const Name extends string,
   const Modes extends Readonly<Record<string, VanityConditionInput | VanityAxisTrigger>>,
   const Control extends VanityAxisControl<keyof Modes & string> | undefined = undefined,
+  const Derive extends Partial<Record<keyof Modes & string, (
+    modes: Readonly<Record<keyof Modes & string, any>>,
+  ) => unknown>> = Record<never, never>,
 >(
   name: Name,
-  config: VanityOpenAxisConfig<Modes, Control>,
-): VanityAxisDefinition<VanityOpenAxisModes<Modes>>
+  config: VanityOpenAxisConfig<Modes, Control, Derive>,
+): VanityAxisDefinition<VanityOpenAxisModes<Modes>, Derive>
   & (Control extends VanityAxisControl<any> ? { readonly control: Control } : object) {
   if (name.startsWith('$')) {
     throwAxisError(
@@ -635,15 +647,10 @@ export function defineOpenAxis<
     return [mode, isAxisTrigger(input)
       ? input
       : triggerForOpenCondition(name, mode, typeof input === 'string' ? { arms: [{ selector: input }] } : input)]
-  }))
-  return defineAxis({
-    modes,
-    ...(config.default === undefined ? {} : { default: config.default }),
-    ...(config.modeOrder === undefined ? {} : { modeOrder: config.modeOrder }),
-    ...(config.description === undefined ? {} : { description: config.description }),
-    ...(config.control === undefined ? {} : { control: config.control }),
-  }) as VanityAxisDefinition<VanityOpenAxisModes<Modes>>
-  & (Control extends VanityAxisControl<any> ? { readonly control: Control } : object)
+  })) as VanityOpenAxisModes<Modes>
+  // Normalization changes condition inputs, not mode keys or derivation signatures.
+  return defineAxis({ ...config, modes }) as VanityAxisDefinition<VanityOpenAxisModes<Modes>, Derive>
+    & (Control extends VanityAxisControl<any> ? { readonly control: Control } : object)
 }
 
 export function normalizeAxisAdditions<const Axes extends VanityAxisDefinitions>(
@@ -660,6 +667,8 @@ export function normalizeAxisAdditions<const Axes extends VanityAxisDefinitions>
 
   const merged: Record<string, VanityAxisDefinition> = { ...existing.definitions }
   const order = [...existing.order]
+  const identities = new Set(existing.order.map(name => parseLayerName(name).identity))
+  const carriers = new Map(existing.order.map(name => [getDataAttribute(name).name, name]))
   for (const [name, definition] of Object.entries(additions)) {
     if (isIntegerIndex(name)) {
       throwAxisError(
@@ -668,11 +677,28 @@ export function normalizeAxisAdditions<const Axes extends VanityAxisDefinitions>
         'use a semantic non-integer name so declaration order stays stable',
       )
     }
-    if (Object.hasOwn(merged, name)) {
+    const { identity, reason: layerReason } = parseLayerName(name)
+    if (layerReason !== undefined) {
       throwAxisError(
-        `axis '${name}' is already defined on this system`,
+        `axis name '${name}' is not one CSS identifier: ${layerReason}; ${name.includes('.') ? 'it collides with Vanity-owned layer nesting' : 'the browser would drop this axis token layer'}`,
+        ['axes', name],
+        'rename the axis to one CSS identifier without a dot',
+      )
+    }
+    if (identities.has(identity)) {
+      throwAxisError(
+        `axis '${name}' repeats an already defined CSS identity; the browser would merge their token layers`,
         ['axes', name],
         'use augmentAxis() or overwriteAxis() for an existing axis',
+      )
+    }
+    const carrier = getDataAttribute(name).name
+    const previousAxis = carriers.get(carrier)
+    if (previousAxis !== undefined) {
+      throwAxisError(
+        `axis '${name}' and '${previousAxis}' share generated attribute '${carrier}'; their modes cannot be controlled independently`,
+        ['axes', name],
+        'choose an axis name with a distinct generated data attribute',
       )
     }
     if (!isAxisDefinition(definition)) {
@@ -682,7 +708,9 @@ export function normalizeAxisAdditions<const Axes extends VanityAxisDefinitions>
         'create the axis definition with axis() or colorSchemes()',
       )
     }
-    merged[name] = bindSchemeAxisDefinition(name, definition)
+    identities.add(identity)
+    carriers.set(carrier, name)
+    setOwn(merged, name, bindSchemeAxisDefinition(name, definition))
     order.push(name)
   }
 
@@ -808,7 +836,7 @@ function triggerForOpenCondition(
     if (arm.anchor !== 'this-mode') {
       const normalized = createAxisCondition({ arms: [arm] }).arms
       if (arm.selector === '&') {
-        const name = `data-${convertToKebab(axis)}`
+        const { name } = getDataAttribute(axis)
         arms.push(...normalized.map(candidate => Object.freeze({
           ...candidate,
           runtime: Object.freeze({ kind: 'attribute' as const, name, value: null }),

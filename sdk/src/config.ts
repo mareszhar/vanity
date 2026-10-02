@@ -102,9 +102,13 @@ export interface VanityCompilerOptions {
    */
   system?: string | VanitySystemSource | readonly (string | VanitySystemSource)[]
   /**
-   * Optional host-wide CSS cascade-layer order. Vanity emits these roots once
-   * as the first stylesheet; when omitted, it derives the order from configured
-   * system roots.
+   * Optional host-wide order of CSS layer roots. Each entry is one complete CSS
+   * identifier, unique by decoded identity, so equivalent escapes name the same
+   * root. Configured system roots the list omits follow it in configuration
+   * order. Vanity declares the complete order in every compiler-owned
+   * stylesheet and places the listed roots first in integrated HTML documents.
+   * With no listed roots, configured roots keep configuration order and no
+   * document-first statement is added.
    */
   layerOrder?: readonly string[]
   /** Directory for compiler-owned system artifacts; defaults to `<root>/.vanity`. */

@@ -26,6 +26,7 @@ const testingDir = join(root, 'testing-kit')
 const sourcePackageDir = join(root, 'packages', 'source-design')
 const sourceConsumerDir = join(root, 'source-consumer')
 const installedConsumerDir = join(root, 'installed-consumer')
+const nuxtLayerOrder = ['vendor', 'vanity'] as const
 
 /** Mirror the workspace's own pnpm pin so the fresh consumer matches the repo toolchain. */
 const rootPackageManager = (
@@ -237,6 +238,7 @@ async function smokeDev(
   command: string[],
   port: number,
   expected: RegExp,
+  assertHtml?: (html: string) => void,
 ): Promise<void> {
   let output = ''
   const ports = [{ label: 'HTTP', port }]
@@ -263,6 +265,7 @@ async function smokeDev(
     const html = await waitForHttp(`http://127.0.0.1:${port}/`, child, () => output)
     if (!expected.test(html))
       throw new Error(`Fresh dev response did not contain ${expected}\n${html.slice(0, 2_000)}`)
+    assertHtml?.(html)
 
     if (/WebSocket server error|EADDRINUSE/.test(output))
       throw new Error(`Fresh dev server reported a port collision\n${output}`)
@@ -273,6 +276,40 @@ async function smokeDev(
 
   for (const candidate of ports)
     await waitForPort(candidate, false, output)
+}
+
+function assertNuxtLayerOrder(html: string): void {
+  const head = html.match(/<head>([\s\S]*?)<\/head>/)?.[1]
+  if (head === undefined)
+    throw new Error('Fresh Nuxt response has no head')
+  const firstStylesheet = [...head.matchAll(/<style(?:\s[^>]*)?>[\s\S]*?<\/style>|<link\s[^>]*rel=["']stylesheet["'][^>]*>/gi)][0]?.[0]
+  const expected = `@layer ${nuxtLayerOrder.join(', ')};`
+  if (firstStylesheet === undefined || !firstStylesheet.startsWith('<style')
+    || !firstStylesheet.includes('data-hid="vanity-layer-order"')
+    || !firstStylesheet.includes(expected)) {
+    throw new Error(`Fresh Nuxt did not render ${expected} as the first stylesheet in <head>\n${head.slice(0, 2_000)}`)
+  }
+}
+
+async function smokeBuiltNuxt(directory: string, port: number): Promise<void> {
+  let output = ''
+  await assertPortFree({ label: 'Nuxt production HTTP', port })
+  const child = spawn(process.execPath, [join(directory, '.output/server/index.mjs')], {
+    cwd: directory,
+    detached: process.platform !== 'win32',
+    env: { ...process.env, NODE_ENV: 'production', PORT: String(port), HOST: '127.0.0.1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  child.stdout?.on('data', chunk => output += String(chunk))
+  child.stderr?.on('data', chunk => output += String(chunk))
+  try {
+    const html = await waitForHttp(`http://127.0.0.1:${port}/`, child, () => output)
+    assertNuxtLayerOrder(html)
+  }
+  finally {
+    await stop(child)
+  }
+  await waitForPort({ label: 'Nuxt production HTTP', port }, false, output)
 }
 
 async function main(): Promise<void> {
@@ -415,6 +452,7 @@ it('captures emitted CSS from a system created in the test', () => {
 export default defineVanityConfig({
   compiler: {
     system: './app/design/system.ts',
+    layerOrder: ${JSON.stringify(nuxtLayerOrder)},
   },
   autoImports: { style: './app/design/authoring.ts', app: ['core', 'vue'] },
 })
@@ -589,12 +627,14 @@ describe('packed consumer testing kit', () => {
   run('pnpm', ['--dir', nuxtDir, 'exec', 'nuxt', 'prepare'])
   run('pnpm', ['--dir', nuxtDir, 'exec', 'nuxi', 'typecheck'])
   run('pnpm', ['--dir', nuxtDir, 'exec', 'nuxt', 'build'])
+  await smokeBuiltNuxt(nuxtDir, await openPort())
   const nuxtHttpPort = await openPort()
   await smokeDev(
     nuxtDir,
     ['nuxt', 'dev', '--host', '127.0.0.1', '--port', String(nuxtHttpPort), '--no-fork'],
     nuxtHttpPort,
     /Fresh Nuxt/,
+    assertNuxtLayerOrder,
   )
   console.log('✓ fresh Nuxt: strict types, build, and HTTP/HMR lifecycle')
   console.log(`✓ packed SDK smoke passed (${tarballName})`)

@@ -63,8 +63,9 @@ export { ports }
  * Restores a token handle when a style module's exports are serialized for app
  * code. Generated import target — not for hand-written code.
  */
-export function restoreToken(meta: Parameters<typeof createHandle>[0]): VanityInternalTokenHandle {
-  return createHandle(meta, { serializeFallback: serializeRuntimeCssText })
+export function restoreToken(meta: Parameters<typeof createHandle>[0] | string): VanityInternalTokenHandle {
+  const restored = typeof meta === 'string' ? JSON.parse(meta) as Parameters<typeof createHandle>[0] : meta
+  return createHandle(restored, { serializeFallback: serializeRuntimeCssText })
 }
 
 /**

@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import type { ViteDevServer } from 'vite'
-import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -58,7 +58,7 @@ async function put(root: string, file: string, source: string): Promise<string> 
   return path
 }
 
-async function startFixture(base: string): Promise<BrowserFixture> {
+async function startFixture(base: string, alternateLayerProbe = false): Promise<BrowserFixture> {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-browser-hmr-')))
   const appRoot = join(root, 'app')
   const designRoot = join(root, 'packages', 'design')
@@ -79,6 +79,7 @@ export const ds = open
   .addTokens({ color: { brand: open.tdef.color({ val: brand, mutable: true, description: 'system-docs-v1' }) } })
   .addRules({
     reset: { layer: 'reset', description: 'system-docs-v1', css: { ':root': { '--browser-layer-probe': 'reset' } } },
+    resetPadding: { layer: 'reset', css: { div: { padding: 0 } } },
     recipe: { layer: 'recipes', css: { ':root': { '--browser-layer-probe': 'recipe' } } },
     orderProbe: { layer: 'recipes', css: { '#order-probe': { margin: '1px', marginTop: '2px' } } },
   })
@@ -94,8 +95,14 @@ export { unrelated as renamedUnrelated } from './constants'
 const open = createSystem()
 export const alternate = open
   .addTokens({ color: { brand: '#aa00bb' } })
+  ${alternateLayerProbe ? '.addRules({ resetPadding: { layer: \'reset\', css: { p: { padding: 0 } } } })' : ''}
   .consolidate({ prefix: 'browser-hmr-alternate' })
 `)
+  if (alternateLayerProbe) {
+    await put(appRoot, 'alternate.css.ts', `import { alternate } from './alternate'
+export const alternateCard = alternate.class({ padding: '2px' })
+`)
+  }
   const hmrUpdates: string[] = []
   const style = await put(appRoot, 'style.css.ts', `import { ds } from '@fixture/design/system'
 
@@ -120,7 +127,7 @@ export const spot = ds.class({
 
 export const broken = ds.class({ color: ds.t.color.brand
 `)
-  await put(appRoot, 'main.ts', `import { card } from './style.css.ts'
+  await put(appRoot, 'main.ts', `${alternateLayerProbe ? 'import { alternateCard } from \'./alternate.css.ts\'\n' : ''}import { card } from './style.css.ts'
 import { card as second } from './second.css.ts'
 import { spot } from '@fixture/design/spot.css.ts'
 import { ds } from '@fixture/design/system'
@@ -142,11 +149,13 @@ document.body.innerHTML = '<main><div id="first"></div><div id="second"></div><d
 document.querySelector('#first')!.className = card
 document.querySelector('#second')!.className = second
 document.querySelector('#third')!.className = spot
+${alternateLayerProbe ? 'document.body.insertAdjacentHTML(\'beforeend\', \'<p id="fourth"></p>\')\ndocument.querySelector(\'#fourth\')!.className = alternateCard' : ''}
 document.body.insertAdjacentHTML('beforeend', '<output id="namespace-proof"></output>')
 document.querySelector('#namespace-proof')!.textContent = JSON.stringify((globalThis as any).__vanityNamespace)
 `)
   await put(appRoot, 'index.html', '<!doctype html><html><body><script type="module" src="/main.ts"></script></body></html>\n')
 
+  await put(appRoot, 'unloaded.css.ts', `import { ds } from '@fixture/design/system'; export const ghost = ds.class({ color: ds.t.color.brand })`)
   const server = await createServer({
     root: appRoot,
     base,
@@ -360,14 +369,16 @@ function emitHostFileChange(server: ViteDevServer, file: string): void {
 }
 
 async function readSystemArtifact(fixture: BrowserFixture, prefix: string): Promise<BrowserSystemArtifact> {
-  const directory = join(fixture.appRoot, '.vanity', 'systems')
-  const artifacts = await Promise.all((await readdir(directory))
-    .filter(name => name.endsWith('.json'))
-    .map(async name => JSON.parse(await readFile(join(directory, name), 'utf8')) as BrowserSystemArtifact))
-  const artifact = artifacts.find(candidate => candidate.prefix === prefix)
-  if (artifact === undefined)
-    throw new Error(`expected a projected system artifact for ${prefix}`)
-  return artifact
+  const artifactRoot = join(fixture.appRoot, '.vanity')
+  const manifest = JSON.parse(await readFile(join(artifactRoot, 'manifest.json'), 'utf8')) as {
+    system: BrowserSystemArtifact
+    systems: Record<string, BrowserSystemArtifact>
+  }
+  const current = [manifest.system, ...Object.values(manifest.systems)]
+    .find(candidate => candidate.prefix === prefix)
+  if (current === undefined)
+    throw new Error(`expected a current system artifact for ${prefix}`)
+  return JSON.parse(await readFile(join(artifactRoot, 'systems', `${current.identities.compatibility}.json`), 'utf8')) as BrowserSystemArtifact
 }
 
 test('configured barrel preserves ordinary module binding semantics in the browser', async ({ page }) => {
@@ -517,13 +528,28 @@ test('a changed-identity package system updates both consumers and preserves com
     const loads = await loadCount(page)
     const initialRequests = new Set(cssRequests)
     const before = await readSystemArtifact(fixture, 'browser-hmr')
+    await fixture.server.transformRequest('/unloaded.css.ts')
+    await page.route('**/*.vanity.css*', async (route) => {
+      await new Promise(resolve => setTimeout(resolve, 600))
+      await route.continue()
+    })
+    await page.evaluate(() => {
+      const systemStylesheets = () => [...document.styleSheets].filter(sheet =>
+        (sheet.ownerNode as Element | null)?.getAttribute('data-vite-dev-id')?.includes('/.vanity/virtual/system/'))
+      if (systemStylesheets().length === 0) {
+        throw new Error('the fixture has no live system stylesheet before the edit')
+      }
+      ;(globalThis as any).__vanitySystemSheetGap = false
+      const observer = new MutationObserver(() => {
+        if (systemStylesheets().length === 0)
+          (globalThis as any).__vanitySystemSheetGap = true
+      })
+      observer.observe(document.head, { childList: true })
+    })
     const source = await readFile(fixture.theme, 'utf8')
+    await fixture.server.watcher.unwatch(fixture.theme)
     await writeFile(fixture.theme, source.replace('#112233', '#445566'))
-    await expect.poll(
-      () => fixture.watchEvents.some(event => event.startsWith('change ') && event.endsWith(fixture.theme)),
-      { message: `Vite watcher events: ${fixture.watchEvents.join('\n')}` },
-    )
-      .toBe(true)
+    emitHostFileChange(fixture.server, fixture.theme)
 
     await expect.poll(async () => (await readSystemArtifact(fixture, 'browser-hmr')).identities.css)
       .not
@@ -537,14 +563,23 @@ test('a changed-identity package system updates both consumers and preserves com
       () => cssRequests.some(url => url.includes(after.identities.css)),
       { message: [...fixture.hmrUpdates, ...cssRequests, ...hmrFrames, ...failures].join('\n') },
     ).toBe(true)
+    await expect.poll(() => page.evaluate(identity => [...document.styleSheets].some(sheet =>
+      (sheet.ownerNode as Element | null)?.getAttribute('data-vite-dev-id')?.includes(identity)), after.identities.css))
+      .toBe(true)
+    await expect.poll(() => page.evaluate(identity => [...document.styleSheets].some(sheet =>
+      (sheet.ownerNode as Element | null)?.getAttribute('data-vite-dev-id')?.includes(identity)), before.identities.css))
+      .toBe(false)
+    expect(await page.evaluate(() => (globalThis as any).__vanitySystemSheetGap)).toBe(false)
 
     await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).color))
       .toBe('rgb(119, 136, 153)')
+    await expect.poll(() => page.locator('#first').evaluate(element => getComputedStyle(element).padding))
+      .toBe('1px')
     await expect.poll(() => page.locator('#second').evaluate(element => getComputedStyle(element).color))
       .toBe('rgb(119, 136, 153)')
     expect(await page.evaluate(() => (globalThis as any).__vanityRuntime.snapshot().overrides.find((entry: { token: string[] }) => entry.token.join('.') === 'color.brand')?.val))
       .toBe('#778899')
-    expect(await loadCount(page)).toBe(loads)
+    expect(await loadCount(page), hmrFrames.join('\n')).toBe(loads)
     expect(new Set(cssRequests).size).toBeGreaterThan(initialRequests.size)
     expect(cssRequests.some(url => new URL(url).pathname.startsWith('/dashboard/'))).toBe(true)
     await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement)
@@ -572,17 +607,18 @@ test('a declaration-order-only system edit changes identity and shorthand cascad
       .toBe('2px')
 
     const source = await readFile(fixture.system, 'utf8')
-    fixture.server.watcher.add(fixture.system)
-    await writeFile(fixture.system, source.replace(
+    await fixture.server.watcher.unwatch(fixture.system)
+    const reordered = source.replace(
       'margin: \'1px\', marginTop: \'2px\'',
       'marginTop: \'2px\', margin: \'1px\'',
-    ))
-    await expect.poll(() => fixture.watchEvents.some(event =>
-      event.startsWith('change ') && event.endsWith(fixture.system)), {
-      message: `Vite watcher events: ${fixture.watchEvents.join('\n')}`,
-    }).toBe(true)
+    )
+    expect(reordered).not.toBe(source)
+    await writeFile(fixture.system, reordered)
+    emitHostFileChange(fixture.server, fixture.system)
 
-    await expect.poll(async () => (await readSystemArtifact(fixture, 'browser-hmr')).identities.css)
+    await expect.poll(async () => (await readSystemArtifact(fixture, 'browser-hmr')).identities.css, {
+      message: [...fixture.hmrUpdates, ...cssRequests, ...hmrFrames, ...failures].join('\n'),
+    })
       .not
       .toBe(before.identities.css)
     const after = await readSystemArtifact(fixture, 'browser-hmr')
@@ -593,6 +629,34 @@ test('a declaration-order-only system edit changes identity and shorthand cascad
     expect(await loadCount(page)).toBe(loads)
     await expect.poll(() => cssRequests.some(url => url.includes(after.identities.css)))
       .toBe(true)
+    expect(failures, failures.join('\n')).toEqual([])
+  }
+  finally {
+    await stopFixture(fixture)
+  }
+})
+
+test('a system layer-order edit applies without a reload', async ({ page }) => {
+  const fixture = await startFixture('/dashboard/', true)
+  try {
+    const alternate = join(fixture.appRoot, 'alternate.ts')
+    const { failures } = await loadFixture(page, fixture)
+    const loads = await loadCount(page)
+    await expect.poll(() => page.locator('#fourth').evaluate(element => getComputedStyle(element).padding))
+      .toBe('2px')
+
+    const source = await readFile(alternate, 'utf8')
+    await writeFile(alternate, source.replace(
+      '.consolidate({ prefix: \'browser-hmr-alternate\' })',
+      '.consolidate({ prefix: \'browser-hmr-alternate\', layerOrder: [\'tokens\', \'recipes\', \'reset\', \'utilities\', \'overrides\'] })',
+    ))
+    emitHostFileChange(fixture.server, alternate)
+
+    await expect.poll(() => page.locator('#fourth').evaluate(element => getComputedStyle(element).padding), {
+      timeout: 10_000,
+      message: fixture.hmrUpdates.join('\n'),
+    }).toBe('0px')
+    expect(await loadCount(page)).toBe(loads)
     expect(failures, failures.join('\n')).toEqual([])
   }
   finally {
@@ -790,5 +854,88 @@ export const broken = ds.class({ color: ds.t.color.brand, padding: '7px' })
   }
   finally {
     await stopFixture(fixture)
+  }
+})
+
+test('accepted identifier spellings preserve rules and direct/prebuilt axis runtime carriers through DOM and SSR', async ({ page }) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-identifiers-browser-')))
+  let server: ViteDevServer | undefined
+  const cases = [
+    ['unset', 'unset'],
+    ['-x', '-x'],
+    ['--x', '--x'],
+    ['é', 'é'],
+    [String.raw`\64 ensity`, 'density'],
+    [String.raw`\31 st`, '1st'],
+    [String.raw`\61 `, 'a'],
+    [String.raw`a\20 b`, 'a b'],
+    [String.raw`a\;b`, 'a;b'],
+    [String.raw`a\"b`, 'a"b'],
+    [String.raw`a\'b`, 'a\'b'],
+  ] as const
+  const mounts = cases.flatMap(([name]) => [false, true].map(prebuilt => ({ name: String(name), prebuilt, native: false, mode: 'compact' })))
+  mounts.push({ name: String.raw`\43 olorScheme`, prebuilt: true, native: true, mode: 'dark' }, { name: String.raw`scheme\20 mode`, prebuilt: true, native: true, mode: 'dark' })
+  for (const name of ['__proto__', 'constructor', 'toString', 'ordinary']) {
+    for (const prebuilt of [false, true]) mounts.push({ name, prebuilt, native: false, mode: name })
+  }
+  try {
+    await put(root, 'package.json', '{"name":"identifier-browser","type":"module"}')
+    const imports: string[] = []
+    const classes: string[] = []
+    const controls: string[] = []
+    const snapshots: string[] = []
+    const systems: string[] = []
+    for (const [index, { name, prebuilt, native, mode }] of mounts.entries()) {
+      const key = JSON.stringify(name)
+      const prefix = `identifier-${index}`
+      const modeKey = JSON.stringify(mode)
+      const mount = native
+        ? `.addAxis(${key}, colorSchemes({ locality: 'root' }))`
+        : !prebuilt
+            ? `.addAxis(${key}, { modes: { base: '&', [${modeKey}]: ${name === String.raw`a\20 b` ? `schemeIs('dark', ${key})` : 'thisMode'} }, default: 'base' })`
+            : `.addAxes({ [${key}]: axis({ modes: { base: defaultMode(), [${modeKey}]: axisData(${key}, ${modeKey}) } }) })`
+      await put(root, `system-${index}.ts`, `import { createSystem, thisMode, axis, defaultMode, colorSchemes, schemeIs } from '@mszr/vanity'; import { createAxisData as axisData } from '${join(sdkRoot, 'src/system/axes.ts')}';
+export const ds = createSystem()${mount}.addTokens(h => ({ ink: h.tdef.color({ ${native ? 'val: h.lightDark(\'black\', \'red\')' : `val: 'black', axes: { [${key}]: { [${modeKey}]: 'red' } }`} }) })).consolidate({ prefix: '${prefix}', root: '#card-${index}', layerOrder: ['reset', 'tokens', 'recipes', 'utilities', 'overrides', ${key}] });`)
+      systems.push(`./system-${index}.ts`)
+      imports.push(`import { ds as ds${index} } from './system-${index}'`)
+      classes.push(`ds${index}.inLayer(${key}).class({ color: ds${index}.t.ink })`)
+      snapshots.push(`ds${index}.runtimeProps(ds${index}.snapshotFrom(rt => rt.axes[${key}].$switchTo(${modeKey}))).$system.attributes`)
+      controls.push(`{ const snapshot = ds${index}.snapshotFrom(rt => rt.axes[${key}].$switchTo(${modeKey})); const props = ds${index}.runtimeProps(snapshot).$system; for (const [key, value] of Object.entries(props.attributes)) document.getElementById('card-${index}').setAttribute(key, value); }`)
+    }
+    await put(root, 'cards.css.ts', `${imports.join(';\n')}; export const cards = [${classes.join(',')}];`)
+    await put(root, 'main.ts', `${imports.join(';\n')}; import { cards } from './cards.css.ts';
+cards.forEach((card, index) => { const node = document.createElement('p'); node.id = 'card-' + index; node.className = card; node.textContent = 'card'; document.body.append(node); });
+const button = document.createElement('button'); button.textContent = 'Compact'; button.onclick = () => { ${controls.join('\n')} }; document.body.append(button);`)
+    await put(root, 'index.html', '<!doctype html><html><head></head><body><script type="module" src="/main.ts"></script></body></html>')
+    await put(root, 'ssr.ts', `import { createSSRApp, h } from 'vue'; import { renderToString } from 'vue/server-renderer'; ${imports.join(';\n')}; import { cards } from './cards.css.ts';
+export const render = () => renderToString(createSSRApp({ render: () => h('div', [${snapshots.join(',')}].map((attributes, index) => h('p', { id: 'card-' + index, class: cards[index], ...attributes }, 'card'))) }));`)
+    server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system: systems } })], resolve: { alias: { ...alias, vue: join(sdkRoot, 'node_modules/vue') } }, optimizeDeps: { noDiscovery: true }, server: { host: '127.0.0.1', port: 0, watch: null } })
+    await server.listen()
+    await page.goto(server.resolvedUrls!.local[0]!, { waitUntil: 'networkidle' })
+    for (let index = 0; index < mounts.length; index++)
+      await expect(page.locator(`#card-${index}`)).toHaveCSS('color', 'rgb(0, 0, 0)')
+    await page.getByRole('button', { name: 'Compact' }).click()
+    for (let index = 0; index < mounts.length; index++)
+      await expect(page.locator(`#card-${index}`)).toHaveCSS('color', 'rgb(255, 0, 0)')
+    const selectors = await page.evaluate(() => {
+      const collect = (rules: CSSRuleList): string[] => [...rules].flatMap(rule => [
+        ...('selectorText' in rule ? [(rule as CSSStyleRule).selectorText] : []),
+        ...('cssRules' in rule ? collect((rule as CSSGroupingRule).cssRules) : []),
+      ])
+      return [...document.styleSheets].flatMap(sheet => collect(sheet.cssRules))
+    })
+    for (let index = 0; index < mounts.length; index++) {
+      const className = await page.locator(`#card-${index}`).getAttribute('class')
+      expect(selectors).toContain(`.${className}`)
+    }
+    const styles = await page.locator('style').evaluateAll(nodes => nodes.map(node => node.outerHTML).join('\n'))
+    const ssr = await server.ssrLoadModule('/ssr.ts')
+    await page.setContent(`${styles}${await ssr.render()}`)
+    for (let index = 0; index < mounts.length; index++)
+      await expect(page.locator(`#card-${index}`)).toHaveCSS('color', 'rgb(255, 0, 0)')
+  }
+  finally {
+    await server?.close()
+    await rm(root, { recursive: true, force: true })
   }
 })

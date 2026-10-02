@@ -34,6 +34,7 @@ import {
 import { isPackageSpecifier } from './compiler/auto-imports/applicationImports'
 import { renderStyleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
 import { planAutoImportDeclarations } from './compiler/auto-imports/autoImportPlan'
+import { renderLayerStatement } from './compiler/core/layers'
 import { configureVanityViteHost } from './compiler/hosts/viteHost'
 import { renderVanityNuxtConfigTypes } from './nuxt/configTypes'
 import { protectRelativeColorSyntax } from './nuxt/postcss'
@@ -129,6 +130,15 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
       resolveRootedViteOptions(options, nuxt.options.rootDir),
       'nuxt',
     ))))
+    const layerStatement = renderLayerStatement(options.compiler?.layerOrder ?? [])
+    if (layerStatement) {
+      nuxt.options.app.head.style ??= []
+      nuxt.options.app.head.style.unshift({
+        key: 'vanity-layer-order',
+        innerHTML: layerStatement,
+        tagPriority: 'critical',
+      })
+    }
 
     addPluginTemplate({
       filename: 'vanity-scheme.mjs',

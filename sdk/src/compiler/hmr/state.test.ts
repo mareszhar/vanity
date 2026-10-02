@@ -233,7 +233,7 @@ describe('compiler CSS ownership state', () => {
     let forwarded = false
 
     cache.remember(id, ':root { --brand: blue; }')
-    cache.addMiddleware(server, '/app', '/_nuxt/')
+    cache.addMiddleware(server, '/app', '/_nuxt/', css => css)
     if (middleware === undefined)
       throw new Error('Vite CSS response middleware was not registered')
     middleware(
@@ -278,7 +278,7 @@ describe('compiler CSS ownership state', () => {
     let forwarded = false
 
     cache.remember(id, '.button { color: var(--outside-color-brand); }')
-    cache.addMiddleware(server, root, '/_nuxt/')
+    cache.addMiddleware(server, root, '/_nuxt/', css => css)
     if (middleware === undefined)
       throw new Error('Vite CSS response middleware was not registered')
     middleware(

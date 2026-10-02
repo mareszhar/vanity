@@ -81,7 +81,7 @@ import { bindFontFace, bindKeyframes } from '../css/keyframes'
 import { createRawEmitter } from '../css/raw'
 import { createRulesEmitter } from '../css/rules'
 import { createPropagatedTokenDeclarations, createTokenDeclarations } from '../css/tdec'
-import { checkSelector } from '../css/validation'
+import { checkSelector, parseLayerName } from '../css/validation'
 import { getDiagnosticSource, VanityError } from '../diagnostics'
 import { runSystemAudit } from '../introspect/audit'
 import { explainFromSystem, explainToken } from '../introspect/explain'
@@ -124,6 +124,7 @@ import {
   createSystemContract,
   VANITY_IN_PROCESS_SYSTEM,
 } from './contract'
+import { orderSystemLayers } from './layers'
 import { resolvePolicies } from './policies'
 import { orderSystemRules } from './rules'
 
@@ -617,6 +618,23 @@ function materializeLockedSystem<
     })
   }
 
+  const layerIdentities = new Set<string>()
+  for (const [index, layer] of layers.entries()) {
+    const { identity, reason } = parseLayerName(layer)
+    if (identity !== undefined && !layerIdentities.has(identity)) {
+      layerIdentities.add(identity)
+      continue
+    }
+    const source = options.layerOrder === undefined ? 'policies.layerOrder' : 'consolidate.layerOrder'
+    throw new VanityError({
+      code: 'VANITY_SYSTEM_INVALID_LAYER',
+      message: `layer '${layer}' in ${source} ${reason === undefined ? 'repeats an earlier CSS layer identity; the browser would merge their positions' : `is not one CSS identifier: ${reason}; the browser would drop rules or collide with Vanity-owned nesting`}`,
+      path: [source, String(index)],
+      file,
+      fix: 'name each layer once with one CSS identifier without a dot, such as \'recipes\'',
+    })
+  }
+
   if (root.includes('&') || checkSelector(root)) {
     throw new VanityError({
       code: 'VANITY_SYSTEM_INVALID_ROOT',
@@ -647,6 +665,7 @@ function materializeLockedSystem<
     })
   }
   const qualifiedTokenLayer = tokenLayer === undefined ? undefined : `${prefix}.${tokenLayer}`
+  const systemLayerOrder = orderSystemLayers(prefix, layers, tokenLayer, binding.axes.order)
 
   let phaseLayers: VanityTokenPhaseLayers | undefined
   if (qualifiedTokenLayer !== undefined) {
@@ -882,18 +901,7 @@ function materializeLockedSystem<
       ...(scope?.packageName === undefined ? {} : { packageName: scope.packageName }),
     }, () => {
       // Establish the complete layer order before token/style declarations.
-      substrate.css.emitLayer({ name: prefix })
-      for (const layer of layers)
-        substrate.css.emitLayer({ parent: prefix, name: layer })
-
-      if (qualifiedTokenLayer !== undefined) {
-        substrate.css.emitLayer({ parent: qualifiedTokenLayer, name: 'base' })
-        substrate.css.emitLayer({ parent: qualifiedTokenLayer, name: 'axes' })
-        const axesLayer = `${qualifiedTokenLayer}.axes`
-        for (const axis of binding.axes.order)
-          substrate.css.emitLayer({ parent: axesLayer, name: axis })
-        substrate.css.emitLayer({ parent: qualifiedTokenLayer, name: 'cases' })
-      }
+      substrate.css.emitLayerOrder(systemLayerOrder)
 
       emitTokenGraph(tokens)
       if (mode.systemRules !== undefined)
@@ -1058,10 +1066,13 @@ function materializeLockedSystem<
     clearEmission: () => { emitted = false },
   })
   ensureSystemEmitted = (): void => {
-    if (emitted)
-      return
-    recordPortableSystem(contract.portable)
-    emitSystem()
+    if (!emitted) {
+      recordPortableSystem(contract.portable)
+      emitSystem()
+    }
+    // A system instance outlives a style-module capture. Declare its order in
+    // the caller's file scope even when its own CSS was emitted earlier.
+    substrate.css.emitLayerOrder(systemLayerOrder)
   }
   Object.defineProperty(bound, VANITY_IN_PROCESS_SYSTEM, {
     enumerable: false,

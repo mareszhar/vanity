@@ -1,0 +1,11 @@
+{
+  "name": "spike-html-build-hosts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "vite": "6.4.3"
+  }
+}

@@ -28,6 +28,7 @@ import type {
   VanityTokens,
   VanityTokensOptions,
 } from './types'
+import { setOwn } from '../collections'
 import { getStyleModuleFile } from '../css/context'
 import { emitTokenCss } from '../css/tokens'
 import { checkSelector } from '../css/validation'
@@ -755,7 +756,9 @@ export function buildTokens<T extends object, Prefix extends string = 'vanity'>(
     substrate.modules.registerFunctionSerialization(node.handle as unknown as (...args: unknown[]) => unknown, {
       importPath: '@mszr/vanity/runtime',
       importName: 'restoreToken',
-      args: [createTokenRestorationMeta(node, resolved) as any],
+      // The substrate serializes objects as JavaScript literals, whose __proto__
+      // keys are setters. Carry token metadata as native JSON instead.
+      args: [JSON.stringify(createTokenRestorationMeta(node, resolved))],
     })
   }
 
@@ -883,7 +886,7 @@ function resolvePatchValue(
     const value = (token as any)(config)
     return new Proxy(value, {
       get(target, key, receiver) {
-        if (typeof key !== 'string' || axes?.definitions[key] === undefined)
+        if (typeof key !== 'string' || !axes || !Object.hasOwn(axes.definitions, key))
           return Reflect.get(target, key, receiver)
         return (input: unknown) => createConfiguredPatch({
           ...config,
@@ -899,7 +902,7 @@ function resolvePatchValue(
     get(_target, key) {
       if (key === 'val')
         return (value: unknown) => createConfiguredPatch({ val: value })
-      if (typeof key === 'string' && axes?.definitions[key] !== undefined) {
+      if (typeof key === 'string' && axes && Object.hasOwn(axes.definitions, key)) {
         return (input: unknown) => createConfiguredPatch({
           axes: { [key]: normalizePatchAxisInput(input, axes.definitions[key]!) },
         })
@@ -1042,11 +1045,12 @@ function createTokenRestorationMeta(
 
   for (const branch of node.branches) {
     if (branch.kind === 'axis') {
-      axes[branch.axis] ??= {}
-      axes[branch.axis]![branch.mode] = {
+      if (!Object.hasOwn(axes, branch.axis))
+        setOwn(axes, branch.axis, {})
+      setOwn(axes[branch.axis]!, branch.mode, {
         ...(branch.handle.$val === undefined ? {} : { value: branch.handle.$val }),
         ...(branch.handle[VANITY_RUNTIME_ADDRESS] === undefined ? {} : { runtime: branch.handle[VANITY_RUNTIME_ADDRESS] }),
-      }
+      })
     }
     else {
       cases.push({
@@ -1177,9 +1181,9 @@ function buildRuntimeContract(graph: TokenGraph): VanityRuntimeContract {
       const values: Record<string, string | null> = {}
       for (const { mode, arm } of runtimeArms) {
         if (arm?.runtime?.name === name)
-          values[mode] = arm.runtime.value
+          setOwn(values, mode, arm.runtime.value)
         else if (mode === definition.defaultMode && definition.modes[mode]!.arms.length === 0)
-          values[mode] = null
+          setOwn(values, mode, null)
       }
       if (Object.keys(values).length > 0)
         attribute = { name, values: Object.freeze(values) }
@@ -1832,7 +1836,7 @@ function normalizeToken(
     }
 
     if (hasVal && definition.defaultMode !== undefined && !Object.hasOwn(authored, definition.defaultMode))
-      authored[definition.defaultMode] = rawVal
+      setOwn(authored, definition.defaultMode, rawVal)
 
     authoredAxes.set(axis, authored)
   }
@@ -1851,7 +1855,7 @@ function normalizeToken(
       const definition = requireAxis(axes, axis, key)
       if (!Object.hasOwn(definition.modes, mode))
         assertValidTrait(key, `cases.when.${axis}`, `use one of the declared modes: ${definition.modeOrder.join(', ')}`)
-      normalizedWhen[axis] = mode
+      setOwn(normalizedWhen, axis, mode)
       caseAxes.add(axis)
     }
     for (const axis of Object.keys(entry.when)) {

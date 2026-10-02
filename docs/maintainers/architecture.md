@@ -47,7 +47,7 @@ The compiler:
 - keeps system CSS separate from per-style-module CSS;
 - imports the system CSS virtual module from each style module that reaches that system and relies on module-ID deduplication;
 - keeps lazy style CSS in the lazy chunk;
-- owns a separate first-loaded cross-system cascade prelude;
+- declares the host's root order in every compiler-owned stylesheet, and each system's layer order in every stylesheet that carries its rules ([§5](#5-css-ownership));
 - generates browser and SSR modules from portable data, never by trusting tree-shaking of the in-process contract;
 - lowers or executes all closures before serialization;
 - resolves configured entries through the build host while retaining configured spelling, physical module identity, and authored source as separate facts;
@@ -95,7 +95,11 @@ One fingerprint cannot serve all consumers. Each ID is a hash of its complete no
 | runtime schema ID | mutable slots, roots/query strategies, controls, validators, hydration addresses, app-visible conditions/layers/consts | runtime-controller and snapshot compatibility |
 | docs/provenance revision | descriptions, source locations, explanations, documentation metadata | manifest/docs only |
 
-A token value edit changes CSS identity without invalidating runtime shape. A description edit changes only documentation identity and must not rewrite CSS, send a CSS update, or churn CSS mtimes. Named-rule names remain structural documentation/compatibility data but do not become CSS bytes when the emitted rule is unchanged. The generated application backing is selected by runtime-schema identity. Each authored member receives an export projection under its physical module ID, so a configured barrel and its leaf can share runtime state without sharing JavaScript exports. Actual system exports use the generated backing; ordinary exports remain host-module edges so objects, callables, and live bindings retain JavaScript module semantics. A change in the authored member set changes module ownership and requires invalidating the affected graph nodes.
+A token value edit changes CSS identity without invalidating runtime shape. A description edit changes only documentation identity and must not rewrite CSS, send a CSS update, or churn CSS mtimes. Named-rule names remain structural documentation/compatibility data but do not become CSS bytes when the emitted rule is unchanged.
+
+The generated application backing is selected by runtime-schema identity. Each authored member receives an export projection under its physical module ID, so a configured barrel and its leaf can share runtime state without sharing JavaScript exports. Actual system exports use the generated backing; ordinary exports remain host-module edges so objects, callables, and live bindings retain JavaScript module semantics. A change in the authored member set changes module ownership and requires invalidating the affected graph nodes.
+
+Generated modules parse portable records from JSON text instead of embedding them as object literals, so an authored key such as `__proto__` stays own data through browser and SSR restoration. Token exports from style modules are restored the same way.
 
 The configured authored system module is a module-role boundary. It may export the evaluated system and values taken from that system, including renamed destructured members; an unrelated application export receives `VANITY_APP_EXPORT_IN_SYSTEM_MODULE` with the small move-and-import fix. Pure ordinary modules and re-export barrels remain in the host graph unchanged, so their objects, callables, closures, and live bindings keep native module semantics.
 
@@ -131,18 +135,29 @@ One system owns one CSS namespace:
 
 Two runtime-compatible systems may share a runtime controller. They may not emit different CSS into the same effective namespace unless their ownership is demonstrably disjoint. A collision fails and names both sources and CSS identities.
 
-Per-system layers are nested:
+Every stylesheet opens with the layer order it needs, so no delivery order can rearrange Vanity's cascade. A stylesheet carrying a system's rules declares that system's complete nested order; every compiler-owned stylesheet declares the host's root order before it:
 
 ```css
+@layer vendor, app;
 @layer app;
-@layer app.reset, app.tokens, app.recipes, app.utilities, app.overrides;
+@layer app.reset;
+@layer app.tokens;
+@layer app.recipes;
+@layer app.utilities;
+@layer app.overrides;
+@layer app.tokens.base;
+@layer app.tokens.axes;
+@layer app.tokens.axes.scheme;
+@layer app.tokens.cases;
 ```
 
-The host integration emits the cross-system order prelude before any system or lazy stylesheet:
+Redeclaring a layer is a no-op, so whichever stylesheet the browser meets first establishes the whole order and every later one agrees with it. The repetition is deliberate and must not be optimized away: lightningcss merges repeated statements and esbuild keeps one per stylesheet module, and no stylesheet can assume it is not the one that arrives first.
 
-```css
-@layer vendor, library, app;
-```
+Root ranking and the `compiler.layerOrder` option are specified in [system §9](../reference/spec-system.md#9-compiler-projection); the host adapter also places listed roots first in integrated HTML documents.
+
+Inside the substrate, a system's order is a semantic contribution to the active capture rather than rendered text. The capture deduplicates it by file scope and complete order and emits native layer declarations before any other rule. Cached systems may keep independently bundled authoring copies; the capture, not the copy, owns the statement's lifetime. The [capture contribution spike](../../spikes/capture-layer-contributions/README.md) establishes that backend boundary.
+
+One parser-owned identifier consumption validates layer and axis names, and names compare by decoded CSS identity: a spelling the parser would only partly consume as an identifier is rejected, not trusted. The [identifier consumption spike](../../spikes/identifier-consumption/README.md) establishes this boundary.
 
 Configured system CSS is a semantic system artifact, addressed by its CSS identity and owned independently of the style module that first reaches it. A style retains an edge to every configured system it uses; materializing a configured system does not make unrelated system or component CSS eager. Shared CSS identities keep all current system and style owners, and an artifact is retired only after its last owner and any required graph transition release it.
 
@@ -208,7 +223,9 @@ Required recovery sequences:
 4. docs-only edit updates the manifest without touching CSS;
 5. incompatible export-shape change performs the documented reload rather than serving stale state.
 
-Candidates are built completely—CSS, portable data, build exports, inspection records, namespace membership, runtime lookup, and serialized artifact—before accepted compiler state changes. A failed candidate leaves the last-good system and CSS virtual modules addressable, restores evaluation state, and remains watchable for a retry. CSS-identity changes switch style edges to the new virtual module and retire the old one only when no owner or transition still needs it; same-identity docs changes update the manifest without a CSS notification.
+Candidates are built completely—CSS, portable data, build exports, inspection records, namespace membership, runtime lookup, and serialized artifact—before accepted compiler state changes. A failed candidate leaves the last-good system and CSS virtual modules addressable, restores evaluation state, and remains watchable for a retry. CSS-identity changes switch style edges to the new virtual module and retire the old one only when no owner or transition still needs it. Same-identity docs changes update the manifest without a CSS notification.
+
+In development, the browser prunes a retired stylesheet only after its replacement is installed on that page. A server graph node does not establish that a page imported it, so the decision is made per client: development CSS modules report the revision they installed through Vite's native CSS path, evaluated style sources report the CSS they actually import, and the host sends a native prune to a client only when the two agree with current state. Stable style CSS and new system CSS both take part, and Vite's own import-analysis prunes of compiler CSS are held to the same boundary even when passes overlap or responses arrive late; every other native payload passes through. Pending state is dropped with its source, CSS, client, or host. Production output carries none of this transport. The [CSS installation spike](../../spikes/css-module-installation/README.md) establishes the native seam across supported Vite majors.
 
 The member set changes when a configured barrel starts or stops re-exporting an authored module, or when a configured entry turns from an authored module into a pure re-export or back. Vanity invalidates every module that joined or left the set across client and SSR graphs and sends one full reload; the next request then uses the new ownership. An unrelated application save leaves that set alone.
 
@@ -266,7 +283,23 @@ The compiler owns Vanity's pipeline, while a host adapter owns how that pipeline
 
 The plugin runs in more hosts than an application's dev server and build. It runs on Vite 5 through 8, in development servers, one-shot builds, and watch builds, and in client and SSR graphs. Nuxt runs a client host and a server host from one plugin instance, and WXT mounts the same plugin. Vitest reuses the application's Vite config by default, and tests create their own servers and builds. Adapter behavior is defined over all of these. The authoring-import guard, for example, serves application graphs only. Its plugin's `apply` leaves it out of a Vitest host, while a server that a test creates has no Vitest plugin and keeps the guard.
 
-Vite reads hook filters differently across its supported range. Its Vite 6–8 development container compiles each hook filter at its first call and caches it by plugin object for the process; Vite 5 development applies no filters. Vite 8 binds filters for each one-shot build, Rollup compiles them per build, and Rolldown snapshots watch filters once when the watcher is created. Vanity keeps `load` and `resolveId` unfiltered for development and watch hosts. On Vite 6–8, a serve host holds each filter absent until that hook's first development call proves the absent filter was cached for every server sharing the plugin object. Watch hosts hold both filters until they close. On Vite 5, the active-host slot is released when a one-shot build closes or a watcher's `closeWatcher` hook runs. One-shot builds add their member files to an instance-wide union and assign a fresh filter object only when no hold is active; handlers still check membership for the active target. A build during a development hold joins the union but runs unfiltered. This monotone rule keeps every build that reads a filter able to project its members. The host-graph compatibility gate proves these projections on each supported major; the isolated [plugin ownership spike](../../spikes/plugin-module-ownership/README.md) records the host evidence.
+Hook filters must admit every member the current host can serve. Vite caches them at different points:
+
+| Host | When filters are captured |
+| --- | --- |
+| Vite 5 development | No hook filters are applied. |
+| Vite 6–8 development | Each hook's first call; cached by plugin object for the process. |
+| Vite 8 one-shot build | Bound for each build. |
+| Rollup build | Compiled for each build. |
+| Rolldown watch build | Snapshotted when the watcher is created. |
+
+Vanity leaves `load` and `resolveId` unfiltered in development and watch hosts. Each Vite 6–8 development hook keeps its filter absent until its first call establishes that every server sharing the plugin object has cached the absence. A watch host keeps both filters absent until it closes.
+
+One-shot builds add their member files to an instance-wide union. A fresh filter object is assigned only when no development or watch host holds it absent; a build during a development hold adds its members but runs unfiltered. Handlers always check membership for the active target. Growing the union keeps an earlier build's captured filter valid while later builds discover more members.
+
+On Vite 5, the active-host slot is released when a one-shot build closes or a watch host reaches `closeWatcher`. The supported-major graph gate verifies these lifetime and projection rules; the [plugin ownership spike](../../spikes/plugin-module-ownership/README.md) records the host evidence.
+
+A Vite HTML hook selects a build only when it needs to link a document layer-order asset. Without listed roots, or when Nuxt owns the document statement, it returns immediately. Where Vite omits the hook environment, Vanity matches the HTML file against active browser builds' resolved inputs and requires one owner. A completed build leaves the active group; a watch host stays live until `closeWatcher`. The [HTML build host spike](../../spikes/html-build-hosts/README.md) establishes the context and lifetime facts.
 
 Vite exposes no single public operation that removes one accepted module from every environment graph while retaining modules other systems still own, so the adapter invalidates through Vite first and then updates the graph indexes retirement requires; those structures are checked before use and the seam fails with a focused error rather than silently keeping stale CSS. Separately, the adapter holds a small, short-lived copy of the previous CSS bytes outside the ownership and module graphs, so a browser already revalidating the old stylesheet URL can finish a transition. That copy can neither restore ownership nor recreate a retired node.
 

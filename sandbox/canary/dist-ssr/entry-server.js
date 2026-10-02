@@ -17,6 +17,14 @@ var VanityRuntimeError = class extends Error {
 function createVanityRuntimeError(diagnostic) {
 	return new VanityRuntimeError(diagnostic);
 }
+function setOwn(target, key, value) {
+	Object.defineProperty(target, key, {
+		enumerable: true,
+		configurable: true,
+		writable: true,
+		value
+	});
+}
 function getVanityHandleSymbol() {
 	return Symbol.for("vanity.tokenHandle");
 }
@@ -124,8 +132,8 @@ function createBranchHandle(value, meta = {}) {
 }
 function attachAxisBranch(handle, axis, mode, branch) {
 	const axes = handle.$axes;
-	axes[axis] ??= {};
-	axes[axis][mode] = branch;
+	if (!Object.hasOwn(axes, axis)) setOwn(axes, axis, {});
+	setOwn(axes[axis], mode, branch);
 }
 function attachCaseBranch(handle, when, branch) {
 	const symbol = getCaseBranchesSymbol();
@@ -427,7 +435,7 @@ function createRuntimeAxes(contract, state, emit) {
 			$switchTo: switchTo,
 			$current: () => getCurrentMode(contract, state, axis),
 			$cycle: (options = {}) => {
-				const modes = definition.modes.filter((mode) => definition.control !== void 0 || definition.attribute?.values[mode] !== void 0).filter((mode) => !options.exclude?.includes(mode));
+				const modes = definition.modes.filter((mode) => definition.control !== void 0 || Object.hasOwn(definition.attribute?.values ?? {}, mode)).filter((mode) => !options.exclude?.includes(mode));
 				if (modes.length === 0) throwRuntimeDiagnostic({
 					code: "VANITY_RUNTIME_UNSELECTABLE_AXIS",
 					message: `runtime axis '${axis}' has no activatable modes left to cycle`,
@@ -439,8 +447,8 @@ function createRuntimeAxes(contract, state, emit) {
 				switchTo(next);
 			}
 		};
-		for (const mode of definition.modes) if (definition.control !== void 0 || definition.attribute?.values[mode] !== void 0) actions[mode] = Object.freeze({ $activate: () => switchTo(mode) });
-		tree[axis] = Object.freeze(actions);
+		for (const mode of definition.modes) if (definition.control !== void 0 || Object.hasOwn(definition.attribute?.values ?? {}, mode)) setOwn(actions, mode, Object.freeze({ $activate: () => switchTo(mode) }));
+		setOwn(tree, axis, Object.freeze(actions));
 	}
 	return Object.freeze(tree);
 }
@@ -460,7 +468,7 @@ function prepareMode(contract, state, axis, mode) {
 		mode,
 		fix: `use one of the declared modes: ${definition.modes.join(", ")}`
 	});
-	const value = definition.attribute?.values[mode];
+	const value = definition.attribute && Object.hasOwn(definition.attribute.values, mode) ? definition.attribute.values[mode] : void 0;
 	if ((!definition.attribute || value === void 0) && !definition.control) throwRuntimeDiagnostic({
 		code: "VANITY_RUNTIME_UNSELECTABLE_AXIS",
 		message: `runtime axis '${axis}' cannot activate mode '${mode}'`,
@@ -571,8 +579,8 @@ function createRuntimeTree(contract, state, schemas, emit) {
 				...token.mutable && branch.slot ? { runtime: createRuntimeMeta(contract, token, branch.address, branch.slot) } : {}
 			};
 			if (branch.address.kind === "axis") {
-				axes[branch.address.axis] ??= {};
-				axes[branch.address.axis][branch.address.mode] = branchMeta;
+				if (!Object.hasOwn(axes, branch.address.axis)) setOwn(axes, branch.address.axis, {});
+				setOwn(axes[branch.address.axis], branch.address.mode, branchMeta);
 			} else cases.push({
 				when: branch.address.when,
 				...branchMeta
@@ -797,7 +805,7 @@ function reconcileSnapshot(contract, input, schemas, options) {
 	}
 	const modes = {};
 	for (const [axis, mode] of Object.entries(source.modes)) {
-		const definition = contract.axes[axis];
+		const definition = Object.hasOwn(contract.axes, axis) ? contract.axes[axis] : void 0;
 		if (!definition || !definition.modes.includes(mode)) {
 			diagnostics.push({
 				code: "VANITY_RUNTIME_UNKNOWN_MODE",
@@ -807,7 +815,7 @@ function reconcileSnapshot(contract, input, schemas, options) {
 			});
 			continue;
 		}
-		if ((!definition.attribute || definition.attribute.values[mode] === void 0) && !definition.control) {
+		if ((!definition.attribute || !Object.hasOwn(definition.attribute.values, mode)) && !definition.control) {
 			diagnostics.push({
 				code: "VANITY_RUNTIME_UNSELECTABLE_AXIS",
 				message: `snapshot mode '${axis}.${mode}' has no runtime root attribute mapping`,
@@ -816,7 +824,7 @@ function reconcileSnapshot(contract, input, schemas, options) {
 			});
 			continue;
 		}
-		modes[axis] = mode;
+		setOwn(modes, axis, mode);
 	}
 	return Object.freeze({
 		snapshot: Object.freeze({
@@ -1010,7 +1018,7 @@ function projectAttributesForRoot(contract, snapshot, root) {
 	for (const [axis, mode] of Object.entries(snapshot.modes)) {
 		if (!root.axes.includes(axis)) continue;
 		const adapter = contract.axes[axis]?.attribute;
-		const value = adapter?.values[mode];
+		const value = adapter && Object.hasOwn(adapter.values, mode) ? adapter.values[mode] : void 0;
 		if (adapter && value !== void 0 && value !== null) attributes[adapter.name] = value;
 		Object.assign(attributes, contract.axes[axis]?.control?.projections?.[mode]?.attributes);
 	}
@@ -1045,7 +1053,7 @@ function restoreRuntimeState(contract, state, snapshot) {
 		writeStyle(targets.get(token.rootPath)[0].style, slot, entry.val);
 	}
 	for (const [axis] of state.modes) {
-		if (snapshot.modes[axis] !== void 0) continue;
+		if (Object.hasOwn(snapshot.modes, axis)) continue;
 		const adapter = contract.axes[axis]?.attribute;
 		if (!adapter) continue;
 		for (const root of getRootsForAxis(state, axis)) for (const target of targets.get(root.contract.path) ?? []) removeAttribute(target, adapter.name);
@@ -1296,7 +1304,7 @@ function getErrorMessage(error) {
 	return error instanceof Error ? error.message : String(error);
 }
 function restoreToken(meta) {
-	return createHandle(meta, { serializeFallback: serializeRuntimeCssText });
+	return createHandle(typeof meta === "string" ? JSON.parse(meta) : meta, { serializeFallback: serializeRuntimeCssText });
 }
 function restoreStyleAuthoringStub(meta) {
 	return () => {
@@ -1311,168 +1319,8 @@ function restoreStyleAuthoringStub(meta) {
 }
 //#endregion
 //#region \0vanity:system-runtime:ssr:vanity-runtime-schema-1-3l9guy
-var _runtimeContract = {
-	"axes": { "scheme": {
-		"attribute": {
-			"name": "data-scheme",
-			"values": {
-				"dark": "dark",
-				"light": "light"
-			}
-		},
-		"defaultMode": "light",
-		"modes": ["light", "dark"]
-	} },
-	"axisOrder": ["scheme"],
-	"prefix": "canary",
-	"protocol": 2,
-	"root": ":root",
-	"roots": [{
-		"axes": ["scheme"],
-		"path": "$system",
-		"selector": ":root"
-	}, {
-		"axes": ["scheme"],
-		"path": "panel",
-		"selector": "#panel"
-	}],
-	"system": "vanity-runtime-2-1jdvz9j",
-	"tokens": [
-		{
-			"token": ["color", "brand"],
-			"name": "--canary-color-brand",
-			"rootPath": "$system",
-			"root": ":root",
-			"type": "color",
-			"reference": "var",
-			"emit": true,
-			"mutable": true,
-			"baseSlot": "--canary-v-6jb35s",
-			"branches": [{
-				"address": {
-					"axis": "scheme",
-					"kind": "axis",
-					"mode": "dark"
-				},
-				"slot": "--canary-v-jueavt"
-			}, {
-				"address": {
-					"axis": "scheme",
-					"kind": "axis",
-					"mode": "light"
-				},
-				"slot": "--canary-v-1uiq57f"
-			}]
-		},
-		{
-			"token": ["color", "canvas"],
-			"name": "--canary-color-canvas",
-			"rootPath": "$system",
-			"root": ":root",
-			"type": "unknown",
-			"reference": "var",
-			"emit": true,
-			"mutable": false,
-			"branches": []
-		},
-		{
-			"token": ["space", "md"],
-			"name": "--canary-space-md",
-			"rootPath": "$system",
-			"root": ":root",
-			"type": "unknown",
-			"reference": "var",
-			"emit": true,
-			"mutable": false,
-			"branches": []
-		},
-		{
-			"token": ["panel", "accent"],
-			"name": "--canary-panel-accent",
-			"rootPath": "panel",
-			"root": "#panel",
-			"type": "color",
-			"reference": "var",
-			"emit": true,
-			"mutable": false,
-			"branches": [{ "address": {
-				"axis": "scheme",
-				"kind": "axis",
-				"mode": "dark"
-			} }, { "address": {
-				"axis": "scheme",
-				"kind": "axis",
-				"mode": "light"
-			} }]
-		}
-	]
-};
-var _tokenRecords = [
-	{
-		"name": "--canary-color-brand",
-		"path": "color.brand",
-		"reference": "var",
-		"emit": true,
-		"mutable": true,
-		"type": "color",
-		"runtime": {
-			"address": { "kind": "base" },
-			"slot": "--canary-v-6jb35s",
-			"system": "vanity-runtime-2-1jdvz9j",
-			"token": ["color", "brand"]
-		},
-		"axes": { "scheme": {
-			"dark": { "runtime": {
-				"address": {
-					"axis": "scheme",
-					"kind": "axis",
-					"mode": "dark"
-				},
-				"slot": "--canary-v-jueavt",
-				"system": "vanity-runtime-2-1jdvz9j",
-				"token": ["color", "brand"]
-			} },
-			"light": { "runtime": {
-				"address": {
-					"axis": "scheme",
-					"kind": "axis",
-					"mode": "light"
-				},
-				"slot": "--canary-v-1uiq57f",
-				"system": "vanity-runtime-2-1jdvz9j",
-				"token": ["color", "brand"]
-			} }
-		} }
-	},
-	{
-		"name": "--canary-color-canvas",
-		"path": "color.canvas",
-		"reference": "var",
-		"emit": true,
-		"mutable": false,
-		"type": "unknown"
-	},
-	{
-		"name": "--canary-space-md",
-		"path": "space.md",
-		"reference": "var",
-		"emit": true,
-		"mutable": false,
-		"type": "unknown"
-	},
-	{
-		"name": "--canary-panel-accent",
-		"path": "panel.accent",
-		"reference": "var",
-		"emit": true,
-		"mutable": false,
-		"type": "color",
-		"axes": { "scheme": {
-			"dark": {},
-			"light": {}
-		} }
-	}
-];
+var _runtimeContract = JSON.parse("{\"axes\":{\"scheme\":{\"attribute\":{\"name\":\"data-scheme\",\"values\":{\"dark\":\"dark\",\"light\":\"light\"}},\"defaultMode\":\"light\",\"modes\":[\"light\",\"dark\"]}},\"axisOrder\":[\"scheme\"],\"prefix\":\"canary\",\"protocol\":2,\"root\":\":root\",\"roots\":[{\"axes\":[\"scheme\"],\"path\":\"$system\",\"selector\":\":root\"},{\"axes\":[\"scheme\"],\"path\":\"panel\",\"selector\":\"#panel\"}],\"system\":\"vanity-runtime-2-1jdvz9j\",\"tokens\":[{\"token\":[\"color\",\"brand\"],\"name\":\"--canary-color-brand\",\"rootPath\":\"$system\",\"root\":\":root\",\"type\":\"color\",\"reference\":\"var\",\"emit\":true,\"mutable\":true,\"baseSlot\":\"--canary-v-6jb35s\",\"branches\":[{\"address\":{\"axis\":\"scheme\",\"kind\":\"axis\",\"mode\":\"dark\"},\"slot\":\"--canary-v-jueavt\"},{\"address\":{\"axis\":\"scheme\",\"kind\":\"axis\",\"mode\":\"light\"},\"slot\":\"--canary-v-1uiq57f\"}]},{\"token\":[\"color\",\"canvas\"],\"name\":\"--canary-color-canvas\",\"rootPath\":\"$system\",\"root\":\":root\",\"type\":\"unknown\",\"reference\":\"var\",\"emit\":true,\"mutable\":false,\"branches\":[]},{\"token\":[\"space\",\"md\"],\"name\":\"--canary-space-md\",\"rootPath\":\"$system\",\"root\":\":root\",\"type\":\"unknown\",\"reference\":\"var\",\"emit\":true,\"mutable\":false,\"branches\":[]},{\"token\":[\"panel\",\"accent\"],\"name\":\"--canary-panel-accent\",\"rootPath\":\"panel\",\"root\":\"#panel\",\"type\":\"color\",\"reference\":\"var\",\"emit\":true,\"mutable\":false,\"branches\":[{\"address\":{\"axis\":\"scheme\",\"kind\":\"axis\",\"mode\":\"dark\"}},{\"address\":{\"axis\":\"scheme\",\"kind\":\"axis\",\"mode\":\"light\"}}]}]}");
+var _tokenRecords = JSON.parse("[{\"name\":\"--canary-color-brand\",\"path\":\"color.brand\",\"reference\":\"var\",\"emit\":true,\"mutable\":true,\"type\":\"color\",\"runtime\":{\"address\":{\"kind\":\"base\"},\"slot\":\"--canary-v-6jb35s\",\"system\":\"vanity-runtime-2-1jdvz9j\",\"token\":[\"color\",\"brand\"]},\"axes\":{\"scheme\":{\"dark\":{\"runtime\":{\"address\":{\"axis\":\"scheme\",\"kind\":\"axis\",\"mode\":\"dark\"},\"slot\":\"--canary-v-jueavt\",\"system\":\"vanity-runtime-2-1jdvz9j\",\"token\":[\"color\",\"brand\"]}},\"light\":{\"runtime\":{\"address\":{\"axis\":\"scheme\",\"kind\":\"axis\",\"mode\":\"light\"},\"slot\":\"--canary-v-1uiq57f\",\"system\":\"vanity-runtime-2-1jdvz9j\",\"token\":[\"color\",\"brand\"]}}}}},{\"name\":\"--canary-color-canvas\",\"path\":\"color.canvas\",\"reference\":\"var\",\"emit\":true,\"mutable\":false,\"type\":\"unknown\"},{\"name\":\"--canary-space-md\",\"path\":\"space.md\",\"reference\":\"var\",\"emit\":true,\"mutable\":false,\"type\":\"unknown\"},{\"name\":\"--canary-panel-accent\",\"path\":\"panel.accent\",\"reference\":\"var\",\"emit\":true,\"mutable\":false,\"type\":\"color\",\"axes\":{\"scheme\":{\"dark\":{},\"light\":{}}}}]");
 var _t = {};
 for (const _meta of _tokenRecords) {
 	const _parts = _meta.path.split(".");

@@ -6,6 +6,7 @@ import {
   definePlugin,
   exportDesignTokens,
   importDesignTokens,
+  thisMode,
 } from '@mszr/vanity'
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
@@ -333,4 +334,25 @@ describe('dTCG interchange', () => {
     }))
     expect(() => exportDesignTokens(nested, { mode: 'authored' })).toThrow('nested in a core/mixed expression')
   })
+})
+
+it.each(['__proto__', 'constructor', 'toString', 'ordinary'])('round-trips owned authored DTCG axis %s', (name) => {
+  const open = createSystem().addAxis(name, { modes: { base: '&', ['__proto__']: thisMode }, default: 'base' })
+  const first = locked(open.addTokens({ ink: (open.tdef.color as any)({ val: 'black', axes: { [name]: { ['__proto__']: 'red' } } }) })) as any
+  const document = JSON.parse(JSON.stringify(exportDesignTokens(first, { mode: 'authored' })))
+  const second = locked(open.addTokens(importDesignTokens(document, { system: open }))) as any
+  expect(Object.hasOwn(second.t.ink.$axes, name)).toBe(true)
+  const mode = '__proto__'
+  expect(second.t.ink.$axes[name][mode].$val).toBe('red')
+  expect(() => exportDesignTokens(first, { environment: { unknown: 'constructor' } })).toThrow(/unknown axis mode/)
+  expect(() => exportDesignTokens(first, { environment: { [name]: 'toString' } })).toThrow(/unknown axis mode/)
+})
+
+it.each(['__proto__', 'constructor', 'toString'])('rejects unknown inherited authored DTCG axis %s', (name) => {
+  const open = createSystem().addAxis('pick', { modes: { base: '&', on: thisMode }, default: 'base' })
+  const ds = locked(open.addTokens({ ink: open.tdef.color({ val: 'black', axes: { pick: { on: 'red' } } }) }))
+  const document = JSON.parse(JSON.stringify(exportDesignTokens(ds, { mode: 'authored' })))
+  const branches = document.$extensions['com.mszr.vanity'].tokens.ink.branches
+  for (const branch of branches) branch.address.axis = name
+  expect(() => locked(open.addTokens(importDesignTokens(document, { system: open })))).toThrow(/VANITY_TOKENS_UNKNOWN_AXIS/)
 })

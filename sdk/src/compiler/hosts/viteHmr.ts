@@ -156,7 +156,7 @@ export function createVitePendingCssResponseCache() {
     return responses.get(id)?.contents
   }
 
-  const addMiddleware = (server: ViteDevServer, root: string, base: string): void => {
+  const addMiddleware = (server: ViteDevServer, root: string, base: string, render: (css: string) => string): void => {
     server.middlewares.use((request, response, next) => {
       if (
         (request.method !== 'GET' && request.method !== 'HEAD')
@@ -180,7 +180,7 @@ export function createVitePendingCssResponseCache() {
       response.statusCode = 200
       response.setHeader('Cache-Control', 'no-cache')
       response.setHeader('Content-Type', 'text/css')
-      response.end(request.method === 'HEAD' ? undefined : contents)
+      response.end(request.method === 'HEAD' ? undefined : render(contents))
     })
   }
 
@@ -213,11 +213,32 @@ export function createViteHmrHost(options: {
       const graphUrl = [...clientGraph.getModulesByFile(id) ?? []][0]?.url
       sendViteCssUpdateMessage(transport, getViteGraphModuleUrl(id, options.root, graphUrl), Date.now())
     },
+    markCssModulesInvalid: (ids) => {
+      for (const graph of getAllViteModuleGraphs()) {
+        for (const id of ids) {
+          for (const module of graph.getModulesByFile(id) ?? [])
+            graph.invalidateModule(module)
+        }
+      }
+    },
     removeCssModules: (ids) => {
+      const paths = new Set<string>()
+      if (transport !== undefined) {
+        const clientGraph = getClientModuleGraph(transport)
+        for (const id of ids) {
+          for (const module of clientGraph.getModulesByFile(id) ?? [])
+            paths.add(module.url)
+        }
+      }
       for (const server of servers) {
         for (const id of ids)
           removeRetiredCssModules(server, id)
       }
+      return [...paths]
+    },
+    sendStyleModuleUpdate: (url) => {
+      if (transport !== undefined)
+        sendViteCssUpdateMessage(transport, url, Date.now())
     },
     sendFullReload: () => {
       transport?.hot.send({ type: 'full-reload' })

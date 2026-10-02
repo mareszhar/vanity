@@ -26,6 +26,24 @@ describe('consumer testing kit', () => {
       .toMatch(/display:\s*grid/)
   })
 
+  it('opens a later capture of the same system with its complete layer order', () => {
+    const ds = createSystem().consolidate({ prefix: 'fixture' })
+    emitOf(() => ds.class({ color: 'red' }, 'first'))
+    const css = emitOf(() => ds.class({ color: 'blue' }, 'second'))
+    const statements = [
+      '@layer fixture;',
+      '@layer fixture.reset;',
+      '@layer fixture.tokens;',
+      '@layer fixture.recipes;',
+      '@layer fixture.utilities;',
+      '@layer fixture.overrides;',
+      '@layer fixture.tokens.base;',
+      '@layer fixture.tokens.axes;',
+      '@layer fixture.tokens.cases;',
+    ]
+    expect(css.startsWith(statements.join('\n'))).toBe(true)
+  })
+
   it('exposes both the concise folded value and the complete fold decision', () => {
     const ds = createSystem()
       .addTokens({ space: { md: '16px' } })

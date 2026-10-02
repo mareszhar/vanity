@@ -28,7 +28,7 @@ Paths and object identity never define semantic compatibility. A docs-only chang
 
 The compiler emits one system virtual stylesheet per CSS identity and one style virtual stylesheet per source module. Every eager or lazy style may import the same system virtual ID; the module graph deduplicates it while retaining normal lazy splitting for per-style CSS.
 
-Cross-system layer order belongs to a compiler-owned prelude injected before entry and lazy styles. Import order is not a cascade-order protocol.
+Every stylesheet carrying a system's rules declares its complete layer order, and every compiler-owned stylesheet declares the host's root order, so delivery order cannot change Vanity's cascade.
 
 ## Failed compilation is state, not absence
 

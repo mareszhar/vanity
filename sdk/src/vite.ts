@@ -80,6 +80,7 @@ import {
   planStyleAutoImports,
 } from './compiler/auto-imports/autoImportPlan'
 import { writeAutoImportDeclarationFiles, writeAutoImportDeclarations } from './compiler/auto-imports/autoImportWriter'
+import { orderCompilerRoots, renderLayerStatement } from './compiler/core/layers'
 import {
   rememberStyleDependencies,
   rememberStyleSystems,
@@ -102,6 +103,7 @@ import {
 } from './compiler/core/systems'
 import { transformStyleModule } from './compiler/core/transform'
 import { handleHotUpdate } from './compiler/hmr/update'
+import { createViteCssInstallation, getCssInstallationRevision } from './compiler/hosts/viteCssInstallation'
 import {
   createViteHmrHost,
   createVitePendingCssResponseCache,
@@ -132,6 +134,7 @@ import {
 } from './compiler/projection/runtimeModule'
 import { emitSystemCss } from './compiler/projection/systemCss'
 import { writeFileArtifacts } from './compiler/publication'
+import { parseLayerName } from './css/validation'
 import { formatVanityDiagnostic, reportDiagnostics, VanityError } from './diagnostics'
 import { renderDevtoolsPage } from './introspect/devtools'
 import { buildManifest } from './introspect/manifest'
@@ -172,8 +175,7 @@ const vanillaExtractVirtualFilter = /\.vanilla\.css(?:\?.*)?$/
 const virtualExt = '.vanity.css'
 const runtimeVirtualPrefix = '\0vanity:system-runtime:'
 const runtimeScanPrefix = '\0vanity:system-scan:'
-const cascadeUrl = '/__vanity/cascade.css'
-const cascadeFileName = 'assets/vanity-cascade.css'
+const layerOrderUrl = '/__vanity/layer-order.css'
 
 type RuntimeTarget = 'browser' | 'ssr'
 
@@ -210,8 +212,14 @@ interface ViteHostState {
 interface ViteHostGroup {
   readonly config: ResolvedConfig
   readonly targets: Map<RuntimeTarget, ViteHostState>
+  readonly activeTargets: Set<RuntimeTarget>
   clientServer?: ViteDevServer
-  cascadeCss: string
+  documentLayerStatement: string
+  layerOrderAssetRef?: string
+  rootLayerStatement: string
+  rootOrderReady: boolean
+  rootOrderChanged: boolean
+  cssInstallation?: ReturnType<typeof createViteCssInstallation>
   /** The manifest as last written, so unchanged builds skip the write. */
   writtenManifest?: string
   manifestTimer?: ReturnType<typeof setTimeout>
@@ -237,6 +245,20 @@ interface ViteHostGroup {
  */
 export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const compiler = options.compiler ?? {}
+  const listedLayers = compiler.layerOrder ?? []
+  const seenLayers = new Set<string>()
+  for (const [index, layer] of listedLayers.entries()) {
+    const { identity, reason } = parseLayerName(layer)
+    if (reason !== undefined || (identity !== undefined && seenLayers.has(identity))) {
+      throw new VanityError({
+        code: 'VANITY_COMPILER_INVALID_INPUT',
+        message: `compiler.layerOrder entry '${layer}' at index ${index} ${reason === undefined ? 'repeats an earlier layer' : `is not one CSS identifier: ${reason}`}; ${reason !== undefined && !layer.includes('.') ? 'the browser would discard its layer statement' : 'each layer root must have one unambiguous position'}`,
+        path: ['compiler', 'layerOrder', String(index)],
+        fix: 'name each layer root once with a single CSS identifier, such as \'app\' or \'vendor\'',
+      })
+    }
+    seenLayers.add(identity!)
+  }
   const autoImports = getAutoImportRoles(options)
   const styleImportSources = autoImports.style
   const nativeTypeHost = (options as VanityViteOptions & { [vanityViteHost]?: 'nuxt' })[vanityViteHost]
@@ -270,19 +292,21 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     group.targets.set(target, state)
     return state
   }
+  const getHostGroup = (context: unknown, hostServer?: ViteDevServer): ViteHostGroup | undefined => {
+    const environment = getHookEnvironment(context as HookEnvironmentContext | undefined)
+    return environment === undefined
+      ? hostServer === undefined
+        ? activeVite5Host
+        : hostGroups.get(hostServer.config) ?? activeVite5Host
+      : hostGroups.get(environment.getTopLevelConfig())
+  }
   const getHostState = (
     context: unknown,
     hostServer?: ViteDevServer,
     ssrOption?: boolean,
   ): ViteHostState => {
-    // Hook contexts differ by hook; only environment-owned hooks on Vite 6+
-    // carry an environment, and every other lookup names its server instead.
     const environment = getHookEnvironment(context as HookEnvironmentContext | undefined)
-    const group = environment === undefined
-      ? hostServer === undefined
-        ? activeVite5Host
-        : hostGroups.get(hostServer.config) ?? activeVite5Host
-      : hostGroups.get(environment.getTopLevelConfig())
+    const group = getHostGroup(context, hostServer)
     if (group === undefined)
       throw new TypeError('host state was requested before configResolved')
 
@@ -310,6 +334,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const dependenciesByEntry = new Map<string, Set<string>>()
   /** Entries whose latest transform failed, including before Vite had a healthy node. */
   const failedStyleEntries = new Set<string>()
+  const failedSystemEntries = new Set<string>()
   /** Root-relative style module → what it recorded, replaced per evaluation. */
   const recordsByFile = new Map<string, VanityInspectRecord[]>()
   /** Full plain-system entry → its last successfully validated portable data. */
@@ -335,6 +360,8 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   /** Initial eager evaluations may fail while the dev server remains repairable. */
   const systemReadinessFailures = new Map<string, unknown>()
   const pendingCssResponseCache = createVitePendingCssResponseCache()
+  const prefixCompilerCss = (state: ViteHostState, css: string): string =>
+    state.group.rootLayerStatement + css
   const declarationConfigRoots = new Set<string>()
   const warnedSourcePackages = new Set<string>()
   const filterState = createLateHookFilterState()
@@ -480,7 +507,25 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     if (virtualIds.size === 0)
       return
 
-    createHmrHost(state).removeCssModules(virtualIds)
+    const host = createHmrHost(state)
+    for (const id of virtualIds) {
+      const urls = host.removeCssModules(new Set([id]))
+      state.group.cssInstallation?.collectRetirement(id, urls)
+    }
+  }
+
+  const refreshRootLayerStatement = (state: ViteHostState): void => {
+    const configuredRoots = state.systemSources.flatMap((source) => {
+      const root = systemsByEntry.get(source.entry)?.portable.layerRoot
+      return root === undefined ? [] : [root]
+    })
+    const next = renderLayerStatement(orderCompilerRoots(compiler.layerOrder, configuredRoots))
+    const previous = state.group.rootLayerStatement
+    state.group.rootLayerStatement = next
+    if (!state.group.rootOrderReady || previous === next || state.group.clientServer === undefined)
+      return
+    createHmrHost(state).markCssModulesInvalid(new Set(cssByVirtualId.keys()))
+    state.group.rootOrderChanged = true
   }
 
   const prepareConfiguredSystem = async (
@@ -575,6 +620,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     })
 
     if (result.committed && result.ownershipUpdate !== undefined) {
+      refreshRootLayerStatement(state)
       scheduleManifest(state)
       for (const id of result.ownershipUpdate.nextCss.keys())
         pendingCssResponseCache.clear(id)
@@ -813,7 +859,11 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       const group: ViteHostGroup = {
         config: resolvedConfig,
         targets: new Map(),
-        cascadeCss: '',
+        activeTargets: new Set(),
+        documentLayerStatement: renderLayerStatement(listedLayers),
+        rootLayerStatement: '',
+        rootOrderReady: false,
+        rootOrderChanged: false,
         systemDeps: new Set(),
         appAutoImportSourceFiles: new Set(),
       }
@@ -852,16 +902,27 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
 
       if (devServer.config.build.ssr !== true) {
         state.group.clientServer = devServer
-        pendingCssResponseCache.addMiddleware(devServer, state.config.root, state.config.base)
+        state.group.cssInstallation = createViteCssInstallation({
+          server: devServer,
+          idsBySource: cssVirtualIdsByEntry,
+          resolveCssId: url => resolveViteVirtualId(url, state.config.root, state.config.base),
+          readCss: (id) => {
+            const css = cssByVirtualId.get(id)
+            return css === undefined ? undefined : prefixCompilerCss(state, css)
+          },
+        })
+        // An in-flight request for retired CSS still needs the current root
+        // order even though the browser normally prunes that URL.
+        pendingCssResponseCache.addMiddleware(devServer, state.config.root, state.config.base, css => prefixCompilerCss(state, css))
       }
 
       // The manifest, live — what the DevTools tab (and any tool) reads.
       devServer.middlewares.use('/__vanity', (req, res, next) => {
         const [path] = (req.url ?? '/').split('?')
 
-        if (path === '/cascade.css') {
+        if (path === '/layer-order.css') {
           res.setHeader('Content-Type', 'text/css')
-          res.end(state.group.cascadeCss)
+          res.end(state.group.documentLayerStatement)
           return
         }
 
@@ -893,6 +954,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       // Vite 6+ exposes the host through this hook's environment; Vite 5 has
       // one active configResolved-to-closeBundle host on this plugin instance.
       const state = getHostState(this)
+      state.group.activeTargets.add(state.target)
       if (nativeTypeHost !== 'nuxt') {
         const result = await writeAutoImportDeclarations(options, { root: state.config.root })
         rememberAppAutoImportSourceFiles(state, result.plan)
@@ -927,38 +989,55 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
           : [createSystemRecordFromPortable(system.portable)])
       }
 
-      state.group.cascadeCss = renderCascadePrelude(
-        compiler.layerOrder
-        ?? [...new Set([...systemsByEntry.values()].map(system => system.portable.layerRoot))],
-      )
+      refreshRootLayerStatement(state)
+      state.group.rootOrderReady = true
       // `emitFile()` belongs to Rollup's build graph. Vite invokes buildStart
-      // in serve mode too, where the cascade is served by /__vanity instead.
-      if (state.group.cascadeCss && state.config.command === 'build' && state.target !== 'ssr') {
-        this.emitFile({
+      // in serve mode too, where the statement is served by /__vanity instead.
+      // Nuxt renders the statement in its own head; a Vite asset there would
+      // be unpublished output with no consumer.
+      if (state.group.documentLayerStatement && state.config.command === 'build' && state.target !== 'ssr' && nativeTypeHost !== 'nuxt') {
+        state.group.layerOrderAssetRef = this.emitFile({
           type: 'asset',
-          fileName: cascadeFileName,
-          source: state.group.cascadeCss,
+          name: 'vanity-layer-order.css',
+          source: state.group.documentLayerStatement,
         })
       }
     },
 
     transformIndexHtml: {
       order: 'pre',
-      handler(_html, context) {
-        // Vite supplies a dev server in the transform context and a build
-        // environment on the plugin context for HTML generated by a build.
-        const state = getHostState(this, context?.server)
-        if (!state.group.cascadeCss || state.target === 'ssr')
+      async handler(_html, context) {
+        if (listedLayers.length === 0 || nativeTypeHost === 'nuxt')
           return undefined
-        const href = state.server
-          ? cascadeUrl
-          : `${state.config.base}${state.config.base.endsWith('/') ? '' : '/'}${cascadeFileName}`
+        let state: ViteHostState
+        if (getHookEnvironment(this as HookEnvironmentContext) !== undefined || context?.server !== undefined || activeVite5Host !== undefined) {
+          state = getHostState(this, context?.server)
+        }
+        else {
+          // Vite 6 HTML hooks omit their environment. Only an active browser
+          // build owning this HTML input can supply its asset reference.
+          const filename = normalizePath(await realpath(context.filename))
+          const candidates = await Promise.all([...hostGroups.values()].map(async (group) => {
+            if (group.config.command !== 'build' || !group.activeTargets.has('browser'))
+              return undefined
+            const input = group.config.build.rollupOptions.input
+            const inputs = input === undefined
+              ? [resolve(group.config.root, 'index.html')]
+              : typeof input === 'string' ? [input] : Array.isArray(input) ? input : Object.values(input)
+            const filenames = await Promise.all(inputs.map(file => realpath(resolve(group.config.root, file))))
+            return filenames.some(file => normalizePath(file) === filename) ? group : undefined
+          }))
+          const builds = candidates.filter((group): group is ViteHostGroup => group !== undefined)
+          if (builds.length !== 1)
+            throw new TypeError('HTML hook cannot identify one active Vanity browser build owning this input')
+          state = createHostState(builds[0]!, 'browser')
+        }
+        if (state.target === 'ssr')
+          return undefined
+        const href = state.server ? layerOrderUrl : `__VITE_ASSET__${state.group.layerOrderAssetRef}__`
         return [{
           tag: 'link',
-          // The asset is emitted by this plugin rather than resolved from the
-          // source tree. Vite removes this sentinel after skipping its
-          // pre-output URL resolver, avoiding a false missing-file warning.
-          attrs: { 'rel': 'stylesheet', 'href': href, 'vite-ignore': '' },
+          attrs: { rel: 'stylesheet', href },
           injectTo: 'head-prepend',
         }]
       },
@@ -975,20 +1054,32 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       if (this.meta.watchMode !== true)
         return
       filterState.finishWatch()
-      // Vite 5 does not call closeBundle for the watch host's lifetime end.
-      // Releasing this slot here lets the same instance serve a later build.
-      if (activeVite5Host !== undefined) {
-        hostGroups.delete(activeVite5Host.config)
-        activeVite5Host = undefined
+      if (getHostGroup(this) === undefined)
+        return
+      const state = getHostState(this)
+      state.group.activeTargets.delete(state.target)
+      if (state.group.activeTargets.size === 0) {
+        hostGroups.delete(state.config)
+        if (activeVite5Host === state.group)
+          activeVite5Host = undefined
       }
     },
 
     closeBundle() {
-      // Only a Vite 5 host occupies this slot; Vite 6+ hooks name their host
-      // through the environment that owns them.
-      if (activeVite5Host !== undefined) {
-        hostGroups.delete(activeVite5Host.config)
-        activeVite5Host = undefined
+      // Failed builds may close an already retired environment again.
+      if (getHostGroup(this) === undefined)
+        return
+      const state = getHostState(this)
+      // Closing a bundle result leaves its Rollup watcher live. closeWatcher
+      // owns the group lifetime across the next watch build.
+      if (this.meta.watchMode === true && state.config.command === 'build')
+        return
+      state.group.cssInstallation?.removeInstallation()
+      state.group.activeTargets.delete(state.target)
+      if (state.group.activeTargets.size === 0) {
+        hostGroups.delete(state.config)
+        if (activeVite5Host === state.group)
+          activeVite5Host = undefined
       }
     },
 
@@ -1000,7 +1091,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
           return null
         // This transform runs in an environment-owned Rollup hook.
         const state = getHostState(this)
-        return transformStyleModule(code, id, transformOptions, {
+        const result = await transformStyleModule(code, id, transformOptions, {
           root: state.config.root,
           styleFileFilter,
           virtualExtension: virtualExt,
@@ -1014,6 +1105,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
           cssOwnersByVirtualId,
           rememberPendingCssResponse: pendingCssResponseCache.remember,
           clearPendingCssResponse: pendingCssResponseCache.clear,
+          clearRetiredCssModules: ids => clearRetiredCss(state, ids),
           exportSignatures,
           failedStyleEntries,
           setStyleModuleOwnership: (filePath, owned) => {
@@ -1046,12 +1138,18 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
           getIdentifierOption: () => getIdentifierOption(state.config),
           scheduleManifest: () => scheduleManifest(state),
         })
+        if (result !== null && !transformOptions?.ssr && state.group.cssInstallation !== undefined) {
+          const ids = cssVirtualIdsByEntry.get(normalizePath(validId)) ?? new Set<string>()
+          return { ...result, code: state.group.cssInstallation.renderSourceCode(result.code, normalizePath(validId), ids) }
+        }
+        return result
       },
     },
 
     async handleHotUpdate({ file, server: devServer, modules }) {
       // Vite passes the owning dev server on the update context.
       const state = getHostState(this, devServer)
+      state.group.rootOrderChanged = false
       const targetStates = [...state.group.targets.values()]
       const normalizedFile = normalizePath(file)
       const generatedArtifactDirectory = normalizePath(getArtifactDirectory(state.config)).replace(/\/$/, '')
@@ -1085,7 +1183,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         for (const memberFile of computeConfiguredSystemMemberChanges(previousMembers, targetState.membersByFile.keys()))
           memberSetChanges.add(memberFile)
       }
-      return await handleHotUpdate({ file, modules }, {
+      const affected = await handleHotUpdate({ file, modules }, {
         host: createHmrHost(state, devServer, state.group.clientServer),
         runtimeVirtualPrefix,
         systemSources: allSources,
@@ -1099,6 +1197,8 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         getRuntimeMemberIdentity: (system, moduleFile) =>
           getRuntimeSystemNamespaceProjection(system, moduleFile)?.identity,
         failedStyleEntries,
+        failedSystemEntries,
+        hasRootOrderChanged: () => state.group.rootOrderChanged,
         refreshAppAutoImports: nativeTypeHost !== 'nuxt' && appAutoImports !== undefined
           && state.group.appAutoImportSourceFiles.size > 0
           ? async () => {
@@ -1135,6 +1235,8 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
           return unique.map(source => evaluatedByEntry.get(source.entry)!)
         },
       }) as ModuleNode[] | undefined
+
+      return affected
     },
 
     watchChange(id) {
@@ -1239,7 +1341,19 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
 
       if (validId.endsWith(virtualExt)) {
         const absoluteId = resolveViteVirtualId(validId, state.config.root, state.config.base)
-        return absoluteId === undefined ? null : cssByVirtualId.get(absoluteId) ?? null
+        const css = absoluteId === undefined ? undefined : cssByVirtualId.get(absoluteId)
+        if (css === undefined)
+          return null
+        const contents = prefixCompilerCss(state, css)
+        if (state.server === undefined || state.target !== 'browser')
+          return contents
+        const host = createHmrHost(state)
+        const module = host.findModulesById(id)[0]
+        const url = module === undefined ? undefined : host.getModuleUrl(module)
+        return {
+          code: contents,
+          meta: { vanityCssInstallation: { id: absoluteId, revision: getCssInstallationRevision(contents), url } },
+        }
       }
 
       const candidate = findMemberCandidate(state, id)
@@ -1281,6 +1395,25 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         : code
       return { code: withComment, map: { mappings: '' } }
     }),
+  }
+
+  const cssInstallationPlugin: Plugin = {
+    name: 'vanity:css-installation',
+    transform: {
+      order: 'post',
+      filter: { id: /\.vanity\.css(?:\?.*)?$/ },
+      handler(code, id, transformOptions) {
+        if (!id.split('?')[0]?.endsWith(virtualExt) || transformOptions?.ssr || !code.includes('__vite__updateStyle('))
+          return null
+        const state = getHostState(this)
+        if (state.group.cssInstallation === undefined)
+          return null
+        const installation = this.getModuleInfo(id)?.meta.vanityCssInstallation
+        if (installation === undefined)
+          return null
+        return `${code}\nif (import.meta.hot) import.meta.hot.send('vanity:css-installed', ${JSON.stringify(installation)});`
+      },
+    },
   }
 
   // vanilla-extract 5.2's compiler still uses Vite 7's `server.hmr: false`.
@@ -1396,7 +1529,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     },
   }
 
-  return [cssTsPlugin, substrateCompilerTransport, ...wrappedSubstratePlugins, ...applicationPlugins, authoringImportGuard]
+  return [cssTsPlugin, cssInstallationPlugin, substrateCompilerTransport, ...wrappedSubstratePlugins, ...applicationPlugins, authoringImportGuard]
 }
 
 function createApplicationAutoImportPlugin(
@@ -1683,11 +1816,6 @@ function evaluateSystemModule(source: string, filePath: string): EvaluatedSystem
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
-}
-
-function renderCascadePrelude(roots: readonly string[]): string {
-  const unique = [...new Set(roots.filter(root => root.trim().length > 0))]
-  return unique.length === 0 ? '' : `@layer ${unique.join(', ')};\n`
 }
 
 /** Resolve configured entries to their canonical physical modules at config time. */

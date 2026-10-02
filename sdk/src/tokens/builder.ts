@@ -22,6 +22,7 @@ import type {
   VanityTokenPolicy,
   VanityTokenTraitDiagnostic,
 } from './types'
+import { setOwn } from '../collections'
 import { VanityError } from '../diagnostics'
 import { isVanityValue } from '../values/types'
 import { isColorValue, isContrastValue } from './color'
@@ -605,21 +606,20 @@ export function createTdefFactory<Axes extends VanityAxisDefinitions>(
   const createConfiguredToken = (configured: VanityConfiguredToken): VanityTokenDefinitionValue<any, any, Axes> =>
     new Proxy(configured, {
       get(target, key, receiver) {
-        if (typeof key !== 'string' || !(key in axes.definitions))
+        if (typeof key !== 'string' || !Object.hasOwn(axes.definitions, key))
           return Reflect.get(target, key, receiver)
         return (input: unknown) => {
           const definition = axes.definitions[key]!
-          const current = { ...((target.config as VanityTokenConfig).axes?.[key] ?? {}) }
+          const configuredAxes = (target.config as VanityTokenConfig).axes
+          const current = { ...(configuredAxes && Object.hasOwn(configuredAxes, key) ? configuredAxes[key] : {}) }
           const additions: Record<string, unknown> = {}
           if (typeof input === 'function') {
             for (const mode of definition.modeOrder)
-              additions[mode] = input(mode)
+              setOwn(additions, mode, input(mode))
           }
           else {
             for (const [mode, value] of Object.entries(input as object)) {
-              additions[mode] = typeof value === 'function'
-                ? value(Object.freeze({ ...current, ...additions }))
-                : value
+              setOwn(additions, mode, typeof value === 'function' ? value(Object.freeze({ ...current, ...additions })) : value)
             }
           }
           return createConfiguredToken((token as any)({
@@ -867,7 +867,7 @@ function applyBulkAxes(
     )
   }
   for (const [axis, producer] of Object.entries(bulk)) {
-    const definition = axes.definitions[axis]
+    const definition = Object.hasOwn(axes.definitions, axis) ? axes.definitions[axis] : undefined
     if (!definition) {
       throwTokenAuthoringError(
         'VANITY_TOKENS_UNKNOWN_AXIS',
@@ -934,7 +934,7 @@ function applyBulkMode(
       axes: {
         ...(current.config as VanityTokenConfig).axes,
         [axis]: {
-          ...(current.config as VanityTokenConfig).axes?.[axis],
+          ...((current.config as VanityTokenConfig).axes && Object.hasOwn(current.config.axes!, axis) ? current.config.axes![axis] : {}),
           [mode]: value,
         },
       },
@@ -950,7 +950,7 @@ function normalizeAxisCallbacks(
     return config
   const normalized: Record<string, Record<string, unknown | null>> = {}
   for (const [axis, input] of Object.entries(config.axes) as [string, any][]) {
-    const definition = axes.definitions[axis]
+    const definition = Object.hasOwn(axes.definitions, axis) ? axes.definitions[axis] : undefined
     if (!definition) {
       throwTokenAuthoringError(
         'VANITY_TOKENS_UNKNOWN_AXIS',
@@ -959,9 +959,9 @@ function normalizeAxisCallbacks(
         `declare '${axis}' with addAxis() before using it in tdef()`,
       )
     }
-    normalized[axis] = typeof input === 'function'
+    setOwn(normalized, axis, typeof input === 'function'
       ? Object.fromEntries(definition.modeOrder.map((mode: string) => [mode, input(mode)]))
-      : { ...input }
+      : { ...input })
   }
   return { ...config, axes: normalized }
 }

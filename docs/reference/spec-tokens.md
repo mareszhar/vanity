@@ -229,7 +229,9 @@ ds.tdef({
 
 The `.scheme(...)` spelling above is a manufactured method for an axis literally named `scheme`. There is no `scheme(light, dark)` value constructor; the CSS function constructor is `lightDark(light, dark)`.
 
-Axis-name methods are manufactured safely because Vanity reserves only `$`-prefixed members in that user-shaped namespace. Axis names may not start with `$`. The internal `config` and `type` transport fields are not part of the public `tdef` completion surface.
+Axis-name methods are manufactured from the system’s own axis declarations. Vanity reserves only `$`-prefixed members in that user-shaped namespace, so axis names may not start with `$`; every other axis and mode name, even `constructor` or `__proto__`, is ordinary own data in mode maps, callback inputs, derivation contexts, and bulk branches. The internal `config` and `type` transport fields are not part of the public `tdef` completion surface.
+
+One limit belongs to TypeScript, not Vanity: the compiler counts inherited members as structure. When an axis or mode is named after a JavaScript member such as `constructor` or `toString`, a sparse literal that omits it can fail assignability even though it is valid at runtime. That covers a partial derivation, token axis map, mode map, bulk branch, or case address. Ordinary names keep sparse authoring and inferred branches.
 
 Bulk `$axes` authors one axis branch across a token group:
 
@@ -300,7 +302,7 @@ $dec
 registration, description, provenance, explanation metadata
 ```
 
-Branch handles expose authored value/condition/provenance, not another public `$name`. Runtime-controller token controls add `$set`/`$unset` only for mutable addresses.
+Entries in `$axes` are own branch handles, isolated between systems. Branch handles expose authored value/condition/provenance, not another public `$name`. Runtime-controller token controls add `$set`/`$unset` only for mutable addresses.
 
 ### Declaration projection with `$dec`
 

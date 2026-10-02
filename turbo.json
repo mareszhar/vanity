@@ -21,7 +21,7 @@
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts", "!**/*.test-d.ts", "!src/test-support/**"],
-      "outputs": ["dist/**", ".output/**"]
+      "outputs": ["dist/**", ".output/**", ".vanity/manifest.json", ".vanity/systems/**", "app/.vanity/manifest.json", "app/.vanity/systems/**"]
     },
     "typecheck": {
       "dependsOn": ["^build", "prep"],

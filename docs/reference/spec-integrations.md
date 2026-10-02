@@ -235,7 +235,7 @@ Vanity watches every resolved input a style module depends on, including data im
 
 The supported Vite range is `^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0`.
 
-`compiler.layerOrder` establishes the host-wide order of CSS layer roots; its detailed semantics live in [spec-system.md §9](./spec-system.md#9-compiler-projection).
+`compiler.layerOrder` sets the host-wide order of CSS layer roots, declared first in integrated HTML documents; its semantics live in [spec-system.md §9](./spec-system.md#9-compiler-projection).
 
 ### Module roles and type consumers
 
@@ -358,7 +358,9 @@ Preserve:
 
 Both HMR recovery sequences are mandatory: a dependency failure repaired in place, and a dependency introduced after a successful transform.
 
-The Vite integration tracks attempted style entries and their dependencies, preserves last-good CSS, uses Vite's `watchChange` hook and `ModuleGraph.invalidateModule` only at the host boundary, and eagerly retries affected entries on the same server. A value edit that changes CSS identity follows the new browser module URL and removes stale ownership, including under a non-root `base`; a docs-only edit updates the manifest without sending a CSS update. Both recovery orders are permanent compiler-projection fixtures.
+The Vite integration tracks attempted style entries and their dependencies, preserves last-good CSS, uses Vite's `watchChange` hook and `ModuleGraph.invalidateModule` only at the host boundary, and eagerly retries affected entries on the same server. A value edit that changes CSS identity follows the new browser module URL and removes stale ownership, including under a non-root `base`. A docs-only edit updates the manifest without sending a CSS update. A change to an application-imported runtime identity, or the repair of a configured system, requests a full reload; compatible CSS edits keep runtime state and the page. Both recovery orders are permanent compiler-projection fixtures.
+
+In development, a retired stylesheet leaves each page once its replacement CSS is installed there. This applies to stylesheets Vite serves as CSS modules; a link a host renders into server HTML, such as Nuxt's development renderer, can keep retired rules until the next page load, because Vanity does not retract host-rendered markup. Stylesheet delivery order never changes Vanity's cascade ([styling §8](./spec-css.md#8-layers)).
 
 ## 10. Demos
 

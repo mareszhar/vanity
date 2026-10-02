@@ -34,12 +34,14 @@ import type { VanityValueOperationContext } from '../values/kernel'
 import type { VanityCssDataType, VanitySelfValue, VanityTokenInput, VanityValue } from '../values/types'
 import type { VanityLengthUnit } from '../values/units'
 import type {
+  VanityAxisControl,
   VanityAxisDefinition,
   VanityAxisDefinitions,
   VanityAxisModeInput,
   VanityAxisModeName,
   VanityAxisOrderGuard,
   VanityAxisRegistry,
+  VanityAxisTrigger,
   VanityOpenAxisConfig,
   VanityOpenAxisModes,
 } from './axes'
@@ -63,6 +65,7 @@ import type {
   VanityWithRules,
 } from './locked'
 import type {
+  DefinitionTreeGuard,
   VanityAxisModuleInput,
   VanityDefinitionKind,
   VanityDefinitionMerge,
@@ -626,9 +629,11 @@ type OpenAxisDefault<Input, Modes> = Input extends { readonly default: infer Def
   : object
 
 type OpenAxisConfigDefinition<Input, Modes extends Readonly<Record<string, unknown>>>
-  = VanityAxisDefinition<VanityOpenAxisModes<Modes>>
+  = VanityAxisDefinition<VanityOpenAxisModes<Modes>, Input extends { readonly derive: infer Derive extends object } ? Derive : Record<never, never>>
     & OpenAxisDefault<Input, Modes>
-    & (Input extends { readonly control: infer Control } ? { readonly control: Control } : object)
+    & (Input extends { readonly control: infer Control }
+      ? Control extends VanityAxisControl<any> ? { readonly control: Control } : object
+      : object)
 
 type OpenAxisDefinition<Input>
   = Input extends VanityAxisDefinition<any, any> ? Input
@@ -993,9 +998,9 @@ export interface VanityOpenSystemMethods<
       Utils,
       Plugins
     >
-    <const Name extends string, const Input extends VanityAxisDefinition<any, any> | VanityOpenAxisConfig<any, any>>(
+    <const Name extends string, const Input extends VanityOpenAxisConfig<any, any>, const Modes extends Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> = Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>>>(
       name: Name extends keyof ShapeAxes<Shape> ? never : Name,
-      input: Input,
+      input: Input & VanityOpenAxisConfig<Modes, VanityAxisControl<keyof Modes & string> | undefined, Partial<Record<keyof Modes & string, (siblings: Readonly<Record<keyof Modes & string, any>>) => unknown>>>,
     ): VanityOpenSystem<
       VanitySystemShape<
         ShapeConstructors<Shape>,
@@ -1010,9 +1015,9 @@ export interface VanityOpenSystemMethods<
       Utils,
       Plugins
     >
-    <const Name extends string, const Input extends VanityAxisDefinition<any, any> | VanityOpenAxisConfig<any, any>>(
+    <const Name extends string, const Input extends VanityOpenAxisConfig<any, any>, const Modes extends Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> = Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>>>(
       name: Name extends keyof ShapeAxes<Shape> ? never : Name,
-      factory: (system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Input,
+      factory: (system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Input & (VanityOpenAxisConfig<Modes, VanityAxisControl<keyof Modes & string> | undefined, Partial<Record<keyof Modes & string, (siblings: Readonly<Record<keyof Modes & string, any>>) => unknown>>>),
     ): VanityOpenSystem<
       VanitySystemShape<
         ShapeConstructors<Shape>,
@@ -1030,10 +1035,10 @@ export interface VanityOpenSystemMethods<
   }
   readonly defineAxes: typeof defineAxes
   readonly addAxes: {
-    <const Added extends Record<string, VanityAxisModuleInput>>(
+    <const Added extends Record<string, VanityAxisModuleInput>, const Modes extends Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]> = Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]>>(
       factory: (
         system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>,
-      ) => Added,
+      ) => Added & DefinitionTreeGuard<'axes', Added, Modes>,
     ): VanityOpenSystem<
       VanitySystemShape<ShapeConstructors<Shape>, ShapePolicy<Shape>, ShapeAxes<Shape> & OpenAxisRecord<Added>, ShapeRequirements<Shape>, ShapePolicies<Shape>>,
       Tokens,
@@ -1042,8 +1047,8 @@ export interface VanityOpenSystemMethods<
       Utils,
       Plugins
     >
-    <const Added extends Record<string, VanityAxisModuleInput>>(
-      axes: Added,
+    <const Added extends Record<string, VanityAxisModuleInput>, const Modes extends Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]> = Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]>>(
+      axes: Added & DefinitionTreeGuard<'axes', Added, Modes>,
     ): VanityOpenSystem<
       VanitySystemShape<ShapeConstructors<Shape>, ShapePolicy<Shape>, ShapeAxes<Shape> & OpenAxisRecord<Added>, ShapeRequirements<Shape>, ShapePolicies<Shape>>,
       Tokens,
@@ -2310,7 +2315,7 @@ export function materializeOpen(
       const patch = typeof input === 'function'
         ? Reflect.apply(input as (...args: any[]) => unknown, undefined, [surface])
         : input
-      const existing = state.axes.definitions[name]
+      const existing = Object.hasOwn(state.axes.definitions, name) ? state.axes.definitions[name] : undefined
       if (!existing) {
         throwOpenError(
           'VANITY_SYSTEM_INVALID_AXIS',
@@ -2351,7 +2356,7 @@ export function materializeOpen(
       const patch = typeof input === 'function'
         ? Reflect.apply(input as (...args: any[]) => unknown, undefined, [surface])
         : input
-      const existing = state.axes.definitions[name]
+      const existing = Object.hasOwn(state.axes.definitions, name) ? state.axes.definitions[name] : undefined
       if (!existing) {
         throwOpenError(
           'VANITY_SYSTEM_INVALID_AXIS',
@@ -2651,7 +2656,7 @@ export function materializeOpen(
       return surface
     },
     expectAxis(name: string, modes: readonly string[] = []) {
-      const definition = state.axes.definitions[name]
+      const definition = Object.hasOwn(state.axes.definitions, name) ? state.axes.definitions[name] : undefined
       if (!definition) {
         throwOpenError(
           'VANITY_SYSTEM_MISSING',

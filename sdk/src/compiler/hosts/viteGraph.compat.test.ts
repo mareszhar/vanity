@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { vanityPlugin } from '@mszr/vanity/vite'
 import { describe, expect, it } from 'vitest'
 import { createViteHmrHost, resolveViteVirtualId } from './viteHmr'
+import { vanityViteHost } from './viteHost'
 
 const vanityRoot = fileURLToPath(new URL('../../', import.meta.url))
 const alias = {
@@ -152,6 +153,247 @@ function wrapHook(
 }
 
 describe('vite virtual CSS graph compatibility', () => {
+  it.each(['/', '/sub/'])('retires only installed replacement CSS for each page under %s', async (base) => {
+    const { chromium } = await import('@playwright/test')
+    const browser = await chromium.launch({ headless: true })
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-installed-css-')))
+    let server: ViteDevServer | undefined
+    let releaseSlowPage = () => {}
+    try {
+      await put(root, 'package.json', '{ "name": "installed-css", "type": "module" }')
+      const system = await put(root, 'system.ts', `import { createSystem } from '@mszr/vanity';
+export const padding = '1px';
+export const ds = createSystem().addTokens({ color: { brand: '#123456' } })
+.addRules({ reset: { layer: 'reset', css: { p: { padding: 0 } } } }).consolidate({ prefix: 'installed' })`)
+      for (const entry of ['first', 'second', 'unloaded']) {
+        await put(root, `${entry}.css.ts`, `import { ds, padding } from './system'; export const card = ds.class({ color: ds.t.color.brand, padding })`)
+        await put(root, `${entry}.ts`, `import { card } from './${entry}.css.ts'; document.body.innerHTML='<p id="card">card</p>'; document.querySelector('#card').className = card`)
+        await put(root, `${entry}.html`, `<script type="module" src="/${entry}.ts"></script>`)
+      }
+      server = await createServer({ root, base, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system: './system.ts' } })], resolve: { alias }, server: { host: '127.0.0.1', port: 0, watch: null }, optimizeDeps: { noDiscovery: true } })
+      const origin = await devHttpBase(server)
+      const pages = [await browser.newPage(), await browser.newPage()]
+      for (const [index, page] of pages.entries()) {
+        await page.goto(new URL(`${base}${index === 0 ? 'first' : 'second'}.html`, origin).href, { waitUntil: 'networkidle' })
+        await page.waitForSelector('#card')
+        expect(await page.locator('#card').evaluate(el => getComputedStyle(el).padding)).toBe('1px')
+        await page.evaluate(() => {
+          const state = { gap: false, early: false, expected: '2px' }
+          ;(globalThis as any).installation = state
+          const old = [...document.styleSheets].map(sheet => (sheet.ownerNode as Element)?.getAttribute('data-vite-dev-id')).find(id => id?.includes('/virtual/system/'))
+          if (!old)
+            throw new Error('no installed system CSS')
+          new MutationObserver(() => {
+            const ids = [...document.styleSheets].map(sheet => (sheet.ownerNode as Element)?.getAttribute('data-vite-dev-id'))
+            if (!ids.some(id => id?.includes('/virtual/system/')))
+              state.gap = true
+            if (!ids.includes(old) && getComputedStyle(document.querySelector('#card')!).padding !== state.expected)
+              state.early = true
+          }).observe(document.head, { childList: true })
+        })
+      }
+      // Materialize an unloaded client and SSR consumer, with no browser import.
+      await server.transformRequest('/unloaded.css.ts')
+      await server.transformRequest('/unloaded.css.ts', { ssr: true })
+      const slowPage = new Promise<void>((resolve) => {
+        releaseSlowPage = resolve
+      })
+      await pages[0]!.route('**/*.vanity.css*', async (route) => {
+        await new Promise(resolve => setTimeout(resolve, route.request().url().includes('/virtual/style/') ? 900 : 600))
+        await route.continue()
+      })
+      await pages[1]!.route('**/*.vanity.css*', async (route) => {
+        await slowPage
+        await route.continue()
+      })
+      const initial = await pages[0]!.evaluate(() => [...document.styleSheets].map(sheet => (sheet.ownerNode as Element)?.getAttribute('data-vite-dev-id')).find(id => id?.includes('/virtual/system/'))!)
+      const original = await readFile(system, 'utf8')
+      await writeFile(system, original.replace('#123456', '#654321').replace('\'1px\'', '\'2px\''))
+      server.watcher.emit('change', system)
+      await pages[0]!.waitForFunction(old => ![...document.styleSheets].some(sheet => (sheet.ownerNode as Element)?.getAttribute('data-vite-dev-id') === old), initial)
+      expect(await pages[1]!.evaluate(old => [...document.styleSheets].some(sheet => (sheet.ownerNode as Element)?.getAttribute('data-vite-dev-id') === old), initial)).toBe(true)
+      releaseSlowPage()
+      for (const page of pages) {
+        await page.waitForFunction(() => getComputedStyle(document.querySelector('#card')!).color === 'rgb(101, 67, 33)' && getComputedStyle(document.querySelector('#card')!).padding === '2px')
+        await page.waitForFunction(old => ![...document.styleSheets].some(sheet => (sheet.ownerNode as Element)?.getAttribute('data-vite-dev-id') === old), initial)
+        expect(await page.evaluate(() => ({ gap: (globalThis as any).installation.gap, early: (globalThis as any).installation.early }))).toEqual({ gap: false, early: false })
+      }
+      // Capture the old response bytes before publishing the next generation.
+      let capturedFirst = () => {}
+      const captured = new Promise<void>((resolve) => {
+        capturedFirst = resolve
+      })
+      for (const page of pages) {
+        await page.unroute('**/*.vanity.css*')
+        await page.evaluate(() => {
+          (globalThis as any).installation.expected = '4px'
+        })
+        await page.route('**/*.vanity.css*', async (route) => {
+          const response = await route.fetch()
+          if (route.request().url().includes('/virtual/system/'))
+            capturedFirst()
+          await new Promise(resolve => setTimeout(resolve, 600))
+          await route.fulfill({ response })
+        })
+      }
+      await writeFile(system, original.replace('#123456', '#abcdef').replace('\'1px\'', '\'3px\''))
+      server.watcher.emit('change', system)
+      await captured
+      await writeFile(system, original.replace('#123456', '#fedcba').replace('\'1px\'', '\'4px\''))
+      server.watcher.emit('change', system)
+      for (const page of pages) {
+        await page.waitForFunction(() => getComputedStyle(document.querySelector('#card')!).color === 'rgb(254, 220, 186)' && getComputedStyle(document.querySelector('#card')!).padding === '4px')
+        await page.waitForFunction(() => [...document.styleSheets].filter(sheet => (sheet.ownerNode as Element)?.getAttribute('data-vite-dev-id')?.includes('/virtual/system/')).length === 1)
+        expect(await page.evaluate(() => (globalThis as any).installation.gap)).toBe(false)
+      }
+    }
+    finally {
+      releaseSlowPage()
+      await browser.close()
+      await server?.close()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    { layerOrder: undefined, nuxt: false },
+    { layerOrder: [], nuxt: false },
+    { layerOrder: ['vendor'], nuxt: true },
+  ])('leaves document CSS to the host when no Vite layer statement is needed %j', async ({ layerOrder, nuxt }) => {
+    const { build, version } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-host-css-')))
+    try {
+      await put(root, 'package.json', '{ "name": "vite-host-css", "type": "module" }')
+      await put(root, 'index.html', '<!doctype html><html><head></head><body><script type="module" src="/main.ts"></script></body></html>')
+      await put(root, 'main.ts', `import './main.css'`)
+      await put(root, 'main.css', 'body { color: red }')
+      const plugins = vanityPlugin({ compiler: { layerOrder }, ...(nuxt ? { [vanityViteHost]: 'nuxt' as const } : {}) })
+      const overlapping = Number.parseInt(version.split('.')[0]!, 10) >= 6
+      let entered = 0
+      let release = () => {}
+      const bothHtmlHosts = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const holdHtml: Plugin = {
+        name: 'hold-shared-html-input',
+        transformIndexHtml: { order: 'pre', async handler() {
+          if (++entered === 2)
+            release()
+          await bothHtmlHosts
+        } },
+      }
+      const runBuild = () => build({
+        root,
+        configFile: false,
+        logLevel: 'silent',
+        plugins: overlapping ? [holdHtml, ...plugins] : plugins,
+        build: { write: false, minify: false, cssMinify: false },
+      })
+      // Vite 6 has no HTML environment. Shared inputs are ambiguous only when
+      // Vanity needs a build-specific asset; otherwise both builds are valid.
+      const results = overlapping ? await Promise.all([runBuild(), runBuild()]) : [await runBuild(), await runBuild()]
+      for (const result of results) {
+        const outputs = (Array.isArray(result) ? result : [result]) as Array<{
+          output: Array<{ type: string, fileName: string, source?: string | Uint8Array }>
+        }>
+        const assets = outputs.flatMap(output => output.output).filter(output => output.type === 'asset')
+        const html = String(assets.find(asset => asset.fileName === 'index.html')?.source)
+        const href = html.match(/<link\b[^>]+rel="stylesheet"[^>]*href="([^"]+)"/)?.[1]
+        expect(href).toBeDefined()
+        const css = assets.find(asset => `/${asset.fileName}` === href)
+        expect(String(css?.source)).toContain('color: red')
+        expect(assets.some(asset => asset.fileName.includes('vanity-layer-order'))).toBe(false)
+        expect(html).not.toContain('__VITE_ASSET__')
+      }
+    }
+    finally {
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  })
+
+  it.each(['/sub/', './'])('resolves the first layer-order stylesheet through the host under base %s', async (base) => {
+    const { build, createLogger, version } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-layer-link-')))
+    const warnings: string[] = []
+    const logger = createLogger('silent')
+    logger.warn = message => warnings.push(message)
+
+    try {
+      await put(root, 'package.json', '{ "name": "vite-layer-link", "type": "module" }')
+      await put(root, 'index.html', '<!doctype html><html><head></head><body><script type="module" src="/main.ts"></script></body></html>')
+      await put(root, 'about.html', '<!doctype html><html><head></head><body><script type="module" src="/main.ts"></script></body></html>')
+      await put(root, 'main.ts', `import './main.css'`)
+      await put(root, 'main.css', 'body { color: red }')
+      const plugins = vanityPlugin({ compiler: { layerOrder: ['vendor', 'app'] } })
+      for (let buildNumber = 0; buildNumber < 2; buildNumber++) {
+        const result = await build({
+          root,
+          base,
+          configFile: false,
+          customLogger: logger,
+          plugins,
+          build: { write: false, assetsDir: 'static', minify: false, cssMinify: false, rollupOptions: { input: { index: join(root, 'index.html'), about: join(root, 'about.html') } } },
+        })
+        const outputs = (Array.isArray(result) ? result : [result]) as Array<{
+          output: Array<{ type: string, fileName: string, source?: string | Uint8Array }>
+        }>
+        const assets = outputs.flatMap(output => output.output).filter(output => output.type === 'asset')
+        const htmlAssets = assets.filter(asset => asset.fileName.endsWith('.html'))
+        expect(htmlAssets.map(asset => asset.fileName).sort()).toEqual(['about.html', 'index.html'])
+        const layerAsset = assets.find(asset => String(asset.source) === '@layer vendor, app;\n')
+        expect(layerAsset?.fileName).toMatch(/^static\/vanity-layer-order-[\w-]+\.css$/)
+        for (const htmlAsset of htmlAssets) {
+          const html = String(htmlAsset.source)
+          const firstStylesheet = [...html.matchAll(/<link\b[^>]+rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g)][0]?.[1]
+          expect(firstStylesheet).toBeDefined()
+          const url = new URL(firstStylesheet!, 'https://fixture.test/sub/index.html')
+          expect(url.pathname).toBe(`/sub/${layerAsset!.fileName}`)
+          expect(warnings).toEqual([])
+        }
+      }
+      if (Number.parseInt(version.split('.')[0]!, 10) >= 6) {
+        const otherRoot = join(root, 'other-root')
+        for (const file of ['package.json', 'index.html', 'main.ts', 'main.css'])
+          await put(otherRoot, file, await readFile(join(root, file), 'utf8'))
+        let entered = 0
+        let release = () => {}
+        const bothHtmlHosts = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        const holdHtml: Plugin = {
+          name: 'hold-overlapping-html-inputs',
+          transformIndexHtml: { order: 'pre', async handler() {
+            if (++entered === 2)
+              release()
+            await bothHtmlHosts
+          } },
+        }
+        const results = await Promise.all([root, otherRoot].map((buildRoot, index) => build({
+          root: buildRoot,
+          base,
+          configFile: false,
+          customLogger: logger,
+          plugins: [holdHtml, ...plugins],
+          build: { write: false, assetsDir: `static-${index}`, minify: false, cssMinify: false },
+        })))
+        for (const [index, result] of results.entries()) {
+          const assets = (result as { output: Array<{ type: string, fileName: string, source?: string | Uint8Array }> }).output.filter(output => output.type === 'asset')
+          const html = String(assets.find(asset => asset.fileName === 'index.html')?.source)
+          const firstHref = [...html.matchAll(/<link\b[^>]+rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g)][0]?.[1]
+          const firstPath = new URL(firstHref!, 'https://fixture.test/sub/index.html').pathname.slice('/sub/'.length)
+          const firstAsset = assets.find(asset => asset.fileName === firstPath)
+          expect(firstAsset?.fileName).toMatch(new RegExp(`^static-${index}/vanity-layer-order-[\\w-]+\\.css$`))
+          expect(String(firstAsset?.source)).toBe('@layer vendor, app;\n')
+        }
+        expect(warnings).toEqual([])
+      }
+    }
+    finally {
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  })
+
   it('returns a virtual scan ID for a configured system member', async () => {
     const { createServer } = await loadViteRuntime()
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-scan-shield-')))
@@ -315,7 +557,9 @@ export const raw = style({ color: 'rebeccapurple', padding: length.rem(1).css })
     const serverMember = join(packageRoot, 'server.ts')
     const entry = await put(root, 'src/entry.ts', `import { ds } from 'conditional-member-design'
 export const brandName = ds.t.color.brand.$name
+console.log(brandName)
 `)
+    await put(root, 'index.html', '<!doctype html><html><head></head><body><script type="module" src="/src/entry.ts"></script></body></html>')
     let server: ViteDevServer | undefined
     let releaseClientBuild: () => void = () => {}
     let clientBuildPromise: Promise<unknown> | undefined
@@ -349,7 +593,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#445566' } }).cons
 export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).consolidate({ prefix: 'compat-development' })
 `)
 
-      const plugin = vanityPlugin({ compiler: { system: 'conditional-member-design' } })
+      const plugin = vanityPlugin({ compiler: { system: 'conditional-member-design', layerOrder: ['vendor'] } })
       const hostPlugin = plugin.find((candidate) => {
         return typeof candidate === 'object'
           && candidate !== null
@@ -373,7 +617,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
       let clientCode: string
       let ssrCode: string
       if (major === 5) {
-        const guardedPlugin = vanityPlugin({ compiler: { system: 'conditional-member-design' } })
+        const guardedPlugin = vanityPlugin({ compiler: { system: 'conditional-member-design', layerOrder: ['vendor'] } })
         let releaseFirstHost!: () => void
         let signalFirstHost!: () => void
         const firstHostGate = new Promise<void>((resolve) => {
@@ -396,7 +640,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
           logLevel: 'silent',
           plugins: [guardedPlugin, firstHostGatePlugin],
           resolve: { alias },
-          build: { write: false, minify: false, ssr: true, rollupOptions: { input: entry } },
+          build: { write: false, minify: false, ssr: entry, rollupOptions: { input: entry } },
         })
         await firstHostConfigured
         let concurrentHostError: unknown
@@ -407,7 +651,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
             logLevel: 'silent',
             plugins: [guardedPlugin],
             resolve: { alias },
-            build: { write: false, minify: false, lib: { entry, formats: ['es'] } },
+            build: { write: false, minify: false },
           })
         }
         catch (error) {
@@ -428,7 +672,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
           logLevel: 'silent',
           plugins: [plugin],
           resolve: { alias },
-          build: { write: false, minify: false, lib: { entry, formats: ['es'] } },
+          build: { write: false, minify: false },
         })
         const ssrBuild = await build({
           root,
@@ -436,9 +680,16 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
           logLevel: 'silent',
           plugins: [plugin],
           resolve: { alias },
-          build: { write: false, minify: false, ssr: true, rollupOptions: { input: entry } },
+          build: { write: false, minify: false, ssr: entry, rollupOptions: { input: entry } },
         })
+        const outputs = (Array.isArray(clientBuild) ? clientBuild : [clientBuild]) as Array<{ output: Array<{ fileName: string, source?: string | Uint8Array }> }>
+        const assets = outputs.flatMap(output => output.output)
+        const html = String(assets.find(asset => asset.fileName === 'index.html')?.source)
+        const layerAsset = assets.find(asset => String(asset.source) === '@layer vendor;\n')
+        expect(html).toContain(`href="/${layerAsset!.fileName}"`)
         clientCode = bundleCode(clientBuild)
+        const ssrOutputs = (Array.isArray(ssrBuild) ? ssrBuild : [ssrBuild]) as Array<{ output: Array<{ type: string, source?: string | Uint8Array }> }>
+        expect(ssrOutputs.flatMap(output => output.output).filter(output => output.type === 'asset' && String(output.source) === '@layer vendor;\n')).toEqual([])
         ssrCode = bundleCode(ssrBuild)
       }
       else {
@@ -454,12 +705,10 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
         const filterGate: Plugin = {
           name: 'vanity-vite-compat-client-filter-gate',
           enforce: 'post',
-          async configResolved(config) {
-            if (config.build.ssr)
-              return
+          transformIndexHtml: { order: 'pre', async handler() {
             resolveClientFilterReady()
             await clientGate
-          },
+          } },
         }
         clientBuildPromise = build({
           root,
@@ -467,7 +716,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
           logLevel: 'silent',
           plugins: [plugin, filterGate],
           resolve: { alias },
-          build: { write: false, minify: false, lib: { entry, formats: ['es'] } },
+          build: { write: false, minify: false },
         }).catch((error: unknown) => {
           rejectClientFilterReady(error)
           throw error
@@ -479,11 +728,18 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
           logLevel: 'silent',
           plugins: [plugin],
           resolve: { alias },
-          build: { write: false, minify: false, ssr: true, rollupOptions: { input: entry } },
+          build: { write: false, minify: false, ssr: entry, rollupOptions: { input: entry } },
         })
         releaseClientBuild()
         const clientBuild = await clientBuildPromise
+        const outputs = (Array.isArray(clientBuild) ? clientBuild : [clientBuild]) as Array<{ output: Array<{ fileName: string, source?: string | Uint8Array }> }>
+        const assets = outputs.flatMap(output => output.output)
+        const html = String(assets.find(asset => asset.fileName === 'index.html')?.source)
+        const layerAsset = assets.find(asset => String(asset.source) === '@layer vendor;\n')
+        expect(html).toContain(`href="/${layerAsset!.fileName}"`)
         clientCode = bundleCode(clientBuild)
+        const ssrOutputs = (Array.isArray(ssrBuild) ? ssrBuild : [ssrBuild]) as Array<{ output: Array<{ type: string, source?: string | Uint8Array }> }>
+        expect(ssrOutputs.flatMap(output => output.output).filter(output => output.type === 'asset' && String(output.source) === '@layer vendor;\n')).toEqual([])
         ssrCode = bundleCode(ssrBuild)
       }
       expect({
@@ -995,7 +1251,7 @@ export const brandName = ds.t.color.brand.$name
     const memberLoadResults: string[] = []
     let watcher: {
       close: () => Promise<void>
-      on: (event: 'event', listener: (event: { code: string, error?: unknown }) => void) => void
+      on: (event: 'event', listener: (event: { code: string, error?: unknown, result?: { close: () => Promise<void> } }) => void) => void
     } | undefined
 
     try {
@@ -1020,9 +1276,11 @@ export const ds = createSystem().addTokens({ color: { brand: '#123456' } }).cons
       await put(root, 'entry.ts', `import { ds } from 'watch-filter-design'
 import { plain } from './plain.ts'
 export const result = [ds.t.color.brand.$name, plain]
+console.log(result)
 `)
 
-      const sharedPlugin = vanityPlugin({ compiler: { system: 'watch-filter-design' } })
+      await put(root, 'index.html', '<!doctype html><html><head></head><body><script type="module" src="/entry.ts"></script></body></html>')
+      const sharedPlugin = vanityPlugin({ compiler: { system: 'watch-filter-design', layerOrder: ['vendor'] } })
       const hostPlugin = sharedPlugin.find(candidate => typeof candidate === 'object' && candidate !== null
         && !Array.isArray(candidate) && 'name' in candidate && candidate.name === 'vanity-css-ts') as Plugin | undefined
       if (hostPlugin === undefined)
@@ -1059,19 +1317,6 @@ export const result = [ds.t.color.brand.$name, plain]
 
       let completedBuilds = 0
       const buildWaiters = new Map<number, { resolve: () => void, reject: (error: unknown) => void }>()
-      const buildEnd = hostPlugin.buildEnd as (this: unknown, error?: Error) => unknown
-      hostPlugin.buildEnd = async function (this: unknown, error?: Error) {
-        await buildEnd.call(this, error)
-        if ((this as { meta?: { watchMode?: boolean } }).meta?.watchMode !== true)
-          return
-        completedBuilds++
-        for (const [target, waiter] of buildWaiters) {
-          if (completedBuilds >= target) {
-            waiter.resolve()
-            buildWaiters.delete(target)
-          }
-        }
-      }
 
       const watcherResult = await build({
         root,
@@ -1088,7 +1333,18 @@ export const result = [ds.t.color.brand.$name, plain]
       if (watcher === undefined)
         throw new Error('Vite did not return the configured watch host')
 
-      watcher.on('event', (event) => {
+      watcher.on('event', async (event) => {
+        if (event.code === 'BUNDLE_END')
+          await event.result!.close()
+        if (event.code === 'END') {
+          completedBuilds++
+          for (const [target, waiter] of buildWaiters) {
+            if (completedBuilds >= target) {
+              waiter.resolve()
+              buildWaiters.delete(target)
+            }
+          }
+        }
         if (event.code === 'ERROR') {
           const failure = event.error ?? new Error('the Vite watch build failed')
           for (const waiter of buildWaiters.values())
@@ -1152,6 +1408,9 @@ export const result = [ds.t.color.brand.$name, plain]
         expect(unservedPackageResolveCalls.length).toBeGreaterThan(resolveCallsBeforeConcurrentBuild)
       }
 
+      await put(root, 'plain.ts', 'export const plain = "after"\n')
+      await waitForBuild(2)
+      expect(await readFile(join(root, 'dist/entry.js'), 'utf8')).toContain('after')
       await watcher.close()
       watcher = undefined
       const entryCallsAfterWatch = unservedEntryCalls.length
@@ -1178,6 +1437,10 @@ export const result = [ds.t.color.brand.$name, plain]
         unservedEntrySkipped: true,
         unservedResolveSkipped: true,
       })
+      const htmlBuild = await build({ root, configFile: false, logLevel: 'silent', plugins: [sharedPlugin], resolve: { alias }, build: { write: false, minify: false } })
+      const outputs = (Array.isArray(htmlBuild) ? htmlBuild : [htmlBuild]) as Array<{ output: Array<{ fileName: string, source?: string | Uint8Array }> }>
+      const html = outputs.flatMap(output => output.output).find(output => output.fileName === 'index.html')
+      expect(String(html?.source)).toMatch(/href="\/assets\/vanity-layer-order-[^"]+\.css"/)
     }
     finally {
       await watcher?.close()
@@ -1240,14 +1503,16 @@ export const result = [ds.t.color.brand.$name, card, appValue, dependencyValue, 
         typeof candidate === 'object' && candidate !== null && !Array.isArray(candidate)
         && 'name' in candidate && candidate.name === name) as Plugin | undefined
       const host = pluginNamed('vanity-css-ts')
+      const cssInstallation = pluginNamed('vanity:css-installation')
       const substrate = pluginNamed('vite-plugin-vanilla-extract')
       const autoImport = pluginNamed('vanity:app-auto-imports')
-      if (host === undefined || substrate === undefined || autoImport === undefined)
-        throw new Error('the Vite host, vanilla-extract, and application auto-import plugins are required')
+      if (host === undefined || cssInstallation === undefined || substrate === undefined || autoImport === undefined)
+        throw new Error('the Vite host, CSS installation, vanilla-extract, and application auto-import plugins are required')
 
       const hostLoadIds: string[] = []
       const hostResolveCalls: Array<{ readonly source: string, readonly importer?: string }> = []
       const hostTransformIds: string[] = []
+      const cssInstallationIds: string[] = []
       const vanityRuntimeAddressInputs: string[] = []
       const substrateCalls: Record<'load' | 'resolveId' | 'transform', string[]> = {
         load: [],
@@ -1272,6 +1537,7 @@ export const result = [ds.t.color.brand.$name, card, appValue, dependencyValue, 
         })
       })
       wrapHook(host, 'transform', id => hostTransformIds.push(id))
+      wrapHook(cssInstallation, 'transform', id => cssInstallationIds.push(id))
       for (const hookName of ['load', 'resolveId', 'transform'] as const)
         wrapHook(substrate, hookName, id => substrateCalls[hookName].push(id))
       wrapHook(autoImport, 'transform', id => autoImportIds.push(id))
@@ -1303,6 +1569,7 @@ export const result = [ds.t.color.brand.$name, card, appValue, dependencyValue, 
       const nonServingHandlerCalls = [
         ...hostLoadIds.filter(id => isGeneratedPlain(id) || isInstalledDependency(id)),
         ...hostTransformIds.filter(id => isGeneratedPlain(id) || isInstalledDependency(id)),
+        ...cssInstallationIds.filter(id => isGeneratedPlain(id) || isInstalledDependency(id)),
         ...substrateCalls.load.filter(id => isGeneratedPlain(id) || isInstalledDependency(id)),
         ...substrateCalls.transform.filter(id => isGeneratedPlain(id) || isInstalledDependency(id)),
         ...autoImportIds.filter(id => isInstalledDependency(id) || normalizeId(id) === style),

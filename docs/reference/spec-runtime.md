@@ -146,6 +146,8 @@ Snapshots contain:
 - runtime-managed modes;
 - no private slot names, DOM references, untouched graph values, or generic custom-property writes.
 
+Axis and mode records keep their own entries through JSON and restored controllers. Only a declared mode with activation metadata or an explicit control can be selected; inherited JavaScript members never supply declarations or activation values.
+
 The portable runtime-contract protocol is `2` for declared multi-root metadata. The semantic snapshot protocol remains `1`: its token-path/address records already survive root and private-slot changes.
 
 `snapshotFrom()` is DOM-free and uses the same validation/serialization/semantic address model as a live runtime.
@@ -160,8 +162,9 @@ The portable runtime-contract protocol is `2` for declared multi-root metadata. 
 - compare runtime schema ID;
 - reconcile known semantic entries on schema mismatch;
 - keep valid additive changes;
-- skip removed, unauthored, type-incompatible, or invalid entries with structured diagnostics;
+- skip removed, unauthored, type-incompatible, or invalid entries with structured diagnostics (an inherited name is unauthored);
 - reject the whole document only when the snapshot protocol is unreadable/unsupported;
+- clear managed mode attributes the reconciled snapshot does not select;
 - avoid redundant writes when SSR inline state already matches;
 - preserve valid runtime state across compatible HMR;
 - mark superseded controllers stale so they cannot mutate behind the current runtime.

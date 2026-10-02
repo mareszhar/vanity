@@ -55,6 +55,7 @@ describe('substrate boundary', () => {
       'emitGlobalRule',
       'emitKeyframes',
       'emitLayer',
+      'emitLayerOrder',
       'emitRawCss',
       'getStyleModuleFile',
       'hasStyleModuleFile',

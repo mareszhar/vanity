@@ -45,3 +45,11 @@ export function range(length: number): number[] {
   }
   return Array.from({ length }, (_, index) => index)
 }
+
+/**
+ * Write ordinary own data without invoking inherited setters, including `__proto__`.
+ * @internal
+ */
+export function setOwn(target: object, key: PropertyKey, value: unknown): void {
+  Object.defineProperty(target, key, { enumerable: true, configurable: true, writable: true, value })
+}

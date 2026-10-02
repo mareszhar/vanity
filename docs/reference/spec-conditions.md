@@ -185,6 +185,32 @@ The object form accepts:
 | `native` | Preserves native `light-dark()` behavior and its fallback policy ([§9](#9-scheme-convenience)). |
 | `description` | Human-readable axis description shown in introspection. |
 
+Every authoring form accepts these same fields and honors them identically: `addAxis`, `addAxes`, detached `defineAxes` modules, and a complete `axis()` definition. A derivation fills a missing mode value, and a value authored for that mode always wins:
+
+```TS
+const open = createSystem().addAxis('emphasis', {
+  modes: { base: '&', strong: thisMode },
+  default: 'base',
+  derive: { strong: modes => oklch.darken(modes.base, 0.2) },
+})
+
+const ds = open
+  .addTokens({
+    ink: open.tdef.color({ axes: { emphasis: { base: oklch(0.7, 0.12, 270) } } }),
+  })
+  .consolidate()
+
+ds.t.ink.$axes.emphasis.strong // the derived branch
+```
+
+A direct `native` policy keeps its own locality and support fallback; only the `colorSchemes()` convenience adds mount-relative behavior. Direct configurations and detached entries infer exact sibling mode names inside derivation callbacks. Record factories type those siblings as a dictionary, and the axis names, mode names, and derived branch types they return stay exact. Sparse-record typing has one documented boundary, described in [tokens §9](spec-tokens.md#9-axis-values).
+
+Types promise only what the configuration supplies. In `VanityOpenAxisConfig` and `VanityAxisConfig`, a control type that excludes `undefined` requires `control`; a derivation type with required callbacks requires `derive`.
+
+An annotation with optional fields cannot guarantee activation methods or derived branches. Inference and `satisfies` retain the supplied fields and callback results.
+
+A derivation guarantees a branch only when its callback is required and cannot return `undefined`. Optional callbacks and callbacks that may return `undefined` remain valid; author a mode value or narrow the callback's result before reading that branch as guaranteed.
+
 `addAxes(ds => ({...}))` and callback overloads exist only when accumulated system context is needed.
 
 Every axis records:
@@ -198,7 +224,9 @@ Every axis records:
 - overlap/precedence evidence;
 - roots that carry values for it.
 
-Axis and mode names may not begin with `$`. Integer-like ordering traps are diagnosed.
+An axis name becomes a token layer and a generated control attribute, so it must be one complete CSS identifier. Mounting fails with `VANITY_SYSTEM_INVALID_AXIS` for comments, incomplete escapes, trailing syntax, dots, and repeated identities; equivalent escape spellings name the same axis. It also fails when two names generate the same `data-*` attribute: `colorScheme` and `color-scheme` both generate `data-color-scheme`, so mounting both is rejected. Distinct names whose conditions are authored to share a trigger remain legal.
+
+Axis and mode entries are own data through additive registration, token branches, native JSON, and restored runtime projections: independent systems never share branch data, and inherited JavaScript members never declare an axis or mode. Generated attributes spell the decoded identity in an HTML-safe form, and CSS selectors address that same spelling through both DOM mounting and SSR. Names may not begin with `$`, and integer-like ordering traps are diagnosed.
 
 ## 9. Scheme convenience
 

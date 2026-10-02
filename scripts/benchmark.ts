@@ -138,7 +138,7 @@ const workspaceDir = process.env.VANITY_BENCHMARK_ROOT === undefined
 const fixturesRoot = join(workspaceDir, 'benchmarks/generated')
 const artifactsRoot = join(workspaceDir, '.vanity/benchmarks')
 const declarationsRoot = join(artifactsRoot, 'declarations')
-/** Deliberate min+gzip ceiling with approximately 9.6% headroom over the current receipt. */
+/** Runtime min+gzip ceiling; an increase requires an explicit benchmark review. */
 const RUNTIME_ENTRY_MIN_GZIP_BUDGET_BYTES = 12_400
 const sdkRequire = createRequire(resolve(workspaceDir, 'sdk/package.json'))
 const runtimeMinifier = sdkRequire('esbuild') as RuntimeMinifier

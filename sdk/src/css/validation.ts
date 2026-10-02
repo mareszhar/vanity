@@ -7,6 +7,7 @@
  * repeat themselves, native calls shouldn't.
  */
 
+import type { Rule, Token, TokenOrValue } from 'lightningcss'
 import { Buffer } from 'node:buffer'
 import { all as knownCssProperties } from 'known-css-properties'
 import { transform } from 'lightningcss'
@@ -167,6 +168,75 @@ function checkSyntax(key: string, css: string): string | undefined {
 export function checkSelector(selector: string): string | undefined {
   const probe = selector.replaceAll('&', '.vanity-probe')
   return checkSyntax(`s\0${selector}`, `${probe}{--vanity-probe:0}`)
+}
+
+type LayerName = { readonly identity: string, readonly reason?: never } | { readonly identity?: never, readonly reason: string }
+const layerNameCache = new Map<string, LayerName>()
+
+/** Consume one complete CSS identifier and expose its decoded layer identity. */
+export function parseLayerName(name: string): LayerName {
+  const cached = layerNameCache.get(name)
+  if (cached !== undefined)
+    return cached
+  const rawRules: Rule[] = []
+  const rules: Rule[] = []
+  const visitRawNameRule = (rule: Rule): void => {
+    rawRules.push(rule)
+  }
+  const visitLayerRule = (rule: Rule): void => {
+    rules.push(rule)
+  }
+  let result: LayerName
+  try {
+    transform({
+      filename: 'vanity-check.css',
+      code: Buffer.from(`@vanity-name ${name};`),
+      errorRecovery: false,
+      visitor: { Rule: visitRawNameRule },
+    })
+    // Parse the contexts independently: injected rules must not impersonate
+    // the layer and sentinel that establish suffix preservation.
+    transform({
+      filename: 'vanity-check.css',
+      code: Buffer.from(`@layer parent.${name}.suffix;.vanity-sentinel{color:red}`),
+      errorRecovery: false,
+      visitor: { Rule: visitLayerRule },
+    })
+    const raw = rawRules[0]
+    const [layer, sentinel] = rules
+    const token = raw?.type === 'unknown' ? raw.value.prelude?.[0] : undefined
+    const identity = token?.type === 'dashed-ident'
+      ? token.value
+      : token?.type === 'token' && token.value.type === 'ident' ? token.value.value : undefined
+    if (identity?.includes('.')) {
+      result = { reason: 'a dot would create a nested layer owned by Vanity' }
+    }
+    else if (rawRules.length !== 1 || rules.length !== 2 || raw?.type !== 'unknown' || raw.value.name !== 'vanity-name'
+      || raw.value.block !== null || raw.value.prelude?.length !== 1 || identity === undefined || identity.includes('\uFFFD')
+      || layer?.type !== 'layer-statement' || layer.value.names.length !== 1
+      || layer.value.names[0]?.length !== 3 || layer.value.names[0]?.[0] !== 'parent'
+      || layer.value.names[0]?.[1] !== identity || layer.value.names[0]?.[2] !== 'suffix'
+      || sentinel?.type !== 'style') {
+      result = { reason: 'the complete spelling must be one identifier and preserve its surrounding rules' }
+    }
+    else {
+      result = { identity }
+    }
+  }
+  catch (error) {
+    result = { reason: (error as Error).message }
+  }
+  layerNameCache.set(name, result)
+  return result
+}
+
+/** Let the CSS parser serialize a decoded identifier for an attribute selector. */
+export function serializeCssIdentifier(identity: string): string {
+  const visitIdentifierToken = (token: Token): TokenOrValue | undefined => token.type === 'ident'
+    ? { type: 'token', value: { type: 'ident', value: identity } }
+    : undefined
+  const css = transform({ filename: 'vanity-name.css', code: Buffer.from('@vanity-name placeholder;'), visitor: { Token: visitIdentifierToken } }).code.toString()
+  return css.slice('@vanity-name '.length, css.lastIndexOf(';'))
 }
 
 /** Check an at-rule's params: `checkQuery('media', '(min-width: 768px)')`. */

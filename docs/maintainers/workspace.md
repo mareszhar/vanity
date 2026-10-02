@@ -49,7 +49,7 @@ Scripts that inspect the repository as a whole—lint, documentation examples, a
 ## 3. Toolchain
 
 - **Package manager:** pnpm, pinned by `packageManager` in the root manifest.
-- **Runtime:** Node from `.nvmrc`.
+- **Runtime:** Node from `.nvmrc`, which CI reads too. A new pin moves the benchmark environment, so rerun the release gates and re-record the baseline with it.
 - **Task graph:** Turborepo.
 - **Lint and formatting:** ESLint with `@antfu/eslint-config`; formatting is part of the lint configuration.
 - **SDK build:** obuild.
@@ -75,8 +75,6 @@ The update helpers use the user-level pnpm store (`$PNPM_HOME/store` when `PNPM_
 
 They fail rather than silently accepting a project-local fallback. This prevents a pnpm upgrade from making an otherwise valid workspace fail later with `ERR_PNPM_UNEXPECTED_STORE`.
 
-The updater writes the package-manager pin itself, runs the install that records the selected CLI in the lockfile, and then runs a frozen install to verify the resulting workspace.
-
 This is separate from `pnpm run upi`: `pnpm:self-update` changes the package manager, while `upi` reviews registry dependencies in the default catalog. If dependency updates are also intended, run `pnpm run upi` after the pnpm update, then `pnpm run validate` before release work.
 
 ### Dependency policy
@@ -99,7 +97,7 @@ Run `pnpm run upi` to review and select eligible upgrades from the default catal
 - the broader `peers` catalog remains intact because it defines the SDK's published compatibility contract;
 - a pnpm exit without a changed catalog or lockfile is a no-op.
 
-The workspace provides one dependency graph, the default catalog owns the exact maintainer matrix, and the `peers` catalog owns the published compatibility range. Follow a dependency upgrade with `pnpm run validate` before release work.
+Follow a dependency upgrade with `pnpm run validate` before release work.
 
 Repository automation under `scripts/` is TypeScript run through `tsx`, with an introductory comment that states the operational purpose and the invariant each script protects. Published runtime shims and tool-required configuration files may still use their required JavaScript module format outside that directory.
 

@@ -1,0 +1,11 @@
+{
+  "name": "spike-identifier-consumption",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "lightningcss": "1.33.0"
+  }
+}

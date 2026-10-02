@@ -164,3 +164,68 @@ describe('open and locked system editor DX', () => {
     expect(errors).toHaveError(/density|never/)
   })
 })
+
+it('completes ordinary direct and detached derivation siblings and branches', () => {
+  const result = project.query`
+    import { createSystem, defineAxes, thisMode } from '@mszr/vanity'
+    const open = createSystem().addAxis('pick', {
+      modes: { base: '&', later: thisMode },
+      derive: { later: siblings => { void siblings.${cursor('directSibling')}; return 'red' as const } },
+    })
+    const module = defineAxes({ pick: {
+      modes: { base: '&', later: thisMode },
+      derive: { later: siblings => { void siblings.${cursor('detachedSibling')}; return 42 as const } },
+    } })
+    const detached = createSystem().addAxes(module)
+    const ds = open.addTokens({ ink: open.tdef({ val: 'black', axes: { pick: {} } }) }).consolidate()
+    const staged = detached.addTokens({ ink: detached.tdef({ val: 1, axes: { pick: {} } }) }).consolidate()
+    void ds.t.ink.$axes.pick.${cursor('branches')}
+    void ds.t.ink.$axes.pick.later.${cursor('directValue')}$val
+    void staged.t.ink.$axes.pick.later.${cursor('detachedValue')}$val
+  `
+  for (const name of ['directSibling', 'detachedSibling']) {
+    expect(result.at(name).completions).toContainCompletions(['base', 'later'])
+    expect(result.at(name).completions).not.toContainCompletion('wrong')
+  }
+  expect(result.at('branches').completions).toContainCompletion('later')
+  expect(result.at('directValue').hover).toContain('"red"')
+  expect(result.at('detachedValue').hover).toContain('42')
+  const { errors } = project.check`
+    import { createSystem, defineAxes, thisMode } from '@mszr/vanity'
+    createSystem().addAxis('pick', { modes: { base: '&', later: thisMode }, derive: { later: siblings => siblings.base } })
+    defineAxes().add('pick', { modes: { base: '&', later: thisMode }, derive: { later: siblings => siblings.base } })
+  `
+  expect(errors).toHaveErrorCount(0)
+})
+
+it('diagnoses missing promised axis capabilities at the configuration', () => {
+  for (const field of ['control', 'derive'] as const) {
+    const { errors } = project.check`
+      import type { VanityOpenAxisConfig } from '@mszr/vanity'
+      import { thisMode } from '@mszr/vanity'
+      const modes = { base: '&', later: thisMode } as const
+      const configuration: VanityOpenAxisConfig<typeof modes, ${field === 'control' ? 'import(\'@mszr/vanity\').VanityAxisControl<keyof typeof modes>' : 'undefined, { later: () => 42 }'}> = { modes }
+      void configuration
+    `
+    expect(errors).toHaveErrorCount(1)
+    expect(errors[0]).toMatchObject({ code: 2322, line: 5 })
+    expect(errors[0]!.message).toContain(`Property '${field}' is missing`)
+  }
+  const result = project.query`
+    import type { VanityOpenAxisConfig } from '@mszr/vanity'
+    import { createSystem, thisMode } from '@mszr/vanity'
+    const modes = { base: '&', later: thisMode } as const
+    type Configuration = ${cursor('configuration')}VanityOpenAxisConfig<typeof modes>
+    const known = createSystem().addAxis('pick', { modes, derive: { later: () => 42 as const } })
+    const uncertain = createSystem().addAxis('pick', { modes, derive: { later: (): 42 | undefined => undefined } })
+    const ds = known.addTokens({ ink: known.tdef({ val: 1, axes: { pick: {} } }) }).consolidate()
+    const maybe = uncertain.addTokens({ ink: uncertain.tdef({ val: 1, axes: { pick: {} } }) }).consolidate()
+    void ds.t.ink.$axes.pick.${cursor('known')}
+    void maybe.t.ink.$axes.pick.${cursor('uncertain')}
+  `
+  expect(result.at('known').completions).toContainCompletion('later')
+  expect(result.at('uncertain').completions).not.toContainCompletion('later')
+  const hover = result.at('configuration').hover ?? ''
+  expect(hover).toContain('Known control and derivation types require their fields')
+  expect(hover.length).toBeLessThan(2000)
+})

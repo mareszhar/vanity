@@ -10,7 +10,7 @@
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
 import type { VanityKebab } from '../tokens/types'
 import type { VanityCssValue, VanityTokenInput } from '../values/types'
-import { checkQuery, checkSelector, isCssProperty } from '../css/validation'
+import { checkQuery, checkSelector, isCssProperty, parseLayerName, serializeCssIdentifier } from '../css/validation'
 import { VanityError } from '../diagnostics'
 import { convertToKebab } from '../tokens/names'
 
@@ -284,9 +284,9 @@ export function schemeIs<
   axisName?: AxisName,
 ): VanityFluentCondition<SchemeConditionCompiled<Scheme, AxisName>, true> {
   const mountedAxisName = axisName ?? 'scheme' as AxisName
-  const attribute = getSchemeAttribute(mountedAxisName)
+  const { name: attribute, selectorName } = getDataAttribute(mountedAxisName)
   const arms = getSchemeConditionArms(scheme, mountedAxisName)
-  const compiled = `&:where([${attribute}='${scheme}'], [${attribute}='${scheme}'] *) | @media (prefers-color-scheme: ${scheme})`
+  const compiled = `&:where([${selectorName}='${scheme}'], [${selectorName}='${scheme}'] *) | @media (prefers-color-scheme: ${scheme})`
   return createCondition(
     compiled,
     {
@@ -318,7 +318,7 @@ export function getSchemeConditionArms(
   axisName = 'scheme',
 ): readonly [VanityConditionArm, VanityConditionArm] {
   const opposite = scheme === 'light' ? 'dark' : 'light'
-  const attribute = getSchemeAttribute(axisName)
+  const { selectorName: attribute } = getDataAttribute(axisName)
 
   return [
     { selector: `&:where([${attribute}='${scheme}'], [${attribute}='${scheme}'] *)` },
@@ -329,8 +329,21 @@ export function getSchemeConditionArms(
   ]
 }
 
-function getSchemeAttribute(axisName: string): string {
-  return `data-${convertToKebab(axisName)}`
+/** Match generated DOM carriers to CSS escape identities without changing authored keys. */
+export function getDataAttribute(attribute: string): { name: string, selectorName: string } {
+  if (!attribute.includes('\\')) {
+    const name = `data-${convertToKebab(attribute)}`
+    return { name, selectorName: name }
+  }
+  const identity = parseLayerName(attribute).identity
+  if (identity === undefined) {
+    const name = `data-${convertToKebab(attribute)}`
+    return { name, selectorName: name }
+  }
+  // Encode HTML and SSR attribute delimiters. Colons distinguish the encoding
+  // from ordinary CSS identifiers and are encoded themselves.
+  const name = `data-${convertToKebab(identity).replace(/[\0\t\n\f\r />=:'"]/g, char => `:${char.codePointAt(0)!.toString(16)}:`)}`
+  return { name, selectorName: serializeCssIdentifier(name) }
 }
 
 /** A literal `data-*` selector; compose `selector('&')` when anchoring is intended. */
@@ -342,8 +355,8 @@ export function data<const Attribute extends string, const Value extends string>
   value: Value,
 ): VanityFluentCondition<`[data-${VanityKebab<Attribute>}='${Value}']`, true>
 export function data(attribute: string, value?: string): VanityFluentCondition<string, true> {
-  const name = `data-${convertToKebab(attribute)}`
-  const compiled = value === undefined ? `[${name}]` : `[${name}='${value}']`
+  const { name, selectorName } = getDataAttribute(attribute)
+  const compiled = value === undefined ? `[${selectorName}]` : `[${selectorName}='${value}']`
   return createCondition(
     compiled,
     { kind: 'selector', selector: compiled },

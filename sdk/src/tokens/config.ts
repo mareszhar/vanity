@@ -9,6 +9,7 @@ import type {
   VanityTokenFactory,
   VanityTypedNoDefaultTokenFactory,
 } from './types'
+import { setOwn } from '../collections'
 import { VanityError } from '../diagnostics'
 import { VANITY_CONFIGURED_TOKEN } from './types'
 
@@ -98,10 +99,12 @@ function lowerAxisDerivations<Config extends VanityTokenConfig>(
     const loweredModes: Record<string, unknown | null> = { ...configuredModes }
     const context: Record<string, unknown> = { ...loweredModes }
     if (definition.defaultMode !== undefined && Object.hasOwn(config, 'val') && !Object.hasOwn(context, definition.defaultMode))
-      context[definition.defaultMode] = config.val
+      setOwn(context, definition.defaultMode, config.val)
 
     for (const mode of definition.modeOrder) {
-      const derive = (definition.derive as Readonly<Record<string, ((modes: Readonly<Record<string, any>>) => unknown) | undefined>>)[mode]
+      const derive = Object.hasOwn(definition.derive, mode)
+        ? (definition.derive as Readonly<Record<string, ((modes: Readonly<Record<string, any>>) => unknown) | undefined>>)[mode]
+        : undefined
       if (derive === undefined || Object.hasOwn(context, mode))
         continue
       let value: unknown
@@ -117,11 +120,11 @@ function lowerAxisDerivations<Config extends VanityTokenConfig>(
         )
       }
       if (value !== undefined) {
-        loweredModes[mode] = value
-        context[mode] = value
+        setOwn(loweredModes, mode, value)
+        setOwn(context, mode, value)
       }
     }
-    loweredAxes[axis] = loweredModes
+    setOwn(loweredAxes, axis, loweredModes)
   }
 
   return { ...config, axes: loweredAxes } as Config
@@ -180,7 +183,7 @@ function validateTokenConfig(config: VanityTokenConfig, axes?: VanityAxisRegistr
   validateRuntimePolicy(config.validate)
 
   for (const [axis, modes] of Object.entries(config.axes ?? {})) {
-    const definition = axes?.definitions[axis]
+    const definition = axes && Object.hasOwn(axes.definitions, axis) ? axes.definitions[axis] : undefined
     if (!definition) {
       throwTokenConfigError(
         'VANITY_TOKENS_UNKNOWN_AXIS',
@@ -229,7 +232,7 @@ function validateTokenConfig(config: VanityTokenConfig, axes?: VanityAxisRegistr
       )
     }
     for (const [axis, mode] of Object.entries(entry.when)) {
-      const definition = axes?.definitions[axis]
+      const definition = axes && Object.hasOwn(axes.definitions, axis) ? axes.definitions[axis] : undefined
       if (!definition) {
         throwTokenConfigError(
           'VANITY_TOKENS_UNKNOWN_AXIS',

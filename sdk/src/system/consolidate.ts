@@ -64,9 +64,6 @@ export function consolidateSystem(
     {
       tokens: finalState.tokens as any,
       conditions: finalState.conditions,
-      ...(systemOptions.layerOrder !== undefined || finalState.policies.layerOrder === undefined
-        ? {}
-        : { layerOrder: finalState.policies.layerOrder }),
       ...systemOptions,
     } as any,
     {

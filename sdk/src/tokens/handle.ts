@@ -1,6 +1,7 @@
 /** Token and branch handles shared across build and application contexts. */
 
 import type { VanityCssDataType } from '../values/types'
+import { setOwn } from '../collections'
 import { createVanityRuntimeError } from '../runtime/contract'
 
 export type VanityHandleReference = 'val' | 'var'
@@ -266,8 +267,9 @@ export function attachAxisBranch(
   branch: VanityInternalTokenBranchHandle,
 ): void {
   const axes = handle.$axes
-  axes[axis] ??= {}
-  axes[axis]![mode] = branch
+  if (!Object.hasOwn(axes, axis))
+    setOwn(axes, axis, {})
+  setOwn(axes[axis]!, mode, branch)
 }
 
 export function attachCaseBranch(

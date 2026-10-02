@@ -52,6 +52,11 @@ interface VanityRawCssBlock {
   readonly css: string
 }
 
+interface VanityLayerOrder {
+  readonly type: 'vanityLayerOrder'
+  readonly names: readonly string[]
+}
+
 type VanillaCss = Parameters<typeof transformCss>[0]['cssObjs'][number]
 type VanillaComposition = Parameters<Adapter['registerComposition']>[0]
 
@@ -94,6 +99,10 @@ function createCssSubstrate() {
       globalLayer({ parent: input.parent }, input.name)
   }
 
+  const emitLayerOrder = (names: readonly string[]): void => {
+    appendCss({ type: 'vanityLayerOrder', names } satisfies VanityLayerOrder, convertToVanillaFileScope(getCurrentFileScopeValue()))
+  }
+
   const createCustomProperty = (label?: string): `--${string}` => {
     const reference = createVar(label)
     return reference.slice(4, -1) as `--${string}`
@@ -110,6 +119,7 @@ function createCssSubstrate() {
     emitKeyframes,
     emitFontFace,
     emitLayer,
+    emitLayerOrder,
     createCustomProperty,
     registerCustomProperty,
     getStyleModuleFile,
@@ -223,8 +233,34 @@ function createModuleSubstrate(): {
   }
 
   const installCapture = (capture: VanityVanillaExtractCapture): void => {
+    // Bundled authoring copies share the native backend, not this substrate
+    // instance. The installed capture therefore owns declaration lifetime.
+    const layerOrdersByFileScope = new Map<string, Set<string>>()
     const adapter: Adapter = {
-      appendCss: (css, fileScope) => capture.appendCss(css, createVanityFileScope(fileScope)),
+      appendCss: (css, fileScope) => {
+        if ((css as unknown as VanityLayerOrder).type !== 'vanityLayerOrder') {
+          capture.appendCss(css, createVanityFileScope(fileScope))
+          return
+        }
+        const { names } = css as unknown as VanityLayerOrder
+        const fileKey = JSON.stringify([fileScope.filePath, fileScope.packageName])
+        const orderKey = JSON.stringify(names)
+        let orders = layerOrdersByFileScope.get(fileKey)
+        if (orders?.has(orderKey))
+          return
+        if (orders === undefined) {
+          orders = new Set()
+          layerOrdersByFileScope.set(fileKey, orders)
+        }
+        orders.add(orderKey)
+        for (const qualifiedName of names) {
+          const separator = qualifiedName.lastIndexOf('.')
+          if (separator < 0)
+            globalLayer(qualifiedName)
+          else
+            globalLayer({ parent: qualifiedName.slice(0, separator) }, qualifiedName.slice(separator + 1))
+        }
+      },
       registerClassName: (className, fileScope) => capture.registerClassName(className, createVanityFileScope(fileScope)),
       registerComposition: (composition, fileScope) => capture.registerComposition(composition, createVanityFileScope(fileScope)),
       markCompositionUsed: capture.markCompositionUsed,
@@ -276,7 +312,7 @@ function hasStyleModuleFile(): boolean {
   return hasFileScope()
 }
 
-function appendCss(css: VanillaCss | VanityRawCssBlock, fileScope: FileScope): void {
+function appendCss(css: VanillaCss | VanityRawCssBlock | VanityLayerOrder, fileScope: FileScope): void {
   appendCssToAdapter(css as never, fileScope)
 }
 

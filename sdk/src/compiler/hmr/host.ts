@@ -5,8 +5,12 @@ export interface CompilerHmrHost {
   readonly resolveBrowserModuleUrl: (id: string) => string
   /** Invalidate and request an already-served CSS module update. */
   readonly updateCssModule: (id: string) => void
+  /** Invalidate all compiler CSS after the host's root order changes. */
+  readonly markCssModulesInvalid: (ids: ReadonlySet<string>) => void
   /** Retire CSS modules from every host graph when their last owner leaves. */
-  readonly removeCssModules: (ids: ReadonlySet<string>) => void
+  readonly removeCssModules: (ids: ReadonlySet<string>) => readonly string[]
+  /** Tell the client to update an already loaded style source before pruning its retired imports. */
+  readonly sendStyleModuleUpdate: (url: string) => void
   /** Request a full browser reload after an incompatible module export change. */
   readonly sendFullReload: () => void
   /** Modules with this physical source in any client or SSR graph. */

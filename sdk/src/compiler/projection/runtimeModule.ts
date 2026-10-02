@@ -83,8 +83,8 @@ export function buildRuntimeSystemModule(system: EvaluatedSystem, target: 'brows
   const sourceExports = new Set(system.exportNames)
   const lines = [
     `import { restoreStyleAuthoringStub, restoreRuntimeControllerFactory, restoreRuntimeProps, restoreRuntimeReconciler, restoreRuntimeStyle, restoreSnapshotFrom, restoreToken } from '@mszr/vanity/runtime';`,
-    `const _runtimeContract = ${JSON.stringify(runtimeContract)};`,
-    `const _tokenRecords = ${JSON.stringify(tokens)};`,
+    `const _runtimeContract = JSON.parse(${JSON.stringify(JSON.stringify(runtimeContract))});`,
+    `const _tokenRecords = JSON.parse(${JSON.stringify(JSON.stringify(tokens))});`,
     `const _t = {};`,
     `for (const _meta of _tokenRecords) {`,
     `  const _parts = _meta.path.split('.');`,

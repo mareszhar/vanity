@@ -20,33 +20,33 @@ Fixtures cover open-to-locked system construction, token modules, axes and spars
 
 <!-- benchmark-receipt:start -->
 
-## Accepted baseline — 2026-09-26
+## Accepted baseline — 2026-10-01
 
-Recorded at 2026-09-26T01:53:06.405Z from the worktree based on HEAD 0770ce7c. Environment: darwin 25.4.0 arm64, Node v24.21.0, pnpm 12.5.1, TypeScript 6.0.3. Wall-clock measurements are local one-run signals. Source receipt: `.vanity/benchmarks/current.json`.
+Recorded at 2026-10-01T23:29:34.331Z from the worktree based on HEAD 724422e6. Environment: darwin 25.4.0 arm64, Node v24.21.0, pnpm 12.5.1, TypeScript 6.0.3. Wall-clock measurements are local one-run signals. Source receipt: `.vanity/benchmarks/current.json`.
 
 | Scale | Cold TS / wall | Instantiations | Memory | Incremental TS / wall |
 | --- | ---: | ---: | ---: | ---: |
-| Small | 0.58s / 0.724s | 34,246 | 99,776 kB | 0.23s / 0.364s |
-| Medium | 0.50s / 0.615s | 65,513 | 102,561 kB | 0.22s / 0.339s |
-| Large | 1.03s / 1.157s | 288,916 | 147,646 kB | 0.25s / 0.379s |
+| Small | 0.50s / 0.728s | 34,928 | 107,942 kB | 0.23s / 0.353s |
+| Medium | 0.51s / 0.640s | 66,618 | 138,575 kB | 0.24s / 0.355s |
+| Large | 1.06s / 1.193s | 290,476 | 169,078 kB | 0.26s / 0.381s |
 
 | Scale | Root | Deep | Axis | Case | Runtime | CSS | Diagnostic | Rename |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Small | 0.099ms | 0.151ms | 0.190ms | 0.237ms | 0.309ms | 6.407ms | 0.306ms | 0.968ms |
-| Medium | 0.068ms | 0.162ms | 0.087ms | 0.148ms | 0.096ms | 5.183ms | 0.104ms | 1.210ms |
-| Large | 0.132ms | 0.243ms | 0.065ms | 0.135ms | 0.116ms | 4.853ms | 0.116ms | 5.644ms |
+| Small | 0.092ms | 0.166ms | 0.171ms | 0.226ms | 0.183ms | 7.864ms | 0.209ms | 0.981ms |
+| Medium | 0.134ms | 0.177ms | 0.084ms | 0.146ms | 0.128ms | 5.772ms | 0.130ms | 1.490ms |
+| Large | 0.129ms | 0.237ms | 0.062ms | 0.128ms | 0.109ms | 5.700ms | 0.109ms | 5.971ms |
 
 | Scale | Declaration emit / bytes | Vite build | CSS raw / gzip | Manifest v4 raw / gzip |
 | --- | ---: | ---: | ---: | ---: |
-| Small | 0.579s / 40,184 B | 0.917s | 4,461 B / 812 B | 153,571 B / 7,227 B |
-| Medium | 0.723s / 107,485 B | 0.759s | 24,712 B / 2,978 B | 1,169,491 B / 32,637 B |
-| Large | 1.545s / 588,958 B | 4.930s | 208,567 B / 21,445 B | 11,386,892 B / 255,924 B |
+| Small | 0.611s / 40,184 B | 0.996s | 4,441 B / 808 B | 153,571 B / 7,227 B |
+| Medium | 0.787s / 107,485 B | 0.874s | 24,691 B / 2,973 B | 1,169,491 B / 32,637 B |
+| Large | 1.578s / 588,958 B | 5.161s | 208,547 B / 21,439 B | 11,386,892 B / 255,924 B |
 
 | Host graph modules | Plain Vite | Vanity | Overhead | Package declaration walk cold / warm |
 | --- | ---: | ---: | ---: | ---: |
-| 3,000 app + 128 installed | 0.167s | 0.478s | 311 ms | 331 ms / 1 ms |
+| 3,000 app + 128 installed | 0.178s | 0.495s | 317 ms | 445 ms / 1 ms |
 
-Package entries: root 623,976 B raw; runtime 65,808 B raw, 38,155 B minified, and 11,318 B min+gzip; Hail presets 31,202 B raw.
+Package entries: root 630,715 B raw; runtime 66,344 B raw, 38,500 B minified, and 11,409 B min+gzip; Hail presets 31,202 B raw.
 
 <!-- benchmark-receipt:end -->
 
@@ -59,6 +59,8 @@ Those semantic characteristics can increase or reduce fixture CSS; the raw and g
 Runtime min+gzip remains subject to the 12,400 B budget enforced by `scripts/benchmark.ts`. Any future runtime-affecting change must either stay within that budget or receive an explicit benchmark review and budget decision.
 
 The host-graph row is a local timing signal. Zero handler calls for unserved modules is enforced by the supported-major Vite graph matrix, where the host is observed directly. The receipt also records cold and warm source-package declaration time on `sandbox/demo-main`'s installed tree.
+
+The TypeScript memory column is the heap in use when the compiler reports its statistics, so it includes allocations still awaiting collection. To judge a large change, compare repeated ordinary runs against clean HEAD on the same toolchain. To tell retained growth from collection timing, run `tsc --extendedDiagnostics` under `node --expose-gc`, which collects before reading memory; its wall time is inflated by that collection, so compare latency from ordinary runs.
 
 ## Acceptance policy
 

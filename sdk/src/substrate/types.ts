@@ -55,6 +55,8 @@ export interface VanityCssSubstrate {
   emitFontFace: (input: VanityFontFaceEmission) => string
   /** Record a cascade-layer declaration. */
   emitLayer: (input: VanityLayerEmission) => void
+  /** Contribute complete layer order to the active backend capture, once per file scope and order. */
+  emitLayerOrder: (names: readonly string[]) => void
   /** Create a stable custom-property name for an authored label. */
   createCustomProperty: (label?: string) => `--${string}`
   /** Register custom-property syntax and initial-value metadata. */

@@ -43,6 +43,7 @@ import type {
   VanityRuntimeValidationContract,
   VanitySnapshotFrom,
 } from './contract'
+import { setOwn } from '../collections'
 import {
   createHandle,
   getRuntimeAddress,
@@ -401,7 +402,7 @@ function createRuntimeAxes<Axes extends VanityAxisDefinitions>(
       $current: () => getCurrentMode(contract, state, axis),
       $cycle: (options: VanityRuntimeCycleOptions<string> = {}) => {
         const modes = definition.modes.filter(mode =>
-          definition.control !== undefined || definition.attribute?.values[mode] !== undefined)
+          definition.control !== undefined || Object.hasOwn(definition.attribute?.values ?? {}, mode))
           .filter(mode => !options.exclude?.includes(mode))
         if (modes.length === 0) {
           throwRuntimeDiagnostic({
@@ -419,10 +420,10 @@ function createRuntimeAxes<Axes extends VanityAxisDefinitions>(
       },
     }
     for (const mode of definition.modes) {
-      if (definition.control !== undefined || definition.attribute?.values[mode] !== undefined)
-        actions[mode] = Object.freeze({ $activate: () => switchTo(mode) })
+      if (definition.control !== undefined || Object.hasOwn(definition.attribute?.values ?? {}, mode))
+        setOwn(actions, mode, Object.freeze({ $activate: () => switchTo(mode) }))
     }
-    tree[axis] = Object.freeze(actions)
+    setOwn(tree, axis, Object.freeze(actions))
   }
   return Object.freeze(tree) as VanityRuntimeAxes<Axes>
 }
@@ -452,7 +453,7 @@ function prepareMode(
       fix: `use one of the declared modes: ${definition.modes.join(', ')}`,
     })
   }
-  const value = definition.attribute?.values[mode]
+  const value = definition.attribute && Object.hasOwn(definition.attribute.values, mode) ? definition.attribute.values[mode] : undefined
   if ((!definition.attribute || value === undefined) && !definition.control) {
     throwRuntimeDiagnostic({
       code: 'VANITY_RUNTIME_UNSELECTABLE_AXIS',
@@ -609,8 +610,9 @@ function createRuntimeTree(
           : {}),
       }
       if (branch.address.kind === 'axis') {
-        axes[branch.address.axis] ??= {}
-        axes[branch.address.axis]![branch.address.mode] = branchMeta
+        if (!Object.hasOwn(axes, branch.address.axis))
+          setOwn(axes, branch.address.axis, {})
+        setOwn(axes[branch.address.axis]!, branch.address.mode, branchMeta)
       }
       else {
         cases.push({ when: branch.address.when, ...branchMeta })
@@ -896,7 +898,7 @@ function reconcileSnapshot(
 
   const modes: Record<string, string> = {}
   for (const [axis, mode] of Object.entries(source.modes)) {
-    const definition = contract.axes[axis]
+    const definition = Object.hasOwn(contract.axes, axis) ? contract.axes[axis] : undefined
     if (!definition || !definition.modes.includes(mode)) {
       diagnostics.push({
         code: 'VANITY_RUNTIME_UNKNOWN_MODE',
@@ -906,7 +908,7 @@ function reconcileSnapshot(
       })
       continue
     }
-    if ((!definition.attribute || definition.attribute.values[mode] === undefined) && !definition.control) {
+    if ((!definition.attribute || !Object.hasOwn(definition.attribute.values, mode)) && !definition.control) {
       diagnostics.push({
         code: 'VANITY_RUNTIME_UNSELECTABLE_AXIS',
         message: `snapshot mode '${axis}.${mode}' has no runtime root attribute mapping`,
@@ -915,7 +917,7 @@ function reconcileSnapshot(
       })
       continue
     }
-    modes[axis] = mode
+    setOwn(modes, axis, mode)
   }
 
   return Object.freeze({
@@ -1195,7 +1197,7 @@ function projectAttributesForRoot(
     if (!root.axes.includes(axis))
       continue
     const adapter = contract.axes[axis]?.attribute
-    const value = adapter?.values[mode]
+    const value = adapter && Object.hasOwn(adapter.values, mode) ? adapter.values[mode] : undefined
     if (adapter && value !== undefined && value !== null)
       attributes[adapter.name] = value
     Object.assign(attributes, contract.axes[axis]?.control?.projections?.[mode]?.attributes)
@@ -1243,7 +1245,7 @@ function restoreRuntimeState(contract: VanityRuntimeContract, state: RuntimeStat
     writeStyle(targets.get(token.rootPath)![0]!.style, slot, entry.val)
   }
   for (const [axis] of state.modes) {
-    if (snapshot.modes[axis] !== undefined)
+    if (Object.hasOwn(snapshot.modes, axis))
       continue
     const adapter = contract.axes[axis]?.attribute
     if (!adapter)

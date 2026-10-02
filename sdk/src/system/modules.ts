@@ -5,11 +5,12 @@
  * grammar. Mounting decides how those entries are normalized and validated.
  */
 
-import type { VanityAxisDefinition, VanityOpenAxisConfig } from './axes'
+import type { VanityAxisDefinition, VanityAxisTrigger, VanityOpenAxisConfig } from './axes'
 import type { VanityConditionInput } from './conditions'
 import type { VanityConstructorDefinition, VanityUtilTree } from './definitions'
 import type { VanityPolicies } from './policies'
 import type { VanitySystemRule } from './rules'
+import { setOwn } from '../collections'
 import { VanityError } from '../diagnostics'
 
 export const VANITY_DEFINITION_MODULE = Symbol.for('vanity.definitionModule')
@@ -90,8 +91,17 @@ type DefinitionJson<Value>
         : Value extends object ? { readonly [Key in keyof Value]: DefinitionJson<Value[Key]> }
           : never
 
-type DefinitionValueGuard<Kind extends VanityDefinitionKind, Value>
-  = Kind extends 'axes' ? Value extends VanityAxisModuleInput ? Value : never
+type AxisInputGuard<Modes>
+  = {
+    readonly modes: Modes
+    readonly derive?: Partial<Record<
+      keyof Extract<Modes, Readonly<Record<string, unknown>>> & string,
+      (siblings: Readonly<Record<keyof Extract<Modes, Readonly<Record<string, unknown>>> & string, any>>) => unknown
+    >>
+  } | (Modes & readonly [string, ...string[]])
+
+type DefinitionValueGuard<Kind extends VanityDefinitionKind, Value, Modes>
+  = Kind extends 'axes' ? AxisInputGuard<Modes>
     : Kind extends 'conditions' ? Value extends VanityConditionInput ? Value : never
       : Kind extends 'consts' ? DefinitionJson<Value>
         : Kind extends 'constructors' ? Value extends VanityConstructorDefinition ? Value : never
@@ -100,9 +110,12 @@ type DefinitionValueGuard<Kind extends VanityDefinitionKind, Value>
               ? Value extends ((...args: any[]) => unknown) | VanityUtilTree ? Value : never
               : Value
 
-type DefinitionTreeGuard<Kind extends VanityDefinitionKind, Added extends object> = {
-  readonly [Key in keyof Added]: DefinitionValueGuard<Kind, Added[Key]>
-}
+// Infer mode inputs independently of Added, which retains derivation return literals.
+// Tuple entries contribute their own input to inference but no derivation keys.
+export type DefinitionTreeGuard<Kind extends VanityDefinitionKind, Added extends object, Modes extends Record<string, unknown>>
+  = Kind extends 'axes' ? {
+    readonly [Key in keyof Modes]: AxisInputGuard<Modes[Key]>
+  } : { readonly [Key in keyof Added]: DefinitionValueGuard<Kind, Added[Key], unknown> }
 
 type ShallowAdditiveGuard<Current extends object, Added extends object> = {
   readonly [Key in keyof Added]: Key extends keyof Current ? never : Added[Key]
@@ -143,16 +156,16 @@ export interface VanityDefinitionModule<
    * in this module—not a host system.
    */
   readonly add: {
-    <const Name extends string, const Value>(
+    <const Name extends string, const Value extends (Kind extends 'axes' ? VanityAxisModuleInput : unknown), const Modes extends Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]] = Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]>(
       name: Kind extends 'utils' ? never : DefinitionName<Kind, Shape, Name>,
-      value: (m: Readonly<Shape>) => Value & DefinitionValueGuard<Kind, Value>,
+      value: (m: Readonly<Shape>) => Value & DefinitionValueGuard<Kind, Value, Modes>,
     ): VanityDefinitionModule<Kind, VanityDefinitionMerge<Kind, Shape, Record<Name, Value>>>
-    <const Name extends string, const Value>(
+    <const Name extends string, const Value extends (Kind extends 'axes' ? VanityAxisModuleInput : unknown), const Modes extends Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]] = Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]>(
       name: DefinitionName<Kind, Shape, Name>,
-      value: Value & DefinitionValueGuard<Kind, Value>,
+      value: Value & DefinitionValueGuard<Kind, Value, Modes>,
     ): VanityDefinitionModule<Kind, VanityDefinitionMerge<Kind, Shape, Record<Name, Value>>>
-    <const Added extends object>(
-      factory: (m: Readonly<Shape>) => Added & DefinitionTreeGuard<Kind, Added>,
+    <const Added extends (Kind extends 'axes' ? Record<string, VanityAxisModuleInput> : object), const Modes extends Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]> = Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]>>(
+      factory: (m: Readonly<Shape>) => Added & DefinitionTreeGuard<Kind, Added, Modes>,
     ): VanityDefinitionModule<Kind, VanityDefinitionMerge<Kind, Shape, Added>>
     <const Module extends VanityDefinitionModule<Kind, any>>(
       module: Module,
@@ -163,9 +176,9 @@ export interface VanityDefinitionModule<
       Kind,
       VanityDefinitionMerge<Kind, Shape, VanityDefinitionModulesShape<Kind, Modules>>
     >
-    <const Added extends object>(
+    <const Added extends (Kind extends 'axes' ? Record<string, VanityAxisModuleInput> : object), const Modes extends Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]> = Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]>>(
       entries: Added
-        & DefinitionTreeGuard<Kind, Added>
+        & DefinitionTreeGuard<Kind, Added, Modes>
         & DefinitionAdditiveGuard<Kind, Shape, Added>,
     ): VanityDefinitionModule<Kind, VanityDefinitionMerge<Kind, Shape, Added>>
   }
@@ -231,8 +244,11 @@ export function defineRecordModule<
 }
 
 /** Define a portable axis module; mount it with `addAxes()`. */
-export function defineAxes<const Seed extends Readonly<Record<string, VanityAxisModuleInput>> = Record<never, never>>(
-  seed?: Seed,
+export function defineAxes<
+  const Seed extends Readonly<Record<string, VanityAxisModuleInput>> = Record<never, never>,
+  const Modes extends Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]> = Record<never, never>,
+>(
+  seed?: Seed & DefinitionTreeGuard<'axes', Seed, Modes>,
 ): VanityDefinitionModule<'axes', Seed> {
   return defineRecordModule('axes', seed)
 }
@@ -292,9 +308,9 @@ function mergeEntries(
   const result: Record<string, unknown> = { ...current }
   for (const [name, value] of Object.entries(added)) {
     const path = [...parent, name]
-    const existing = result[name]
+    const existing = Object.hasOwn(result, name) ? result[name] : undefined
     if (existing === undefined) {
-      result[name] = value
+      setOwn(result, name, value)
       continue
     }
     if (
@@ -343,7 +359,11 @@ function freezeTree<Value>(value: Value, seen = new WeakMap<object, object>()): 
     return prior as Value
   const clone: any = Array.isArray(value) ? [] : Object.create(Object.getPrototypeOf(value))
   seen.set(value, clone)
-  for (const key of Reflect.ownKeys(value))
-    clone[key] = freezeTree((value as any)[key], seen)
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!
+    Object.defineProperty(clone, key, 'value' in descriptor
+      ? { ...descriptor, value: freezeTree(descriptor.value, seen) }
+      : descriptor)
+  }
   return Object.freeze(clone)
 }

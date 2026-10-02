@@ -127,6 +127,7 @@ The shared configuration and the two module-role pipelines are defined in [spec-
 - **Importing the system module from app code is legal.** Token handles, override classes, runtime-controller factories, and SSR projection helpers cross as serializable contracts; bound authoring functions cross as build-only stubs that throw the module-role diagnostic if called — never a poisoned module, never a silent no-op.
 - Nuxt DevTools tab: the token browser (values per scheme, liveness, usage counts), recipe/anatomy inspector, ports, conditions, and the escape inventory, with click-through to the `.css.ts` source. It embeds the manifest view the `/vite` plugin serves at `/__vanity/` in dev — one implementation serves plain Vite and Nuxt alike ([spec-introspection.md §5](./spec-introspection.md#5-manifest-v4)).
 - A single component can use Vanity with the module and one `.css.ts` file; no global buy-in is required.
+- With roots listed in `compiler.layerOrder`, the module renders that layer statement inline as the first stylesheet in `<head>`, in development and production, for SSR and SPA pages.
 
 ---
 

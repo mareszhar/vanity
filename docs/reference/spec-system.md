@@ -243,7 +243,11 @@ For browser and SSR imports, Vanity owns a configured member when Vite loads the
 
 The configured authored system module may export the consolidated system and values taken from it, including renamed destructured members. An unrelated runtime export raises `VANITY_APP_EXPORT_IN_SYSTEM_MODULE`; move that declaration into another ordinary module and import it normally. Type-only exports do not participate in this rule. Ordinary modules and pure re-export barrels stay in the host graph, so application bindings are never reconstructed as serialized values.
 
-A compiler-owned cascade prelude is emitted as the first stylesheet. `compiler.layerOrder` optionally supplies its ordered CSS layer roots; when omitted, Vanity derives the order from the configured systems' roots. Set it when the build also contains external layers whose precedence must be explicit.
+`compiler.layerOrder` lists the CSS layer roots whose order the host declares. Each entry is one complete CSS identifier (no dots, which would nest) and compares by decoded identity, so equivalent escape spellings are one root; comments, incomplete escapes, and trailing syntax are rejected. Configured system roots the list omits follow it in configuration order, and without a list configured roots rank in configuration order. Vanity assigns no rank to layers that neither the list nor a configured system names, so list external layers whose precedence matters.
+
+Every compiler-owned stylesheet declares this root order, and every stylesheet carrying a system's rules declares that system's complete layer order ([styling §8](./spec-css.md#8-layers)). When `compiler.layerOrder` lists roots, Vanity also places its statement first in the document in every integrated HTML host.
+
+System layer names from `consolidate()` options or policies follow the same rule and fail at consolidation with `VANITY_SYSTEM_INVALID_LAYER`, empty policy entries included; a malformed policy list keeps its policy diagnostic. [Axis names and their generated control attributes](./spec-conditions.md#8-axes) are validated when mounted.
 
 ## 10. Package projection
 
@@ -291,9 +295,9 @@ Permanent release evidence:
 - runtime/type/DX lifecycle suites in `sdk/src/system/open.*`;
 - projection, SSR, package-pair, duplicate-copy, namespace-collision, and closure-exclusion suites in `sdk/src/system/projection.test.ts`;
 - both HMR recovery orders over the plain-system canary in `sdk/src/system/projection.test.ts`, plus stable CSS IDs and style-module suffix validation in `sdk/src/vite.test.ts`;
-- the permanent `sandbox/canary` app with a plain system, two eager styles, one lazy style, mutable token, activatable axis, DOM-free SSR seed, manifest, pure introspection/explanation, and compiler-first cascade prelude;
+- the permanent `sandbox/canary` app with a plain system, two eager styles, one lazy style, mutable token, activatable axis, DOM-free SSR seed, manifest, pure introspection/explanation, and layer statements in its emitted stylesheets;
 - emitted package declarations and the public-surface absence test;
-- the type-accumulation, system-scale, system-package, and compiler-projection spikes.
+- the type-accumulation, system-scale, system-package, and compiler-projection spikes;
 - the token-builder behavior/type/DX/output/rename/scale suites described in [spec-tokens.md §13](./spec-tokens.md#13-evidence);
-- the condition algebra, root/scope, axis-order, introspection, and Chromium canary evidence described in [spec-conditions.md §13](./spec-conditions.md#13-evidence).
+- the condition algebra, root/scope, axis-order, introspection, and Chromium canary evidence described in [spec-conditions.md §13](./spec-conditions.md#13-evidence);
 - the styling rule-IR, recipe/anatomy, port/atom, plugin, property-alias, and Hail suites described by their owning specifications.
