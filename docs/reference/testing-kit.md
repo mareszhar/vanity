@@ -9,10 +9,10 @@ The entrypoint is Node/test-only. It never enters application or SSR bundles.
 Install Selenita and TypeScript only in projects that exercise editor DX:
 
 ```sh
-pnpm add -D @mszr/vanity @mszr/selenita typescript vitest
+pnpm add -D @mszr/vanity @mszr/selenita typescript@^6.0.3 vitest@^4.1.11
 ```
 
-`@mszr/selenita` is an optional peer of Vanity because ordinary styling, runtime, compiler, Vue, and Nuxt consumers do not need it. Selenita requires TypeScript 6 or newer.
+`@mszr/selenita` is an optional peer of Vanity because ordinary styling, runtime, compiler, Vue, and Nuxt consumers do not need it. Use TypeScript 6 for its language-service API and Vitest 4 for Selenita 0.2.2's matcher declarations. TypeScript 7's native CLI does not provide that API; Vitest 5's matcher types are incompatible with this Selenita release.
 
 ## 2. Emitted CSS
 

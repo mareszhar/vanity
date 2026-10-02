@@ -93,11 +93,13 @@ Run `pnpm run upi` to review and select eligible upgrades from the default catal
 - one Clack multiselect option represents each outdated catalog entry, with the changed semver suffix highlighted;
 - the parser tolerates a pnpm reporter prefix, so diagnostics cannot corrupt the JSON review;
 - Space toggles an entry, the arrow keys move, and Enter confirms; cancellation or an empty submission is a no-op;
-- TypeScript remains excluded while the ESLint integration supports only the current workspace toolchain;
+- TypeScript and Vitest remain excluded while their compiler API and matcher declarations must match the lint, Vue, and Selenita integrations;
 - the broader `peers` catalog remains intact because it defines the SDK's published compatibility contract;
 - a pnpm exit without a changed catalog or lockfile is a no-op.
 
 Follow a dependency upgrade with `pnpm run validate` before release work.
+
+**Selenita compatibility:** Selenita 0.2.2 blocks Vitest 5 through its matcher declarations. Its addon also fails declaration checking on Vitest 4 with `skipLibCheck: false`: the ordinary and asymmetric matcher signatures conflict. A replacement release must pass packed-consumer checks with library checking enabled, including ordinary, negated, asynchronous and asymmetric assertions. Once it does, refresh the Selenita catalog and fresh-consumer pin, reassess the Vitest updater guard, and run editor-DX, fresh-consumer and release gates. Keep the TypeScript compiler-API gate independent. The [testing-kit guide](../reference/testing-kit.md) owns consumer installation versions.
 
 Repository automation under `scripts/` is TypeScript run through `tsx`, with an introductory comment that states the operational purpose and the invariant each script protects. Published runtime shims and tool-required configuration files may still use their required JavaScript module format outside that directory.
 

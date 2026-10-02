@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
@@ -36,9 +36,10 @@ function vitePackageFromPath(): { directory: string, entry: string, version: str
   if (!existsSync(viteBinary))
     throw new Error('The Vite package binary is not available on PATH; run this child through pnpm dlx')
 
-  const launcher = readFileSync(viteBinary, 'utf8')
+  const launcherPath = realpathSync(viteBinary)
+  const launcher = readFileSync(launcherPath, 'utf8')
   const target = launcher.match(/(?:#|rem) cmd-shim-target=(.+)$/m)?.[1]
-  let directory = dirname(realpathSync(target ?? viteBinary))
+  let directory = dirname(target === undefined ? launcherPath : realpathSync(resolve(dirname(launcherPath), target)))
   while (!existsSync(join(directory, 'package.json'))) {
     const parent = dirname(directory)
     if (parent === directory)
@@ -89,9 +90,13 @@ if (childIndex !== -1) {
   process.exitCode = runMajor(major)
 }
 else {
+  const pnpm = process.env.npm_execpath
+  if (pnpm === undefined)
+    throw new Error('Run pnpm run sdk:test:vite-compat to use the workspace package manager.')
+
   for (const major of supportedViteMajors()) {
     console.log(`\n• Vite ${major}`)
-    const result = spawnSync('pnpm', [
+    const result = spawnSync(pnpm, [
       'dlx',
       '--package',
       `vite@${major}`,
@@ -102,8 +107,8 @@ else {
       '--single-major',
       String(major),
     ], {
-      // Do not let this workspace's packageManager pin force a temporary
-      // pnpm installation just to fetch the isolated Vite test host.
+      // Use the executing pnpm CLI even outside the workspace, where a
+      // global launcher would otherwise select its own version.
       // Preserve the caller's cache environment so browser tests find the
       // same Playwright installation as the workspace gates.
       cwd: tmpdir(),

@@ -11,6 +11,12 @@ import {
   semverChangeParts,
 } from './update-dependencies-core'
 
+const peerCatalogSource = `catalogs:
+  peers:
+    zeta: '>=1 <2'
+    '@scope/alpha': '>=2 <3'
+`
+
 const workspaceSource = `catalogMode: strict
 
 catalog:
@@ -19,10 +25,7 @@ catalog:
   # keep this catalog ordered
   beta: ^3.0.0
 
-catalogs:
-  peers:
-    zeta: '>=1 <2'
-    '@scope/alpha': '>=2 <3'
+${peerCatalogSource}
 
 blockExoticSubdeps: true
 `
@@ -128,6 +131,22 @@ ${JSON.stringify({
     assert.match(restoredSource, / {2}zeta: \^1\.0\.0/)
     assert.match(restoredSource, / {4}zeta: '>=1 <2'/)
     assert.match(restoredSource, / {2}beta: \^4\.0\.0/)
+  })
+
+  it('preserves peer contracts independently of surrounding setting order', () => {
+    const expected = peerCatalogSource.trimEnd()
+    const atEnd = workspaceSource.replace('\nblockExoticSubdeps: true\n', '')
+    const reordered = `blockExoticSubdeps: true\n${atEnd}`
+    const followedByOtherSetting = atEnd.replace(/\n*$/, '\n\nallowBuilds:\n  esbuild: false\n')
+
+    for (const source of [atEnd, reordered, followedByOtherSetting, reordered.replaceAll('\n', '\r\n')]) {
+      assert.equal(namedPeerCatalog(source).trimEnd().replaceAll('\r\n', '\n'), expected)
+      const changed = source.replace('    zeta:', '    replaced:')
+      assert.equal(
+        restoreProtectedCatalogEntries(changed, namedPeerCatalog(source), []).trimEnd(),
+        source.trimEnd(),
+      )
+    }
   })
 
   it('persists a policy restoration without treating it as a dependency change', () => {

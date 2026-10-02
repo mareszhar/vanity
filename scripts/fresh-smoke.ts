@@ -58,7 +58,7 @@ function writeSourceConsumer(
       '@fixture/design': designDependency,
       '@mszr/vanity': packedDependency,
     },
-    devDependencies: { vite: '8.1.5' },
+    devDependencies: { vite: '8.3.1' },
   }, null, 2))
   write(join(directory, 'vite.config.ts'), `import { defineConfig } from 'vite'
 import { vanityPlugin } from '@mszr/vanity/vite'
@@ -362,7 +362,7 @@ async function main(): Promise<void> {
     private: true,
     type: 'module',
     dependencies: { '@mszr/vanity': packedDependency },
-    devDependencies: { typescript: '5.8.3', vite: '8.1.5', vitest: '4.1.9' },
+    devDependencies: { typescript: '6.0.3', vite: '8.3.1', vitest: '4.1.11' },
   }, null, 2))
   write(join(plainDir, 'tsconfig.json'), JSON.stringify({
     compilerOptions: {
@@ -443,8 +443,8 @@ it('captures emitted CSS from a system created in the test', () => {
     name: 'vanity-fresh-nuxt',
     private: true,
     type: 'module',
-    dependencies: { '@mszr/vanity': packedDependency, 'nuxt': '4.5.1', 'vue': '3.5.40' },
-    devDependencies: { 'typescript': '5.8.3', 'vue-tsc': '3.2.0' },
+    dependencies: { '@mszr/vanity': packedDependency, 'nuxt': '4.5.2', 'vue': '3.5.43' },
+    devDependencies: { 'typescript': '6.0.3', 'vue-tsc': '3.3.11' },
   }, null, 2))
   write(join(nuxtDir, 'tsconfig.json'), '{ "extends": "./.nuxt/tsconfig.json" }\n')
   write(join(nuxtDir, 'vanity.config.ts'), `import { defineVanityConfig } from '@mszr/vanity/config'
@@ -508,7 +508,7 @@ import { page } from './app.css.ts'
     },
     devDependencies: {
       typescript: '6.0.3',
-      vitest: '4.1.9',
+      vitest: '4.1.11',
     },
   }, null, 2))
   write(join(testingDir, 'tsconfig.json'), JSON.stringify({

@@ -210,13 +210,13 @@ export function catalogUpdateChoices(
 
 /** Return the named peer catalog block that defines the published contract. */
 export function namedPeerCatalog(source: string): string {
-  const start = source.indexOf('catalogs:\n')
-  const end = source.indexOf('\nblockExoticSubdeps:', start)
-
-  if (start === -1 || end === -1)
+  const header = /^catalogs:[ \t]*(?:#[^\r\n]*)?\r?$/m.exec(source)
+  if (header === null)
     throw new Error('Unable to preserve the published peer compatibility catalog.')
 
-  return source.slice(start, end)
+  const bodyStart = header.index + header[0].length
+  const nextSetting = source.slice(bodyStart).search(/^[^\s#]/m)
+  return source.slice(header.index, nextSetting === -1 ? source.length : bodyStart + nextSetting)
 }
 
 /** Restore workspace policies that the updater is not allowed to change. */

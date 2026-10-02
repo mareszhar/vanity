@@ -1,19 +1,24 @@
 catalogMode: strict
-
+blockExoticSubdeps: true
 minimumReleaseAge: 4320
-shellEmulator: true
-# A git hook has no TTY, so pnpm's pre-run dependency check can abort a commit
-# when it decides to auto-install. Keep runs clean and installs explicit;
-# dependency integrity is gated by `pnpm install --frozen-lockfile` in `check`
-# and in CI, which fails on real lockfile/manifest drift rather than on a
-# benign manifest bump.
-verifyDepsBeforeRun: false
+minimumReleaseAgeExcludePrune: true
+
 trustPolicy: no-downgrade
 trustPolicyExclude:
   - semver
   - undici-types
   # chokidar 4.x dropped provenance attestation; required by @pandacss/node (demo-comparisons)
   - chokidar
+
+shellEmulator: true
+
+# A git hook has no TTY, so pnpm's pre-run dependency check can abort a commit
+# when it decides to auto-install. Keep runs clean and installs explicit;
+# dependency integrity is gated by `pnpm install --frozen-lockfile` in `check`
+# and in CI, which fails on real lockfile/manifest drift rather than on a
+# benign manifest bump.
+verifyDepsBeforeRun: false
+
 packages:
   - sdk
   - sandbox/fixtures
@@ -21,48 +26,60 @@ packages:
   - sandbox/demo-main
   - sandbox/demo-comparisons
 
+# Panda 1.12 pins these versions below their published security fixes.
+overrides:
+  browserslist@4.28.1: 4.29.2
+  postcss-selector-parser@7.1.1: 7.1.6
+
+  postcss@8.5.14: 8.5.28
+
+allowBuilds:
+  '@parcel/watcher': false
+  esbuild: false
+
 catalog:
-  '@antfu/eslint-config': ^9.3.0
-  '@clack/prompts': ^1.7.0
+  '@antfu/eslint-config': ^9.5.1
+  '@clack/prompts': ^1.8.1
   '@mszr/selenita': ^0.2.2
   '@nuxt/kit': 4.5.2
   '@nuxt/schema': 4.5.2
-  '@pandacss/dev': ^1.12.0
-  '@playwright/test': ^1.62.1
+  '@pandacss/dev': ^1.12.1
+  '@playwright/test': ^1.63.0
   '@tailwindcss/vite': ^4.3.3
   '@types/culori': ^4.0.1
-  '@types/node': ^26.4.1
+  '@types/node': ^26.6.3
   '@vanilla-extract/css': ^1.21.2
   '@vanilla-extract/dynamic': ^2.1.5
   '@vanilla-extract/integration': ^8.0.10
   '@vanilla-extract/recipes': ^0.5.7
   '@vanilla-extract/vite-plugin': 5.2.6
-  '@vitejs/plugin-vue': ^6.0.8
+  '@vitejs/plugin-vue': ^6.0.9
   '@vue/language-plugin-pug': ^3.3.11
   ajv: ^8.20.0
   csstype: ^3.2.3
   culori: ^4.0.2
   esbuild: ^0.28.2
-  eslint: ^10.9.1
+  eslint: ^10.11.0
   eslint-plugin-format: ^2.0.1
   jiti: ^2.7.0
   known-css-properties: ^0.37.0
   lightningcss: ^1.33.0
-  lint-staged: ^17.4.1
+  lint-staged: ^17.6.0
   nuxt: 4.5.2
-  obuild: ^0.4.38
-  oxc-parser: ^0.148.0
+  obuild: ^0.4.40
+  oxc-parser: ^0.151.0
   pug: ^3.0.4
   tailwindcss: ^4.3.3
-  tsx: ^4.23.13
-  turbo: 2.10.12
+  tsx: ^4.23.15
+  turbo: 2.11.5
   # @typescript-eslint 8.x supports TypeScript < 6.1; do not upgrade to 7 yet.
   typescript: ^6.0.3
   unplugin-auto-import: ^21.1.0
-  vite: 8.2.2
+  vite: 8.3.1
   vitefu: ^1.1.3
+  # Selenita 0.2.2 matcher declarations use the Vitest 4 type parameters.
   vitest: ^4.1.11
-  vue: ^3.5.42
+  vue: ^3.5.43
   vue-tsc: ^3.3.11
   wxt: ^0.21.4
 
@@ -78,8 +95,3 @@ catalogs:
     vite: '^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0'
     vue: ^3.5.39
     wxt: '>=0.21.4 <1.0.0'
-
-blockExoticSubdeps: true
-allowBuilds:
-  '@parcel/watcher': false
-  esbuild: false

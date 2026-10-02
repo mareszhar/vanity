@@ -36,6 +36,9 @@ const guardedCatalogEntries = [
   // @typescript-eslint 8.x supports TypeScript < 6.1. Keep this in lockstep
   // with the comment next to the catalog entry until that support window changes.
   { name: 'typescript', range: '^6.0.3', pattern: /^( {2}typescript:) .+$/m, label: 'supported TypeScript range' },
+  // Selenita 0.2.2 augments Vitest's matcher interfaces with one type parameter;
+  // Vitest 5 requires two, so its declarations fail strict consumer checks.
+  { name: 'vitest', range: '^4.1.11', pattern: /^( {2}vitest:) .+$/m, label: 'Selenita-compatible Vitest range' },
 ] as const
 // Clack dims non-active labels. Clear that inherited terminal style before
 // the semantic color, without adding a trailing global reset that could wash

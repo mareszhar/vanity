@@ -8,6 +8,16 @@ const vueExternal = ['vue']
 const testingExternal = ['@mszr/selenita']
 
 export default defineBuildConfig({
+  hooks: {
+    rolldownOutput(output) {
+      if (typeof output.codeSplitting !== 'object')
+        return
+      for (const group of output.codeSplitting.groups ?? []) {
+        if (typeof group.name === 'function')
+          group.debugName ??= 'dependencies'
+      }
+    },
+  },
   entries: [
     {
       type: 'bundle',
