@@ -22,29 +22,29 @@ Fixtures cover open-to-locked system construction, token modules, axes and spars
 
 ## Accepted baseline — 2026-10-02
 
-Recorded at 2026-10-02T05:34:43.377Z from the worktree based on HEAD d9ee7015. Environment: darwin 25.4.0 arm64, Node v24.21.0, pnpm 12.8.1, TypeScript 6.0.3. Wall-clock measurements are local one-run signals. Source receipt: `.vanity/benchmarks/current.json`.
+Recorded at 2026-10-02T10:57:56.175Z from the worktree based on HEAD 5b618961. Environment: darwin 25.4.0 arm64, Node v24.21.0, pnpm 12.8.1, TypeScript 6.0.3. Wall-clock measurements are local one-run signals. Source receipt: `.vanity/benchmarks/current.json`.
 
 | Scale | Cold TS / wall | Instantiations | Memory | Incremental TS / wall |
 | --- | ---: | ---: | ---: | ---: |
-| Small | 0.41s / 0.551s | 34,928 | 138,707 kB | 0.26s / 0.407s |
-| Medium | 0.49s / 0.617s | 66,618 | 138,967 kB | 0.23s / 0.351s |
-| Large | 1.05s / 1.188s | 290,476 | 198,160 kB | 0.25s / 0.377s |
+| Small | 0.48s / 0.776s | 34,928 | 105,606 kB | 0.22s / 0.403s |
+| Medium | 0.51s / 1.267s | 66,618 | 111,796 kB | 0.21s / 0.964s |
+| Large | 1.02s / 1.790s | 290,476 | 173,980 kB | 0.24s / 1.002s |
 
 | Scale | Root | Deep | Axis | Case | Runtime | CSS | Diagnostic | Rename |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Small | 0.088ms | 0.139ms | 0.181ms | 0.213ms | 0.189ms | 10.689ms | 0.213ms | 0.969ms |
-| Medium | 0.074ms | 0.165ms | 0.073ms | 0.131ms | 0.101ms | 4.905ms | 0.094ms | 1.264ms |
-| Large | 0.131ms | 0.236ms | 0.161ms | 0.133ms | 0.113ms | 5.013ms | 0.116ms | 6.033ms |
+| Small | 0.089ms | 0.133ms | 0.172ms | 0.219ms | 0.149ms | 5.658ms | 0.230ms | 0.949ms |
+| Medium | 0.076ms | 0.179ms | 0.081ms | 0.149ms | 0.111ms | 5.396ms | 0.106ms | 1.179ms |
+| Large | 0.156ms | 0.271ms | 0.087ms | 0.128ms | 0.123ms | 5.088ms | 0.112ms | 5.762ms |
 
 | Scale | Declaration emit / bytes | Vite build | CSS raw / gzip | Manifest v4 raw / gzip |
 | --- | ---: | ---: | ---: | ---: |
-| Small | 0.592s / 40,184 B | 0.649s | 4,441 B / 808 B | 153,571 B / 7,227 B |
-| Medium | 0.734s / 107,485 B | 0.770s | 24,691 B / 2,973 B | 1,169,491 B / 32,637 B |
-| Large | 1.591s / 588,958 B | 4.992s | 208,547 B / 21,439 B | 11,386,892 B / 255,924 B |
+| Small | 1.221s / 40,184 B | 1.257s | 4,441 B / 808 B | 153,571 B / 7,227 B |
+| Medium | 0.886s / 107,485 B | 1.415s | 24,691 B / 2,973 B | 1,169,491 B / 32,637 B |
+| Large | 2.203s / 588,958 B | 5.562s | 208,547 B / 21,439 B | 11,386,892 B / 255,924 B |
 
 | Host graph modules | Plain Vite | Vanity | Overhead | Package declaration walk cold / warm |
 | --- | ---: | ---: | ---: | ---: |
-| 3,000 app + 128 installed | 0.178s | 0.438s | 260 ms | 243 ms / 1 ms |
+| 3,000 app + 128 installed | 0.166s | 0.420s | 254 ms | 226 ms / 1 ms |
 
 Package entries: root 630,604 B raw; runtime 66,344 B raw, 38,500 B minified, and 11,409 B min+gzip; Hail presets 31,202 B raw.
 

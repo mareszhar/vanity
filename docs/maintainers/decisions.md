@@ -90,6 +90,7 @@ When the brief requires maintainer approval, obtain an explicit answer before tr
 | Hail is the optional opinionated layer. | Core remains CSS-capable without prescribing design taste. |
 | Introspection, manifest, diagnostics, audit, DTCG, and CLI derive from one semantic record. | Humans and agents receive one consistent explanation surface. |
 | Hover text, completion, TSDoc, and diagnostics are tested API behavior. | The cursor is part of the product, not a secondary presentation. |
+| Style consumers wait for known system evaluations and revalidate their bundle's system snapshot; genuine failures have no diagnostic grace period. | Replaced work cannot report false errors or publish stale output. Retained CSS is disclosed, and unrelated future saves do not excuse an invalid expression. |
 | Evidence spans types, emitted CSS, browsers, packages, tooling, and performance. | A green result proves the relevant user-visible behavior. |
 
 ## Deliberate boundaries

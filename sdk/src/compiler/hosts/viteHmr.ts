@@ -189,6 +189,7 @@ export function createVitePendingCssResponseCache() {
 }
 
 type ViteHmrNotification = Extract<HMRPayload, { type: 'update' | 'full-reload' }>
+type ViteHmrUpdate = Extract<ViteHmrNotification, { type: 'update' }>['updates'][number]
 
 /**
  * Publish notifications only after a hot update succeeds; a reload supersedes
@@ -196,6 +197,34 @@ type ViteHmrNotification = Extract<HMRPayload, { type: 'update' | 'full-reload' 
  */
 export function createViteHmrNotifications() {
   const pending = new AsyncLocalStorage<Map<ViteDevServer, ViteHmrNotification[]>>()
+  const undelivered = new WeakMap<ViteDevServer, Map<string, ViteHmrUpdate>>()
+
+  const collectCurrentUpdates = (server: ViteDevServer): ViteHmrUpdate[] => {
+    const updates = undelivered.get(server)
+    if (updates === undefined)
+      return []
+    const graph = getClientModuleGraph(server)
+    // A failed batch can outlive a stylesheet's graph ownership.
+    for (const path of updates.keys()) {
+      if (!graph.urlToModuleMap.has(path))
+        updates.delete(path)
+    }
+    return [...updates.values()]
+  }
+
+  const registerUpdates = (batch: Map<ViteDevServer, ViteHmrNotification[]>): void => {
+    for (const [server, messages] of batch) {
+      const updates = undelivered.get(server) ?? new Map<string, ViteHmrUpdate>()
+      for (const message of messages) {
+        if (message.type === 'update') {
+          for (const update of message.updates)
+            updates.set(update.acceptedPath, update)
+        }
+      }
+      undelivered.set(server, updates)
+      collectCurrentUpdates(server)
+    }
+  }
 
   const send = (server: ViteDevServer, message: ViteHmrNotification): void => {
     const batch = pending.getStore()
@@ -208,23 +237,42 @@ export function createViteHmrNotifications() {
     batch.set(server, messages)
   }
 
-  const runUpdate = async <T>(update: () => Promise<T>): Promise<T> => {
+  const runUpdate = async <T>(server: ViteDevServer, update: () => Promise<T>): Promise<T> => {
     const batch = new Map<ViteDevServer, ViteHmrNotification[]>()
     return pending.run(batch, async () => {
-      const result = await update()
-      for (const [server, messages] of batch) {
+      let result: T
+      try {
+        result = await update()
+      }
+      catch (error) {
+        // A valid consumer can publish CSS before a sibling fails.
+        registerUpdates(batch)
+        throw error
+      }
+      registerUpdates(batch)
+      const servers = new Set([server, ...batch.keys()])
+      for (const server of servers) {
+        const messages = batch.get(server) ?? []
         // Vite can reload on an incremental update while its error overlay
         // is visible. Deliver the completed generation through one reload.
-        if (messages.some(message => message.type === 'full-reload'))
+        if (messages.some(message => message.type === 'full-reload')) {
           server.hot.send({ type: 'full-reload' })
-        else
-          messages.forEach(message => server.hot.send(message))
+        }
+        else {
+          // A retained notification must fetch current bytes, not reuse a
+          // browser module cached under an earlier delivery timestamp.
+          const timestamp = Date.now()
+          const updates = collectCurrentUpdates(server).map(update => ({ ...update, timestamp }))
+          if (updates.length > 0)
+            server.hot.send({ type: 'update', updates })
+        }
+        undelivered.delete(server)
       }
       return result
     })
   }
 
-  return { send, runUpdate }
+  return { send, runUpdate, clear: (server: ViteDevServer) => undelivered.delete(server) }
 }
 
 /** Build the Vite adapter for compiler-owned style and graph HMR. */
@@ -333,6 +381,10 @@ export function createViteHmrHost(options: {
         ?? getServerPluginContainer(server)?.transform
       if (transform === undefined)
         throw new TypeError('Vanity cannot recompile a style: the Vite client plugin container is unavailable')
+      // An SSR-only consumer has no client node yet. Native import analysis
+      // requires that node even when this eager compile precedes a page request.
+      const graph = environments?.client?.moduleGraph ?? getServerModuleGraph(server)
+      await graph.ensureEntryFromUrl(getViteSourceModuleUrl(file, options.root))
       await transform.call(
         environments?.client?.pluginContainer ?? getServerPluginContainer(server),
         await readFile(file, 'utf8'),

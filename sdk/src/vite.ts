@@ -353,13 +353,13 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const systemDependentsByFile = new Map<string, Set<string>>()
   /** Namespace owner key → last-good systems, recomputed after successful updates. */
   const namespaceOwners = new Map<string, Map<string, VanityPortableSystem>>()
-  /** Pending initial evaluations are shared by concurrent style requests. */
+  /** Initial requests and hot updates share each system's in-flight evaluation. */
   const pendingSystemsByEntry = new Map<string, Promise<EvaluatedSystem>>()
   /** Monotonic attempt generations prevent stale async work from publishing. */
   const systemGenerationsByEntry = new Map<string, number>()
   /** Host-neutral candidate validation and publication serialize per compiler. */
   const registerSystemCandidates = createSystemRegistrationQueue()
-  /** Initial eager evaluations may fail while the dev server remains repairable. */
+  /** Current failed evaluations remain explicit while the dev server is repairable. */
   const systemReadinessFailures = new Map<string, unknown>()
   const pendingCssResponseCache = createVitePendingCssResponseCache()
   const prefixCompilerCss = (state: ViteHostState, css: string): string =>
@@ -592,8 +592,11 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
           systemDependentsByFile,
         )
       }
-      const failure = createStyleBuildError(error, source.entry, state.config.root)
-      reportFailure(failure)
+      const failure = createStyleBuildError(error, source.entry, state.config.root, state.server !== undefined && systemsByEntry.has(source.entry))
+      if (systemGenerationsByEntry.get(source.entry) === generation) {
+        systemReadinessFailures.set(source.entry, failure)
+        reportFailure(failure)
+      }
       throw failure
     }
   }
@@ -637,40 +640,65 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     return [...result.systems]
   }
 
-  const evaluateConfiguredSystem = async (
-    state: ViteHostState,
-    source: NormalizedSystemSource,
-  ): Promise<EvaluatedSystem> => {
-    const [accepted] = await registerSystems(state, [await prepareConfiguredSystem(state, source)])
-    return accepted!
+  /** Read a started evaluation, following any save that supersedes it. */
+  const readCurrentSystem = async (source: NormalizedSystemSource): Promise<EvaluatedSystem> => {
+    for (;;) {
+      const pending = pendingSystemsByEntry.get(source.entry)
+      if (pending !== undefined) {
+        const generation = systemGenerationsByEntry.get(source.entry)
+        try {
+          const system = await pending
+          if (systemGenerationsByEntry.get(source.entry) === generation)
+            return system
+        }
+        catch (error) {
+          if (systemGenerationsByEntry.get(source.entry) === generation)
+            throw error
+        }
+        continue
+      }
+      if (systemReadinessFailures.has(source.entry))
+        throw systemReadinessFailures.get(source.entry)
+      // A completed current attempt either publishes a system or records its failure.
+      return systemsByEntry.get(source.entry)!
+    }
   }
 
-  const evaluateConfiguredSystems = async (
+  const evaluateConfiguredSystems = (
     state: ViteHostState,
     sources: readonly NormalizedSystemSource[],
   ): Promise<EvaluatedSystem[]> => {
     const unique = [...new Map(sources.map(source => [source.entry, source])).values()]
-    return registerSystems(state, await Promise.all(unique.map(source => prepareConfiguredSystem(state, source))))
+    const evaluation = Promise.all(unique.map(source => prepareConfiguredSystem(state, source)))
+      .then(candidates => registerSystems(state, candidates))
+    for (const [index, source] of unique.entries()) {
+      const generation = systemGenerationsByEntry.get(source.entry)
+      const pending = evaluation.then(systems => systems[index]!, (error: unknown) => {
+        if (systemGenerationsByEntry.get(source.entry) === generation)
+          systemReadinessFailures.set(source.entry, error)
+        throw error
+      })
+      pendingSystemsByEntry.set(source.entry, pending)
+      void pending.then(() => {}, () => {}).finally(() => {
+        if (pendingSystemsByEntry.get(source.entry) === pending)
+          pendingSystemsByEntry.delete(source.entry)
+      })
+    }
+    // HMR callers, like style readers, follow the latest attempt. Otherwise a
+    // replaced batch could still raise its old failure through Vite's hook.
+    return Promise.all(unique.map(readCurrentSystem))
   }
 
-  const ensureConfiguredSystem = (state: ViteHostState, source: NormalizedSystemSource): Promise<EvaluatedSystem> => {
+  const ensureConfiguredSystem = async (state: ViteHostState, source: NormalizedSystemSource): Promise<EvaluatedSystem> => {
+    if (pendingSystemsByEntry.has(source.entry))
+      return readCurrentSystem(source)
+    // A rejected candidate does not revoke its accepted artifacts. Readers
+    // already waiting on that candidate receive its error through readCurrentSystem.
     const accepted = systemsByEntry.get(source.entry)
-    if (accepted !== undefined) {
-      systemReadinessFailures.delete(source.entry)
-      return Promise.resolve(accepted)
-    }
-
-    const pending = pendingSystemsByEntry.get(source.entry)
-    if (pending !== undefined)
-      return pending
-
-    const evaluation = evaluateConfiguredSystem(state, source)
-    pendingSystemsByEntry.set(source.entry, evaluation)
-    void evaluation.then(() => {}, () => {}).finally(() => {
-      if (pendingSystemsByEntry.get(source.entry) === evaluation)
-        pendingSystemsByEntry.delete(source.entry)
-    })
-    return evaluation
+    if (accepted !== undefined)
+      return accepted
+    const [system] = await evaluateConfiguredSystems(state, [source])
+    return system!
   }
 
   const startHostState = (state: ViteHostState): Promise<void> => {
@@ -1078,6 +1106,8 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
       if (this.meta.watchMode === true && state.config.command === 'build')
         return
       state.group.cssInstallation?.removeInstallation()
+      if (state.server !== undefined)
+        hmrNotifications.clear(state.server)
       state.group.activeTargets.delete(state.target)
       if (state.group.activeTargets.size === 0) {
         hostGroups.delete(state.config)
@@ -1136,7 +1166,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
           ),
           addWatchFile: file => this.addWatchFile(file),
           buildFailureFiles,
-          createStyleBuildError,
+          createStyleBuildError: (error, entry, root) => createStyleBuildError(error, entry, root, state.server !== undefined && cssVirtualIdsByEntry.has(entry)),
           reportFailure,
           getIdentifierOption: () => getIdentifierOption(state.config),
           scheduleManifest: () => scheduleManifest(state),
@@ -1186,7 +1216,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         for (const memberFile of computeConfiguredSystemMemberChanges(previousMembers, targetState.membersByFile.keys()))
           memberSetChanges.add(memberFile)
       }
-      const affected = await hmrNotifications.runUpdate(() => handleHotUpdate({ file, modules }, {
+      const affected = await hmrNotifications.runUpdate(state.group.clientServer ?? devServer, () => handleHotUpdate({ file, modules }, {
         host: createHmrHost(state, devServer, state.group.clientServer),
         runtimeVirtualPrefix,
         systemSources: allSources,
@@ -2033,11 +2063,17 @@ function buildFailureLocations(error: unknown, root: string): BuildFailureLocati
   return [...locations.values()]
 }
 
-function createStyleBuildError(error: unknown, entry: string, root: string): unknown {
+function createStyleBuildError(error: unknown, entry: string, root: string, hasLastGoodCss = false): unknown {
+  const cssDetail = 'Last successful CSS is retained; it does not include this failed edit.'
   if (error instanceof VanityError
     || (error !== null && typeof error === 'object' && 'name' in error
       && error.name === 'VanityError' && 'diagnostics' in error)) {
-    return error
+    if (!hasLastGoodCss || (error as VanityError).diagnostics.every(diagnostic => diagnostic.detail?.includes(cssDetail)))
+      return error
+    return new VanityError((error as VanityError).diagnostics.map(diagnostic => ({
+      ...diagnostic,
+      detail: [...diagnostic.detail ?? [], cssDetail],
+    })), { cause: error })
   }
 
   const [primary] = buildFailureLocations(error, root)
@@ -2053,6 +2089,7 @@ function createStyleBuildError(error: unknown, entry: string, root: string): unk
     code: 'VANITY_VITE_BUILD_FAILED',
     message: `${primaryFile} could not be compiled: ${reason}`,
     file: primaryFile,
+    ...(hasLastGoodCss ? { detail: [cssDetail] } : {}),
     ...(primary?.line === undefined ? {} : { line: primary.line }),
     ...(primary?.column === undefined ? {} : { column: primary.column }),
     ...(related === undefined ? {} : { related }),

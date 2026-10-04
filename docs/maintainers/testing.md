@@ -262,6 +262,8 @@ Required measurements:
 
 The supported-major Vite graph matrix asserts that, in a one-shot build, no handler runs for modules the hook does not serve. It wraps the real host hooks in place and observes invocation counts for generated plain application modules and a physically installed dependency on every supported Vite major. The host-graph benchmark records build timings only; it does not duplicate the matrix's zero-call gate.
 
+Save-overlap controls observe current CSS and exported values across first/warm requests, explicit/ambient imports and client/SSR. Browser controls verify that known system updates produce no false errors, genuine missing roles reach native logs and overlays, and system-only repairs recover every consumer, including CSS accepted in an overlapping failed update. Controlled partial-failure cases invoke the real compiler hook so a native fallback reload cannot mask missing CSS notifications; the watcher-driven controls own normal host event flow. Syntax, evaluation and CSS-validation failures retain accepted CSS with an explicit diagnostic; failures from replaced system attempts cannot replace later valid output.
+
 Value-resolution changes use a dedicated propagation matrix:
 
 - self-contained expressions only;

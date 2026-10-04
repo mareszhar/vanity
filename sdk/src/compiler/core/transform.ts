@@ -81,37 +81,42 @@ export async function transformStyleModule(
   let evaluatedSystems: Array<{ source: NormalizedSystemSource, system: EvaluatedSystem }> = []
 
   try {
-    evaluatedSystems = await Promise.all(context.systemSources.map(async (systemSource) => {
-      // An auto-import barrel may be the only route from a style module to
-      // the configured system. Ensure that route still receives the same
-      // evaluated build-time external as an explicit system import.
-      const system = await context.ensureConfiguredSystem(systemSource)
-      return { source: systemSource, system }
-    }))
-    externalSystems = evaluatedSystems.flatMap(({ source: systemSource, system }, systemIndex) => {
-      const namespaces = system.moduleExports.size > 0
-        ? [...system.moduleExports]
-        : [[systemSource.entry, system.buildExports] as const]
-      return namespaces.map(([moduleFile, exports], moduleIndex) => ({
-        id: `vanity:build-system:${systemIndex}:${moduleIndex}`,
-        moduleFile,
-        source: systemSource,
-        exports,
+    for (;;) {
+      evaluatedSystems = await Promise.all(context.systemSources.map(async (systemSource) => {
+        // Ambient barrels and explicit imports share one system snapshot.
+        const system = await context.ensureConfiguredSystem(systemSource)
+        return { source: systemSource, system }
       }))
-    })
-    const injection = await context.injectShimFor(filePath)
-    const bundled = await context.buildStyleModule({
-      filePath,
-      root,
-      alias: context.alias,
-      inject: injection?.path,
-      ambientAliases: injection?.aliases,
-      externalModules: externalSystems,
-    })
-    source = bundled.source
-    watchFiles = bundled.watchFiles
-    externalSystemEntries = bundled.externalSystemEntries
-    context.rememberStyleSystems(filePath, externalSystemEntries)
+      externalSystems = evaluatedSystems.flatMap(({ source: systemSource, system }, systemIndex) => {
+        const namespaces = system.moduleExports.size > 0
+          ? [...system.moduleExports]
+          : [[systemSource.entry, system.buildExports] as const]
+        return namespaces.map(([moduleFile, exports], moduleIndex) => ({
+          id: `vanity:build-system:${systemIndex}:${moduleIndex}`,
+          moduleFile,
+          source: systemSource,
+          exports,
+        }))
+      })
+      const injection = await context.injectShimFor(filePath)
+      const bundled = await context.buildStyleModule({
+        filePath,
+        root,
+        alias: context.alias,
+        inject: injection?.path,
+        ambientAliases: injection?.aliases,
+        externalModules: externalSystems,
+      })
+      source = bundled.source
+      watchFiles = bundled.watchFiles
+      externalSystemEntries = bundled.externalSystemEntries
+      context.rememberStyleSystems(filePath, externalSystemEntries)
+      // Bundling yields to the host. Rebuild against a completed newer system
+      // before either evaluating an outdated expression or publishing its CSS.
+      const currentSystems = await Promise.all(evaluatedSystems.map(({ source }) => context.ensureConfiguredSystem(source)))
+      if (currentSystems.every((system, index) => system === evaluatedSystems[index]!.system))
+        break
+    }
   }
   catch (error) {
     context.failedStyleEntries.add(filePath)
@@ -246,10 +251,9 @@ export async function transformStyleModule(
   // access, but every importer must retain the stable semantic stylesheet
   // edge so a later re-transform cannot orphan or delete that shared CSS.
   for (const entry of externalSystemEntries) {
-    const system = context.systemSources.find(source => source.entry === entry)
-    if (!system)
+    const evaluatedSystem = evaluatedSystems.find(({ source }) => source.entry === entry)?.system
+    if (!evaluatedSystem)
       continue
-    const evaluatedSystem = await context.ensureConfiguredSystem(system)
     const virtualId = getSystemCssVirtualId(
       evaluatedSystem.portable.identities.css,
       root,

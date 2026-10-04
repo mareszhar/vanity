@@ -358,6 +358,10 @@ Preserve:
 
 Both HMR recovery sequences are mandatory: a dependency failure repaired in place, and a dependency introduced after a successful transform.
 
+Consumers wait for known in-flight system evaluations and rebuild bundles whose system snapshot has changed. Overlapping saves therefore use current system inputs for both diagnostics and output. Successful recovery installs each consumer's current CSS even when an overlapping failed update already compiled it.
+
+Separate file saves are not atomic: a style referencing a token its system does not yet define remains invalid. Failures report without a grace period; when accepted CSS is retained, the diagnostic states that it excludes the failed edit. Defining the missing token retries consumers without a stylesheet resave or server restart.
+
 The Vite integration tracks attempted style entries and their dependencies, preserves last-good CSS, uses Vite's `watchChange` hook and `ModuleGraph.invalidateModule` only at the host boundary, and eagerly retries affected entries on the same server. A value edit that changes CSS identity follows the new browser module URL and removes stale ownership, including under a non-root `base`. A docs-only edit updates the manifest without sending a CSS update. A change to an application-imported runtime identity, or the repair of a configured system, requests a full reload; compatible CSS edits keep runtime state and the page. Both recovery orders are permanent compiler-projection fixtures.
 
 In development, a retired stylesheet leaves each page once its replacement CSS is installed there. This applies to stylesheets Vite serves as CSS modules; a link a host renders into server HTML, such as Nuxt's development renderer, can keep retired rules until the next page load, because Vanity does not retract host-rendered markup. Stylesheet delivery order never changes Vanity's cascade ([styling §8](./spec-css.md#8-layers)).

@@ -137,7 +137,7 @@ The shared configuration and the two module-role pipelines are defined in [spec-
 
 **Contract details.**
 
-- **HMR:** editing a `.css.ts` hot-swaps the emitted CSS without a full reload or component state loss. Stable virtual CSS ids swap the style tag in place, style modules self-accept, an edit to a bundled dependency hot-updates every style module built on it, and only an export-shape change costs a full reload. The Nuxt demos lock this contract end to end; a regression is a release blocker.
+- **HMR:** compatible `.css.ts` edits hot-swap the emitted CSS without a full reload or component state loss. Stable virtual CSS ids swap the style tag in place, style modules self-accept, and an edit to a bundled dependency updates every style module built on it. [Integrations §9](./spec-integrations.md#9-ssr-and-hmr) owns recovery and reload boundaries. The Nuxt demos lock this contract end to end; a regression is a release blocker.
 - **SSR:** static styles ship as stylesheets; port values as inline style; no FOUC, no hydration style mismatch, no per-request collection.
 - **Mutable-token/mode flash:** persist application settings or `runtime.snapshot()` in a cookie/server payload.
   - Pass each root entry from `ds.runtimeProps()` to its matching server-rendered root, then construct `ds.runtime({ within, initial: snapshot })` on mount.

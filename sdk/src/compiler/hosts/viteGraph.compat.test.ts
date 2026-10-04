@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os'
 import { join, posix } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { vanityPlugin } from '@mszr/vanity/vite'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { createPromiseGate } from '../../test-support/promises'
+import { invokeVanityHotUpdate } from '../../test-support/vite'
+import * as styleBuild from '../modules/build'
 import { createViteHmrHost, resolveViteVirtualId } from './viteHmr'
 import { vanityViteHost } from './viteHost'
 
@@ -153,6 +156,221 @@ function wrapHook(
 }
 
 describe('vite virtual CSS graph compatibility', () => {
+  it.each(['/', '/sub/'].flatMap(base => [false, true].map(first => ({ base, first }))))('serves overlapping system saves without false errors under $base, first=$first', async ({ base, first }) => {
+    const { chromium } = await import('@playwright/test')
+    const browser = await chromium.launch({ headless: true })
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-save-burst-')))
+    let server: ViteDevServer | undefined
+    const systemReady = createPromiseGate()
+    const systemGate = createPromiseGate()
+    let holdSystem = false
+    const systemFile = join(root, 'system.ts')
+    const build = styleBuild.buildStyleModule
+    const spy = vi.spyOn(styleBuild, 'buildStyleModule').mockImplementation(async (params) => {
+      const result = await build(params)
+      if (params.filePath === systemFile && holdSystem) {
+        holdSystem = false
+        systemReady.resolve()
+        await systemGate.promise
+      }
+      return result
+    })
+    try {
+      await put(root, 'package.json', '{ "name": "save-burst", "type": "module" }')
+      const system = (menu = false, missing = false) => `import { createSystem } from '@mszr/vanity'
+const open = createSystem()
+export const ds = open.addTokens(open.defineTokens({ text: {
+  caption: { fontSize: '12px' }${menu ? ', menu: { fontSize: \'14px\' }' : ''}${missing ? ', missing: { fontSize: \'16px\' }' : ''},
+} })).consolidate({ prefix: 'save-burst' })`
+      await writeFile(systemFile, system())
+      await put(root, 'authoring.ts', 'import { ds } from \'./system\'; export const { class: cls, t } = ds\n')
+      await put(root, 'initial.css.ts', 'import { ds } from \'./system\'; export const initial = ds.class({ padding: \'1px\' })\n')
+      const styleFiles = [1, 2, 3].map(index => join(root, `style${index}.css.ts`))
+      const style = (role: string) => `export const card = cls({ ...t.text.${role}.$dec })\n`
+      for (const file of styleFiles)
+        await writeFile(file, style(first ? 'menu' : 'caption'))
+      await put(root, 'main.ts', `import { card as a } from './style1.css'; import { card as b } from './style2.css'; import { card as c } from './style3.css';
+document.body.innerHTML = '<p id="a">a</p><p id="b">b</p><p id="c">c</p>';
+for (const [id, cls] of [['a', a], ['b', b], ['c', c]]) document.getElementById(id).className = cls;
+`)
+      await put(root, 'index.html', '<script type="module" src="/main.ts"></script>')
+      const attempts = new Set<string>()
+      const diagnostics: string[] = []
+      const errors: string[] = []
+      server = await createServer({
+        root,
+        base,
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [
+          { name: 'observe-consumers', enforce: 'pre', transform(_code, id) {
+            if (styleFiles.includes(id))
+              attempts.add(id)
+          } },
+          vanityPlugin({ compiler: { system: './system.ts', diagnostics: diagnostic => diagnostics.push(diagnostic.message) }, autoImports: { shared: './authoring.ts' } }),
+        ],
+        resolve: { alias },
+        optimizeDeps: { noDiscovery: true },
+        server: { host: '127.0.0.1', port: 0, watch: null },
+      })
+      const logger = vi.spyOn(server.config.logger, 'error')
+      const page = await browser.newPage()
+      page.on('websocket', socket => socket.on('framereceived', (frame) => {
+        const message = JSON.parse(String(frame.payload))
+        if (message.type === 'error')
+          errors.push(message.err.message)
+      }))
+      const origin = await devHttpBase(server)
+      await server.transformRequest('/initial.css.ts')
+      if (!first) {
+        await page.goto(new URL(base, origin).href, { waitUntil: 'networkidle' })
+        for (const id of ['a', 'b', 'c'])
+          await expect.poll(() => page.locator(`#${id}`).evaluate(el => getComputedStyle(el).fontSize)).toBe('12px')
+      }
+      attempts.clear()
+      holdSystem = true
+      await writeFile(systemFile, system(true))
+      server.watcher.emit('change', systemFile)
+      await systemReady.promise
+      const navigation = first ? page.goto(new URL(base, origin).href, { waitUntil: 'networkidle' }) : undefined
+      if (!first) {
+        for (const file of styleFiles) {
+          await writeFile(file, style('menu'))
+          server.watcher.emit('change', file)
+        }
+      }
+      await vi.waitFor(() => expect(attempts.size).toBeGreaterThanOrEqual(first ? 3 : 1))
+      systemGate.resolve()
+      await navigation
+      for (const id of ['a', 'b', 'c'])
+        await expect.poll(() => page.locator(`#${id}`).evaluate(el => getComputedStyle(el).fontSize), { timeout: 10_000 }).toBe('14px')
+      expect(errors).toEqual([])
+      expect(diagnostics).toEqual([])
+      expect(logger).not.toHaveBeenCalled()
+      expect(await page.locator('vite-error-overlay').count()).toBe(0)
+
+      // An absent role with no replacement in flight remains a real failure.
+      for (const file of styleFiles) {
+        await writeFile(file, style('missing'))
+        server.watcher.emit('change', file)
+      }
+      await page.locator('vite-error-overlay').getByText('Last successful CSS is retained', { exact: false }).first().waitFor()
+      expect(errors.some(error => error.includes('reading \'$dec\''))).toBe(true)
+      expect(diagnostics.some(error => error.includes('reading \'$dec\''))).toBe(true)
+      await vi.waitFor(() => {
+        for (const index of [1, 2, 3])
+          expect(diagnostics.some(error => error.includes(`style${index}.css.ts`))).toBe(true)
+      })
+      expect(await page.evaluate(url => fetch(url).then(response => response.status), `${base}style1.css.ts?t=${Date.now()}`)).toBe(500)
+      expect(logger.mock.calls.some(([message]) => message.includes('Last successful CSS is retained'))).toBe(true)
+      for (const id of ['a', 'b', 'c'])
+        expect(await page.locator(`#${id}`).evaluate(el => getComputedStyle(el).fontSize)).toBe('14px')
+      await writeFile(systemFile, system(true, true))
+      server.watcher.emit('change', systemFile)
+      for (const id of ['a', 'b', 'c'])
+        await expect.poll(() => page.locator(`#${id}`).evaluate(el => getComputedStyle(el).fontSize), { timeout: 10_000 }).toBe('16px')
+      expect(await page.locator('vite-error-overlay').count()).toBe(0)
+      logger.mockRestore()
+    }
+    finally {
+      systemGate.resolve()
+      await browser.close()
+      await server?.close()
+      spy.mockRestore()
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  }, 30_000)
+
+  it.each([false, true])('delivers accepted CSS after a partial failure, overlapping repair=%s', async (overlapping) => {
+    const { chromium } = await import('@playwright/test')
+    const browser = await chromium.launch({ headless: true })
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-partial-recovery-')))
+    let server: ViteDevServer | undefined
+    const held = createPromiseGate()
+    const release = createPromiseGate()
+    const secondFile = join(root, 'second.css.ts')
+    const firstFile = join(root, 'first.css.ts')
+    let holdSecond = false
+    const build = styleBuild.buildStyleModule
+    const spy = vi.spyOn(styleBuild, 'buildStyleModule').mockImplementation(async (params) => {
+      const result = await build(params)
+      if (holdSecond && params.filePath === secondFile) {
+        holdSecond = false
+        held.resolve()
+        await release.promise
+      }
+      return result
+    })
+    try {
+      await put(root, 'package.json', '{ "name": "partial-recovery", "type": "module" }')
+      const system = (font: string) => `import { createSystem } from '@mszr/vanity'; export const ds = createSystem().consolidate({ prefix: 'partial' }); export const font = '${font}'`
+      const systemFile = await put(root, 'system.ts', system('12px'))
+      const valueFile = await put(root, 'first-value.ts', 'export const padding = \'1px\'')
+      await writeFile(firstFile, 'import { ds, font } from \'./system\'; import { padding } from \'./first-value\'; export const card = ds.class({ fontSize: font, padding })')
+      await writeFile(secondFile, 'import { ds, font } from \'./system\'; export const card = ds.class({ fontSize: font })')
+      await put(root, 'main.ts', `import { card as first } from './first.css'; import { card as second } from './second.css'; document.body.innerHTML='<p id="first">first</p><p id="second">second</p>'; document.getElementById('first').className=first; document.getElementById('second').className=second`)
+      await put(root, 'index.html', '<script type="module" src="/main.ts"></script>')
+      server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system: './system.ts' } })], resolve: { alias }, server: { host: '127.0.0.1', port: 0, watch: null }, optimizeDeps: { noDiscovery: true } })
+      const initial = await server.transformRequest('/first.css.ts')
+      await server.transformRequest('/second.css.ts')
+      const cssUrl = initial?.code.match(/import ["']([^"']+\/style\/[^"']+\.vanity\.css)["']/)?.[1]
+      expect(cssUrl).toBeDefined()
+      const origin = await devHttpBase(server)
+      const page = await browser.newPage()
+      const errors: string[] = []
+      page.on('websocket', socket => socket.on('framereceived', (frame) => {
+        const message = JSON.parse(String(frame.payload))
+        if (message.type === 'error')
+          errors.push(message.err.message)
+      }))
+      await page.goto(origin, { waitUntil: 'networkidle' })
+      for (const id of ['first', 'second'])
+        await expect.poll(() => page.locator(`#${id}`).evaluate(el => getComputedStyle(el).fontSize)).toBe('12px')
+      // Complete a normal native update before exercising recovery.
+      await writeFile(valueFile, 'export const padding = \'2px\'')
+      server.watcher.emit('change', valueFile)
+      await expect.poll(() => page.locator('#first').evaluate(el => getComputedStyle(el).padding)).toBe('2px')
+      await writeFile(valueFile, 'export const padding = (() => { throw new Error(\'authored style failure\') })()')
+      server.moduleGraph.onFileChange(firstFile)
+      for (const environment of Object.values(server.environments ?? {}))
+        environment.moduleGraph.onFileChange(firstFile)
+      expect((await fetch(new URL('/first.css.ts?t=1', origin))).status).toBe(500)
+      await page.locator('vite-error-overlay').getByText('authored style failure', { exact: false }).first().waitFor()
+      // The system update fails its first consumer, then pauses while the
+      // second consumer is preparing valid replacement CSS.
+      holdSecond = true
+      await writeFile(systemFile, system('14px'))
+      server.watcher.emit('change', systemFile)
+      await held.promise
+      if (!overlapping) {
+        const reported = errors.length
+        release.resolve()
+        await expect.poll(() => errors.length, { timeout: 10_000 }).toBeGreaterThan(reported)
+      }
+      await writeFile(valueFile, 'export const padding = \'2px\'')
+      // Invoke the actual compiler hook without Vite's separate fallback
+      // reload for a bundled file; that reload would mask lost CSS delivery.
+      const repair = invokeVanityHotUpdate(server, valueFile)
+      // Public CSS requests establish that the repair has been accepted,
+      // while the other known update is still held at its bundle boundary.
+      await expect.poll(async () => (await fetch(new URL(`${cssUrl!}?t=${Date.now()}`, origin))).text(), { timeout: 10_000 }).toMatch(/font-size:\s*14px/)
+      release.resolve()
+      await repair
+      for (const id of ['first', 'second'])
+        await expect.poll(() => page.locator(`#${id}`).evaluate(el => getComputedStyle(el).fontSize), { timeout: 10_000 }).toBe('14px')
+      await expect.poll(() => page.locator('vite-error-overlay').count()).toBe(0)
+    }
+    finally {
+      release.resolve()
+      await browser.close()
+      await server?.close()
+      spy.mockRestore()
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  }, 30_000)
+
   it.each([false, true])('repairs a failed system with one reload after prior hot update: %s', async (afterHotUpdate) => {
     const { chromium } = await import('@playwright/test')
     const browser = await chromium.launch({ headless: true })

@@ -1028,19 +1028,23 @@ export const brand = ds.t.color.brand
     expect(refreshed?.code).toContain('#ff0000')
   })
 
-  it('recovers after a successful entry hits a dependency error and preserves last-good CSS', async () => {
+  it.each([
+    { kind: 'syntax', source: 'export const color =\n' },
+    { kind: 'evaluation', source: 'export const color = (undefined as any).$dec\nexport const radius = "1px"\n' },
+    { kind: 'validation', source: 'export const color = "#635bff"\nexport const radius = "8pxx"\n' },
+  ])('reports a genuine $kind failure, identifies last-good CSS, and repairs it', async ({ source }) => {
     const { root, server: devServer } = await serveFixtureCopy()
     const dependency = join(root, 'lifecycle-value.ts')
     const entry = join(root, 'lifecycle.css.ts')
 
-    await writeFile(dependency, 'export const color = \'#635bff\'\n')
+    await writeFile(dependency, 'export const color = \'#635bff\'\nexport const radius = "1px"\n')
     await writeFile(join(root, 'lifecycle-system.ts'), `import { createSystem } from '@mszr/vanity'
 export const ds = createSystem().consolidate({ prefix: 'lifecycle' })
 `)
     await writeFile(entry, `import { ds } from './lifecycle-system'
-import { color } from './lifecycle-value'
+import { color, radius } from './lifecycle-value'
 
-export const lifecycle = ds.class({ color })
+export const lifecycle = ds.class({ color, borderRadius: radius })
 `)
 
     const accepted = await devServer.transformRequest('/lifecycle.css.ts')
@@ -1049,13 +1053,13 @@ export const lifecycle = ds.class({ color })
     const lastGood = await devServer.transformRequest(cssUrl!)
     expect(lastGood?.code).toContain('#635bff')
 
-    await writeFile(dependency, 'export const color =\n')
-    await expect(hotUpdate(devServer, dependency)).rejects.toThrow()
+    await writeFile(dependency, source)
+    await expect(hotUpdate(devServer, dependency)).rejects.toThrow('Last successful CSS is retained; it does not include this failed edit.')
 
     // A failed attempt never replaces the bytes served by the stable CSS id.
     expect((await devServer.transformRequest(cssUrl!))?.code).toContain('#635bff')
 
-    await writeFile(dependency, 'export const color = \'#00aa55\'\n')
+    await writeFile(dependency, 'export const color = \'#00aa55\'\nexport const radius = "1px"\n')
     const affected = await hotUpdate(devServer, dependency)
     expect((affected ?? []).map(moduleNode => moduleNode.file).filter(file => file?.includes('.css.'))).toEqual([entry])
 

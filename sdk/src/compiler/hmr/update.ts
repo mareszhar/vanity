@@ -50,6 +50,7 @@ export async function handleHotUpdate(
   const invalidatedRuntimeMemberFiles = new Set(state.memberSetChanges ?? [])
   const projectedMemberFiles = new Set<string>()
   const failures: unknown[] = []
+  const styleFailures = new Map<string, unknown>()
   let recoveredSystem = false
   const affected = new Set(context.modules)
   const affectedSources = affectedSystems.flatMap((entry) => {
@@ -175,10 +176,19 @@ export async function handleHotUpdate(
       await state.host.compileStyle(dependent)
     }
     catch (error) {
-      failures.push(error)
+      if (state.failedStyleEntries.has(dependent))
+        styleFailures.set(dependent, error)
+      else
+        failures.push(error)
     }
   }
 
+  // Another hot update can repair a consumer while this batch compiles its
+  // siblings. Its resolved failure must not become Vite's current error.
+  for (const [entry, error] of styleFailures) {
+    if (state.failedStyleEntries.has(entry))
+      failures.push(error)
+  }
   if (failures.length > 0)
     throw failures[0]
 
