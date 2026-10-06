@@ -44,16 +44,13 @@ describe('p3 — a field may be a value OR a callback; both resolve to the value
     expect(observation).toSuggest('ink')
   })
 
-  it('the unfinished callback receives typed tools after native diagnostics', () => {
+  it('a complete callback expression has contextual tools and checks clean', () => {
     const observation = project.query`
       import { create } from '#src/builder'
-      create().add('space', { md: tools => tools.${cursor} })
+      create().add('space', { md: tools => tools.${cursor}unit(1) })
     `
-    // Native TypeScript resolves this reverse-mapped callback's context during
-    // semantic diagnostics. Observe that before requesting its completions.
-    expect(observation).toHaveErrorCount(1)
-    expect(observation).toHaveError(1003)
     expect(observation).toSuggest('unit')
+    expect(observation).toBeClean()
   })
 })
 

@@ -171,8 +171,8 @@ catalogs:
       specifier: ^1.8.1
       version: 1.8.1
     '@mszr/selenita':
-      specifier: ^0.3.0
-      version: 0.3.0
+      specifier: ^0.4.1
+      version: 0.4.1
     '@nuxt/kit':
       specifier: 4.5.2
       version: 4.5.2
@@ -474,7 +474,7 @@ importers:
     devDependencies:
       '@mszr/selenita':
         specifier: 'catalog:'
-        version: 0.3.0(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 0.4.1(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@nuxt/kit':
         specifier: 'catalog:'
         version: 4.5.2(magic-string@1.4.2)(magicast@0.5.5)(oxc-parser@0.151.0)(rolldown@1.2.11)(unplugin@3.4.0(esbuild@0.28.2)(rolldown@1.2.11)(rollup@4.63.5)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
@@ -531,7 +531,7 @@ importers:
     devDependencies:
       '@mszr/selenita':
         specifier: 'catalog:'
-        version: 0.3.0(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 0.4.1(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -606,7 +606,7 @@ importers:
     devDependencies:
       '@mszr/selenita':
         specifier: 'catalog:'
-        version: 0.3.0(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 0.4.1(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -618,7 +618,7 @@ importers:
     devDependencies:
       '@mszr/selenita':
         specifier: 'catalog:'
-        version: 0.3.0(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 0.4.1(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       type-fest:
         specifier: 'catalog:'
         version: 5.10.0
@@ -633,7 +633,7 @@ importers:
     devDependencies:
       '@mszr/selenita':
         specifier: 'catalog:'
-        version: 0.3.0(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 0.4.1(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       type-fest:
         specifier: 'catalog:'
         version: 5.10.0
@@ -654,7 +654,7 @@ importers:
     devDependencies:
       '@mszr/selenita':
         specifier: 'catalog:'
-        version: 0.3.0(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 0.4.1(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       type-fest:
         specifier: 'catalog:'
         version: 5.10.0
@@ -669,7 +669,7 @@ importers:
     devDependencies:
       '@mszr/selenita':
         specifier: 'catalog:'
-        version: 0.3.0(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 0.4.1(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -1425,8 +1425,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@mszr/selenita@0.3.0':
-    resolution: {integrity: sha512-WFVlOSO4c4vgnwRpD2Ai7iEOstIS8xzdTtgCbq9eYCUrue4gnzod3vPGEZHM4iHsfudsRMgDxiouwecKJ4aA1A==}
+  '@mszr/selenita@0.4.1':
+    resolution: {integrity: sha512-cwQJHXu3htzetre9rfTj4/vlTVe/JQQZwcWDtAtPXWRW7LmfoXUJZ/q485bmCindxhwlBLV/CNd4x7iMp41JEw==}
     engines: {node: '>=22.12'}
     peerDependencies:
       vitest: ^5.0.3
@@ -7392,7 +7392,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@mszr/selenita@0.3.0(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@mszr/selenita@0.4.1(vitest@5.0.3(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@typescript/typescript6': 6.0.2
     optionalDependencies:

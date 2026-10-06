@@ -4,6 +4,8 @@ A **library-agnostic** proof that TypeScript can express an _accumulating builde
 
 It exists to de-risk a design that hinges on these exact capabilities. If a future library re-derives them, this spike is the reference — and its guard rails (below) are the difference between "works" and "explodes at scale".
 
+**Verdict:** immutable shape accumulation, structural requirements and completed callback inference are viable. The reverse-mapped field callback does not offer tools while its member expression is unfinished.
+
 ## Run it
 
 The model is independent of the SDK; dependencies use the workspace catalog and root lockfile:
@@ -56,7 +58,7 @@ The missing piece is named, on one line — not generic type soup.
 
 ## Footguns encountered (each is a one-line regression waiting to happen)
 
-- Native TypeScript resolves this model's reverse-mapped callback context during semantic diagnostics. For an unfinished `tools.` expression, diagnostics-first observation reports only the missing identifier and completes `unit`; completions-first observation returns no names and introduces an implicit `any`. The fixture observes diagnostics first explicitly. Complete `tools.unit(1)` expressions are clean and complete in either order. Selenita's `@typescript/typescript6` package is versioned 6.0.2 but reports compiler `ts.version` 6.0.3, matching the workspace compiler; package metadata alone does not identify the running compiler version.
+- An unfinished `tools.` expression in this reverse-mapped field callback offers no suggestions while typing. Checking diagnostics first can warm TypeScript's checker and conceal that limitation; Selenita observations are independent and cannot use that warmed answer. Completed `tools.unit(1)` expressions infer correctly, offer `unit` at the member cursor and check clean.
 - **`never extends string` is `true`** — a _met_ requirement makes the "missing" type `never`, which then wrongly takes the error branch. Tuple-wrap it: `[Missing] extends [never] ? Pass : Missing`.
 - **`unknown | X === unknown`** — a `FieldInput<unknown>` constraint collapses and the callback param loses its contextual type. Use the reverse-mapped param `{ [K in keyof G]: FieldInput<G[K]> }` with `G` inferred as the _resolved_ values.
 - **`*/` inside a JSDoc comment** silently closes the comment and corrupts the file.

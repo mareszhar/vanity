@@ -240,6 +240,8 @@ System namespace fixtures lock the exported reserved-member set, namespaced plug
 
 Editor fixtures use structured Selenita observations: type text and documentation are separate promises, exact diagnostic ranges prove locality, and suggested repair/import edits are applied and rechecked. Completion parity names its expected scopes and includes a known suggestion; equal empty sets prove no discovery. Packed testing consumers check declarations with `skipLibCheck: false` and exercise runner-owned and standalone lifecycles.
 
+Each observation starts with independent checker state: completion describes typing, diagnostics describe opening the file. Assertion order cannot establish an editor promise; a diagnostics-warmed completion is not typing-time discovery.
+
 Documented names must remain documented through root imports, bound constructors and returned handles. A comment on a mapped type is insufficient if the native service drops it from member completion. Extend existing domain fixtures to observe those projections and active-argument guidance; pair a local invalid input with a clean correction. Case selection covers literal and dynamic addresses, exact values, reservations and the runtime projection. Packed consumers emit and consume extracted selector declarations, and runtime types imported from the runtime entrypoint preserve core token identities. Keep these as consumer promises rather than inventories of type helpers or copies of repository strings.
 
 Type tests that merely assert assignability are insufficient for APIs whose product claim includes completion, rename, or error locality.

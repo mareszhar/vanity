@@ -503,7 +503,7 @@ import { page } from './app.css.ts'
     private: true,
     type: 'module',
     dependencies: {
-      '@mszr/selenita': '0.3.0',
+      '@mszr/selenita': '0.4.1',
       '@mszr/vanity': packedDependency,
     },
     devDependencies: {

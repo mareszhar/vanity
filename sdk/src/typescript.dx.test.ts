@@ -74,11 +74,6 @@ describe('typescript authoring-barrel completions', () => {
     }
 
     const action = result.findCompletion({ name: 'cls', source: '@acme/design/authoring' })!.codeActions[0]!
-    let fixed = result.files[file]!
-    for (const edit of [...action.edits].sort((first, second) => second.range.start.offset - first.range.start.offset)) {
-      expect(edit.range.file).toBe(file)
-      fixed = fixed.slice(0, edit.range.start.offset) + edit.newText + fixed.slice(edit.range.end.offset)
-    }
-    expect(configured.check({ [file]: fixed })).toBeClean()
+    expect(configured.check(action.fixedFiles)).toBeClean()
   })
 })

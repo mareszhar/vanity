@@ -9,10 +9,10 @@ The entrypoint is Node/test-only. It never enters application or SSR bundles.
 For a Vitest suite with editor-DX checks:
 
 ```sh
-pnpm add -D @mszr/vanity @mszr/selenita@^0.3.0 typescript@^6.0.3 vitest@^5.0.3 @types/node
+pnpm add -D @mszr/vanity @mszr/selenita@^0.4.1 typescript@^6.0.3 vitest@^5.0.3 @types/node
 ```
 
-Editor-DX checks require Selenita 0.3. It is an optional peer of Vanity because ordinary styling, runtime, compiler, Vue, and Nuxt consumers do not need it. Its Vitest integration requires Vitest 5.0.3 or later within major 5. Selenita supplies its own TypeScript 6 language service, independently of the project's compiler. Vanity's compiler and lint tooling use TypeScript 6.
+Use Selenita 0.4 for editor-DX evidence. It is an optional peer of Vanity because ordinary styling, runtime, compiler, Vue, and Nuxt consumers do not need it. Its Vitest integration requires Vitest 5.0.3 or later within major 5. Selenita supplies its own TypeScript 6 language service, independently of the project's compiler. Vanity's compiler and lint tooling use TypeScript 6.
 
 If your test tsconfig restricts `lib`, include `ESNext.Disposable` for Selenita's resource ownership and `DOM` for Vitest/Vite declarations. These declarations do not create a browser test environment.
 
@@ -153,9 +153,9 @@ The preset accepts Selenita's `tsconfig`, `compilerOptions`, `preferences`, `fil
 
 Caller `files` and `aliases` win on collision. Compose further Selenita configuration layers in the project constructor or `project.extend()`.
 
-Import `cursor`, `mark`, `snippet` and the project constructor from the same Selenita entrypoint. Its private marker registry belongs to that package instance; a package manager can install separate instances for different peer contexts.
+Import fixture helpers and project constructors from Selenita. Markers work across separate installed copies of the same Selenita version.
 
-Use observations as matcher receivers so failures include source context; use `hover.displayText` for types, `hover.documentation` for prose, and named marks with `rangeOf()` for exact diagnostic underlines. Scoped snippets and `atEach()` compare completion surfaces without repeating fixture source. Selenita's [promise guide](https://github.com/mareszhar/selenita/blob/main/docs/guide/promises.md) covers these patterns and native rename, import and repair actions.
+Use observations as matcher receivers so failures include source context; use `hover.displayText` for types, `hover.documentation` for prose, and named marks with `rangeOf()` for exact diagnostic underlines. Each observation reflects native editor behavior independently of assertion order. Scoped snippets and `atEach()` compare completion surfaces without repeating fixture source. Selenita's [promise guide](https://github.com/mareszhar/selenita/blob/main/docs/guide/promises.md) covers these patterns and native rename, import and repair actions.
 
 Standalone tools and agents can use the same configuration with core `createProject()`. Read the observations needed for the job: `errors` for code, message and range; a selected completion's documentation for discovery; `signatureHelp.activeParameter` for argument guidance; and a diagnostic's `codeFixes` for native repairs. Recheck the corrected fixture in the same project. Observations are lazy, so read the data you intend to retain before disposal and create a fresh project after changing files on disk. Fixture diagnostics cover the supplied files; run the project's strict compiler separately to check imported sources and declarations.
 

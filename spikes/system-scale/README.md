@@ -41,7 +41,7 @@ Each generated chain models a real system build, not a synthetic ladder:
 - **Payload width is benign.** The first spike's blow-up axis was _naive per-step `Simplify` across many links_; wide payloads on few links do not reproduce it. The lean rules are the load-bearing part, not the link count.
 - **Three facets are benign.** Accumulating `S`/`V`/`U` in parallel multiplies parameters per instantiation, not instantiation _depth_ — no compounding.
 
-## DX at scale (Selenita 0.3, TypeScript 6.0.2 backend)
+## DX at scale
 
 | id | claim |
 | --- | --- |
