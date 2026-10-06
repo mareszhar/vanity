@@ -10,6 +10,8 @@ npm install @mszr/vanity vite
 
 `vite` is required for the compiler integration. Add `vue`, `nuxt`, `typescript`, or `@mszr/selenita` only when the corresponding Vanity entrypoint is part of the project.
 
+For an existing application, see [restarting after dependency updates](../reference/spec-integrations.md#91-updating-dependencies).
+
 ## 2. Create the system
 
 Create and consolidate a design system in a plain TypeScript module—not in a `*.css.ts` file.

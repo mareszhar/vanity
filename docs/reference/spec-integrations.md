@@ -208,7 +208,7 @@ The shared style-module pipeline:
 - emits one system CSS artifact and one CSS artifact per style source while preserving lazy splitting;
 - loads each style source's generated CSS in development and in production, under any public base;
 - writes the manifest and provides stable development endpoints and DevTools;
-- recovers from dependency errors without a restart;
+- recovers from source dependency errors without a restart;
 - generates browser and SSR projections from portable data; and
 - supports precompiled package contracts.
 
@@ -365,6 +365,12 @@ Separate file saves are not atomic: a style referencing a token its system does 
 The Vite integration tracks attempted style entries and their dependencies, preserves last-good CSS, uses Vite's `watchChange` hook and `ModuleGraph.invalidateModule` only at the host boundary, and eagerly retries affected entries on the same server. A value edit that changes CSS identity follows the new browser module URL and removes stale ownership, including under a non-root `base`. A docs-only edit updates the manifest without sending a CSS update. A change to an application-imported runtime identity, or the repair of a configured system, requests a full reload; compatible CSS edits keep runtime state and the page. Both recovery orders are permanent compiler-projection fixtures.
 
 In development, a retired stylesheet leaves each page once its replacement CSS is installed there. This applies to stylesheets Vite serves as CSS modules; a link a host renders into server HTML, such as Nuxt's development renderer, can keep retired rules until the next page load, because Vanity does not retract host-rendered markup. Stylesheet delivery order never changes Vanity's cascade ([styling §8](./spec-css.md#8-layers)).
+
+### 9.1 Updating dependencies
+
+Stop the development server before changing the installed version of Vanity or its build host, then start it again after installation completes. A running server can retain loaded compiler code while reading files from the updated installation. Reloading the browser does not restart that process.
+
+If a compilation error such as `VANITY_VITE_BUILD_FAILED` first appears after a dependency update, retry with a freshly started server before changing your system or styles. Use the reported file, underlying cause and fix guidance to investigate errors that persist after restarting.
 
 ## 10. Demos
 
