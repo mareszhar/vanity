@@ -3,6 +3,9 @@
   "compilerOptions": {
     "incremental": true,
     "tsBuildInfoFile": "./.cache/typescript/workspace.tsbuildinfo",
+    "paths": {
+      "@mszr/vanity": ["./sdk/src/index.ts"]
+    },
     "types": ["node"]
   },
   "include": [

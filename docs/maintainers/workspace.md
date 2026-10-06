@@ -187,7 +187,7 @@ SDK tests live beside the code they exercise in `sdk/src/`:
 
 Repository browser tests live in `tests/`. They own cross-package evidence that cannot belong to the SDK: `demos.spec.ts` and `scheme-axis.spec.ts` exercise built Nuxt/Vite applications, while `dev/nuxt-dev.spec.ts` proves first paint and HMR against the development server.
 
-The root `tsconfig.json` typechecks these Node/Playwright files and root tooling without making those concerns part of the reusable `tsconfig.base.json`. Shared demo data lives in `sandbox/fixtures/`; package-consumer fixtures live in `sdk/src/test-support/`.
+The root `tsconfig.json` typechecks these Node/Playwright files and root tooling without making those concerns part of the reusable `tsconfig.base.json`. Its `@mszr/vanity` path resolves to SDK source so imported SDK modules share core type identities before any build. Application projects and packed consumers resolve the package's published declarations. Shared demo data lives in `sandbox/fixtures/`; package-consumer fixtures live in `sdk/src/test-support/`.
 
 The permanent evidence policy is [testing.md](./testing.md); use it to choose the dimensions required by a change.
 
