@@ -18,11 +18,11 @@ describe('token $dec editor DX', () => {
       void ds.t.text.body.${cursor('bundle')}$dec
     `
 
-    expect(result.at('member').completions).toContainCompletion('$dec')
-    expect(result.at('bundle').hover).toContain('fontSize')
-    expect(result.at('bundle').hover).toContain('lineHeight')
-    expect(result.at('bundle').hover).toContain('hover')
-    expect(result.at('bundle').hover).not.toContain('VanityExpressionNode')
+    expect(result.at('member')).toSuggest('$dec')
+    expect(result.at('bundle').hover?.displayText).toContain('fontSize')
+    expect(result.at('bundle').hover?.displayText).toContain('lineHeight')
+    expect(result.at('bundle').hover?.displayText).toContain('hover')
+    expect(result.at('bundle').hover?.text).not.toContain('VanityExpressionNode')
   })
 
   it('keeps namespace misuse local and names both repairs', () => {

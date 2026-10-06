@@ -14,7 +14,7 @@ const project = vanityProject()
 /** Compiler internals a diagnostic or hover must never leak. */
 const LEAK = /ColorValue\b|ContrastValue\b|createPortHandle\b|VanityPortMeta\b/
 
-function expectNoLeak(messages: Array<Diagnostic | string>): void {
+function expectNoLeak(messages: readonly (Diagnostic | string)[]): void {
   for (const message of messages)
     expect(typeof message === 'string' ? message : message.message).not.toMatch(LEAK)
 }
@@ -66,29 +66,33 @@ describe('the authoring shape', () => {
   it('port methods autocomplete — declaration fragment, validator binding, metadata, and intent', () => {
     const result = project.query`${defineSystem}
       export const fraction = port(0)
-      void fraction.${cursor}
+      void fraction.${cursor('members')}
+      void fraction.meta.${cursor('metadata')}
+      void fraction.dec(${cursor('value')}0)
     `
-    expect(result.completions).toContainCompletions(['dec', 'bind', 'describe', 'deprecated', 'toString', 'var', 'name', 'type', 'kind'])
+    expect(result.at('members')).toSuggest(['dec', 'bind', 'describe', 'deprecated', 'toString', 'var', 'name', 'type', 'kind', 'defaultValue', 'meta'], { requireDocumentation: true })
+    expect(result.at('metadata')).toSuggest(['name', 'defaultValue', 'type', 'kind', 'validation', 'description', 'deprecated'], { requireDocumentation: true })
+    expect(result.at('value').signatureHelp?.activeParameter?.documentation).toContain('compatible with the port\'s data type')
   })
 })
 
 describe('errors at the cursor', () => {
-  it('a number port rejects a string in set()', () => {
+  it('a number port rejects a string in dec()', () => {
     const { errors } = project.check`${defineSystem}
       export const fraction = port(0)
       void fraction.dec('hello')
     `
-    expect(errors).toHaveError(/not assignable to parameter of type 'VanityPortDecValue<"number">'/)
+    expect(errors).toHaveError(/not assignable to parameter of type 'VanityPortDecValue<"number">'/, { on: '\'hello\'' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
 
-  it('a string port rejects a number in set()', () => {
+  it('a length port rejects a number in dec()', () => {
     const { errors } = project.check`${defineSystem}
       export const width = port('4px')
       void width.dec(8)
     `
-    expect(errors).toHaveError(/not assignable to parameter of type 'VanityPortDecValue<"length">'/)
+    expect(errors).toHaveError(/not assignable to parameter of type 'VanityPortDecValue<"length">'/, { on: '8' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -101,7 +105,7 @@ describe('errors at the cursor', () => {
     expectNoLeak(errors)
   })
 
-  it('a color port set accepts a string cleanly', () => {
+  it('a color port dec() accepts a string cleanly', () => {
     const { errors } = project.check`${defineSystem}
       export const tint = port(t.color.brand)
       void tint.dec('oklch(0.45 0.15 250)')
@@ -109,7 +113,7 @@ describe('errors at the cursor', () => {
     expect(errors).toBeClean()
   })
 
-  it('a color port set accepts a token reference cleanly', () => {
+  it('a color port dec() accepts a token reference cleanly', () => {
     const { errors } = project.check`${defineSystem}
       export const tint = port(t.color.brand)
       void tint.dec(t.color.ink)
@@ -124,15 +128,15 @@ describe('hovers', () => {
       const fraction = port(0, { label${cursor('label')}: 'fraction', validate${cursor('validate')}: { id: 'fraction' } })
       void fraction
     `
-    expect(result.at('label').hover).toContain('Human-readable port label')
-    expect(result.at('validate').hover).toContain('Runtime validation policy')
+    expect(result.at('label').hover?.documentation).toContain('Human-readable port label')
+    expect(result.at('validate').hover?.documentation).toContain('Runtime validation policy')
   })
 
   it('a port hover reads as the public type, not internals', () => {
     const result = project.query`${defineSystem}
       export const fract${cursor}ion = port(0)
     `
-    expect(result.hover).toContain('VanityPort')
-    expectNoLeak([result.hover ?? ''])
+    expect(result.hover?.displayText).toContain('VanityPort')
+    expectNoLeak([result.hover?.text ?? ''])
   })
 })

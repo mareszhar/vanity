@@ -7,34 +7,33 @@
  *   R3  contribution ordering is enforced: requiring-before-providing fails,
  *       and the failure is readable.
  */
-import { cursor, defineProject } from '@mszr/selenita'
+import { cursor, defineProject } from '@mszr/selenita/vitest'
 import { describe, expect, it } from 'vitest'
-import '@mszr/selenita/vitest'
 
 const project = defineProject({ tsconfig: './tsconfig.json', aliases: { '#src/*': './src/*' } })
 
 describe('r1 — branched fields accumulate and stay inspectable', () => {
   it('a field whose value is a per-branch record keeps both the field and its branches typed', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { create } from '#src/builder'
       const built = create()
         .add('color', { canvas: { light: 'white', dark: '#111' }, ink: 'black' })
         .consolidate()
       built.read('color').canvas.${cursor}
     `
-    expect(completions).toContainCompletion('light')
-    expect(completions).toContainCompletion('dark')
+    expect(observation).toSuggest('light')
+    expect(observation).toSuggest('dark')
   })
 
   it('the field itself is still visible alongside plain fields', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { create } from '#src/builder'
       create()
         .add('color', { canvas: { light: 'white', dark: '#111' }, brand: 'red' })
         .derive(shape => { shape.color.${cursor}; return {} })
     `
-    expect(completions).toContainCompletion('canvas')
-    expect(completions).toContainCompletion('brand')
+    expect(observation).toSuggest('canvas')
+    expect(observation).toSuggest('brand')
   })
 })
 
@@ -50,14 +49,14 @@ describe('r2 — contribution chains: A provides what B requires', () => {
   })
 
   it('b contributions are visible downstream of A', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { create, contribution } from '#src/builder'
       const a = contribution({ id: 'a', requires: {}, provides: { scheme: { light: '&' } } })
       const b = contribution({ id: 'b', requires: { scheme: ['light'] }, provides: { motion: { on: '&' } } })
       create().use(a).use(b).derive(shape => { shape.${cursor}; return {} })
     `
-    expect(completions).toContainCompletion('scheme')
-    expect(completions).toContainCompletion('motion')
+    expect(observation).toSuggest('scheme')
+    expect(observation).toSuggest('motion')
   })
 })
 

@@ -9,7 +9,7 @@ A plugin reused across builds has to know which build an HTML hook is serving, a
 Use the workspace-pinned Node and pnpm. From this directory:
 
 ```sh
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm test
 ```
 

@@ -16,7 +16,7 @@ vanity/
   docs/                    canonical product and maintainer documentation
   scripts/                 audits, benchmarks, smoke tests, release tooling
   tests/                   browser and development integration tests
-  spikes/                  standalone probes of patterns, run before designing
+  spikes/                  SDK-independent experiments with catalog dependencies
   benchmarks/              generated scale fixtures and accepted baselines
   sandbox/
     fixtures/              shared comparison data
@@ -81,7 +81,7 @@ This is separate from `pnpm run upi`: `pnpm:self-update` changes the package man
 
 `pnpm-workspace.yaml` holds pnpm's own settings, in camelCase. The pinned pnpm reads its configuration there and ignores pnpm keys left in `.npmrc`, which keeps only genuine npm settings such as `registry` — a pnpm setting placed in `.npmrc` is silently inert, so it reads as protection that is not in force. `verifyDepsBeforeRun: false` is set deliberately: a Git hook has no TTY, so pnpm's pre-run dependency check can abort a commit when it decides to auto-install. Dependency integrity is gated explicitly by `pnpm install --frozen-lockfile` in `check` and in CI, which fails on real lockfile or manifest drift rather than on a benign manifest edit.
 
-Third-party version ranges live in `pnpm-workspace.yaml`. The default `catalog` is the exact maintainer test matrix consumed with `catalog:`; the named `peers` catalog is the broader SDK compatibility contract consumed with `catalog:peers`. This keeps “what this checkout verifies” separate from “what consumers may install” without duplicating either policy across package manifests.
+Third-party version ranges live in `pnpm-workspace.yaml`. The default `catalog` is the exact maintainer test matrix consumed with `catalog:` by the SDK, demos and spikes; the named `peers` catalog is the broader SDK compatibility contract consumed with `catalog:peers`. This keeps “what this checkout verifies” separate from “what consumers may install” without duplicating either policy across package manifests. The `vite6` catalog pins the HTML-host experiment to its named Vite 6 question. A workspace alone does not enforce common versions; the catalog references and shared root lockfile do.
 
 Packing and publication use pnpm, which natively materializes both catalog and workspace references as ordinary npm-compatible ranges inside the artifact. It does not rewrite `sdk/package.json` on disk, so the authored manifest and Git always retain `catalog:` references—even after an interrupted pack or publish. Fresh-package smoke tests inspect and install that real tarball outside the workspace.
 
@@ -93,13 +93,13 @@ Run `pnpm run upi` to review and select eligible upgrades from the default catal
 - one Clack multiselect option represents each outdated catalog entry, with the changed semver suffix highlighted;
 - the parser tolerates a pnpm reporter prefix, so diagnostics cannot corrupt the JSON review;
 - Space toggles an entry, the arrow keys move, and Enter confirms; cancellation or an empty submission is a no-op;
-- TypeScript and Vitest remain excluded while their compiler API and matcher declarations must match the lint, Vue, and Selenita integrations;
-- the broader `peers` catalog remains intact because it defines the SDK's published compatibility contract;
+- TypeScript and Vitest keep reviewed compatibility ranges: the compiler API must match lint/Vue tooling, and the test runner must satisfy Selenita’s peer contract;
+- named catalogs remain intact: `peers` defines the SDK's published compatibility contract, and `vite6` owns the version-specific HTML-host experiment;
 - a pnpm exit without a changed catalog or lockfile is a no-op.
 
 Follow a dependency upgrade with `pnpm run validate` before release work.
 
-**Selenita compatibility:** Selenita 0.2.2 blocks Vitest 5 through its matcher declarations. Its addon also fails declaration checking on Vitest 4 with `skipLibCheck: false`: the ordinary and asymmetric matcher signatures conflict. A replacement release must pass packed-consumer checks with library checking enabled, including ordinary, negated, asynchronous and asymmetric assertions. Once it does, refresh the Selenita catalog and fresh-consumer pin, reassess the Vitest updater guard, and run editor-DX, fresh-consumer and release gates. Keep the TypeScript compiler-API gate independent. The [testing-kit guide](../reference/testing-kit.md) owns consumer installation versions.
+**Editor tooling compatibility:** Selenita owns its bundled language-service backend; the workspace TypeScript compiler/lint gate stays independent. A testing-tool upgrade must pass packed-consumer declaration checking with `skipLibCheck: false`, ordinary, negated, asynchronous and asymmetric assertions, and runner-free core use. Refresh the catalog and fresh-consumer pins together, then run editor-DX, supported Vite graphs and release gates. The [testing-kit guide](../reference/testing-kit.md) owns consumer installation and lifecycle.
 
 Repository automation under `scripts/` is TypeScript run through `tsx`, with an introductory comment that states the operational purpose and the invariant each script protects. Published runtime shims and tool-required configuration files may still use their required JavaScript module format outside that directory.
 
@@ -138,6 +138,17 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run sdk:test:types` | run the compile-time evidence dimension |
 | `pnpm run sdk:test:watch` | run SDK tests in watch mode |
 | `pnpm run sdk:test:vite-compat` | run the real client/SSR module-graph gate against every supported Vite major |
+
+### Spikes
+
+| Command | Purpose |
+| --- | --- |
+| `pnpm run spikes:check` | typecheck each spike that exposes a check task, sequentially |
+| `pnpm run spikes:test` | run each spike's executable experiment, sequentially |
+
+For one experiment, use `pnpm --filter spike-policy-law test` or run its commands from its directory. Spikes share installation and version policy while keeping SDK-independent models and their own execution scopes. They are not added to the SDK release assertion suite.
+
+Browser experiments require the matching Chromium installation: `pnpm exec playwright install chromium`.
 
 ### Demos
 
@@ -180,6 +191,8 @@ The root `tsconfig.json` typechecks these Node/Playwright files and root tooling
 
 The permanent evidence policy is [testing.md](./testing.md); use it to choose the dimensions required by a change.
 
+The Vitest extension discovers `sdk/vitest.config.ts` through `.vscode/settings.json`. Application Vite configs belong to the browser hosts, and spikes run independently (§5.1). Open a spike as its own workspace to use its Test Explorer; repository test commands retain their own scopes.
+
 Use `check:fast` while iterating, `check` before handing off non-browser work, and `validate` as the release-shaped gate. The two levels differ in cadence, not standards; [testing and evidence](./testing.md) defines the required dimensions.
 
 ### 5.1 Spikes
@@ -190,7 +203,7 @@ Four rules keep spikes durable:
 
 1. **Substrate-agnostic.** A spike depends on TypeScript and its own fixtures, never on `@mszr/vanity`. A spike that imports the SDK expires when the SDK changes, which is exactly when its evidence would be most useful. Model Vanity's shape with local fixtures instead.
 2. **Observational, never prescriptive.** A spike reports what happened: what held, what failed, what a measurement establishes, and what it cannot show. Decisions about what Vanity should therefore do belong in a plan or a specification. A spike that carries a verdict outlives the reasoning that produced it and starts to read as policy.
-3. **Reproducible from a clean checkout.** `pnpm install --ignore-workspace` then `pnpm test`. A runner regenerates everything the root `.gitignore` excludes — `node_modules/`, `dist/`, `.vanity/` — so only authored fixture source is committed. Assert results against expectation rather than printing them for a human to interpret.
+3. **Reproducible from a clean checkout.** Install with `pnpm install --frozen-lockfile`, then run the spike's commands in its directory or select its package with `--filter`. Spike dependencies use the root catalog and lockfile; generated fixture packages remain outside the workspace package glob. A runner regenerates everything the root `.gitignore` excludes — `node_modules/`, `dist/`, `.vanity/` — so only authored fixture source is committed. Assert results against expectation rather than printing them for a human to interpret.
 4. **Named for its question, not its subject.** The directory says what was asked; the README's opening paragraph says why it was worth asking, and its verdict line answers it.
 
 A README carries: the question, how to run it, the setup, a results table, what the results establish and what they do not, and the footguns hit along the way. Cross-references to product code are welcome as context and should describe rather than cite paths, which rot.

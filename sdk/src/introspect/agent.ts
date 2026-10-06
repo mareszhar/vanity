@@ -1,46 +1,75 @@
 import type { VanityManifest } from './manifest'
 import { createManifestModules } from './manifest'
 
-/** Compact manifest context supplied to human or automated tooling. */
+/** Primary system vocabulary and build evidence for human or automated tooling. */
 export interface VanityAgentContext {
+  /** Manifest protocol version from the supplied build snapshot. */
   readonly manifestVersion: VanityManifest['version']
+  /** Compatibility, CSS, runtime and documentation identities of the primary system. */
   readonly identities: VanityManifest['system']['identities']
+  /** Primary system's CSS root and declared cascade order. */
   readonly system: {
+    /** Selector owning the primary system's declarations. */
     readonly root: string
+    /** Token layer when token declarations are layered. */
     readonly tokenLayer?: string
+    /** Cascade layers in authored precedence order. */
     readonly layers: readonly string[]
   }
+  /** Declared axes, mode vocabulary and readable named conditions. */
   readonly environment: {
+    /** Declared environmental axes of the primary system. */
     readonly axes: readonly {
+      /** Public axis name used by token branches and runtime mode controls. */
       readonly name: string
+      /** Declared mode names in selection/cycle order. */
       readonly modes: readonly string[]
+      /** Nominal axis default, when declared; distinct from a token's fallback. */
       readonly defaultMode?: string
     }[]
+    /** Named conditions mapped to their readable CSS selectors or queries. */
     readonly conditions: Readonly<Record<string, string>>
   }
+  /** All primary-system tokens, with traits, dependencies and emission contexts. */
   readonly tokens: readonly {
+    /** Semantic token path usable with explain(), without private CSS slot names. */
     readonly path: string
+    /** Resolved CSS data type. */
     readonly type: string
+    /** Whether styling uses the resolved expression or a custom-property reference. */
     readonly reference: 'val' | 'var'
+    /** Whether declared token addresses permit runtime updates. */
     readonly mutable: boolean
+    /** Semantic paths of this token's dependencies. */
     readonly dependencies: readonly string[]
+    /** Distinct emitted root, layer, at-rule and selector contexts, as readable CSS. */
     readonly contexts: readonly string[]
+    /** Author-supplied guidance, when present. */
     readonly description?: string
   }[]
+  /** Source modules and their published recipes/anatomies or component ports. */
   readonly modules: readonly {
+    /** Module's source path from the manifest. */
     readonly source: string
+    /** Published recipe and anatomy names. */
     readonly recipes: readonly string[]
+    /** Published component port names. */
     readonly ports: readonly string[]
   }[]
+  /** Recorded authoring escapes, interchange limitations and explicit replacements. */
   readonly policy: {
+    /** Number of recorded raw and unsafe assertions. */
     readonly rawAssertions: number
+    /** Number of standards-form escapes from an aliases-only styling surface. */
     readonly aliasEscapes: number
+    /** Token paths that cannot be transferred through authored interchange. */
     readonly nonportableTokens: readonly string[]
+    /** Number of recorded overwrite and augmentation entries. */
     readonly overwrites: number
   }
 }
 
-/** Bounded machine context derived entirely from Manifest v4. */
+/** Machine context derived entirely from Manifest v4, with the complete token vocabulary. */
 export function buildAgentContext(manifest: VanityManifest): VanityAgentContext {
   const modules = createManifestModules(manifest)
   return Object.freeze({

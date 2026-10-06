@@ -17,7 +17,7 @@ describe('policy editor DX', () => {
       ds.oklch(0.6, 0.2, 280)
     `
 
-    expect(result.at('policy').completions).toContainCompletions([
+    expect(result.at('policy')).toSuggest([
       'constructors',
       'support',
       'layerOrder',

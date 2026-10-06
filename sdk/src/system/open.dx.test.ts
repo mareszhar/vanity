@@ -1,4 +1,4 @@
-import { cursor } from '@mszr/selenita'
+import { cursor, snippet } from '@mszr/selenita'
 import { vanityProject } from '@test'
 import { describe, expect, it } from 'vitest'
 
@@ -14,7 +14,7 @@ describe('open and locked system editor DX', () => {
       void ds.${cursor('locked')}
     `
 
-    expect(result.at('open').completions).toContainCompletions([
+    expect(result.at('open')).toSuggest([
       'addTokens',
       'addToken',
       'defineTokens',
@@ -36,16 +36,16 @@ describe('open and locked system editor DX', () => {
       'addPlugin',
       'expectTokens',
       'consolidate',
-    ])
-    expect(result.at('open').completions).not.toContainCompletions([
+    ], { requireDocumentation: true })
+    expect(result.at('open')).not.toSuggest([
       'css',
       'recipe',
       'runtime',
     ])
-    expect(result.at('open').completions.indexOf('addTokens')).toBeLessThan(
-      result.at('open').completions.indexOf('consolidate'),
+    expect(result.at('open').completionNames.indexOf('addTokens')).toBeLessThan(
+      result.at('open').completionNames.indexOf('consolidate'),
     )
-    expect(result.at('locked').completions).toContainCompletions([
+    expect(result.at('locked')).toSuggest([
       't',
       'class',
       'rules',
@@ -58,13 +58,13 @@ describe('open and locked system editor DX', () => {
       'snapshotFrom',
       'introspect',
     ])
-    expect(result.at('locked').completions).not.toContainCompletions([
+    expect(result.at('locked')).not.toSuggest([
       'addTokens',
       'overwriteTokens',
       'consolidate',
       'createSystem',
     ])
-    expect(result.at('locked').completions.every(name => !/^\$|^VANITY_|^__vanity/i.test(name))).toBe(true)
+    expect(result.at('locked').completionNames.every(name => !/^\$|^VANITY_|^__vanity/i.test(name))).toBe(true)
   })
 
   it('shows logical handles before consolidation and resolved handles after it', () => {
@@ -76,21 +76,21 @@ describe('open and locked system editor DX', () => {
       void ds.t.color.brand.${cursor('resolved')}
     `
 
-    expect(result.at('logical').completions).toContainCompletions([
+    expect(result.at('logical')).toSuggest([
       '$path',
       '$type',
       '$reference',
       '$phase',
       '$var',
     ])
-    expect(result.at('logical').completions).not.toContainCompletion('$name')
-    expect(result.at('resolved').completions).toContainCompletions([
+    expect(result.at('logical')).not.toSuggest('$name')
+    expect(result.at('resolved')).toSuggest([
       '$name',
       '$var',
       '$path',
       '$type',
     ])
-    expect(result.at('resolved').completions).not.toContainCompletion('$phase')
+    expect(result.at('resolved')).not.toSuggest('$phase')
   })
 
   it('keeps the public system hovers readable', () => {
@@ -117,14 +117,14 @@ describe('open and locked system editor DX', () => {
       rt: 800,
     } as const
     for (const [name, budget] of Object.entries(budgets)) {
-      const hover = result.at(name).hover ?? ''
+      const hover = result.at(name as keyof typeof budgets).hover?.text ?? ''
       expect(hover).toBeTruthy()
       expect(hover.length).toBeLessThan(budget)
       expect(hover).not.toContain('import("./')
       expect(hover).not.toContain('Omit<')
       expect(hover).not.toContain('VANITY_OPEN_SYSTEM_TYPE')
     }
-    expect(result.at('runtimeFactory').hover).toContain('Create a live runtime controller')
+    expect(result.at('runtimeFactory').hover?.documentation).toContain('Create a live runtime controller')
   })
 
   it('surfaces public documentation at method, option, token, and runtime cursors', () => {
@@ -143,13 +143,13 @@ describe('open and locked system editor DX', () => {
       void open.consolidate({ prefix${cursor('prefix')}: 'app' })
     `
 
-    expect(result.at('consolidate').hover).toContain('Finalize the accumulated shape')
-    expect(result.at('tdef').hover).toContain('Define advanced token traits')
-    expect(result.at('var').hover).toContain('Return the token\'s `var()` reference')
-    expect(result.at('audit').hover).toContain('Run every audit this system can evaluate')
-    expect(result.at('reference').hover).toContain('Choose whether a token resolves')
-    expect(result.at('emit').hover).toContain('Choose whether tokens emit CSS')
-    expect(result.at('prefix').hover).toContain('Prefix custom-property names')
+    expect(result.at('consolidate').hover?.documentation).toContain('Finalize the accumulated shape')
+    expect(result.at('tdef').hover?.documentation).toContain('Define advanced token traits')
+    expect(result.at('var').hover?.documentation).toContain('Return the token\'s `var()` reference')
+    expect(result.at('audit').hover?.documentation).toContain('Run every audit this system can evaluate')
+    expect(result.at('reference').hover?.documentation).toContain('Choose whether a token resolves')
+    expect(result.at('emit').hover?.documentation).toContain('Choose whether tokens emit CSS')
+    expect(result.at('prefix').hover?.documentation).toContain('Prefix custom-property names')
   })
 
   it('keeps duplicate additions local to the duplicate key', () => {
@@ -166,15 +166,16 @@ describe('open and locked system editor DX', () => {
 })
 
 it('completes ordinary direct and detached derivation siblings and branches', () => {
+  const sibling = snippet`void siblings.${cursor('sibling')};`
   const result = project.query`
     import { createSystem, defineAxes, thisMode } from '@mszr/vanity'
     const open = createSystem().addAxis('pick', {
       modes: { base: '&', later: thisMode },
-      derive: { later: siblings => { void siblings.${cursor('directSibling')}; return 'red' as const } },
+      derive: { later: siblings => { ${sibling.scope('direct')} return 'red' as const } },
     })
     const module = defineAxes({ pick: {
       modes: { base: '&', later: thisMode },
-      derive: { later: siblings => { void siblings.${cursor('detachedSibling')}; return 42 as const } },
+      derive: { later: siblings => { ${sibling.scope('detached')} return 42 as const } },
     } })
     const detached = createSystem().addAxes(module)
     const ds = open.addTokens({ ink: open.tdef({ val: 'black', axes: { pick: {} } }) }).consolidate()
@@ -183,13 +184,15 @@ it('completes ordinary direct and detached derivation siblings and branches', ()
     void ds.t.ink.$axes.pick.later.${cursor('directValue')}$val
     void staged.t.ink.$axes.pick.later.${cursor('detachedValue')}$val
   `
-  for (const name of ['directSibling', 'detachedSibling']) {
-    expect(result.at(name).completions).toContainCompletions(['base', 'later'])
-    expect(result.at(name).completions).not.toContainCompletion('wrong')
+  const siblings = result.atEach('sibling', ['direct', 'detached'])
+  expect(siblings).toHaveCompletionParity()
+  for (const member of Object.values(siblings)) {
+    expect(member).toSuggest(['base', 'later'])
+    expect(member).not.toSuggest('wrong')
   }
-  expect(result.at('branches').completions).toContainCompletion('later')
-  expect(result.at('directValue').hover).toContain('"red"')
-  expect(result.at('detachedValue').hover).toContain('42')
+  expect(result.at('branches')).toSuggest('later')
+  expect(result.at('directValue').hover?.displayText).toContain('"red"')
+  expect(result.at('detachedValue').hover?.displayText).toContain('42')
   const { errors } = project.check`
     import { createSystem, defineAxes, thisMode } from '@mszr/vanity'
     createSystem().addAxis('pick', { modes: { base: '&', later: thisMode }, derive: { later: siblings => siblings.base } })
@@ -208,8 +211,7 @@ it('diagnoses missing promised axis capabilities at the configuration', () => {
       void configuration
     `
     expect(errors).toHaveErrorCount(1)
-    expect(errors[0]).toMatchObject({ code: 2322, line: 5 })
-    expect(errors[0]!.message).toContain(`Property '${field}' is missing`)
+    expect(errors).toHaveError(2322, `Property '${field}' is missing`, { on: 'configuration' })
   }
   const result = project.query`
     import type { VanityOpenAxisConfig } from '@mszr/vanity'
@@ -223,9 +225,9 @@ it('diagnoses missing promised axis capabilities at the configuration', () => {
     void ds.t.ink.$axes.pick.${cursor('known')}
     void maybe.t.ink.$axes.pick.${cursor('uncertain')}
   `
-  expect(result.at('known').completions).toContainCompletion('later')
-  expect(result.at('uncertain').completions).not.toContainCompletion('later')
-  const hover = result.at('configuration').hover ?? ''
+  expect(result.at('known')).toSuggest('later')
+  expect(result.at('uncertain')).not.toSuggest('later')
+  const hover = result.at('configuration').hover?.text ?? ''
   expect(hover).toContain('Known control and derivation types require their fields')
   expect(hover.length).toBeLessThan(2000)
 })

@@ -9,7 +9,8 @@ A development page must keep its old stylesheet until the replacement is install
 Use the workspace-pinned Node and pnpm. From this directory:
 
 ```sh
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
 pnpm test
 ```
 

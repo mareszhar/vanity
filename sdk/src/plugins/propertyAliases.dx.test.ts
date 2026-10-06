@@ -13,8 +13,8 @@ describe('property alias editor DX', () => {
         .consolidate()
       void ds.class({ ${cursor} })
     `
-    expect(result.completions).toContainCompletions(['py', 'bg', 'paddingBlock', 'background', 'color'])
-    expect(result.completions).not.toContainCompletion('pb')
+    expect(result).toSuggest(['py', 'bg', 'paddingBlock', 'background', 'color'])
+    expect(result).not.toSuggest('pb')
   })
 
   it('aliases-only narrows the primary vocabulary and leaves class.standard complete', () => {
@@ -26,9 +26,9 @@ describe('property alias editor DX', () => {
       void ds.class({ ${cursor('primary')} })
       void ds.class.standard({ ${cursor('standard')} })
     `
-    expect(result.at('primary').completions).toContainCompletion('py')
-    expect(result.at('primary').completions).not.toContainCompletion('paddingBlock')
-    expect(result.at('standard').completions).toContainCompletion('paddingBlock')
+    expect(result.at('primary')).toSuggest('py')
+    expect(result.at('primary')).not.toSuggest('paddingBlock')
+    expect(result.at('standard')).toSuggest('paddingBlock')
   })
 
   it('retains alias completion for reusable fragments', () => {
@@ -40,6 +40,6 @@ describe('property alias editor DX', () => {
       const fragment = ds.fragment({ ${cursor('fragment')} })
       void ds.class([fragment, { py: '2rem' }])
     `
-    expect(result.at('fragment').completions).toContainCompletions(['py', 'paddingBlock'])
+    expect(result.at('fragment')).toSuggest(['py', 'paddingBlock'])
   })
 })

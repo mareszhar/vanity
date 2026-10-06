@@ -6,11 +6,11 @@ It exists to de-risk a design that hinges on these exact capabilities. If a futu
 
 ## Run it
 
-Self-contained and independent of the monorepo workspace (hence `--ignore-workspace`):
+The model is independent of the SDK; dependencies use the workspace catalog and root lockfile:
 
 ```sh
 cd spikes/type-accumulation
-pnpm install --ignore-workspace   # own node_modules, shared pnpm store (disk-cheap)
+pnpm install --frozen-lockfile     # workspace catalog and root lockfile
 pnpm run check                    # tsc: the patterns typecheck
 pnpm run test                     # selenita: completions + diagnostics behave as claimed
 pnpm run depth                    # the naive-vs-lean depth comparison
@@ -26,7 +26,7 @@ pnpm run depth                    # the naive-vs-lean depth comparison
 | `consolidate()` removes mutation methods from the locked surface. | `src/builder.ts` |
 | Branched fields and ordered contributions remain inspectable at scale. | `tests/realistic.test.ts` |
 
-The branched (R1) shape does **not** compound the depth problem: an 80-link chain of branched-field groups stays flat (~8.6k instantiations, no TS2589) — nesting within a field is bounded and doesn't accumulate across the chain.
+The branched (R1) shape does **not** compound the depth problem: an 80-link chain of branched-field groups stays flat (~8.7k instantiations, no TS2589) — nesting within a field is bounded and doesn't accumulate across the chain.
 
 ## Product guard
 
@@ -38,12 +38,12 @@ An equivalent guard runs in the product's own [type test](../../sdk/src/system/o
 
 ```
 kind   N    TS2589?  instantiations
-naive  20   no       4421
-naive  40   YES      16945          ← breaks
-lean   20   no       976
-lean   40   no       2736
-lean   80   no       8656
-lean   150  no       26716          ← still fine, ~0.12s
+naive  20   no       4424
+naive  40   YES      16948          ← breaks
+lean   20   no       982
+lean   40   no       2742
+lean   80   no       8662
+lean   150  no       26722          ← still fine, ~0.11s
 ```
 
 **1b. Intersection guards preserve contextual typing; wrapping conditionals do not.** A wrapping conditional (`[Dup] extends [never] ? Mapped : Msg`) type-checks but defeats contextual typing for callback-valued fields. Intersecting instead — `Mapped & Brand`, where `Brand` is `unknown` when clean — keeps the mapped type primary, callbacks keep their types, and a collision still errors on the exact argument. Cost: a slightly noisier "property is missing" line alongside the named message.
@@ -56,6 +56,7 @@ The missing piece is named, on one line — not generic type soup.
 
 ## Footguns encountered (each is a one-line regression waiting to happen)
 
+- Native TypeScript resolves this model's reverse-mapped callback context during semantic diagnostics. For an unfinished `tools.` expression, diagnostics-first observation reports only the missing identifier and completes `unit`; completions-first observation returns no names and introduces an implicit `any`. The fixture observes diagnostics first explicitly. Complete `tools.unit(1)` expressions are clean and complete in either order. Selenita's `@typescript/typescript6` package is versioned 6.0.2 but reports compiler `ts.version` 6.0.3, matching the workspace compiler; package metadata alone does not identify the running compiler version.
 - **`never extends string` is `true`** — a _met_ requirement makes the "missing" type `never`, which then wrongly takes the error branch. Tuple-wrap it: `[Missing] extends [never] ? Pass : Missing`.
 - **`unknown | X === unknown`** — a `FieldInput<unknown>` constraint collapses and the callback param loses its contextual type. Use the reverse-mapped param `{ [K in keyof G]: FieldInput<G[K]> }` with `G` inferred as the _resolved_ values.
 - **`*/` inside a JSDoc comment** silently closes the comment and corrupts the file.

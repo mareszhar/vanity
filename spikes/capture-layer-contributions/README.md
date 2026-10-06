@@ -9,7 +9,7 @@ A system's layer order has to reach every stylesheet that carries its rules, eve
 Use the workspace-pinned Node and pnpm. From this directory:
 
 ```sh
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm test
 ```
 

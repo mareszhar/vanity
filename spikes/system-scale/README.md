@@ -6,11 +6,11 @@ Answer: **no.** The lean discipline holds with a wide margin.
 
 ## Run it
 
-Self-contained and independent of the monorepo workspace:
+The model is independent of the SDK; dependencies use the workspace catalog and root lockfile:
 
 ```sh
 cd spikes/system-scale
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm run generate   # rewrite generated/m.ts (the committed M-profile module)
 pnpm run check      # tsc over src + tests + generated
 pnpm run test       # selenita: DX claims against the M-profile chain
@@ -27,21 +27,21 @@ Each generated chain models a real system build, not a synthetic ladder:
 - **periodic `derive` reads** — every 10th group derives from earlier groups, forcing a `Simplify` instantiation each time, as real usage does;
 - **20 helpers in 2 batches**, then `consolidate()` and probes that force the first group, the last group's branched field, a helper, and a contribution-provided group to have survived accumulation.
 
-## Results (TS 6.0.3, Apple Silicon, 2026-07)
+## Results (TS 6.0.3, type-fest 5.10.0, Apple Silicon, 2026-10)
 
 | profile | groups×fields | errors | instantiations | memory | time |
 | --- | --- | --- | --- | --- | --- |
-| S | 10×8 | none | 4,303 | 46MB | 0.17s |
-| M | 30×10 | none | 11,138 | 53MB | 0.23s |
-| L | 60×12 | none | 28,805 | 54MB | 0.24s |
-| XL | 100×15 | none | 66,207 | 67MB | 0.38s |
-| XXL | 150×20 | none | 135,212 | 61MB | 0.75s |
+| S | 10×8 | none | 4,303 | 47MB | 0.20s |
+| M | 30×10 | none | 11,138 | 60MB | 0.21s |
+| L | 60×12 | none | 28,805 | 58MB | 0.26s |
+| XL | 100×15 | none | 66,207 | 60MB | 0.39s |
+| XXL | 150×20 | none | 135,212 | 80MB | 0.77s |
 
 - **No TS2589 at any profile.** XXL is ~3,000 leaf fields across 150 groups plus contributions, derives, and helpers — far beyond a plausible design system — and stays under a second of check time with near-linear instantiation growth.
 - **Payload width is benign.** The first spike's blow-up axis was _naive per-step `Simplify` across many links_; wide payloads on few links do not reproduce it. The lean rules are the load-bearing part, not the link count.
 - **Three facets are benign.** Accumulating `S`/`V`/`U` in parallel multiplies parameters per instantiation, not instantiation _depth_ — no compounding.
 
-## DX at scale (selenita, all green, ~1s for the suite)
+## DX at scale (Selenita 0.3, TypeScript 6.0.2 backend)
 
 | id | claim |
 | --- | --- |

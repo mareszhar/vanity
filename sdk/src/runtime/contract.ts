@@ -11,7 +11,11 @@ import type {
   VanitySemanticTokenAddress,
 } from '../tokens/handle'
 import type {
+  VanityCaseInput,
+  VanityCaseVal,
   VanityStandardSchemaV1,
+  VanityTokenBranchHandle,
+  VanityTokenCaseSelector,
   VanityTokenFallback,
   VanityTokenHandleAny,
 } from '../tokens/types'
@@ -351,6 +355,7 @@ export interface VanityRuntimeOptions {
   readonly dev?: boolean
 }
 
+/** Runtime setters available only on declared mutable token addresses. */
 export interface VanityRuntimeMutableActions<Type extends VanityCssDataType = VanityCssDataType> {
   /** Set a mutable token or branch to a validated runtime value. */
   readonly $set: (input: VanityRuntimeInput<Type>) => void
@@ -370,24 +375,35 @@ type RuntimeAxes<Axes, Mutable extends boolean, Type extends VanityCssDataType> 
 type RuntimeMutability<Handle extends VanityTokenHandleAny>
   = [Handle['$mutable']] extends [true] ? true : false
 
+/** Select authored runtime cases with precise values and permitted setters. */
+export interface VanityRuntimeCaseSelector<Cases, Mutable extends boolean, Type extends VanityCssDataType> {
+  /** @param when - Exact axis-mode address of an authored case; mutable branches expose runtime setters. */
+  <const When extends Parameters<VanityTokenCaseSelector<Cases, Mutable>>[0]>(when: VanityCaseInput<Cases, When>): RuntimeBranch<
+    VanityTokenBranchHandle<VanityCaseVal<Cases, When>, Mutable>,
+    Mutable,
+    Type
+  >
+}
+
+type RuntimeCase<Handle extends VanityTokenHandleAny>
+  = Handle['$case'] extends VanityTokenCaseSelector<infer Cases, boolean>
+    ? VanityRuntimeCaseSelector<Cases, RuntimeMutability<Handle>, Handle['$type']>
+    : never
+
 type RuntimeToken<Handle extends VanityTokenHandleAny>
   = Omit<Handle, '$axes' | '$case'>
     & (RuntimeMutability<Handle> extends true
       ? VanityRuntimeMutableActions<Handle['$type']>
       : object)
     & {
+      /** Branch controls grouped by axis and mode; mutable branches expose $set and $unset. */
       readonly $axes: RuntimeAxes<
         Handle['$axes'],
         RuntimeMutability<Handle>,
         Handle['$type']
       >
-      readonly $case: (
-        when: Parameters<Handle['$case']>[0],
-      ) => RuntimeBranch<
-        ReturnType<Handle['$case']>,
-        RuntimeMutability<Handle>,
-        Handle['$type']
-      >
+      /** Select an authored intersection branch; mutable branches expose $set and $unset. */
+      readonly $case: RuntimeCase<Handle>
     }
 
 /** Recursively project token handles into the runtime setter surface. */
@@ -414,11 +430,19 @@ export interface VanityRuntimeCycleOptions<Mode extends string> {
 /** Recursively expose runtime axis selection and activation operations. */
 export type VanityRuntimeAxes<Axes extends VanityAxisDefinitions> = {
   readonly [Axis in keyof Axes]: {
-    readonly $switchTo: (mode: ActivatableModeName<Axes[Axis]>) => void
+    /** Activate a declared controllable mode at this axis's runtime roots. */
+    readonly $switchTo: {
+      /** @param mode - A declared mode with runtime activation support; media-only modes cannot be selected. */
+      (mode: ActivatableModeName<Axes[Axis]>): void
+    }
+    /** Activate the next mode in declared order, optionally skipping excluded modes. */
     readonly $cycle: (options?: VanityRuntimeCycleOptions<ActivatableModeName<Axes[Axis]>>) => void
+    /** Read the mode shared by this axis's roots; undefined means unknown, unavailable, or disagreement. */
     readonly $current: () => ActivatableModeName<Axes[Axis]> | undefined
   } & {
+    /** Activate this declared mode at the axis's runtime roots. */
     readonly [Mode in ActivatableModeName<Axes[Axis]>]: {
+      /** Activate this declared mode at the axis's runtime roots. */
       readonly $activate: () => void
     }
   }

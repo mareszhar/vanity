@@ -1,6 +1,6 @@
 /** Language-service contracts for the fluent CSS value surface. */
 
-import { cursor } from '@mszr/selenita'
+import { cursor, mark } from '@mszr/selenita'
 import { vanityProject } from '@test'
 import { describe, expect, it } from 'vitest'
 
@@ -13,17 +13,34 @@ describe('cSS value editor DX', () => {
       void calc('1rem').${cursor}
     `
 
-    expect(completions).toContainCompletions(['add', 'subtract', 'multiply', 'divide', 'negate', 'css'])
+    expect(completions).toSuggest(['add', 'subtract', 'multiply', 'divide', 'negate', 'css', 'type', 'dimension'], { requireDocumentation: true })
   })
 
   it('a dimensional mistake is one diagnostic at its operand', () => {
-    const { errors } = project.check`
-      import { calc } from '@mszr/vanity'
-      void calc('1rem').add('20deg')
+    for (const operation of ['add', 'subtract']) {
+      const result = project.check`
+        import { calc } from '@mszr/vanity'
+        void calc('1rem').${operation}('20deg')
+      `
+      expect(result).toHaveErrorCount(1)
+      expect(result).toHaveError(/calc cannot add or subtract length and angle: use compatible dimensions/, { on: '\'20deg\'' })
+      expect(project.check({ '__selenita__.ts': result.files['__selenita__.ts']!.replace('20deg', '20px') })).toBeClean()
+    }
+    const uncertain = project.check`
+      import { angle, calc, length } from '@mszr/vanity'
+      const operand = Math.random() > 0.5 ? length.rem(1) : angle.deg(20)
+      void calc('1rem').add(${mark('operand')`operand`})
+      void calc(operand).subtract('1px')
     `
-
-    expect(errors).toHaveErrorCount(1)
-    expect(errors).toHaveError(/20deg|never/)
+    expect(uncertain).toHaveErrorCount(2)
+    expect(uncertain).toHaveError(/length and angle: use compatible dimensions/, { on: uncertain.rangeOf('operand') })
+    expect(uncertain).toHaveError(/angle and length: use compatible dimensions/, { on: '\'1px\'' })
+    expect(project.check({ '__selenita__.ts': uncertain.files['__selenita__.ts']!.replace('angle.deg(20)', 'length.px(20)').replace('angle, calc', 'calc') })).toBeClean()
+    const guidance = project.query`
+      import { calc } from '@mszr/vanity'
+      calc('1rem').add(${cursor})
+    `.signatureHelp
+    expect(guidance?.activeParameter?.documentation).toContain('lengths and percentages may combine')
   })
 
   it('grid helpers complete as one focused namespace', () => {
@@ -32,7 +49,7 @@ describe('cSS value editor DX', () => {
       void grid.${cursor}
     `
 
-    expect(completions).toContainCompletions(['minmax', 'repeat', 'template', 'areas'])
+    expect(completions).toSuggest(['minmax', 'repeat', 'template', 'areas'])
   })
 
   it('relative color and channel operations are discoverable', () => {
@@ -49,9 +66,9 @@ describe('cSS value editor DX', () => {
       void channel.${cursor('channel')}
     `
 
-    expect(result.at('oklch').completions).toContainCompletion('from')
-    for (const family of ['rgb', 'hsl', 'hwb', 'lab', 'lch', 'oklab', 'color'])
-      expect(result.at(family).completions).toContainCompletion('from')
-    expect(result.at('channel').completions).toContainCompletions(['set', 'add', 'subtract', 'multiply', 'divide'])
+    expect(result.at('oklch')).toSuggest('from')
+    for (const family of ['rgb', 'hsl', 'hwb', 'lab', 'lch', 'oklab', 'color'] as const)
+      expect(result.at(family)).toSuggest('from')
+    expect(result.at('channel')).toSuggest(['set', 'add', 'subtract', 'multiply', 'divide'], { requireDocumentation: true })
   })
 })

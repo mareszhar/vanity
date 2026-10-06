@@ -36,6 +36,7 @@ export class TextContrastCheck {
   }
 }
 
+/** Define build-time token guarantees, including foreground/background contrast checks. */
 export const check = {
   /** Assert `text` stays legible over `background`, in both schemes. */
   textContrast: (text: VanityColorish, background: VanityColorish): TextContrastCheck =>

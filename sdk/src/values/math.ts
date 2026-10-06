@@ -86,8 +86,18 @@ export type VanityQuotientDimension<
     : A extends B ? 'number'
       : 'unknown'
 
+type IncompatibleSum<Left extends VanityMathDimension, Right extends VanityMathDimension>
+  = 'unknown' extends Left | Right ? never
+    : Left extends unknown
+      ? Right extends unknown
+        ? VanitySumDimension<Left, Right> extends never ? `calc cannot add or subtract ${Left} and ${Right}: use compatible dimensions` : never
+        : never
+      : never
+
 type SumInput<Dimension extends VanityMathDimension, Input extends VanityCssInput>
-  = Input & (VanitySumDimension<Dimension, VanityDimensionOf<Input>> extends never ? never : unknown)
+  = Input & ([IncompatibleSum<Dimension, VanityDimensionOf<Input>>] extends [never]
+    ? unknown
+    : { readonly [Message in IncompatibleSum<Dimension, VanityDimensionOf<Input>>]: never })
 
 type JoinDimensions<
   Inputs extends readonly VanityCssInput[],
@@ -107,14 +117,30 @@ type DataTypeOfDimension<Dimension extends VanityMathDimension>
 
 export interface VanityMathValue<Dimension extends VanityMathDimension = VanityMathDimension>
   extends VanityCssValue<string, DataTypeOfDimension<Dimension>> {
+  /** Inferred numeric dimension used to validate calculation operands. */
   readonly dimension: Dimension
 }
 
 export interface VanityCalc<Dimension extends VanityMathDimension = VanityMathDimension> extends VanityMathValue<Dimension> {
-  add: <const Input extends VanityCssInput>(value: SumInput<Dimension, Input>) => VanityCalc<VanitySumDimension<Dimension, VanityDimensionOf<Input>>>
-  subtract: <const Input extends VanityCssInput>(value: SumInput<Dimension, Input>) => VanityCalc<VanitySumDimension<Dimension, VanityDimensionOf<Input>>>
+  /**
+   * Return a new calculation adding a compatible dimension; leaves this value unchanged.
+   */
+  add: {
+    /** @param value - Operand compatible with this calculation's dimension; lengths and percentages may combine. */
+    <const Input extends VanityCssInput>(value: SumInput<Dimension, Input>): VanityCalc<VanitySumDimension<Dimension, VanityDimensionOf<Input>>>
+  }
+  /**
+   * Return a new calculation subtracting a compatible dimension.
+   */
+  subtract: {
+    /** @param value - Operand compatible with this calculation's dimension; lengths and percentages may combine. */
+    <const Input extends VanityCssInput>(value: SumInput<Dimension, Input>): VanityCalc<VanitySumDimension<Dimension, VanityDimensionOf<Input>>>
+  }
+  /** Return a new calculation with the product's inferred dimension. */
   multiply: <const Input extends VanityCssInput>(value: Input) => VanityCalc<VanityProductDimension<Dimension, VanityDimensionOf<Input>>>
+  /** Return a new calculation with the quotient's inferred dimension. */
   divide: <const Input extends VanityCssInput>(value: Input) => VanityCalc<VanityQuotientDimension<Dimension, VanityDimensionOf<Input>>>
+  /** Return a new calculation with its sign reversed and its dimension preserved. */
   negate: () => VanityCalc<Dimension>
 }
 

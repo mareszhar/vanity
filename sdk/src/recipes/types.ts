@@ -120,10 +120,13 @@ export interface VanityRecipe<
   readonly props: TProps
   /** The typed variant map: axis → declared values, for prop forwarding and docs. */
   readonly variants: TVariants
+  /** Declared boolean toggle names accepted by the recipe. */
   readonly toggles: readonly TToggle[]
+  /** Variant and toggle choices used when callers omit them. */
   readonly defaults: Readonly<Partial<TProps>>
   /** The component's published runtime style API ([spec-recipes.md §2]). */
   readonly ports: TPorts
+  /** Return the recipe's stable base class for selector interpolation. */
   toString: () => string
 }
 
@@ -137,6 +140,7 @@ export interface VanityRecipeFactory<C extends string, L extends string> {
     options: VanityRecipeOptions<C, L, V, G, P>,
     debugId?: string,
   ): VanityRecipe<VanityRecipeProps<V, G>, VanityVariantValues<V>, keyof G & string, P>
+  /** Bind subsequent recipes to one declared cascade layer. */
   readonly layer: <Layer extends L>(name: Layer) => VanityRecipeFactory<C, Layer>
 }
 
@@ -241,14 +245,19 @@ export interface VanityAnatomy<
   TToggle extends string = never,
   TPorts extends VanityPortsInput = VanityNoInput,
 > {
+  /** Select precompiled classes for every part from shared variants and toggles. */
   (props?: TProps): Record<TPart, string>
   /** The inferred call-site props — the same carrier a recipe publishes. */
   readonly props: TProps
   /** Part → its stable class, for typed cross-file references. */
   readonly parts: Readonly<Record<TPart, string>>
+  /** The typed variant map: variant name to its declared values. */
   readonly variants: TVariants
+  /** Declared boolean toggle names accepted by the anatomy. */
   readonly toggles: readonly TToggle[]
+  /** Variant and toggle choices used when callers omit them. */
   readonly defaults: Readonly<Partial<TProps>>
+  /** Published component-owned ports available to application and SSR callers. */
   readonly ports: TPorts
 }
 
@@ -263,6 +272,7 @@ export interface VanityAnatomyFactory<C extends string, L extends string> {
     options: VanityAnatomyOptions<C, L, TParts, V, G, P>,
     debugId?: string,
   ): VanityAnatomy<TParts[number], VanityRecipeProps<V, G>, VanityVariantValues<V>, keyof G & string, P>
+  /** Bind subsequent anatomies to one declared cascade layer. */
   readonly layer: <Layer extends L>(name: Layer) => VanityAnatomyFactory<C, Layer>
 }
 

@@ -1,7 +1,6 @@
-import { cursor, defineProject } from '@mszr/selenita'
+import { cursor, defineProject, mark } from '@mszr/selenita/vitest'
 import { describe, expect, it } from 'vitest'
 import { channel, reference, serialize } from '../src/model'
-import '@mszr/selenita/vitest'
 
 const project = defineProject({
   tsconfig: './tsconfig.json',
@@ -22,23 +21,22 @@ describe('semantic reference rebinding', () => {
 
 describe('relative-channel DX', () => {
   it('keeps the full operation family after every link', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { channel } from '#src/model'
       channel().subtract(0.5).${cursor}
     `
-    expect(completions).toContainCompletion('add')
-    expect(completions).toContainCompletion('subtract')
-    expect(completions).toContainCompletion('multiply')
-    expect(completions).toContainCompletion('divide')
+    expect(observation).toSuggest('add')
+    expect(observation).toSuggest('subtract')
+    expect(observation).toSuggest('multiply')
+    expect(observation).toSuggest('divide')
   })
 
   it('underlines the incompatible operand rather than the whole chain', () => {
-    const { errors } = project.check`
+    const observation = project.check`
       import { channel } from '#src/model'
-      channel().subtract({ nope: true }).multiply(-1000)
+      channel().subtract({ ${mark('operand')`nope`}: true }).multiply(-1000)
     `
-    expect(errors).toHaveLength(1)
-    expect(errors[0]!.line).toBe(3)
-    expect(errors[0]!.column).toBeGreaterThan(20)
+    expect(observation).toHaveErrorCount(1)
+    expect(observation).toHaveError(2353, /nope/, { on: observation.rangeOf('operand') })
   })
 })

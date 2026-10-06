@@ -6,10 +6,10 @@ A compiler can retain accepted exports while their replacement is being prepared
 
 ## Run
 
-Use the workspace-pinned Node. The standalone package pins pnpm and its dependencies:
+Use the workspace-pinned Node and pnpm. Dependencies use the shared catalog and root lockfile. From this directory:
 
 ```sh
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 pnpm test
 ```

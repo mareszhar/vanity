@@ -90,7 +90,9 @@ export interface VanityCondition<
   Activatable extends boolean = false,
 > {
   readonly [VANITY_CONDITION_ACTIVATABLE]?: Activatable
+  /** Lowered alternatives of selectors and at-rules that activate this condition. */
   readonly arms: readonly VanityConditionArm[]
+  /** Structured condition expression used by introspection and composition. */
   readonly ast?: VanityConditionAst
   /**
    * The exact selector or at-rule emitted by the condition.
@@ -129,13 +131,17 @@ export interface VanityFluentCondition<
   Compiled extends string = string,
   Activatable extends boolean = false,
 > extends VanityCondition<Compiled, Activatable> {
+  /** Structured condition expression used by introspection and composition. */
   readonly ast: VanityConditionAst
+  /** Return a new condition requiring both this condition and the supplied condition. */
   readonly and: <Other extends VanityConditionInput>(
     other: Other,
   ) => VanityFluentCondition<string, IntersectedActivatable<Compiled, Activatable, Other>>
+  /** Return a new condition matching either this condition or the supplied condition. */
   readonly or: <Other extends VanityConditionInput>(
     other: Other,
   ) => VanityFluentCondition<string, EitherActivatable<Activatable, Other>>
+  /** Return a new condition negating this condition through its CSS selector or query. */
   readonly not: () => VanityFluentCondition<string>
 }
 

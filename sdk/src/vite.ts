@@ -1539,7 +1539,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
         : typeof plugins === 'object'
           && plugins !== null
           && 'name' in plugins
-          && plugins.name === 'vitest'
+          && (plugins.name === 'vitest' || plugins.name === 'vitest:config')
 
       return !hasVitestPlugin(config.plugins)
     },

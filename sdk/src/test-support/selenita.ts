@@ -1,20 +1,15 @@
-/**
- * The selenita project for editor-DX suites, wired once.
- *
- * The package tsconfig maps `@mszr/vanity` (and subpaths) onto `src/`, so
- * snippets read exactly like userland code and resolve against our real types.
- */
-import { resolve } from 'node:path'
-import process from 'node:process'
-import { defineProject } from '@mszr/selenita'
-import '@mszr/selenita/vitest'
+/** Editor projects resolve package imports through the SDK tsconfig's source aliases. */
+import type { Plugin, Project, ProjectConfig } from '@mszr/selenita'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { defineProject } from '@mszr/selenita/vitest'
 
-// Resolve from cwd (the package dir under Vitest) rather than import.meta.url.
-function tsconfigPath() {
-  return resolve(process.cwd(), 'tsconfig.json')
+/** Declare at collection time; the Vitest scope owns warm-up and disposal. */
+export function vanityProject(...configs: ProjectConfig[]): Project {
+  return defineProject({ tsconfig: './tsconfig.json' }, ...configs)
 }
 
-/** Call at module scope (it registers `beforeAll`/`afterAll`). */
-export function vanityProject(): ReturnType<typeof defineProject> {
-  return defineProject({ tsconfig: tsconfigPath() })
-}
+/** The shipped plugin runs against Selenita's native language service. */
+export const vanityTypeScriptPlugin = createRequire(import.meta.url)(
+  fileURLToPath(new URL('../../typescript.cjs', import.meta.url)),
+) as Plugin

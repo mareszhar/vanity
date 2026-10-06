@@ -208,11 +208,11 @@ export function catalogUpdateChoices(
   })
 }
 
-/** Return the named peer catalog block that defines the published contract. */
-export function namedPeerCatalog(source: string): string {
+/** Return named catalog policies, including published peers and version-specific hosts. */
+export function getNamedCatalogPolicies(source: string): string {
   const header = /^catalogs:[ \t]*(?:#[^\r\n]*)?\r?$/m.exec(source)
   if (header === null)
-    throw new Error('Unable to preserve the published peer compatibility catalog.')
+    throw new Error('Unable to preserve the named catalog policies.')
 
   const bodyStart = header.index + header[0].length
   const nextSetting = source.slice(bodyStart).search(/^[^\s#]/m)
@@ -222,10 +222,10 @@ export function namedPeerCatalog(source: string): string {
 /** Restore workspace policies that the updater is not allowed to change. */
 export function restoreProtectedCatalogEntries(
   source: string,
-  originalPeerCatalog: string,
+  originalNamedCatalogs: string,
   protectedEntries: readonly ProtectedCatalogEntry[],
 ): string {
-  let restoredSource = source.replace(namedPeerCatalog(source), originalPeerCatalog)
+  let restoredSource = source.replace(getNamedCatalogPolicies(source), originalNamedCatalogs)
 
   for (const entry of protectedEntries) {
     if (!entry.pattern.test(restoredSource))

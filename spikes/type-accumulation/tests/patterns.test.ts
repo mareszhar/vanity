@@ -1,37 +1,36 @@
-import { cursor, defineProject } from '@mszr/selenita'
+import { cursor, defineProject } from '@mszr/selenita/vitest'
 import { describe, expect, it } from 'vitest'
-import '@mszr/selenita/vitest'
 
 const project = defineProject({ tsconfig: './tsconfig.json', aliases: { '#src/*': './src/*' } })
 
 describe('p1/P2 — additive accumulation is visible to later callbacks', () => {
   it('derive() sees groups added earlier', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { create } from '#src/builder'
       create()
         .add('color', { brand: 'red' })
         .add('space', { md: 'x' })
         .derive(shape => { shape.${cursor}; return {} })
     `
-    expect(completions).toContainCompletion('color')
-    expect(completions).toContainCompletion('space')
+    expect(observation).toSuggest('color')
+    expect(observation).toSuggest('space')
   })
 
   it('fields of an accumulated group are visible', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { create } from '#src/builder'
       create()
         .add('color', { brand: 'red', ink: 'black' })
         .derive(shape => { shape.color.${cursor}; return {} })
     `
-    expect(completions).toContainCompletion('brand')
-    expect(completions).toContainCompletion('ink')
+    expect(observation).toSuggest('brand')
+    expect(observation).toSuggest('ink')
   })
 })
 
 describe('p3 — a field may be a value OR a callback; both resolve to the value type', () => {
   it('a callback field resolves to its return type in the accumulated shape', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { create } from '#src/builder'
       create()
         .add('color', { brand: 'red', ink: tools => tools.unit(1) }) // ink via callback
@@ -41,16 +40,20 @@ describe('p3 — a field may be a value OR a callback; both resolve to the value
           return { s: {} }
         })
     `
-    expect(completions).toContainCompletion('brand')
-    expect(completions).toContainCompletion('ink')
+    expect(observation).toSuggest('brand')
+    expect(observation).toSuggest('ink')
   })
 
-  it('the callback receives the typed tools', () => {
-    const { completions } = project.query`
+  it('the unfinished callback receives typed tools after native diagnostics', () => {
+    const observation = project.query`
       import { create } from '#src/builder'
       create().add('space', { md: tools => tools.${cursor} })
     `
-    expect(completions).toContainCompletion('unit')
+    // Native TypeScript resolves this reverse-mapped callback's context during
+    // semantic diagnostics. Observe that before requesting its completions.
+    expect(observation).toHaveErrorCount(1)
+    expect(observation).toHaveError(1003)
+    expect(observation).toSuggest('unit')
   })
 })
 
@@ -88,25 +91,25 @@ describe('p4 — structural additive requirement with a readable error', () => {
   })
 
   it('a contribution that PROVIDES a group makes it visible downstream', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { create, contribution } from '#src/builder'
       const plugin = contribution({ id: 'p', requires: {}, provides: { motion: { on: 'x', off: 'y' } } })
       create().use(plugin).derive(shape => { shape.${cursor}; return {} })
     `
-    expect(completions).toContainCompletion('motion')
+    expect(observation).toSuggest('motion')
   })
 })
 
 describe('p5 — consolidate() drops the mutation methods', () => {
   it('read is present, add/derive/use/consolidate are gone', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { create } from '#src/builder'
       const consolidated = create().add('color', { brand: 'red' }).consolidate()
       consolidated.${cursor}
     `
-    expect(completions).toContainCompletion('read')
-    expect(completions).not.toContainCompletion('add')
-    expect(completions).not.toContainCompletion('use')
-    expect(completions).not.toContainCompletion('consolidate')
+    expect(observation).toSuggest('read')
+    expect(observation).not.toSuggest('add')
+    expect(observation).not.toSuggest('use')
+    expect(observation).not.toSuggest('consolidate')
   })
 })

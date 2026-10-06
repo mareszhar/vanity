@@ -1,11 +1,11 @@
 # Spike: ambient auto-imports across a package boundary
 
-A **library-agnostic** probe of the question raised by a monorepo adopter: a package authors `*.css.ts` and **ships TypeScript source**, so every downstream program that compiles that source inherits its ambient-declaration requirement. Today that surfaces as `error TS2304: Cannot find name 'cls'` pointing at a file in a *different* package, fixable only by giving every consumer — including consumers with no styling concern — a `vanity.config.ts`, a `types` entry, a `@mszr/vanity` devDependency, and a `prepare` step.
+A **library-agnostic** experiment in publishing TypeScript source with an ambient-declaration dependency. A downstream program that compiles source containing bare authoring names must receive those declarations, even when that consumer has no styling configuration of its own.
 
 Two questions, both empirical:
 
 1. can a **type-only unlock import** (`import type {} from '<pkg>/vanity-style-auto-imports'`) carry the declaration dependency with the source, so consumers need nothing?
-2. if it can, does it **compose** with a host that generates its own declarations the way vanity does today?
+2. if it can, does it **compose** with a host that generates its own declarations with the same global names?
 
 Verdict: **yes to (1); (2) collides under `declare const` and composes under `declare var`, which still rejects genuinely divergent declarations.**
 
@@ -13,7 +13,7 @@ Verdict: **yes to (1); (2) collides under `declare const` and composes under `de
 
 ```sh
 cd spikes/ambient-boundary
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm test
 ```
 

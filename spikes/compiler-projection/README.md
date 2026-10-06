@@ -12,7 +12,7 @@ Nothing here imports the product. The spike implements the smallest neutral `con
 
 ```sh
 cd spikes/compiler-projection
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm run check
 pnpm run test
 # or both:

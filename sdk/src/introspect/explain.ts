@@ -86,30 +86,53 @@ function getSemanticEntries(map: VanitySystemMap): VanitySemanticEntry[] {
   ]
 }
 
+/** Structured token provenance, resolved behavior and available build evidence. */
 export interface VanityTokenExplanation {
+  /** Authored token path as segments, independent of generated CSS names. */
   readonly path: readonly string[]
+  /** Authored file and position when source metadata is available. */
   readonly source?: { readonly file?: string, readonly line?: number, readonly column?: number }
+  /** Generated custom-property name when the token emits or uses a variable. */
   readonly name?: `--${string}`
+  /** Resolved CSS data type used by declarations and runtime validation. */
   readonly type: VanityTokenRecord['semantic']['type']
+  /** Canonical value expression retained for semantic inspection. */
   readonly expression: VanityTokenRecord['semantic']['expression']
+  /** Token paths referenced by this expression. */
   readonly dependencies: VanityTokenRecord['semantic']['dependencies']
+  /** Whether consumers reference a folded value or a CSS variable. */
   readonly reference: 'val' | 'var'
+  /** Whether the system emits this token's custom-property declaration. */
   readonly emit: boolean
+  /** Whether runtime overrides are permitted for this token. */
   readonly mutable: boolean
+  /** Whether a base value exists; reservations can have branches without one. */
   readonly hasDefault: boolean
+  /** How the resolved type was inferred, including inference limits. */
   readonly inference: VanityTokenRecord['semantic']['inference']
+  /** Build-time folding outcome and the reason when folding is unavailable. */
   readonly fold: VanityTokenRecord['semantic']['fold']
+  /** Resolved value in the declared default environment, or its unavailability reason. */
   readonly preview:
     | { readonly status: 'resolved', readonly val: string, readonly environment: Readonly<Record<string, string>> }
     | { readonly status: 'unavailable', readonly reason: string }
+  /** Browser support requirements carried by the expression. */
   readonly support: VanityTokenRecord['semantic']['support']
+  /** Emitted declaration contexts, including roots, layers, selectors and at-rules. */
   readonly declarations: VanityTokenRecord['semantic']['declarations']
+  /** Authored and derived axis/case branches with their resolved behavior. */
   readonly branches: VanityTokenRecord['semantic']['branches']
+  /** CSS property registration when the token declares one. */
   readonly registration?: VanityTokenRecord['semantic']['registration']
+  /** Portable runtime contract when this token has runtime behavior. */
   readonly runtime?: VanityTokenRecord['runtime']
+  /** Whether the expression can cross the build/runtime boundary and any restriction. */
   readonly portability: VanityTokenRecord['semantic']['portability']
+  /** Authored application metadata preserved without interpretation. */
   readonly metadata: Readonly<Record<string, unknown>>
+  /** Authored human-readable token documentation. */
   readonly description?: string
+  /** Authored migration guidance for a deprecated token. */
   readonly deprecated?: string
 }
 

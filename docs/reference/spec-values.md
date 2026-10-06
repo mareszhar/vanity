@@ -71,6 +71,8 @@ ds.length(2)              // the bound spelling, also 2rem
 
 The top-level form is portable and policy-agnostic at construction. The bound form has the same runtime value brand but is projected through the system's policy for completion, hover, and restriction diagnostics. Bare adaptive values resolve when they enter/consolidate in a host; explicit units such as `length.px(8)` are immune.
 
+Constructor and unit-member documentation remains available through both forms. Unit members explain their CSS basis while preserving the numeric literal in the returned value. Calculation `add()` and `subtract()` guide the active argument, accept compatible dimensions including length with percentage, and identify incompatible dimensions at the offending operand. A union of known dimensions with an incompatible pair requires narrowing before the sum. Context-dependent or raw values with an unknown dimension retain build-time validation.
+
 System-bound constructors form an open namespace:
 
 ```TS

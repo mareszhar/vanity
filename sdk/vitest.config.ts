@@ -27,13 +27,10 @@ export default defineConfig({
     },
   },
   test: {
-    globals: true,
     // Selenita spins up a TypeScript language service for the editor-DX suites;
     // CI runners can exceed Vitest's default budgets.
     hookTimeout: 30_000,
-    // Rename-symbol fixtures each hydrate two whole-project language services.
-    // Parallel DX suites can exceed the default 30s timeout on otherwise
-    // healthy runs; keep the contract assertion deterministic under load.
+    // Whole-project editor fixtures can exceed the default timeout under load.
     testTimeout: 60_000,
     // Runtime (*.test.ts), editor-DX (*.dx.test.ts), and output (*.out.test.ts)
     // planes all match this.

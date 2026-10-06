@@ -24,19 +24,22 @@ describe('runtime editor DX', () => {
       void runtime.t.color.fixed.${cursor('fixed')}
       void runtime.axes.scheme.${cursor('axis')}
       void runtime.axes.scheme.dark.${cursor('mode')}
+      void runtime.axes.scheme.$switchTo(${cursor('modeArgument')}'dark')
     `
 
-    expect(result.at('system').completions).toContainCompletions([
+    expect(result.at('system')).toSuggest([
       'runtime',
       'runtimeStyle',
       'runtimeProps',
       'reconcileRuntimeSnapshot',
     ])
-    expect(result.at('mutable').completions).toContainCompletions(['$set', '$unset', '$axes', '$case'])
-    expect(result.at('set').hover).toContain('Set a mutable token')
-    expect(result.at('fixed').completions).not.toContainCompletion('$set')
-    expect(result.at('axis').completions).toContainCompletions(['$switchTo', '$cycle', '$current', 'light', 'dark'])
-    expect(result.at('mode').completions).toContainCompletion('$activate')
+    expect(result.at('mutable')).toSuggest(['$set', '$unset', '$axes', '$case'], { requireDocumentation: true })
+    expect(result.at('set').hover?.documentation).toContain('Set a mutable token')
+    expect(result.at('fixed')).not.toSuggest('$set')
+    expect(result.at('axis')).toSuggest(['$switchTo', '$cycle', '$current'], { requireDocumentation: true })
+    expect(result.at('axis')).toSuggest(['light', 'dark'])
+    expect(result.at('mode')).toSuggest('$activate', { requireDocumentation: true })
+    expect(result.at('modeArgument').signatureHelp?.activeParameter?.documentation).toContain('media-only modes cannot be selected')
   })
 
   it('keeps wrong modes and no-target setters local', () => {
@@ -53,7 +56,7 @@ describe('runtime editor DX', () => {
     `
 
     expect(errors).toHaveErrorCount(3)
-    expect(errors).toHaveError(/\$set.*does not exist|Property '\$set'/)
+    expect(errors).toHaveError(/\$set.*does not exist|Property '\$set'/, { on: '$set' })
     expect(errors).toHaveError(/dense.*compact|not assignable/)
     expect(errors).toHaveError(/color.*length|not assignable/)
   })

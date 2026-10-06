@@ -6,6 +6,6 @@
     "test": "node run.mjs"
   },
   "devDependencies": {
-    "lightningcss": "1.33.0"
+    "lightningcss": "catalog:"
   }
 }

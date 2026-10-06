@@ -5,16 +5,18 @@ import {
   catalogUpdateChoices,
   catalogUpdateTargets,
   defaultCatalogNames,
-  namedPeerCatalog,
+  getNamedCatalogPolicies,
   reconcileDependencyUpdate,
   restoreProtectedCatalogEntries,
   semverChangeParts,
 } from './update-dependencies-core'
 
-const peerCatalogSource = `catalogs:
+const namedCatalogSource = `catalogs:
   peers:
     zeta: '>=1 <2'
     '@scope/alpha': '>=2 <3'
+  vite6:
+    vite: 6.4.3
 `
 
 const workspaceSource = `catalogMode: strict
@@ -25,7 +27,7 @@ catalog:
   # keep this catalog ordered
   beta: ^3.0.0
 
-${peerCatalogSource}
+${namedCatalogSource}
 
 blockExoticSubdeps: true
 `
@@ -112,14 +114,15 @@ ${JSON.stringify({
     assert.equal(semverChangeParts('1.2.3-beta.1', '1.2.3'), undefined)
   })
 
-  it('restores the peer catalog and protected default entries', () => {
-    const originalPeerCatalog = namedPeerCatalog(workspaceSource)
+  it('restores named catalog policies and protected default entries', () => {
+    const originalNamedCatalogs = getNamedCatalogPolicies(workspaceSource)
     const updatedSource = workspaceSource
       .replace('  zeta: ^1.0.0', '  zeta: ^2.0.0')
       .replace('    zeta: \'>=1 <2\'', '    zeta: \'>=2 <3\'')
       .replace('  beta: ^3.0.0', '  beta: ^4.0.0')
+      .replace('    vite: 6.4.3', '    vite: 8.3.1')
 
-    const restoredSource = restoreProtectedCatalogEntries(updatedSource, originalPeerCatalog, [
+    const restoredSource = restoreProtectedCatalogEntries(updatedSource, originalNamedCatalogs, [
       {
         name: 'zeta',
         range: '^1.0.0',
@@ -131,19 +134,20 @@ ${JSON.stringify({
     assert.match(restoredSource, / {2}zeta: \^1\.0\.0/)
     assert.match(restoredSource, / {4}zeta: '>=1 <2'/)
     assert.match(restoredSource, / {2}beta: \^4\.0\.0/)
+    assert.match(restoredSource, / {4}vite: 6\.4\.3/)
   })
 
-  it('preserves peer contracts independently of surrounding setting order', () => {
-    const expected = peerCatalogSource.trimEnd()
+  it('preserves named catalog policies independently of surrounding setting order', () => {
+    const expected = namedCatalogSource.trimEnd()
     const atEnd = workspaceSource.replace('\nblockExoticSubdeps: true\n', '')
     const reordered = `blockExoticSubdeps: true\n${atEnd}`
     const followedByOtherSetting = atEnd.replace(/\n*$/, '\n\nallowBuilds:\n  esbuild: false\n')
 
     for (const source of [atEnd, reordered, followedByOtherSetting, reordered.replaceAll('\n', '\r\n')]) {
-      assert.equal(namedPeerCatalog(source).trimEnd().replaceAll('\r\n', '\n'), expected)
+      assert.equal(getNamedCatalogPolicies(source).trimEnd().replaceAll('\r\n', '\n'), expected)
       const changed = source.replace('    zeta:', '    replaced:')
       assert.equal(
-        restoreProtectedCatalogEntries(changed, namedPeerCatalog(source), []).trimEnd(),
+        restoreProtectedCatalogEntries(changed, getNamedCatalogPolicies(source), []).trimEnd(),
         source.trimEnd(),
       )
     }

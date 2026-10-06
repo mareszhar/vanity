@@ -8,8 +8,8 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@mszr/selenita": "^0.2.2",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "@mszr/selenita": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

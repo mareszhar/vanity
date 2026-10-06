@@ -22,19 +22,19 @@ describe('token builder and condition editor DX', () => {
       void state.${cursor('condition')}
     `
 
-    expect(result.at('tdef').completions).toContainCompletions([
+    expect(result.at('tdef')).toSuggest([
       'color',
       'length',
       'angle',
       'time',
       'number',
     ])
-    expect(result.at('builder').completions).toContainCompletions(['add', 'refs', 'root'])
-    expect(result.at('add').hover).toContain('Add a named value')
-    expect(result.at('builder').completions).not.toContainCompletion('t')
-    expect(result.at('axis').completions).toContainCompletion('density')
-    expect(result.at('axis').completions).not.toContainCompletions(['config', 'type'])
-    expect(result.at('condition').completions).toContainCompletions(['and', 'or', 'not', 'ast', 'arms'])
+    expect(result.at('builder')).toSuggest(['add', 'refs', 'root'])
+    expect(result.at('add').hover?.documentation).toContain('Add a named value')
+    expect(result.at('builder')).not.toSuggest('t')
+    expect(result.at('axis')).toSuggest('density')
+    expect(result.at('axis')).not.toSuggest(['config', 'type'])
+    expect(result.at('condition')).toSuggest(['and', 'or', 'not', 'ast', 'arms'], { requireDocumentation: true })
   })
 
   it('keeps duplicate names, axis modes, ranges, and order failures local', () => {

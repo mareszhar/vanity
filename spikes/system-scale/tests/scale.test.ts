@@ -10,9 +10,8 @@
  *   SC3  additive-only still errors at the cursor, readably, at scale
  *   SC4  an unmet requirement still collapses to the readable message at scale
  */
-import { cursor, defineProject } from '@mszr/selenita'
+import { cursor, defineProject } from '@mszr/selenita/vitest'
 import { describe, expect, it } from 'vitest'
-import '@mszr/selenita/vitest'
 
 const project = defineProject({
   tsconfig: './tsconfig.json',
@@ -21,34 +20,34 @@ const project = defineProject({
 
 describe('sc1 — the accumulated tree is fully visible at the end of a realistic chain', () => {
   it('derive completions include the first group, the last group, plugin groups, and derived groups', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { sys } from '#gen/m'
       sys.derive(t => { t.${cursor}; return {} })
     `
-    expect(completions).toContainCompletion('g0')
-    expect(completions).toContainCompletion('g29')
-    expect(completions).toContainCompletion('ctl7')
-    expect(completions).toContainCompletion('d20')
+    expect(observation).toSuggest('g0')
+    expect(observation).toSuggest('g29')
+    expect(observation).toSuggest('ctl7')
+    expect(observation).toSuggest('d20')
   })
 })
 
 describe('sc2 — deep reads stay typed at scale', () => {
   it('a branched field completes its branches inside a derive callback', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { sys } from '#gen/m'
       sys.derive(t => { t.g29.f2.${cursor}; return {} })
     `
-    expect(completions).toContainCompletion('light')
-    expect(completions).toContainCompletion('dark')
+    expect(observation).toSuggest('light')
+    expect(observation).toSuggest('dark')
   })
 
   it('the consolidated surface reads the same way', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { locked } from '#gen/m'
       locked.t.g29.f2.${cursor}
     `
-    expect(completions).toContainCompletion('light')
-    expect(completions).toContainCompletion('dark')
+    expect(observation).toSuggest('light')
+    expect(observation).toSuggest('dark')
   })
 })
 

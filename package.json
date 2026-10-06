@@ -37,6 +37,8 @@
     "sdk:test:types": "pnpm --dir sdk run test:types",
     "sdk:test:vite-compat": "tsx scripts/run-vite-graph-compat.ts",
     "sdk:test:watch": "pnpm --dir sdk run test:watch",
+    "spikes:check": "pnpm --filter 'spike-*' --workspace-concurrency=1 --if-present run check",
+    "spikes:test": "pnpm --filter 'spike-*' --workspace-concurrency=1 --if-present run test",
     "bench:generate": "tsx scripts/generate-benchmarks.ts",
     "bench:fixtures:check": "tsx scripts/generate-benchmarks.ts --check",
     "bench:resolution": "tsx scripts/benchmark-resolution.ts",

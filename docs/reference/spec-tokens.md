@@ -71,6 +71,8 @@ Definition fields preserve independent traits:
 
 Absent, reserved-without-value, and CSS `unset` are distinct states.
 
+`token.$case(when)` selects an authored address exactly. A literal address retains that case's value type; a variable spanning several authored addresses returns their possible value types. Extra keys and unauthored combinations are rejected. A `null` reservation has `$val: undefined`, and runtime controls preserve this inference while adding setters only for mutable tokens.
+
 ## 3. Policy and inference
 
 The zero-config shorthand remains inspectable and CSS-reactive:

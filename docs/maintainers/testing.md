@@ -215,7 +215,7 @@ For every new public API, lock:
 - diagnostic range on the offending key/value;
 - readable hover free of internal conditional-type walls;
 - definition and references across token modules;
-- rename from definition and consumer;
+- graph-owned rename from definition and consumer, with same-name independent graphs and a native ordinary-binding control;
 - unrelated graph/system isolation;
 - no `undefined` pollution in valid staged callbacks;
 - system/axis/plugin literal preservation without `as const` ceremony;
@@ -238,11 +238,17 @@ Auto-import integrations receive the same tests as explicit imports. A generated
 
 System namespace fixtures lock the exported reserved-member set, namespaced plugin convention, constructor/plugin/system collision diagnostics, and the rule that an unreserved core top-level addition is a system-surface version change.
 
+Editor fixtures use structured Selenita observations: type text and documentation are separate promises, exact diagnostic ranges prove locality, and suggested repair/import edits are applied and rechecked. Completion parity names its expected scopes and includes a known suggestion; equal empty sets prove no discovery. Packed testing consumers check declarations with `skipLibCheck: false` and exercise runner-owned and standalone lifecycles.
+
+Documented names must remain documented through root imports, bound constructors and returned handles. A comment on a mapped type is insufficient if the native service drops it from member completion. Extend existing domain fixtures to observe those projections and active-argument guidance; pair a local invalid input with a clean correction. Case selection covers literal and dynamic addresses, exact values, reservations and the runtime projection. Packed consumers emit and consume extracted selector declarations, and runtime types imported from the runtime entrypoint preserve core token identities. Keep these as consumer promises rather than inventories of type helpers or copies of repository strings.
+
 Type tests that merely assert assignability are insufficient for APIs whose product claim includes completion, rename, or error locality.
 
 ## 6. Performance benchmarks
 
 Record cold and warm results with environment metadata. Benchmarks are comparative gates against the accepted baseline on the same machine/CI class, not universal marketing numbers.
+
+A shared declaration import can increase cold checking for consumers that otherwise use one entrypoint. Measure that boundary separately from fixtures that already import core, and distinguish full library checking from warm editor operations.
 
 Required measurements:
 

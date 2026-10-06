@@ -1,6 +1,12 @@
 /** Browser-safe runtime binding over pre-emitted mutable custom-property slots. */
 
 import type {
+  VanityCustomPropertyEntries,
+  VanityCustomPropertyReference,
+  VanityCustomPropertyTarget,
+  VanityRuntimeInput,
+} from '@mszr/vanity'
+import type {
   VanityAxisControl,
   VanityAxisDefinitions,
 } from '../system/axes'
@@ -16,16 +22,12 @@ import type {
 } from '../tokens/types'
 import type { VanityCssDataType } from '../values/types'
 import type {
-  VanityCustomPropertyEntries,
-  VanityCustomPropertyReference,
-  VanityCustomPropertyTarget,
   VanityRuntimeAxes,
   VanityRuntimeContract,
   VanityRuntimeController,
   VanityRuntimeControllerFactory,
   VanityRuntimeCycleOptions,
   VanityRuntimeDiagnostic,
-  VanityRuntimeInput,
   VanityRuntimeInspection,
   VanityRuntimeOptions,
   VanityRuntimeProps,

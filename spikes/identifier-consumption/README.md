@@ -9,7 +9,7 @@ Layer and axis names become CSS layer names and selectors, so a name the browser
 Use the workspace-pinned Node and pnpm. From this directory:
 
 ```sh
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm test
 ```
 

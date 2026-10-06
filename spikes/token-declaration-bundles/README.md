@@ -8,3 +8,14 @@ This spike isolates the type law behind `$dec` before the implementation is used
 - `$` metadata does not leak into recursive token consumers.
 
 The permanent product evidence lives in `sdk/src/tokens/declarations.{test,test-d,dx.test}.ts`; this directory preserves the smaller model that made the recursive shape and diagnostic placement easy to reason about.
+
+## Run
+
+Use the workspace-pinned Node and pnpm. From this directory:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm run check
+```
+
+Dependencies use the shared catalog and root lockfile; the model imports no SDK code.

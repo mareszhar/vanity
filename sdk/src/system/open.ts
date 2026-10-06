@@ -758,11 +758,14 @@ export interface VanityOpenSystemMethods<
   /** Authored policies before consolidation resolves their defaults. */
   readonly policies: Readonly<VanityPolicies & ShapePolicies<Shape>>
 
+  /** Define detached, reusable system policy contributions without mounting them. */
   readonly definePolicies: typeof definePolicies
+  /** Add one absent system policy; returns a new open system. */
   readonly addPolicy: <const Name extends keyof VanityPolicies & string, const Value extends NonNullable<VanityPolicies[Name]>>(
     name: Name,
     value: Value | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Value),
   ) => VanityOpenSystem<ProjectSystemShape<Shape, Record<Name, Value>>, Tokens, Conditions, Consts, Utils, Plugins>
+  /** Add system policy definitions or a reusable module; returns a new open system. */
   readonly addPolicies: {
     <const Added extends VanityPolicies>(
       policies: Added | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Added),
@@ -778,10 +781,12 @@ export interface VanityOpenSystemMethods<
       Plugins
     >
   }
+  /** Replace an existing system policy definition explicitly and record provenance. */
   readonly overwritePolicy: <const Name extends keyof VanityPolicies & string, const Value extends NonNullable<VanityPolicies[Name]>>(
     name: Name,
     value: Value | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Value),
   ) => VanityOpenSystem<ProjectSystemShape<Shape, Record<Name, Value>>, Tokens, Conditions, Consts, Utils, Plugins>
+  /** Replace existing system policy definitions explicitly and record provenance. */
   readonly overwritePolicies: {
     <const Patch extends VanityPolicies>(
       policies: Patch | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Patch),
@@ -797,13 +802,16 @@ export interface VanityOpenSystemMethods<
       Plugins
     >
   }
+  /** Require an existing system policy immediately; throws at this call if absent. */
   readonly expectPolicy: <const Name extends keyof VanityPolicies & string>(
     name: Name,
   ) => VanityOpenSystem<WithSystemRequirements<Shape, { readonly policies: Name }>, Tokens, Conditions, Consts, Utils, Plugins>
+  /** Require existing system policy contributions immediately; throws at this call if any are absent. */
   readonly expectPolicies: <const Names extends readonly (keyof VanityPolicies & string)[]>(
     names: Names,
   ) => VanityOpenSystem<WithSystemRequirements<Shape, { readonly policies: Names[number] }>, Tokens, Conditions, Consts, Utils, Plugins>
 
+  /** Start a detached token builder using this system’s axes and token policy. */
   readonly defineTokens: <
     const Seed extends VanityTokenTreeContext<ShapeAxes<Shape>> = Record<never, never>,
   >(
@@ -855,6 +863,7 @@ export interface VanityOpenSystemMethods<
       factory: (system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Input & VanityCompositionGuard<Tokens, GraphOf<Input>>,
     ): VanityOpenSystem<Shape, VanityAdditiveGraph<Tokens, GraphOf<Input>>, Conditions, Consts, Utils, Plugins>
   }
+  /** Add one absent token name; returns a new open system. */
   readonly addToken: {
     <const Name extends string, const Input extends VanityLeafInput | VanityDerivedResult | VanityTokenConfig>(
       name: Name extends keyof Tokens ? never : Name,
@@ -865,12 +874,14 @@ export interface VanityOpenSystemMethods<
       input: (system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Input,
     ): VanityOpenSystem<Shape, VanityAdditiveGraph<Tokens, Record<Name, Input>>, Conditions, Consts, Utils, Plugins>
   }
+  /** Refine an existing token’s definition while preserving its identity. */
   readonly augmentToken: <const Name extends keyof Tokens & string>(
     name: Name,
     patch: TokenPatch<ResolvedTokenAt<Tokens, Name, ShapePolicy<Shape>>, ShapeAxes<Shape>>
       | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) =>
       TokenPatch<ResolvedTokenAt<Tokens, Name, ShapePolicy<Shape>>, ShapeAxes<Shape>>),
   ) => VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>
+  /** Refine existing token definitions while preserving their identities. */
   readonly augmentTokens: {
     <const Inputs extends readonly (
       VanityTokenModule<any, any> | VanityTokenBuilder<any, any, any>
@@ -896,12 +907,14 @@ export interface VanityOpenSystemMethods<
         TokenPatch<ResolvedTokens<Tokens, 'vanity-open', ShapePolicy<Shape>>, ShapeAxes<Shape>>),
     ): VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>
   }
+  /** Replace an existing token’s definition explicitly and record provenance. */
   readonly overwriteToken: <const Name extends keyof Tokens & string>(
     name: Name,
     patch: TokenPatch<ResolvedTokenAt<Tokens, Name, ShapePolicy<Shape>>, ShapeAxes<Shape>>
       | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) =>
       TokenPatch<ResolvedTokenAt<Tokens, Name, ShapePolicy<Shape>>, ShapeAxes<Shape>>),
   ) => VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>
+  /** Replace existing token definitions explicitly and record provenance. */
   readonly overwriteTokens: {
     <const Inputs extends readonly (
       VanityTokenModule<any, any> | VanityTokenBuilder<any, any, any>
@@ -928,11 +941,14 @@ export interface VanityOpenSystemMethods<
     ): VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>
   }
 
+  /** Define detached, reusable named condition contributions without mounting them. */
   readonly defineConditions: typeof defineConditions
+  /** Add one absent named condition; returns a new open system. */
   readonly addCondition: <const Name extends string, const Input extends VanityConditionInput>(
     name: Name extends keyof Conditions ? never : Name,
     condition: Input | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Input),
   ) => VanityOpenSystem<Shape, Tokens, Conditions & Record<Name, Input>, Consts, Utils, Plugins>
+  /** Add named condition definitions or a reusable module; returns a new open system. */
   readonly addConditions: {
     <const Added extends Record<string, VanityConditionInput>>(
       factory: (system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) =>
@@ -954,10 +970,12 @@ export interface VanityOpenSystemMethods<
       Plugins
     >
   }
+  /** Replace an existing named condition definition explicitly and record provenance. */
   readonly overwriteCondition: <const Name extends keyof Conditions & string, const Input extends VanityConditionInput>(
     name: Name,
     condition: Input | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Input),
   ) => VanityOpenSystem<Shape, Tokens, Omit<Conditions, Name> & Record<Name, Input>, Consts, Utils, Plugins>
+  /** Replace existing named condition definitions explicitly and record provenance. */
   readonly overwriteConditions: {
     <const Patch extends Record<string, VanityConditionInput>>(
       factory: (system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) =>
@@ -980,6 +998,7 @@ export interface VanityOpenSystemMethods<
     >
   }
 
+  /** Add one absent environmental axis; returns a new open system. */
   readonly addAxis: {
     <const Name extends string, const Modes extends readonly [string, ...string[]]>(
       name: Name extends keyof ShapeAxes<Shape> ? never : Name,
@@ -1033,7 +1052,9 @@ export interface VanityOpenSystemMethods<
       Plugins
     >
   }
+  /** Define detached, reusable environmental axis contributions without mounting them. */
   readonly defineAxes: typeof defineAxes
+  /** Add environmental axis definitions or a reusable module; returns a new open system. */
   readonly addAxes: {
     <const Added extends Record<string, VanityAxisModuleInput>, const Modes extends Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]> = Record<string, Readonly<Record<string, VanityConditionInput | VanityAxisTrigger<boolean>>> | readonly [string, ...string[]]>>(
       factory: (
@@ -1076,6 +1097,7 @@ export interface VanityOpenSystemMethods<
       Plugins
     >
   }
+  /** Add or refine modes and configuration on an existing environmental axis. */
   readonly augmentAxis: <
     const Name extends keyof ShapeAxes<Shape> & string,
     const Patch extends VanityAxisPatch,
@@ -1096,6 +1118,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Add or refine modes and configuration on existing environmental axes. */
   readonly augmentAxes: {
     <const Patch extends Partial<Record<keyof ShapeAxes<Shape>, VanityAxisPatch>>>(
       patch: Patch | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Patch),
@@ -1136,6 +1159,7 @@ export interface VanityOpenSystemMethods<
       Plugins
     >
   }
+  /** Replace an existing environmental axis definition explicitly and record provenance. */
   readonly overwriteAxis: <
     const Name extends keyof ShapeAxes<Shape> & string,
     const Patch extends VanityAxisPatch,
@@ -1156,6 +1180,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Replace existing environmental axis definitions explicitly and record provenance. */
   readonly overwriteAxes: {
     <const Patch extends Partial<Record<keyof ShapeAxes<Shape>, VanityAxisPatch>>>(
       patch: Patch | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Patch),
@@ -1197,7 +1222,9 @@ export interface VanityOpenSystemMethods<
     >
   }
 
+  /** Define detached, reusable JSON-safe constant contributions without mounting them. */
   readonly defineConsts: typeof defineConsts
+  /** Add one absent JSON-safe constant; returns a new open system. */
   readonly addConst: {
     <const Name extends string, const Value>(
       name: Name extends keyof PublicConsts<Consts> ? never : Name,
@@ -1210,6 +1237,7 @@ export interface VanityOpenSystemMethods<
       value: Value & JsonConst<Value>,
     ): VanityOpenSystem<Shape, Tokens, Conditions, Consts & Record<Name, Value>, Utils, Plugins>
   }
+  /** Add JSON-safe constant definitions or a reusable module; returns a new open system. */
   readonly addConsts: {
     <const Added extends object>(
       factory: (system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) =>
@@ -1224,6 +1252,7 @@ export interface VanityOpenSystemMethods<
       consts: Input,
     ): VanityOpenSystem<Shape, Tokens, Conditions, Consts & DefinitionShape<'consts', Input>, Utils, Plugins>
   }
+  /** Replace an existing JSON-safe constant definition explicitly and record provenance. */
   readonly overwriteConst: {
     <const Name extends keyof PublicConsts<Consts> & string, const Value>(
       name: Name,
@@ -1236,6 +1265,7 @@ export interface VanityOpenSystemMethods<
       value: Value & JsonConst<Value>,
     ): VanityOpenSystem<Shape, Tokens, Conditions, Omit<Consts, Name> & Record<Name, Value>, Utils, Plugins>
   }
+  /** Replace existing JSON-safe constant definitions explicitly and record provenance. */
   readonly overwriteConsts: {
     <const Patch extends object>(
       factory: (system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) =>
@@ -1258,11 +1288,14 @@ export interface VanityOpenSystemMethods<
     >
   }
 
+  /** Define detached, reusable utility function contributions without mounting them. */
   readonly defineUtils: typeof defineUtils
+  /** Add one absent utility function; returns a new open system. */
   readonly addUtil: <const Name extends string, const Value extends (...args: any[]) => unknown>(
     name: Name extends keyof OpenNamespace<Shape, Utils> ? never : Name,
     value: Value,
   ) => VanityOpenSystem<Shape, Tokens, Conditions, Consts, VanityDefinitionMerge<'utils', Utils, Record<Name, Value>>, Plugins>
+  /** Add utility function definitions or a reusable module; returns a new open system. */
   readonly addUtils: {
     <const Added extends VanityUtilTree>(
       utils: Added & RecursiveUtilityGuard<OpenNamespace<Shape, Utils>, Added>,
@@ -1285,8 +1318,11 @@ export interface VanityOpenSystemMethods<
     >
   }
 
+  /** Define one detached value constructor and its callable members. */
   readonly defineConstructor: typeof defineConstructor
+  /** Define detached, reusable value constructor contributions without mounting them. */
   readonly defineConstructors: typeof defineConstructors
+  /** Add one absent value constructor; returns a new open system. */
   readonly addConstructor: <
     const Name extends string,
     const Definition extends VanityConstructorDefinition,
@@ -1311,6 +1347,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Add value constructor definitions or a reusable module; returns a new open system. */
   readonly addConstructors: {
     <const Added extends Readonly<Record<string, VanityConstructorDefinition>>>(
       constructors: Added
@@ -1355,7 +1392,9 @@ export interface VanityOpenSystemMethods<
     >
   }
 
+  /** Define detached, reusable named system rule contributions without mounting them. */
   readonly defineRules: typeof defineRules
+  /** Add one absent named system rule; returns a new open system. */
   readonly addRule: <const Name extends string, const Rule extends VanitySystemRule>(
     name: Name extends keyof RulesOf<Consts> ? never : Name,
     rule: Rule | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Rule),
@@ -1367,6 +1406,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Add named system rule definitions or a reusable module; returns a new open system. */
   readonly addRules: {
     <const Added extends Readonly<Record<string, VanitySystemRule>>>(
       rules: Added | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Added),
@@ -1391,10 +1431,12 @@ export interface VanityOpenSystemMethods<
       Plugins
     >
   }
+  /** Replace an existing named system rule definition explicitly and record provenance. */
   readonly overwriteRule: <const Name extends keyof RulesOf<Consts> & string, const Patch extends Partial<VanitySystemRule>>(
     name: Name,
     patch: Patch | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Patch),
   ) => VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>
+  /** Replace existing named system rule definitions explicitly and record provenance. */
   readonly overwriteRules: {
     <const Patch extends Partial<Record<keyof RulesOf<Consts>, Partial<VanitySystemRule>>>>(
       rules: Patch | ((system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Patch),
@@ -1410,6 +1452,7 @@ export interface VanityOpenSystemMethods<
     ): VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>
   }
 
+  /** Mount a reusable plugin and return the extended open system; requirements must already exist. */
   readonly addPlugin: {
     <const Plugin extends VanitySystemPluginSystemShape>(
       plugin: Plugin
@@ -1457,6 +1500,7 @@ export interface VanityOpenSystemMethods<
     >
   }
 
+  /** Require the named token shape and traits immediately; throws at this call if unmet. */
   readonly expectTokens: <const Expected extends object>(
     shape: Expected,
   ) => VanityOpenSystem<
@@ -1467,6 +1511,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require an existing token and any specified traits immediately; throws at this call if unmet. */
   readonly expectToken: <const Name extends string, const Expected extends object | true = true>(
     name: Name,
     shape?: Expected,
@@ -1478,6 +1523,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require an existing environmental axis immediately; throws at this call if absent. */
   readonly expectAxis: <const Name extends string, const Modes extends readonly string[] = readonly []>(
     name: Name,
     modes?: Modes,
@@ -1495,6 +1541,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require existing environmental axis contributions immediately; throws at this call if any are absent. */
   readonly expectAxes: <const Axes extends Readonly<Record<string, readonly string[]>>>(
     axes: Axes,
   ) => VanityOpenSystem<
@@ -1513,6 +1560,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require an existing named condition immediately; throws at this call if absent. */
   readonly expectCondition: <const Name extends string>(
     name: Name,
   ) => VanityOpenSystem<
@@ -1523,6 +1571,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require existing named condition contributions immediately; throws at this call if any are absent. */
   readonly expectConditions: <const Expected extends object>(
     shape: Expected,
   ) => VanityOpenSystem<
@@ -1533,6 +1582,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require an existing JSON-safe constant immediately; throws at this call if absent. */
   readonly expectConst: <const Name extends string>(
     name: Name,
   ) => VanityOpenSystem<
@@ -1543,6 +1593,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require existing JSON-safe constant contributions immediately; throws at this call if any are absent. */
   readonly expectConsts: <const Expected extends object>(
     shape: Expected,
   ) => VanityOpenSystem<
@@ -1553,6 +1604,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require an existing utility function immediately; throws at this call if absent. */
   readonly expectUtil: <const Path extends string>(
     path: Path,
   ) => VanityOpenSystem<
@@ -1563,6 +1615,7 @@ export interface VanityOpenSystemMethods<
     Utils & PathTree<Path, (...args: any[]) => unknown>,
     Plugins
   >
+  /** Require existing utility function contributions immediately; throws at this call if any are absent. */
   readonly expectUtils: <const Paths extends readonly string[]>(
     paths: Paths,
   ) => VanityOpenSystem<
@@ -1573,6 +1626,7 @@ export interface VanityOpenSystemMethods<
     Utils & UnionToIntersection<PathTree<Paths[number], (...args: any[]) => unknown>>,
     Plugins
   >
+  /** Require an existing named system rule immediately; throws at this call if absent. */
   readonly expectRule: <const Name extends string>(
     name: Name,
   ) => VanityOpenSystem<
@@ -1583,6 +1637,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require existing named system rule contributions immediately; throws at this call if any are absent. */
   readonly expectRules: <const Names extends readonly string[]>(
     names: Names,
   ) => VanityOpenSystem<
@@ -1593,9 +1648,11 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require an already mounted plugin by its stable id; throws at this call if absent. */
   readonly expectPlugin: <const Id extends string>(
     id: Id,
   ) => VanityOpenSystem<WithSystemRequirements<Shape, { readonly plugins: Id }>, Tokens, Conditions, Consts, Utils, Plugins>
+  /** Require an existing value constructor immediately; throws at this call if absent. */
   readonly expectConstructor: <const Name extends string>(
     name: Name,
   ) => VanityOpenSystem<
@@ -1612,6 +1669,7 @@ export interface VanityOpenSystemMethods<
     Utils,
     Plugins
   >
+  /** Require existing value constructor contributions immediately; throws at this call if any are absent. */
   readonly expectConstructors: <const Names extends readonly string[]>(
     names: Names,
   ) => VanityOpenSystem<

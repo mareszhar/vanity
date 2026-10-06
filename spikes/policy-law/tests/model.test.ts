@@ -1,7 +1,6 @@
-import { cursor, defineProject } from '@mszr/selenita'
+import { cursor, defineProject } from '@mszr/selenita/vitest'
 import { describe, expect, it } from 'vitest'
 import { violates } from '../src/model'
-import '@mszr/selenita/vitest'
 
 const project = defineProject({
   tsconfig: './tsconfig.json',
@@ -22,7 +21,7 @@ describe('bound constructor diagnostics', () => {
 
     expect(result.errors).toHaveErrorCount(1)
     expect(result.errors).toHaveError(/forbidden|oklchx|argument/)
-    expect(result.at('bound').completions).toContainCompletion('oklch')
+    expect(result.at('bound')).toSuggest('oklch')
   })
 })
 

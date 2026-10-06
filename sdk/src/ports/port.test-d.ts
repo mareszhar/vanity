@@ -1,11 +1,12 @@
 /**
- * The type-shape evidence dimension: port type inference, `set()` typing, and the
+ * The type-shape evidence dimension: port type inference, `dec()` typing, and the
  * `VanityPort` interface — the contracts of [spec-ports.md §1-3], asserted
  * at the type level.
  */
 
 import type { VanityColorTokenHandle, VanityPort, VanityPortDecValue, VanityPortKind, VanityPortMeta, VanityVarReference } from '@mszr/vanity'
 import { angle, createSystem, oklch } from '@mszr/vanity'
+import { bindPort } from '@mszr/vanity/runtime'
 import { describe, expectTypeOf, it } from 'vitest'
 
 const open = createSystem()
@@ -38,6 +39,15 @@ describe('port type inference', () => {
 
     expectTypeOf(width).toExtend<VanityPort<string, 'length'>>()
     expectTypeOf(width.defaultValue).toEqualTypeOf<string>()
+    const bound = bindPort(width, { dev: true })
+    expectTypeOf(bound).toEqualTypeOf<typeof width>()
+    bound.dec('8px')
+    // @ts-expect-error — binding preserves the length port's declaration type
+    bound.dec(8)
+    // @ts-expect-error — a port binding requires a bind operation
+    bindPort({}, {})
+    // @ts-expect-error — binding must return the promised handle type
+    bindPort({ bind: () => 1 }, {})
   })
 
   it('port(t.color.brand) is a color port — typed by the token handle', () => {

@@ -40,21 +40,21 @@ describe('atoms, at the cursor', () => {
     const result = project.query`${defineFixture}
       void atoms({ ${cursor} })
     `
-    expect(result.completions).toContainCompletions(['display', 'gap', 'padding', 'p', 'stack'])
+    expect(result).toSuggest(['display', 'gap', 'padding', 'p', 'stack'])
   })
 
   it('token keys autocomplete as values', () => {
     const result = project.query`${defineFixture}
       void atoms({ gap: '${cursor}' })
     `
-    expect(result.completions).toContainCompletions(['sm', 'md'])
+    expect(result).toSuggest(['sm', 'md'])
   })
 
   it('a value outside the map is one diagnostic at the key', () => {
     const { errors } = project.check`${defineFixture}
       void atoms({ gap: 'lg' })
     `
-    expect(errors).toHaveError(/lg|sm|md/)
+    expect(errors).toHaveError(/lg|sm|md/, { on: 'gap' })
     expect(errors).toHaveErrorCount(1)
   })
 })
@@ -64,7 +64,7 @@ describe('atoms option documentation', () => {
     const result = project.query`${defineFixture}
       void makeAtoms({ properties${cursor('properties')}: { display: ['none', 'flex'] }, conditions${cursor('conditions')}: ['md'] })
     `
-    expect(result.at('properties').hover).toContain('Property → its closed value set')
-    expect(result.at('conditions').hover).toContain('conditions available at atoms call sites')
+    expect(result.at('properties').hover?.documentation).toContain('Property → its closed value set')
+    expect(result.at('conditions').hover?.documentation).toContain('conditions available at atoms call sites')
   })
 })

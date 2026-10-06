@@ -528,9 +528,32 @@ type VanityCaseWhen<Cases> = Cases extends readonly (infer Case)[]
   ? Case extends { readonly when: infer When } ? When : never
   : never
 
-type VanityCaseVal<Cases, _When> = Cases extends readonly (infer Case)[]
+type VanityCaseMatch<Cases, When> = When extends unknown
+  ? Cases extends readonly (infer Case)[]
+    ? Case extends { readonly when: infer Address }
+      ? Address extends When
+        ? Exclude<keyof When, keyof Address> | Exclude<keyof Address, keyof When> extends never ? Case : never
+        : never
+      : never
+    : never
+  : never
+
+export type VanityCaseVal<Cases, When> = VanityCaseMatch<Cases, When> extends infer Case
   ? Case extends { readonly val: infer Val } ? Val : never
   : never
+
+/** Accept exact authored addresses, including a variable spanning several cases. */
+export type VanityCaseInput<Cases, When> = When & ([VanityCaseMatch<Cases, When>] extends [never] ? never : unknown)
+
+declare const VANITY_TOKEN_CASES: unique symbol
+
+/** Select exact authored case addresses while preserving the branch's value and mutability. */
+export interface VanityTokenCaseSelector<Cases, Mutable extends boolean> {
+  /** Type-only case data; the callable has no runtime metadata requirement. */
+  readonly [VANITY_TOKEN_CASES]?: Cases
+  /** @param when - Exact axis-mode address of an authored case; selects that branch's value. */
+  <const When extends VanityCaseWhen<Cases>>(when: VanityCaseInput<Cases, When>): VanityTokenBranchHandle<VanityCaseVal<Cases, When>, Mutable>
+}
 
 type VanityConfiguredAxes<Node> = Node extends VanityConfiguredTokenShape<infer Config, any>
   ? Config extends { readonly axes: infer Axes } ? Axes : Record<never, never>
@@ -624,9 +647,7 @@ export interface VanityTokenHandle<
   /** Branch handles grouped by environmental axis and mode. */
   readonly $axes: VanityAxisHandles<Axes, Mutable>
   /** Resolve the branch selected by a semantic axis-mode address. */
-  readonly $case: (
-    when: VanityCaseWhen<Cases>,
-  ) => VanityTokenBranchHandle<VanityCaseVal<Cases, VanityCaseWhen<Cases>>, Mutable>
+  readonly $case: VanityTokenCaseSelector<Cases, Mutable>
   /** Serialize the token's resolved value. */
   toString: () => string
 }
@@ -935,13 +956,18 @@ type VanityTokenDeclarationGroup<
     }
   : VanityTokenDeclarationError<VanityInvalidDeclarationChildren<T, Conditions, Aliases>>
 
-/** Readable resolved handle inferred from one canonical authored token node. */
+/**
+ * Readable resolved handle inferred from one canonical authored token node.
+ *
+ * The non-distributive conditional materializes resolved traits in native
+ * hovers instead of displaying the tdef authoring context as an alias argument.
+ */
 export type VanityTokenHandleOf<
   Node,
   Name extends string,
   Path extends string,
   Policy extends VanityTokenPolicy,
-> = VanityTokenHandle<
+> = [Node] extends [unknown] ? VanityTokenHandle<
   VanityConfiguredVal<Node>,
   Name,
   Path,
@@ -956,7 +982,7 @@ export type VanityTokenHandleOf<
   VanityConfiguredDescription<Node>
 > & ((Node extends VanityConfiguredTokenShape<any, infer ConfiguredType>
   ? ConfiguredType
-  : VanityDataTypeOf<VanityConfiguredVal<Node>>) extends 'color' ? VanityColorMethods : Record<never, never>)
+  : VanityDataTypeOf<VanityConfiguredVal<Node>>) extends 'color' ? VanityColorMethods : Record<never, never>) : never
 
 export type VanityTokensFromDefinition<SystemTokens, Definition>
   = Definition extends VanityTokenDefinition<infer Graph, any>

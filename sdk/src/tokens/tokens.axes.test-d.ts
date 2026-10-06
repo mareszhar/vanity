@@ -45,6 +45,42 @@ const ds = open.addTokens(tokens).consolidate({
 })
 
 describe('axis types', () => {
+  it('selects the exact case value in build and runtime handles', () => {
+    const ds = open.addTokens({ spacing: open.tdef.length({
+      val: length.rem(1),
+      mutable: true,
+      cases: [
+        { when: { scheme: 'light', density: 'compact' }, val: length.rem(0.5) },
+        { when: { scheme: 'dark', density: 'compact' }, val: null },
+      ],
+    }) }).consolidate()
+    const runtime = ds.runtime()
+    expectTypeOf(ds.t.spacing.$case({ scheme: 'light', density: 'compact' }).$val).toEqualTypeOf<'0.5rem'>()
+    expectTypeOf(ds.t.spacing.$case({ scheme: 'dark', density: 'compact' }).$val).toEqualTypeOf<undefined>()
+    expectTypeOf(runtime.t.spacing.$case({ scheme: 'light', density: 'compact' }).$val).toEqualTypeOf<'0.5rem'>()
+    expectTypeOf(runtime.t.spacing.$case({ scheme: 'dark', density: 'compact' }).$val).toEqualTypeOf<undefined>()
+    const scheme = Math.random() > 0.5 ? 'light' : 'dark'
+    expectTypeOf(ds.t.spacing.$case({ scheme, density: 'compact' }).$val).toEqualTypeOf<'0.5rem' | undefined>()
+    expectTypeOf(runtime.t.spacing.$case({ scheme, density: 'compact' }).$val).toEqualTypeOf<'0.5rem' | undefined>()
+    runtime.t.spacing.$case({ scheme: 'light', density: 'compact' }).$set('2rem')
+    // @ts-expect-error — the selected mutable branch still requires a length
+    runtime.t.spacing.$case({ scheme: 'dark', density: 'compact' }).$set(open.oklch(0.6, 0.2, 280))
+    // @ts-expect-error — no case was authored at this address
+    ds.t.spacing.$case({ scheme: 'dark', density: 'cozy' })
+    // @ts-expect-error — an extra key does not identify the authored case
+    ds.t.spacing.$case({ scheme: 'light', density: 'compact', typo: 'extra' })
+    // @ts-expect-error — runtime selection has the same exact address boundary
+    runtime.t.spacing.$case({ scheme: 'light', density: 'compact', typo: 'extra' })
+    const nested = open.addTokens({ gap: open.tdef.length({ val: '1rem', cases: [
+      { when: { scheme: 'dark' }, val: '2rem' },
+      { when: { scheme: 'dark', density: 'compact' }, val: '3rem' },
+    ] }) }).consolidate()
+    expectTypeOf(nested.t.gap.$case({ scheme: 'dark' }).$val).toEqualTypeOf<'2rem'>()
+    expectTypeOf(nested.runtime().t.gap.$case({ scheme: 'dark', density: 'compact' }).$val).toEqualTypeOf<'3rem'>()
+    // @ts-expect-error — declared axes are not extra keys for a sparse case address
+    nested.t.gap.$case({ scheme: 'dark', density: 'cozy' })
+  })
+
   it('preserves exact axes, inferred defaults, branches, and group metadata filtering', () => {
     expectTypeOf(ds.t.space.control.$axes.density.compact.$val).toEqualTypeOf<'32px'>()
     expectTypeOf(ds.t.shadow.card.$case({ scheme: 'dark', density: 'compact' }).$val).toEqualTypeOf<'none'>()

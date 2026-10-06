@@ -15,7 +15,7 @@ const project = vanityProject()
 /** Compiler internals a diagnostic or hover must never leak. */
 const LEAK = /ColorValue\b|ContrastValue\b|TokenNode\b|RuleWalker\b|VanityArm\b|VanityRecipeRuntime\b/
 
-function expectNoLeak(messages: Array<Diagnostic | string>): void {
+function expectNoLeak(messages: readonly (Diagnostic | string)[]): void {
   for (const message of messages)
     expect(typeof message === 'string' ? message : message.message).not.toMatch(LEAK)
 }
@@ -65,14 +65,19 @@ describe('the authoring shape', () => {
     const result = project.query`${defineSystem}
       void recipe({ variants: { intent: { brand: { ${cursor} } } } })
     `
-    expect(result.completions).toContainCompletions(['open', 'md', 'hover', 'padding'])
+    expect(result).toSuggest(['open', 'md', 'hover', 'padding'])
   })
 
   it('call sites autocomplete the declared values', () => {
     const result = project.query`${defineButton}
-      void button({ intent: ${cursor} })
+      void button({ intent: ${cursor('intent')} })
+      void button.${cursor('recipe')}
+      const dialog = anatomy({ parts: ['root', 'content'], variants: { size: { sm: {}, lg: {} } } })
+      void dialog.${cursor('anatomy')}
     `
-    expect(result.completions).toContainCompletions(['brand', 'ghost'])
+    expect(result.at('intent')).toSuggest(['brand', 'ghost'])
+    expect(result.at('recipe')).toSuggest(['variants', 'toggles', 'defaults', 'props', 'toString'], { requireDocumentation: true })
+    expect(result.at('anatomy')).toSuggest(['variants', 'toggles', 'defaults', 'props', 'parts', 'ports'], { requireDocumentation: true })
   })
 })
 
@@ -81,7 +86,7 @@ describe('errors at the cursor', () => {
     const { errors } = project.check`${defineButton}
       void button({ intent: 'brnd' })
     `
-    expect(errors).toHaveError(/'"brnd"' is not assignable to type '"brand" \| "ghost" \| undefined'/)
+    expect(errors).toHaveError(/'"brnd"' is not assignable to type '"brand" \| "ghost" \| undefined'/, { on: 'intent' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -90,7 +95,7 @@ describe('errors at the cursor', () => {
     const { errors } = project.check`${defineButton}
       void button({ intnet: 'brand' })
     `
-    expect(errors).toHaveError(/intnet/)
+    expect(errors).toHaveError(/intnet/, { on: 'intnet' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -99,7 +104,7 @@ describe('errors at the cursor', () => {
     const { errors } = project.check`${defineSystem}
       void recipe({ variants: { intent: { brand: { paddin: 8 } } } })
     `
-    expect(errors).toHaveError(/paddin/)
+    expect(errors).toHaveError(/paddin/, { on: 'paddin' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -111,7 +116,7 @@ describe('errors at the cursor', () => {
         compound: [{ when: { size: 'xl' }, style: {} }],
       })
     `
-    expect(errors).toHaveError(/xl/)
+    expect(errors).toHaveError(/xl/, { on: 'size' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -123,7 +128,7 @@ describe('errors at the cursor', () => {
         base: { contnet: { padding: 8 } },
       })
     `
-    expect(errors).toHaveError(/contnet/)
+    expect(errors).toHaveError(/contnet/, { on: 'contnet' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -135,7 +140,7 @@ describe('errors at the cursor', () => {
         base: { content: { 'roto:open': { padding: 0 } } },
       })
     `
-    expect(errors).toHaveError(/roto:open/)
+    expect(errors).toHaveError(/roto:open/, { on: '\'roto:open\'' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -147,9 +152,9 @@ describe('hovers', () => {
       void recipe({ base${cursor('recipeBase')}: {}, variants${cursor('recipeVariants')}: {} })
       void anatomy({ parts: ['root'], base${cursor('anatomyBase')}: { root: {} } })
     `
-    expect(result.at('recipeBase').hover).toContain('Base rule emitted for every recipe instance')
-    expect(result.at('recipeVariants').hover).toContain('Named variant values and their rules')
-    expect(result.at('anatomyBase').hover).toContain('Base rules keyed by anatomy part')
+    expect(result.at('recipeBase').hover?.documentation).toContain('Base rule emitted for every recipe instance')
+    expect(result.at('recipeVariants').hover?.documentation).toContain('Named variant values and their rules')
+    expect(result.at('anatomyBase').hover?.documentation).toContain('Base rules keyed by anatomy part')
   })
 
   it('vanityProps collapses to the plain optional object — no internals wall', () => {
@@ -157,9 +162,9 @@ describe('hovers', () => {
       import type { VanityProps } from '@mszr/vanity'
       type ButtonPro${cursor}ps = VanityProps<typeof button>
     `
-    expect(result.hover).toMatch(/intent\?: "brand" \| "ghost"/)
-    expect(result.hover).toMatch(/size\?: "(?:sm" \| "md|md" \| "sm)"/)
-    expect(result.hover).toMatch(/pill\?: boolean/)
-    expectNoLeak([result.hover ?? ''])
+    expect(result.hover?.displayText).toMatch(/intent\?: "brand" \| "ghost"/)
+    expect(result.hover?.displayText).toMatch(/size\?: "(?:sm" \| "md|md" \| "sm)"/)
+    expect(result.hover?.displayText).toMatch(/pill\?: boolean/)
+    expectNoLeak([result.hover?.text ?? ''])
   })
 })

@@ -1,6 +1,5 @@
-import { cursor, defineProject } from '@mszr/selenita'
+import { cursor, defineProject } from '@mszr/selenita/vitest'
 import { describe, expect, it } from 'vitest'
-import '@mszr/selenita/vitest'
 
 const project = defineProject({
   tsconfig: './tsconfig.json',
@@ -24,7 +23,7 @@ describe('symmetric authoring grammar', () => {
       void ds
     `
 
-    expect(result.at('context').completions).toContainCompletion('seed')
+    expect(result.at('context')).toSuggest('seed')
     expect(result.errors).toHaveErrorCount(1)
     expect(result.errors).toHaveError(/seed|never/)
   })

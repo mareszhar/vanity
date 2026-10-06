@@ -10,7 +10,7 @@ Verdict: **all clear, with one nuance worth knowing** (portable vs naive, below)
 
 ```sh
 cd spikes/system-package
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm run generate   # rewrite lib/src/index.ts + app/src/consume.ts (profile M)
 pnpm run check      # emit lib d.ts, then typecheck the app against it
 pnpm run test       # selenita: consumer DX from the emitted d.ts ALONE
@@ -24,15 +24,15 @@ pnpm run measure    # the profile sweep (M → XL), lib emit + app check per pro
   - `dsPortable` — via `portable()`, a boundary simplifier returning `PortableSurface<Simplify<S>, …>` applied once at the export site.
 - `app/` — a consumer that resolves **only `lib/dist/*.d.ts`** (no library source in sight, exactly like a published package), with reads across the whole surface and selenita completion probes.
 
-## Results (TS 6.0.3, Apple Silicon, 2026-07)
+## Results (TS 6.0.3, type-fest 5.10.0, Apple Silicon, 2026-10)
 
 | profile | lib emit | emit errors | d.ts size | type-fest in d.ts? | app check | app errors |
 | --- | --- | --- | --- | --- | --- | --- |
-| M (30×10) | 0.28s | none | 44.2KB | no | 0.14s | none |
-| L (60×12) | 0.31s | none | 97.6KB | no | 0.16s | none |
-| XL (100×15) | 0.59s | none | 188.2KB | no | 0.29s | none |
+| M (30×10) | 0.27s | none | 44.2KB | no | 0.14s | none |
+| L (60×12) | 0.32s | none | 97.6KB | no | 0.15s | none |
+| XL (100×15) | 0.47s | none | 188.2KB | no | 0.17s | none |
 
-- **No TS7056 or TS2742 at any profile.** Declaration emit of a 100-group × 15-field consolidated system completes in ~0.6s.
+- **No TS7056 or TS2742 at any profile.** Declaration emit of a 100-group × 15-field consolidated system completes in ~0.5s.
 - **`portable()` EVALUATES at emit.** The `dsPortable` declaration in the d.ts is a single flattened object type — `Simplify` does **not** survive as an alias reference, so **type-fest never becomes part of the public API**.
 - **The naive export serializes the raw chain** — a long `Record<never, never> & { … } & { … }` intersection spelling. It works, and consumers read it fine, but it is what a consumer sees on hover.
 - **d.ts size is linear and unremarkable** (~1.9KB per group at this field width), and the two export styles cost roughly the same bytes (21.1KB naive vs 24.1KB portable at M — flattening spells the same fields).

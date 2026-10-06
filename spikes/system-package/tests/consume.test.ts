@@ -9,9 +9,8 @@
  *        plugin-provided groups; deep branched reads complete their branches
  *   PB3  the portable surface reads identically
  */
-import { cursor, defineProject } from '@mszr/selenita'
+import { cursor, defineProject } from '@mszr/selenita/vitest'
 import { describe, expect, it } from 'vitest'
-import '@mszr/selenita/vitest'
 
 const project = defineProject({
   tsconfig: './app/tsconfig.json',
@@ -34,32 +33,32 @@ describe('pb1 — the emitted d.ts carries the whole surface', () => {
 
 describe('pb2 — completions from the emitted types', () => {
   it('the token tree completes first, last, and plugin-provided groups', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { ds } from '#lib/index'
       ds.t.${cursor}
     `
-    expect(completions).toContainCompletion('g0')
-    expect(completions).toContainCompletion('g29')
-    expect(completions).toContainCompletion('ctl7')
+    expect(observation).toSuggest('g0')
+    expect(observation).toSuggest('g29')
+    expect(observation).toSuggest('ctl7')
   })
 
   it('a deep branched field completes its branches', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { ds } from '#lib/index'
       ds.t.g29.f2.${cursor}
     `
-    expect(completions).toContainCompletion('light')
-    expect(completions).toContainCompletion('dark')
+    expect(observation).toSuggest('light')
+    expect(observation).toSuggest('dark')
   })
 })
 
 describe('pb3 — the portable surface reads identically', () => {
   it('portable deep reads complete and typecheck', () => {
-    const { completions } = project.query`
+    const observation = project.query`
       import { dsPortable } from '#lib/index'
       dsPortable.t.g29.f2.${cursor}
     `
-    expect(completions).toContainCompletion('light')
-    expect(completions).toContainCompletion('dark')
+    expect(observation).toSuggest('light')
+    expect(observation).toSuggest('dark')
   })
 })

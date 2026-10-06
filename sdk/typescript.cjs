@@ -1,13 +1,13 @@
 /**
  * vanity TypeScript language-service plugin.
  *
- * TypeScript deliberately treats a mapped property as synthesized, so native
- * rename cannot connect a `defineTokens` object key to the handle properties
- * inferred from it. Vanity has more information: every handle carries a literal
- * `$path` type, and every use can be traced
- * to one graph-producing call. This
- * plugin adds only those missing rename locations; every other language-
- * service operation remains TypeScript's own.
+ * Mapped token properties lack a shared declaration for native rename. Vanity
+ * traces each handle's literal `$path` to its originating graph; other symbols
+ * keep native rename. Native binding edits retain their prefix/suffix metadata.
+ *
+ * The plugin also ranks configured style-barrel imports and reports module-role
+ * and ambient-declaration diagnostics. TypeScript owns completion details and
+ * import actions.
  */
 
 'use strict'
@@ -62,12 +62,17 @@ module.exports = function init(modules) {
         if (!identity || !program)
           return native
 
-        const added = findLocationsFor(ts, program, identity)
+        // Equal string-literal types can connect unrelated token names. Keep
+        // native edits (including binding prefixes/suffixes) only when their
+        // source belongs to this token's graph and path.
+        const owned = native.filter((location) => {
+          const candidate = findIdentityAt(ts, program, location.fileName, location.textSpan.start)
+            ?? findBindingIdentityAt(ts, program, location.fileName, location.textSpan.start)
+          return candidate?.graph === identity.graph && candidate.path === identity.path
+        })
         const unique = new Map()
-
-        for (const location of [...native, ...added])
+        for (const location of [...findLocationsFor(ts, program, identity), ...owned])
           unique.set(`${location.fileName}:${location.textSpan.start}:${location.textSpan.length}`, location)
-
         return [...unique.values()]
       }
 
@@ -136,10 +141,9 @@ function collectVanityDiagnostics(ts, program, source) {
   const diagnostics = []
   const packageInfo = findSourceShippingPackage(source.fileName)
 
-  if (packageInfo && !packageInfo.vanity?.suppressAmbientSourceDeclarationNotice && isStyleModule(source.fileName)
-    && !hasTypeOnlyUnlock(ts, source)) {
+  if (packageInfo && !packageInfo.vanity?.suppressAmbientSourceDeclarationNotice && isStyleModule(source.fileName)) {
     const ambient = findFirstAmbientUse(ts, program, source)
-    if (ambient) {
+    if (ambient && !hasTypeOnlyUnlock(ts, source, getPackageOf(ambient.source))) {
       diagnostics.push(createDiagnostic(
         ts,
         source,
@@ -265,11 +269,15 @@ function isImportOrDeclarationName(ts, node) {
     || (ts.isPropertyAccessExpression(node.parent) && node.parent.name !== node)
 }
 
-function hasTypeOnlyUnlock(ts, source) {
+function hasTypeOnlyUnlock(ts, source, packageName) {
   return source.statements.some(statement => ts.isImportDeclaration(statement)
     && statement.importClause?.isTypeOnly
     && statement.importClause.name === undefined
-    && statement.importClause.namedBindings === undefined)
+    && statement.importClause.namedBindings
+    && ts.isNamedImports(statement.importClause.namedBindings)
+    && statement.importClause.namedBindings.elements.length === 0
+    && ts.isStringLiteral(statement.moduleSpecifier)
+    && statement.moduleSpecifier.text === `${packageName}/vanity-style-auto-imports`)
 }
 
 function findSourceShippingPackage(fileName) {
@@ -331,6 +339,24 @@ function findIdentityAt(ts, program, fileName, position) {
 
   const definition = findDefinitionIdentity(ts, checker, name)
   return definition ? { ...definition, span: getSpanOf(name) } : undefined
+}
+
+/** Native binding edits still belong to the token selected from that graph. */
+function findBindingIdentityAt(ts, program, fileName, position) {
+  const source = program.getSourceFile(fileName)
+  if (!source)
+    return undefined
+  const checker = program.getTypeChecker()
+  const node = findNodeAt(ts, source, position)
+  const binding = ts.isBindingElement(node.parent) && node.parent.propertyName === node
+    ? node.parent
+    : getResolvedSymbol(ts, checker, node)?.declarations?.find(declaration =>
+        ts.isBindingElement(declaration) && declaration.propertyName === undefined)
+  if (!binding || !ts.isIdentifier(binding.name))
+    return undefined
+  const path = getTokenPath(ts, checker, binding.name)
+  const graph = path && findGraphForUse(ts, checker, binding.propertyName ?? binding.name, path)
+  return graph ? { graph, path } : undefined
 }
 
 function findLocationsFor(ts, program, identity) {
@@ -410,6 +436,10 @@ function findTypedTokenPath(ts, checker, name) {
   if (!value)
     return undefined
 
+  return getTokenPath(ts, checker, value)
+}
+
+function getTokenPath(ts, checker, value) {
   const type = checker.getTypeAtLocation(value)
   const property = type.getProperty('$path')
 
@@ -510,7 +540,9 @@ function findGraphForDefinition(ts, checker, object) {
 
 function findGraphForUse(ts, checker, name, path) {
   const access = name.parent
-  let root = access
+  let root = ts.isBindingElement(access) ? findContainingVariable(ts, access)?.initializer : access
+  if (!root)
+    return undefined
 
   while (ts.isPropertyAccessExpression(root) || ts.isElementAccessExpression(root))
     root = root.expression

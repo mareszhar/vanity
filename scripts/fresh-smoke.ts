@@ -362,7 +362,7 @@ async function main(): Promise<void> {
     private: true,
     type: 'module',
     dependencies: { '@mszr/vanity': packedDependency },
-    devDependencies: { typescript: '6.0.3', vite: '8.3.1', vitest: '4.1.11' },
+    devDependencies: { typescript: '6.0.3', vite: '8.3.1', vitest: '5.0.3' },
   }, null, 2))
   write(join(plainDir, 'tsconfig.json'), JSON.stringify({
     compilerOptions: {
@@ -372,7 +372,7 @@ async function main(): Promise<void> {
       module: 'ESNext',
       moduleResolution: 'Bundler',
       target: 'ES2022',
-      lib: ['ES2022', 'DOM'],
+      lib: ['ES2022', 'DOM', 'ESNext.Disposable'],
       types: ['vanity-style-auto-imports', 'vanity-app-auto-imports'],
       plugins: [{ name: '@mszr/vanity/typescript' }],
     },
@@ -503,12 +503,14 @@ import { page } from './app.css.ts'
     private: true,
     type: 'module',
     dependencies: {
-      '@mszr/selenita': '0.2.2',
+      '@mszr/selenita': '0.3.0',
       '@mszr/vanity': packedDependency,
     },
     devDependencies: {
-      typescript: '6.0.3',
-      vitest: '4.1.11',
+      '@types/node': '26.6.3',
+      'typescript': '6.0.3',
+      'vitest': '5.0.3',
+      'vite': '8.3.1',
     },
   }, null, 2))
   write(join(testingDir, 'tsconfig.json'), JSON.stringify({
@@ -518,16 +520,16 @@ import { page } from './app.css.ts'
       module: 'ESNext',
       moduleResolution: 'Bundler',
       target: 'ES2022',
-      lib: ['ES2022'],
-      skipLibCheck: true,
-      types: ['vitest/globals'],
+      lib: ['ES2022', 'DOM', 'ESNext.Disposable'],
+      skipLibCheck: false,
+      types: ['node'],
     },
     include: ['src', 'vitest.config.ts'],
   }, null, 2))
   write(join(testingDir, 'vitest.config.ts'), `import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  test: { globals: true, hookTimeout: 30_000, testTimeout: 30_000 },
+  test: { hookTimeout: 30_000, testTimeout: 30_000 },
 })
 `)
   write(join(testingDir, 'src/system.ts'), `import { createSystem } from '@mszr/vanity'
@@ -536,21 +538,64 @@ export const ds = createSystem()
   .addTokens({ color: { brand: '#635bff' }, space: { md: '16px' } })
   .consolidate({ prefix: 'consumer' })
 `)
+  write(join(testingDir, 'src/exports.ts'), `import { createSystem, length, thisMode } from '@mszr/vanity'
+import { bindPort, restorePort, setCustomProperties, setCustomProperty } from '@mszr/vanity/runtime'
+import type { VanityPort, VanityRuntimeTarget, VanityRuntimeTokens } from '@mszr/vanity/runtime'
+
+const open = createSystem().addAxis('scheme', { modes: { light: '&', dark: thisMode } })
+const ds = open.addTokens({ gap: open.tdef.length({ val: '1rem', mutable: true, cases: [
+  { when: { scheme: 'light' }, val: '0.5rem' },
+  { when: { scheme: 'dark' }, val: null },
+] }) }).consolidate()
+export const selectCase = ds.t.gap.$case
+export const runtimeSelectCase = ds.runtime().t.gap.$case
+
+declare const projected: VanityRuntimeTokens<typeof ds.t>
+const selected: '0.5rem' = projected.gap.$case({ scheme: 'light' }).$val
+void selected
+projected.gap.$set('2rem')
+declare const target: VanityRuntimeTarget
+setCustomProperty(target, '--typed', length.px(1))
+setCustomProperties(target, { '--typed': length.px(2) })
+const portDefault = length.px(1)
+const typedPort: VanityPort<typeof portDefault, 'length'> = ds.port(portDefault)
+const bound = bindPort(typedPort, { dev: true })
+bound.dec(length.px(2))
+// @ts-expect-error binding preserves the port's accepted CSS data type
+bound.dec(2)
+restorePort(typedPort.meta).dec(length.px(2))
+`)
+  write(join(testingDir, 'tsconfig.exports.json'), JSON.stringify({
+    extends: './tsconfig.json',
+    // TypeScript 6 requires an explicit emit root for this source-only project.
+    compilerOptions: { noEmit: false, declaration: true, emitDeclarationOnly: true, rootDir: './src', outDir: './declarations' },
+    include: ['src/exports.ts'],
+  }, null, 2))
+  write(join(testingDir, 'declaration-consumer.ts'), `import { selectCase, runtimeSelectCase } from './declarations/exports'
+const light: '0.5rem' = selectCase({ scheme: 'light' }).$val
+const dark: undefined = runtimeSelectCase({ scheme: 'dark' }).$val
+runtimeSelectCase({ scheme: 'light' }).$set('2rem')
+void [light, dark]
+`)
+  write(join(testingDir, 'tsconfig.declaration-consumer.json'), JSON.stringify({
+    extends: './tsconfig.json',
+    include: ['declaration-consumer.ts'],
+  }, null, 2))
   write(join(testingDir, 'src/testing.test.ts'), `import { describe, expect, it } from 'vitest'
+import { VANITY_BUILTIN_CONSTRUCTOR_NAMES } from '@mszr/vanity'
 import {
-  cursor,
-  defineVanityProject,
+  createVanityProjectConfig,
   emitOf,
   foldOf,
   rendersLike,
 } from '@mszr/vanity/testing'
 import { ds } from './system'
-import '@mszr/selenita/vitest'
+import { cursor, defineProject, mark } from '@mszr/selenita/vitest'
 
-const project = defineVanityProject({
+const project = defineProject(createVanityProjectConfig({
   tsconfig: './tsconfig.json',
   system: "export { ds } from './src/system'",
-})
+}))
 
 describe('packed consumer testing kit', () => {
   it('captures output and build-time fold evidence', () => {
@@ -574,17 +619,76 @@ describe('packed consumer testing kit', () => {
     expect(rendersLike(element, { '--consumer-color-brand': '#635bff' })(ds)).toBe(true)
   })
 
-  it('prewires the consumer system for editor assertions', () => {
+  it('prewires strict ordinary, negated, async and asymmetric editor assertions', async () => {
     const result = project.query\`
       import { ds } from '#vanity/system'
       void ds.\${cursor}class({})
     \`
-    expect(result.errors).toBeClean()
-    expect(result.completions).toContainCompletions(['class', 'recipe', 'runtime'])
-    for (const name of ['class', 'recipe', 'runtime'])
-      expect(result.completionItem(name)?.type, name).not.toMatch(/\\bany\\b/)
+    expect(result).toBeClean()
+    expect(result).toSuggest(['class', 'recipe', 'runtime'], { requireDocumentation: true })
+    expect(result).not.toSuggest(['addTokens', 'consolidate'])
+    await expect(Promise.resolve(result)).resolves.toSuggest('class')
+    expect(result).toEqual(expect.toSuggest('recipe'))
+    expect(result).toEqual(expect.not.toSuggest(['addTokens', 'consolidate']))
+    expect(() => expect(result).not.toSuggest(['class', 'missing'])).toThrow()
+    expect(() => expect(result).toEqual(expect.toSuggest('missing'))).toThrow()
+    for (const name of ['class', 'recipe', 'runtime']) {
+      expect(result.findCompletion(name)?.displayText, name).toBeTruthy()
+      expect(result.findCompletion(name)?.displayText, name).not.toMatch(/\\bany\\b/)
+    }
+    const wrong = project.check\`import { ds } from '#vanity/system'; ds.class({ \${mark('property')\`colro\`}: 'red' })\`
+    expect(wrong).toHaveErrorCount(1)
+    expect(wrong).toHaveError(/colro/, { on: wrong.rangeOf('property') })
+    expect(wrong).toEqual(expect.toHaveErrorCount(1))
+    const guidance = project.query\`
+      import * as api from '@mszr/vanity'
+      const open = api.createSystem().addAxis('scheme', { modes: { light: '&', dark: api.thisMode } })
+      const ds = open.addTokens({ gap: open.tdef.length({ val: '1rem', mutable: true, cases: [
+        { when: { scheme: 'light' }, val: '0.5rem' },
+        { when: { scheme: 'dark' }, val: null },
+      ] }) }).consolidate()
+      void api.\${cursor('constructors')}length
+      void ds.length.\${cursor('units')}rem(1)
+      void ds.t.\${cursor('token')}gap
+      void ds.t.gap.$case({ scheme: 'light' }).\${cursor('case')}$val
+      void ds.runtime().t.gap.$case({ scheme: 'dark' }).\${cursor('reservation')}$val
+      void api.calc('1rem').add(\${cursor('operand')}'1px')
+    \`
+    expect(guidance).toBeClean()
+    expect(guidance.at('constructors')).toSuggest(VANITY_BUILTIN_CONSTRUCTOR_NAMES, { requireDocumentation: true })
+    expect(guidance.at('units')).toSuggest(['px', 'rem', 'em', 'vh', 'cqi'], { requireDocumentation: true })
+    const tokenHover = guidance.at('token').hover?.displayText ?? ''
+    expect(tokenHover).toContain('VanityTokenHandle')
+    expect(tokenHover).not.toMatch(/TdefResult|VanityAxisDefinition|Omit</)
+    expect(tokenHover.length).toBeLessThan(600)
+    expect(guidance.at('case').hover?.displayText).toContain('"0.5rem"')
+    expect(guidance.at('reservation').hover?.displayText).toMatch(/\\$val: undefined/)
+    expect(guidance.at('operand').signatureHelp?.activeParameter?.documentation).toContain('lengths and percentages may combine')
+    const dimensions = project.check\`import { calc } from '@mszr/vanity'; void calc('1rem').add('20deg')\`
+    expect(dimensions).toHaveErrorCount(1)
+    expect(dimensions).toHaveError(/length and angle: use compatible dimensions/, { on: "'20deg'" })
   })
 })
+`)
+
+  write(join(testingDir, 'src/standalone.mjs'), `import assert from 'node:assert/strict'
+import { createProject, cursor, snippet } from '@mszr/selenita'
+import { createVanityProjectConfig } from '@mszr/vanity/testing'
+
+const project = createProject(createVanityProjectConfig({
+  tsconfig: './tsconfig.json',
+  system: "export { ds } from './src/system'",
+}))
+try {
+  const result = project.query({ 'consumer.ts': snippet\`import { ds } from '#vanity/system'; void ds.\${cursor}class({})\` })
+  project.check({ 'other.ts': 'const value: number = 1' }).errors
+  assert.ok(result.completionNames.includes('class'))
+  assert.ok(result.findCompletion('class').displayText)
+  assert.equal(result.errors.length, 0)
+}
+finally {
+  project.dispose()
+}
 `)
 
   run('pnpm', ['install', '--ignore-scripts'])
@@ -593,8 +697,11 @@ describe('packed consumer testing kit', () => {
   console.log('✓ fresh plain-Vite consumer: documented testing-kit test through its mounted Vite config')
 
   run('pnpm', ['--dir', testingDir, 'exec', 'tsc', '--noEmit'])
+  run('pnpm', ['--dir', testingDir, 'exec', 'tsc', '--project', 'tsconfig.exports.json'])
+  run('pnpm', ['--dir', testingDir, 'exec', 'tsc', '--project', 'tsconfig.declaration-consumer.json'])
   run('pnpm', ['--dir', testingDir, 'exec', 'vitest', 'run'])
-  console.log('✓ fresh testing kit: packed emit/fold/render and Selenita DX')
+  run('node', ['src/standalone.mjs'], testingDir)
+  console.log('✓ fresh testing kit: strict packed matchers, emit/fold/render and runner-free Selenita DX')
 
   const sourcePackageRealPath = await realpath(sourcePackageDir)
   const linkedSourcePackage = await realpath(join(sourceConsumerDir, 'node_modules/@fixture/design'))

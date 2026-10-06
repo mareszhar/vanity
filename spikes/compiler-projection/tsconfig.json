@@ -1,15 +1,25 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": ["node", "vitest/globals"],
+    "types": [
+      "node"
+    ],
     "allowImportingTsExtensions": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "tests", "fixtures", "vitest.config.ts"]
+  "include": [
+    "src",
+    "tests",
+    "fixtures",
+    "vitest.config.ts"
+  ]
 }

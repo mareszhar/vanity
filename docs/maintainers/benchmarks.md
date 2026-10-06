@@ -20,33 +20,33 @@ Fixtures cover open-to-locked system construction, token modules, axes and spars
 
 <!-- benchmark-receipt:start -->
 
-## Accepted baseline — 2026-10-02
+## Accepted baseline — 2026-10-05
 
-Recorded at 2026-10-02T10:57:56.175Z from the worktree based on HEAD 5b618961. Environment: darwin 25.4.0 arm64, Node v24.21.0, pnpm 12.8.1, TypeScript 6.0.3. Wall-clock measurements are local one-run signals. Source receipt: `.vanity/benchmarks/current.json`.
+Recorded at 2026-10-05T23:15:34.663Z from the worktree based on HEAD eb71c56a. Environment: darwin 25.4.0 arm64, Node v24.21.0, pnpm 12.8.1, TypeScript 6.0.3. Wall-clock measurements are local one-run signals. Source receipt: `.vanity/benchmarks/current.json`.
 
 | Scale | Cold TS / wall | Instantiations | Memory | Incremental TS / wall |
 | --- | ---: | ---: | ---: | ---: |
-| Small | 0.48s / 0.776s | 34,928 | 105,606 kB | 0.22s / 0.403s |
-| Medium | 0.51s / 1.267s | 66,618 | 111,796 kB | 0.21s / 0.964s |
-| Large | 1.02s / 1.790s | 290,476 | 173,980 kB | 0.24s / 1.002s |
+| Small | 0.46s / 0.661s | 38,988 | 118,596 kB | 0.23s / 0.977s |
+| Medium | 0.53s / 1.282s | 70,678 | 146,766 kB | 0.22s / 0.981s |
+| Large | 1.06s / 1.841s | 294,604 | 152,554 kB | 0.24s / 1.018s |
 
 | Scale | Root | Deep | Axis | Case | Runtime | CSS | Diagnostic | Rename |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Small | 0.089ms | 0.133ms | 0.172ms | 0.219ms | 0.149ms | 5.658ms | 0.230ms | 0.949ms |
-| Medium | 0.076ms | 0.179ms | 0.081ms | 0.149ms | 0.111ms | 5.396ms | 0.106ms | 1.179ms |
-| Large | 0.156ms | 0.271ms | 0.087ms | 0.128ms | 0.123ms | 5.088ms | 0.112ms | 5.762ms |
+| Small | 0.069ms | 0.136ms | 0.176ms | 0.288ms | 0.139ms | 5.963ms | 0.229ms | 1.068ms |
+| Medium | 0.074ms | 0.256ms | 0.082ms | 0.191ms | 0.123ms | 5.296ms | 0.107ms | 1.203ms |
+| Large | 0.150ms | 0.268ms | 0.134ms | 0.173ms | 0.129ms | 5.507ms | 0.139ms | 6.385ms |
 
 | Scale | Declaration emit / bytes | Vite build | CSS raw / gzip | Manifest v4 raw / gzip |
 | --- | ---: | ---: | ---: | ---: |
-| Small | 1.221s / 40,184 B | 1.257s | 4,441 B / 808 B | 153,571 B / 7,227 B |
-| Medium | 0.886s / 107,485 B | 1.415s | 24,691 B / 2,973 B | 1,169,491 B / 32,637 B |
-| Large | 2.203s / 588,958 B | 5.562s | 208,547 B / 21,439 B | 11,386,892 B / 255,924 B |
+| Small | 1.243s / 40,184 B | 1.340s | 4,441 B / 808 B | 153,571 B / 7,227 B |
+| Medium | 0.921s / 107,485 B | 1.412s | 24,691 B / 2,973 B | 1,169,491 B / 32,637 B |
+| Large | 2.325s / 588,958 B | 5.749s | 208,547 B / 21,439 B | 11,386,892 B / 255,924 B |
 
 | Host graph modules | Plain Vite | Vanity | Overhead | Package declaration walk cold / warm |
 | --- | ---: | ---: | ---: | ---: |
-| 3,000 app + 128 installed | 0.166s | 0.420s | 254 ms | 226 ms / 1 ms |
+| 3,000 app + 128 installed | 0.169s | 0.420s | 251 ms | 358 ms / 1 ms |
 
-Package entries: root 630,604 B raw; runtime 66,344 B raw, 38,500 B minified, and 11,409 B min+gzip; Hail presets 31,202 B raw.
+Package entries: root 632,123 B raw; runtime 66,344 B raw, 38,500 B minified, and 11,409 B min+gzip; Hail presets 31,202 B raw.
 
 <!-- benchmark-receipt:end -->
 
@@ -66,6 +66,7 @@ The TypeScript memory column is the heap in use when the compiler reports its st
 
 - Compare only like-for-like environment classes and fixture identities.
 - Investigate a large-fixture editor or type regression above 20%; editor interactions below 1ms use absolute timing and repeated-run stability instead.
+- Alternate baseline and candidate runs to distinguish code changes from host timing variation.
 - Record an explicit decision for an intentional regression and name the user-visible gain.
 - Keep raw machine output outside version control; update this page only for a reviewed baseline.
 - Measure hover with the language-service path defined in [testing §5](./testing.md#5-typescripteditor-dx-contract).

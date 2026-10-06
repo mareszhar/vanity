@@ -19,14 +19,14 @@ describe('the value law in editor tooling', () => {
       void shifted
     `
 
-    expect(result.at('channel').completions).toContainCompletions([
+    expect(result.at('channel')).toSuggest([
       'add',
       'subtract',
       'multiply',
       'divide',
     ])
     expect(result.errors).toHaveErrorCount(1)
-    expect(result.errors).toHaveError(/brand|VanityNumericColorChannel|assignable/)
+    expect(result).toHaveError(/brand|VanityNumericColorChannel|assignable/, { on: 'first.t.brand' })
   })
 
   it('accepts compatible handles without a var() detour and keeps exact results', () => {
@@ -45,6 +45,6 @@ describe('the value law in editor tooling', () => {
     `
 
     expect(result.errors).toHaveErrorCount(0)
-    expect(result.at('clamp').hover).toContain('clamp')
+    expect(result.at('clamp').hover?.displayText).toContain('clamp')
   })
 })

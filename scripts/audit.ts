@@ -330,7 +330,6 @@ const NAMING_ALLOWLIST = new Set([
   'emitOf',
   'renderOf',
   'rendersLike',
-  'defineVanityProject',
   'interpolate',
   'fluid',
   'customProperty',

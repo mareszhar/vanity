@@ -49,6 +49,12 @@ rt.t.color.hue.$unset()
 
 Only mutable addresses expose these verbs.
 
+`rt.t` preserves the token tree's branch and value inference. `$axes` exposes authored modes and `$case(when)` selects exact authored addresses, including no-default reservations; their controls expose `$set` and `$unset` only when the token is mutable. The setter accepts the token's CSS data type rather than just its default literal.
+
+Public runtime types imported from `@mszr/vanity/runtime` share the core entrypoint's token identities. `VanityRuntimeTokens<typeof ds.t>` therefore preserves cases and setters across entrypoints. Extracted case functions can also be exported from declaration-emitting libraries: `VanityTokenCaseSelector`, `VanityRuntimeCaseSelector` and `VanityRuntimeMutableActions` provide named public types for their inferred signatures.
+
+The runtime entrypoint's custom-property helpers accept typed values constructed through core, such as `length.rem(1)`. `bindPort(port, options)` preserves the supplied handle's declaration type, including narrow number, length and color ports.
+
 `$set`:
 
 - accepts the token's CSS data-type inputs and handles;

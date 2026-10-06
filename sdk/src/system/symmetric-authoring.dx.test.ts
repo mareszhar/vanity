@@ -1,4 +1,4 @@
-import { cursor } from '@mszr/selenita'
+import { cursor, mark } from '@mszr/selenita'
 import { vanityProject } from '@test'
 import { describe, expect, it } from 'vitest'
 
@@ -18,8 +18,8 @@ describe('symmetric authoring editor DX', () => {
       })
     `
 
-    expect(result.at('module').completions).toContainCompletion('seed')
-    expect(result.at('system').completions).toContainCompletions(['seed', 'doubled'])
+    expect(result.at('module')).toSuggest('seed')
+    expect(result.at('system')).toSuggest(['seed', 'doubled'])
     expect(result.errors).toHaveErrorCount(0)
   })
 
@@ -29,7 +29,7 @@ describe('symmetric authoring editor DX', () => {
       void createSystem().${cursor('system')}addTokens
     `
 
-    expect(result.at('system').completions).toContainCompletions([
+    expect(result.at('system')).toSuggest([
       'addToken',
       'addTokens',
       'augmentToken',
@@ -70,18 +70,18 @@ describe('symmetric authoring editor DX', () => {
       'expectRules',
       'expectConstructor',
       'expectConstructors',
-    ])
+    ], { requireDocumentation: true })
   })
 
   it('underlines one duplicate singular name instead of the whole chain', () => {
-    const { errors } = project.check`
+    const result = project.check`
       import { createSystem } from '@mszr/vanity'
       createSystem()
         .addConst('density', 1)
-        .addConst('density', 2)
+        .addConst(${mark('duplicate')`'density'`}, 2)
     `
 
-    expect(errors).toHaveErrorCount(1)
-    expect(errors).toHaveError(/density|never/)
+    expect(result).toHaveErrorCount(1)
+    expect(result).toHaveError(/density|never/, { on: result.rangeOf('duplicate') })
   })
 })

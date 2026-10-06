@@ -15,7 +15,7 @@ const project = vanityProject()
 /** Compiler internals a diagnostic or hover must never leak. */
 const LEAK = /ColorValue\b|ContrastValue\b|TokenNode\b|RuleWalker\b|VanityArm\b/
 
-function expectNoLeak(messages: Array<Diagnostic | string>): void {
+function expectNoLeak(messages: readonly (Diagnostic | string)[]): void {
   for (const message of messages)
     expect(typeof message === 'string' ? message : message.message).not.toMatch(LEAK)
 }
@@ -57,32 +57,32 @@ describe('the authoring shape', () => {
     const result = project.query`${defineSystem}
       void style({ ${cursor} })
     `
-    expect(result.completions).toContainCompletions(['open', 'md', 'hover', 'motionOk', 'dark', 'padding'])
+    expect(result).toSuggest(['open', 'md', 'hover', 'motionOk', 'dark', 'padding'])
   })
 
   it('property-first maps autocomplete base and the conditions', () => {
     const result = project.query`${defineSystem}
       void style({ color: { ${cursor} } })
     `
-    expect(result.completions).toContainCompletions(['base', 'open', 'md', 'hover'])
+    expect(result).toSuggest(['base', 'open', 'md', 'hover'])
   })
 })
 
 describe('errors at the cursor', () => {
   it('a typo\'d property is one diagnostic at the key, with the fix', () => {
-    const { errors } = project.check`${defineSystem}
+    const result = project.check`${defineSystem}
       void style({ paddin: '8px' })
     `
-    expect(errors).toHaveError(/paddin/)
-    expect(errors).toHaveErrorCount(1)
-    expectNoLeak(errors)
+    expect(result).toHaveError(/paddin/, { on: 'paddin' })
+    expect(result).toHaveErrorCount(1)
+    expectNoLeak(result.errors)
   })
 
   it('an unknown condition as a bare key dies at the key', () => {
     const { errors } = project.check`${defineSystem}
       void style({ hovr: { padding: 8 } })
     `
-    expect(errors).toHaveError(/hovr/)
+    expect(errors).toHaveError(/hovr/, { on: 'hovr' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -91,7 +91,7 @@ describe('errors at the cursor', () => {
     const { errors } = project.check`${defineSystem}
       void style({ color: { hovr: 'red' } })
     `
-    expect(errors).toHaveError(/hovr/)
+    expect(errors).toHaveError(/hovr/, { on: 'hovr' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -100,7 +100,7 @@ describe('errors at the cursor', () => {
     const { errors } = project.check`${defineSystem}
       void style.layer('overides')({})
     `
-    expect(errors).toHaveError(/overides|overrides/)
+    expect(errors).toHaveError(/overides|overrides/, { on: '\'overides\'' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -109,7 +109,7 @@ describe('errors at the cursor', () => {
     const { errors } = project.check`${defineSystem}
       void keyframes({ from: { hover: { opacity: 0 } } })
     `
-    expect(errors).toHaveError(/hover/)
+    expect(errors).toHaveError(/hover/, { on: 'hover' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -118,7 +118,7 @@ describe('errors at the cursor', () => {
     const { errors } = project.check`${defineSystem}
       void style({ gap: t.space.mid })
     `
-    expect(errors).toHaveError(/'mid' does not exist/)
+    expect(errors).toHaveError(/'mid' does not exist/, { on: 'mid' })
     expect(errors).toHaveErrorCount(1)
     expectNoLeak(errors)
   })
@@ -129,7 +129,7 @@ describe('hovers', () => {
     const result = project.query`${defineSystem}
       void st${cursor}yle
     `
-    expect(result.hover).toContain('VanityClassEmitter')
-    expectNoLeak([result.hover ?? ''])
+    expect(result.hover?.displayText).toContain('VanityClassEmitter')
+    expectNoLeak([result.hover?.text ?? ''])
   })
 })

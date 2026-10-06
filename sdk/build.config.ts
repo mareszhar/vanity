@@ -32,6 +32,8 @@ export default defineBuildConfig({
       input: ['./src/runtime.ts'],
       rolldown: {
         platform: 'browser',
+        // Public runtime projections share core's nominal handle identities.
+        external: ['@mszr/vanity'],
       },
     },
     {

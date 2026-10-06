@@ -1,10 +1,11 @@
-import { cursor, defineVanityProject } from '@mszr/vanity/testing'
+import { cursor, defineProject, mark } from '@mszr/selenita/vitest'
+import { VANITY_BUILTIN_CONSTRUCTOR_NAMES, VANITY_SYSTEM_MEMBERS } from '@mszr/vanity'
+import { createVanityProjectConfig } from '@mszr/vanity/testing'
 import { describe, expect, it } from 'vitest'
 import { renderVanityNuxtConfigTypes } from './nuxt/configTypes'
 import { renderStyleAutoImportDeclarations } from './vite'
-import '@mszr/selenita/vitest'
 
-const project = defineVanityProject({
+const project = defineProject(createVanityProjectConfig({
   tsconfig: './tsconfig.json',
   system: `
     import { createSystem } from '@mszr/vanity'
@@ -13,16 +14,16 @@ const project = defineVanityProject({
       .addTokens({ color: { brand: '#635bff' } })
     export const ds = open.consolidate()
   `,
-})
+}))
 
-const nuxtProject = defineVanityProject({
+const nuxtProject = defineProject(createVanityProjectConfig({
   tsconfig: './tsconfig.json',
   files: {
     'nuxt-config.d.ts': renderVanityNuxtConfigTypes(),
   },
-})
+}))
 
-const autoImportProject = defineVanityProject({
+const autoImportProject = defineProject(createVanityProjectConfig({
   tsconfig: './tsconfig.json',
   files: {
     'authoring.ts': `
@@ -33,9 +34,10 @@ const autoImportProject = defineVanityProject({
     `,
     'vanity-style-auto-imports.d.ts': renderStyleAutoImportDeclarations([{ from: './authoring.ts', imports: ['ds', 't', 'style'] }]),
   },
-})
+}))
 
 const CORE_CANONICAL_VALUES = [
+  ...VANITY_BUILTIN_CONSTRUCTOR_NAMES,
   'aria',
   'axis',
   'colorSchemes',
@@ -47,8 +49,19 @@ const CORE_CANONICAL_VALUES = [
   'defineCssOperation',
   'defineCssSupportTarget',
   'defineCssValue',
+  'defineAxes',
+  'defineConditions',
+  'defineConstructor',
+  'defineConstructors',
+  'defineConsts',
+  'definePolicies',
   'definePlugin',
+  'defineRules',
   'defineTokens',
+  'defineUtils',
+  'defaultMode',
+  'check',
+  'scale',
   'didYouMean',
   'exportDesignTokens',
   'formatExplanation',
@@ -139,19 +152,17 @@ const ENTRYPOINT_VALUES = {
   prepare: ['loadVanityConfig', 'planAutoImportDeclarations', 'writeAutoImportDeclarations'],
   testing: [
     'captureEmission',
-    'cursor',
-    'defineVanityProject',
+    'createVanityProjectConfig',
     'emitOf',
     'foldOf',
     'foldResultOf',
-    'group',
     'renderOf',
     'rendersLike',
-    'snippet',
   ],
 } as const
 
 const CORE_CANONICAL_TYPES = [
+  'VanityAngleUnit',
   'VanityAnatomy',
   'VanityAtoms',
   'VanityCondition',
@@ -159,18 +170,26 @@ const CORE_CANONICAL_TYPES = [
   'VanityCssValue',
   'VanityDiagnostic',
   'VanityDtcgDocument',
+  'VanityFlexUnit',
+  'VanityFrequencyUnit',
+  'VanityLengthUnit',
   'VanityLockedSystem',
   'VanityOpenSystem',
   'VanityPluginDefinition',
   'VanityPort',
   'VanityProps',
   'VanityRecipe',
+  'VanityResolutionUnit',
   'VanityRuleInput',
   'VanityRuntimeControllerFactory',
+  'VanityRuntimeCaseSelector',
+  'VanityRuntimeMutableActions',
   'VanityStyleValue',
   'VanitySystemMap',
   'VanitySystemPlugin',
+  'VanityTimeUnit',
   'VanityTokenHandle',
+  'VanityTokenCaseSelector',
   'VanityTokenInput',
 ] as const
 
@@ -193,14 +212,7 @@ describe('public editor contract', () => {
       void ds.${cursor}
     `
 
-    expect(result.completions).toContainCompletions([
-      't',
-      'class',
-      'recipe',
-      'anatomy',
-      'runtime',
-      'introspect',
-    ])
+    expect(result).toSuggest([...VANITY_SYSTEM_MEMBERS, ...VANITY_BUILTIN_CONSTRUCTOR_NAMES], { requireDocumentation: true })
   })
 
   it('gives every canonical root value a purpose at completion', () => {
@@ -209,11 +221,7 @@ describe('public editor contract', () => {
       vanity.${cursor}
     `
 
-    for (const name of CORE_CANONICAL_VALUES) {
-      const item = result.completionItem(name)
-      expect(item, name).toBeDefined()
-      expect(item!.documentation, name).not.toBe('')
-    }
+    expect(result).toSuggest(CORE_CANONICAL_VALUES, { requireDocumentation: true })
   })
 
   it('gives every named value on every public entrypoint a purpose at completion', () => {
@@ -245,12 +253,8 @@ describe('public editor contract', () => {
     `
 
     for (const [entrypoint, names] of Object.entries(ENTRYPOINT_VALUES)) {
-      const at = result.at(entrypoint)
-      for (const name of names) {
-        const item = at.completionItem(name)
-        expect(item, `${entrypoint}:${name}`).toBeDefined()
-        expect(item!.documentation, `${entrypoint}:${name}`).not.toBe('')
-      }
+      expect(result.at(entrypoint as keyof typeof ENTRYPOINT_VALUES))
+        .toSuggest(names, { requireDocumentation: true })
     }
   })
 
@@ -264,12 +268,7 @@ describe('public editor contract', () => {
       ['core', CORE_CANONICAL_TYPES],
       ['testing', TESTING_CANONICAL_TYPES],
     ] as const) {
-      const at = result.at(cursorName)
-      for (const name of names) {
-        const item = at.completionItem(name)
-        expect(item, `${cursorName}:${name}`).toBeDefined()
-        expect(item!.documentation, `${cursorName}:${name}`).not.toBe('')
-      }
+      expect(result.at(cursorName)).toSuggest(names, { requireDocumentation: true })
     }
   })
 
@@ -280,9 +279,9 @@ describe('public editor contract', () => {
       void ds.td${cursor('tdec')}ec
     `
 
-    expect(result.at('tdef').hover).toContain('Define advanced token traits')
-    expect(result.at('tdec').hover).toContain('Produce CSS declaration data')
-    expect(result.at('tdec').hover).not.toContain('Define advanced token traits')
+    expect(result.at('tdef').hover?.documentation).toContain('Define advanced token traits')
+    expect(result.at('tdec').hover?.documentation).toContain('Produce CSS declaration data')
+    expect(result.at('tdec').hover?.documentation).not.toContain('Define advanced token traits')
   })
 
   it('documents every accepted tokenOrProperty form at the setter argument', () => {
@@ -293,7 +292,7 @@ describe('public editor contract', () => {
     `
     const signature = result.signatureHelp
 
-    expect(signature?.activeParameter).toBe(1)
+    expect(signature?.activeParameterIndex).toBe(1)
     expect(signature?.signatures[0]?.parameters[1]?.documentation)
       .toContain('`\'--name\'`, `{ name }`, `{ $name }`, or token handle')
   })
@@ -315,27 +314,27 @@ describe('public editor contract', () => {
       })
     `
 
-    expect(result.at('condition').hover).toContain('(condition) open:')
-    expect(result.at('condition').hover).toContain('&[data-state=\\"open\\"]')
-    expect(result.at('property').hover).toContain('(property) color')
-    expect(result.at('property').hover).not.toContain('(condition)')
-    expect(result.at('part').hover).toContain('(part condition) root:open:')
-    expect(result.at('part').hover).toContain('&[data-state=\\"open\\"]')
+    expect(result.at('condition').hover?.displayText).toContain('(condition) open:')
+    expect(result.at('condition').hover?.displayText).toContain('&[data-state=\\"open\\"]')
+    expect(result.at('property').hover?.displayText).toContain('(property) color')
+    expect(result.at('property').hover?.displayText).not.toContain('(condition)')
+    expect(result.at('part').hover?.displayText).toContain('(part condition) root:open:')
+    expect(result.at('part').hover?.displayText).toContain('&[data-state=\\"open\\"]')
   })
 
   it('keeps one local diagnostic for common rule and anatomy mistakes', () => {
-    const { errors } = project.check`
+    const result = project.check`
       import { ds } from '#vanity/system'
-      ds.class({ colro: 'red' })
+      ds.class({ ${mark('property')`colro`}: 'red' })
       ds.anatomy({
         parts: ['root', 'content'],
-        base: { content: { 'roto:open': { color: 'red' } } },
+        base: { content: { ${mark('condition')`'roto:open'`}: { color: 'red' } } },
       })
     `
 
-    expect(errors).toHaveErrorCount(2)
-    expect(errors).toHaveError(/colro/)
-    expect(errors).toHaveError(/roto:open/)
+    expect(result).toHaveErrorCount(2)
+    expect(result).toHaveError(/colro/, { on: result.rangeOf('property') })
+    expect(result).toHaveError(/roto:open/, { on: result.rangeOf('condition') })
   })
 
   it('preserves exact generated auto-import types with no any wall', () => {
@@ -345,9 +344,9 @@ describe('public editor contract', () => {
     `
 
     expect(result.errors).toBeClean()
-    expect(result.completions).toContainCompletions(['class', 'recipe', 'runtime'])
+    expect(result).toSuggest(['class', 'recipe', 'runtime'])
     for (const name of ['class', 'recipe', 'runtime'])
-      expect(result.completionItem(name)?.type, name).not.toMatch(/\bany\b/)
+      expect(result.findCompletion(name)?.displayText, name).not.toMatch(/\bany\b/)
   })
 
   it('documents shared config keys at object-literal completion sites', () => {
@@ -417,13 +416,12 @@ describe('public editor contract', () => {
       })
     `
 
-    const expectDocumented = (at: string, names: readonly string[]) => {
-      for (const name of names)
-        expect(result.at(at).completionItem(name)?.documentation, `${at}:${name}`).not.toBe('')
+    const expectDocumented = (at: Parameters<typeof result.at>[0], names: readonly string[]) => {
+      expect(result.at(at)).toSuggest(names, { requireDocumentation: true })
     }
 
-    expect(result.at('root').completionItem('compiler')?.documentation).toContain('Compiler')
-    expect(result.at('root').completionItem('autoImports')?.documentation).toContain('module roles')
+    expect(result.at('root').findCompletion('compiler')?.documentation).toContain('Compiler')
+    expect(result.at('root').findCompletion('autoImports')?.documentation).toContain('module roles')
     expectDocumented('compiler', [
       'identifiers',
       'unstableMode',
@@ -438,16 +436,16 @@ describe('public editor contract', () => {
     expectDocumented('styleOptions', ['from', 'include'])
     expectDocumented('systemOptions', ['entry', 'artifact', 'packageName', 'exportName'])
     expectDocumented('appOptions', ['presets', 'sources'])
-    expect(result.at('configCompiler').hover).toContain('Compiler')
-    expect(result.at('configAutoImports').hover).toContain('module roles')
-    expect(result.at('viteConfigCompiler').hover).toContain('Compiler')
-    expect(result.at('viteConfigAutoImports').hover).toContain('module roles')
-    expect(result.at('viteSystem').hover).toContain('Plain consolidated system')
-    expect(result.at('viteStyle').hover).toContain('style modules')
-    expect(result.at('viteApp').hover).toContain('application')
-    expect(result.at('system').hover).toContain('Plain consolidated system')
-    expect(result.at('style').hover).toContain('$system')
-    expect(result.at('app').hover).toContain('core')
+    expect(result.at('configCompiler').hover?.documentation).toContain('Compiler')
+    expect(result.at('configAutoImports').hover?.documentation).toContain('module roles')
+    expect(result.at('viteConfigCompiler').hover?.documentation).toContain('Compiler')
+    expect(result.at('viteConfigAutoImports').hover?.documentation).toContain('module roles')
+    expect(result.at('viteSystem').hover?.documentation).toContain('Plain consolidated system')
+    expect(result.at('viteStyle').hover?.documentation).toContain('style modules')
+    expect(result.at('viteApp').hover?.documentation).toContain('application')
+    expect(result.at('system').hover?.documentation).toContain('Plain consolidated system')
+    expect(result.at('style').hover?.displayText).toContain('$system')
+    expect(result.at('app').hover?.displayText).toContain('core')
   })
 
   it('documents the shared config shape through Nuxt module options', () => {
@@ -473,11 +471,11 @@ describe('public editor contract', () => {
       }
     `
 
-    expect(completionResult.at('nuxtRootCompletion').completionItem('vanity')?.documentation).toContain('Vanity\'s Nuxt adapter configuration')
-    expect(result.at('nuxtRoot').hover).toContain('Vanity\'s Nuxt adapter configuration')
-    expect(result.at('nuxtCompiler').completionItem('compiler')?.documentation).toContain('Compiler options')
-    expect(result.at('nuxtCompilerOptions').completionItem('system')?.documentation).toMatch(/consolidated/i)
-    expect(result.at('nuxtAutoImports').completionItem('autoImports')?.documentation).toContain('module roles')
-    expect(result.at('nuxtAutoImportOptions').completionItem('app')?.documentation).toContain('application')
+    expect(completionResult.at('nuxtRootCompletion').findCompletion('vanity')?.documentation).toContain('Vanity\'s Nuxt adapter configuration')
+    expect(result.at('nuxtRoot').hover?.documentation).toContain('Vanity\'s Nuxt adapter configuration')
+    expect(result.at('nuxtCompiler').findCompletion('compiler')?.documentation).toContain('Compiler options')
+    expect(result.at('nuxtCompilerOptions').findCompletion('system')?.documentation).toMatch(/consolidated/i)
+    expect(result.at('nuxtAutoImports').findCompletion('autoImports')?.documentation).toContain('module roles')
+    expect(result.at('nuxtAutoImportOptions').findCompletion('app')?.documentation).toContain('application')
   })
 })

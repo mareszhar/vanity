@@ -5,10 +5,10 @@ This is a library-agnostic proof for two patterns needed by a typed styling harn
 1. An unfinished logical reference stays value-capable by carrying a semantic path. A later host rebinds that path to its final emitted name; no temporary name or object coercion crosses the boundary.
 2. A relative channel operation is an immutable left-associated expression. The first operation starts from the channel, and every subsequent operation composes on the result with exact completion.
 
-Run independently:
+Run this experiment with workspace-installed dependencies:
 
 ```sh
-pnpm install --ignore-workspace
+pnpm install --frozen-lockfile
 pnpm run check
 pnpm run test
 ```

@@ -267,14 +267,21 @@ type VanitySystemReadSurface<
 > = VanityRuntimeServices<T, Axes> & {
   /** The resolved token module — one import line serves every style file. */
   readonly t: T
+  /** Emit a CSS class from a rule or ordered contributions. */
   readonly class: LockedClassEmitter<C, L, Consts>
+  /** Emit rules for explicit selectors, optionally in a declared layer. */
   readonly rules: LockedRulesEmitter<C, L, Consts>
+  /** Emit raw CSS text or raw selector declarations in a declared layer. */
   readonly raw: VanityRawEmitter<L>
+  /** Create reusable declaration and rule data without emitting CSS. */
   readonly fragment: LockedFragmentFactory<C, L, Consts>
+  /** Remove the named declarations from an ordered styling contribution. */
   readonly omit: VanityOmit
   /** Produce CSS declaration data over resolved tokens without mutating runtime state. */
   readonly tdec: VanityTokenDeclarationProducer<T>
+  /** Emit CSS keyframes and return their generated animation name. */
   readonly keyframes: VanityKeyframesFunction<L>
+  /** Emit a CSS @font-face rule and return its font-family name. */
   readonly fontFace: VanityFontFaceFunction<L>
   /** Variants compress state: props in, classes out ([spec-recipes.md §1]). */
   readonly recipe: VanityRecipeFactory<C, L>
@@ -302,7 +309,9 @@ type VanitySystemReadSurface<
   readonly explain: <Subject>(subject: Subject) => VanityExplanationFor<Subject>
   /** Read-only normalized authoring context for integrations and inspection. */
   readonly conditions: VanityConditionDescriptions<C>
+  /** Read the JSON-safe constants contributed to this system. */
   readonly consts: Readonly<VanityPublicConsts<Consts>>
+  /** Read the finalized system policies, including installed plugin policies. */
   readonly policies: Readonly<Policies>
   /** Semantic axis handles; pass one directly to `explain()`. */
   readonly axes: Readonly<{
@@ -350,6 +359,8 @@ export type VanityLockedSystem<
       Utils,
       Policies
     >
+    /** Declared cascade layers in their resolved order. */
+    /** Declared cascade layers in their resolved order. */
     readonly layers: readonly L[]
   }>
 

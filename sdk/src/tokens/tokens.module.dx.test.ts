@@ -23,8 +23,8 @@ describe('token-module editor DX', () => {
       void ds.${cursor('system')}
     `
 
-    expect(result.at('typed').completions).toContainCompletions(['color', 'length', 'angle', 'time', 'number'])
-    expect(result.at('handle').completions).toContainCompletions([
+    expect(result.at('typed')).toSuggest(['color', 'length', 'angle', 'time', 'number'])
+    expect(result.at('handle')).toSuggest([
       '$name',
       '$val',
       '$var',
@@ -36,11 +36,11 @@ describe('token-module editor DX', () => {
       '$axes',
       '$case',
     ])
-    expect(result.at('handle').completions).not.toContainCompletion('mode')
-    expect(result.at('handle').completions).not.toContainCompletion('name')
-    expect(result.at('modes').completions).toContainCompletion('dark')
-    expect(result.at('modes').completions).not.toContainCompletion('light')
-    expect(result.at('system').completions).toContainCompletions(['tokensOf', 'namesOf', 'varsOf'])
+    expect(result.at('handle')).not.toSuggest('mode')
+    expect(result.at('handle')).not.toSuggest('name')
+    expect(result.at('modes')).toSuggest('dark')
+    expect(result.at('modes')).not.toSuggest('light')
+    expect(result.at('system')).toSuggest(['tokensOf', 'namesOf', 'varsOf'])
   })
 
   it('keeps trait conflicts local and branch mistakes exact', () => {
@@ -56,7 +56,7 @@ describe('token-module editor DX', () => {
     `
 
     expect(errors).toHaveErrorCount(1)
-    expect(errors).toHaveError(/light.*does not exist|Property 'light'/)
+    expect(errors).toHaveError(/light.*does not exist|Property 'light'/, { on: 'light' })
   })
 
   it('keeps token hovers compact and factual', () => {
@@ -68,10 +68,11 @@ describe('token-module editor DX', () => {
       ds.t.color.${cursor('brand')}brand
     `
 
-    const hover = result.at('brand').hover ?? ''
-    expect(hover).toContain('VanityTokenHandleOf')
+    const hover = result.at('brand').hover?.displayText ?? ''
+    expect(hover).toContain('VanityTokenHandle')
     expect(hover).toContain('app-color-brand')
     expect(hover).toContain('color.brand')
-    expect(hover).toContain('VanityDefaultTokenPolicy')
+    expect(hover).not.toMatch(/TdefResult|VanityDefaultTokenPolicy|Omit</)
+    expect(hover.length).toBeLessThan(500)
   })
 })

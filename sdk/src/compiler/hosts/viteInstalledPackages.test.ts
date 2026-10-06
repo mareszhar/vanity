@@ -148,7 +148,7 @@ const cases = (['source', 'precompiled'] as const).flatMap(packageKind =>
     (['client dev', 'SSR dev', 'client build', 'SSR build'] as const)
       .map(host => ({ host, moduleKind, packageKind }))))
 
-describe.sequential('physically installed packages in client and SSR graphs', () => {
+describe('physically installed packages in client and SSR graphs', () => {
   it.each(cases)('$packageKind package $moduleKind module in $host', async ({ host, moduleKind, packageKind }) => {
     const fixture = await writeInstalledFixture(packageKind, moduleKind)
     const plugin = pluginFor(fixture)

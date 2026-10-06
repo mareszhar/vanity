@@ -12,9 +12,9 @@
     "measure": "node emit/measure.mjs"
   },
   "devDependencies": {
-    "@mszr/selenita": "^0.2.2",
-    "type-fest": "^5.8.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "@mszr/selenita": "catalog:",
+    "type-fest": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

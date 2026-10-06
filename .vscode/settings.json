@@ -38,5 +38,13 @@
 
   "eslint.workingDirectories": [{ "mode": "auto" }],
   "typescript.tsdk": "node_modules/typescript/lib",
-  "editor.acceptSuggestionOnCommitCharacter": false
+  "editor.acceptSuggestionOnCommitCharacter": false,
+
+  // vitest
+  // ──────────────────────────────────────────────────────────────
+
+  // The workspace test explorer owns SDK tests. Spikes run independently;
+  // application Vite configs do not define Vitest suites.
+  "vitest.configSearchPatternInclude": "sdk/vitest.config.ts",
+  "vitest.configSearchPatternExclude": "**/{node_modules,__references__,__archive__,__temp__,dist,generated,.*}/**"
 }

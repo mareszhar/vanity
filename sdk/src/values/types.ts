@@ -41,6 +41,7 @@ export type VanityResolution = 'self' | 'system'
 export const VANITY_VALUE = Symbol.for('vanity.value')
 
 interface VanityValueBase<Type extends VanityCssDataType = VanityCssDataType> {
+  /** CSS data type used to check compatible tokens, operations, and declaration positions. */
   readonly type: Type
   readonly [VANITY_VALUE]: {
     readonly resolution: VanityResolution
@@ -70,7 +71,9 @@ export interface VanityCssValue<
   Css extends string = string,
   Type extends VanityCssDataType = VanityCssDataType,
 > extends VanitySelfValue<Type> {
+  /** Serialize this self-contained value as ordinary CSS text. */
   readonly css: Css
+  /** Return the same CSS text as .css for interpolation. */
   toString: () => Css
 }
 

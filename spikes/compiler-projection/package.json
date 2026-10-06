@@ -12,10 +12,10 @@
     "validate": "pnpm run check && pnpm run test"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
-    "type-fest": "^5.8.0",
-    "typescript": "^6.0.3",
-    "vite": "^8.1.5",
-    "vitest": "^4.1.10"
+    "@types/node": "catalog:",
+    "type-fest": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

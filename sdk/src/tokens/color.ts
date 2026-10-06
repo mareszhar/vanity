@@ -104,9 +104,13 @@ export interface VanityChannelOperation<Value extends VanityColorChannel = Vanit
     readonly kind: 'set' | 'add' | 'subtract' | 'multiply' | 'divide'
     readonly value: Value
   }[]
+  /** Return a new channel expression that will add this operand in authored order. */
   add: <const Next extends VanityColorChannel>(value: Next) => VanityChannelOperation<Value | Next>
+  /** Return a new channel expression that will subtract this operand in authored order. */
   subtract: <const Next extends VanityColorChannel>(value: Next) => VanityChannelOperation<Value | Next>
+  /** Return a new channel expression multiplied by this operand in authored order. */
   multiply: <const Next extends VanityColorChannel>(value: Next) => VanityChannelOperation<Value | Next>
+  /** Return a new channel expression divided by this operand in authored order. */
   divide: <const Next extends VanityColorChannel>(value: Next) => VanityChannelOperation<Value | Next>
 }
 
@@ -631,10 +635,15 @@ function createChannelExpression<const Value extends VanityColorChannel>(
 
 /** Composable operations over a relative-color channel. Plain numbers mean `set`. */
 export const channel = {
+  /** Replace the relative color channel with the supplied value. */
   set: <const Value extends VanityColorChannel>(value: Value): VanityChannelOperation<Value> => createChannelOperation('set', value),
+  /** Add to the relative color channel; chain further operations on the returned expression. */
   add: <const Value extends VanityColorChannel>(value: Value): VanityChannelOperation<Value> => createChannelOperation('add', value),
+  /** Subtract from the relative color channel; chain further operations on the returned expression. */
   subtract: <const Value extends VanityColorChannel>(value: Value): VanityChannelOperation<Value> => createChannelOperation('subtract', value),
+  /** Multiply the relative color channel; chain further operations on the returned expression. */
   multiply: <const Value extends VanityColorChannel>(value: Value): VanityChannelOperation<Value> => createChannelOperation('multiply', value),
+  /** Divide the relative color channel; chain further operations on the returned expression. */
   divide: <const Value extends VanityColorChannel>(value: Value): VanityChannelOperation<Value> => createChannelOperation('divide', value),
 } as const
 

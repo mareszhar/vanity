@@ -34,6 +34,17 @@ describe('typed CSS value contracts', () => {
   })
 
   it('propagates math results and rejects known incompatible comparisons', () => {
+    expectTypeOf(calc(length.rem(2)).add(percent(30))).toExtend<import('@mszr/vanity').VanityCalc<'length-percentage'>>()
+    expectTypeOf(calc(length.rem(2)).subtract('1px')).toExtend<import('@mszr/vanity').VanityCalc<'length'>>()
+    // @ts-expect-error — a repair message still rejects incompatible dimensions
+    calc('1rem').subtract('20deg')
+    const operand = Math.random() > 0.5 ? length.rem(1) : angle.deg(20)
+    // @ts-expect-error — every possible operand must be compatible
+    calc('1rem').add(operand)
+    // @ts-expect-error — every possible calculation dimension must be compatible
+    calc(operand).subtract('1px')
+    if (operand.type === 'length')
+      expectTypeOf(calc(operand).add('1px')).toExtend<import('@mszr/vanity').VanityCalc<'length'>>()
     expectTypeOf(calc(length.px(2)).multiply(cssNumber(3))).toExtend<import('@mszr/vanity').VanityCalc<'length'>>()
     expectTypeOf(calc(length.px(2)).divide(length.px(1))).toExtend<import('@mszr/vanity').VanityCalc<'number'>>()
     expectTypeOf(min(length.px(2), percent(30))).toExtend<import('@mszr/vanity').VanityMathValue<'length-percentage'>>()

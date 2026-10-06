@@ -15,7 +15,7 @@ describe('hail editor DX', () => {
       void ds.mx.${cursor('mixins')}
     `
 
-    expect(result.at('system').completions).toContainCompletions([
+    expect(result.at('system')).toSuggest([
       'rgbx',
       'hslx',
       'hwbx',
@@ -31,9 +31,9 @@ describe('hail editor DX', () => {
       'contrastOf',
       'mx',
     ])
-    expect(result.at('family').completions).toContainCompletion('from')
-    expect(result.at('family').completions).not.toContainCompletion('inE')
-    expect(result.at('mixins').completions).toContainCompletions(['circle', 'square', 'truncate'])
+    expect(result.at('family')).toSuggest('from')
+    expect(result.at('family')).not.toSuggest('inE')
+    expect(result.at('mixins')).toSuggest(['circle', 'square', 'truncate'])
   })
 
   it('projects conditional and renamed members exactly', () => {
@@ -48,11 +48,11 @@ describe('hail editor DX', () => {
       void ds.oklchx.${cursor('hover')}inE
     `
 
-    expect(result.at('system').completions).toContainCompletions(['portion', 'literal'])
-    expect(result.at('system').completions).not.toContainCompletions(['span', 'exact'])
-    expect(result.at('family').completions).toContainCompletions(['from', 'inE'])
-    expect(result.at('hover').hover).toContain('semantic elevation')
-    expect(result.at('hover').hover).not.toContain('VanityDefinitionMerge')
+    expect(result.at('system')).toSuggest(['portion', 'literal'])
+    expect(result.at('system')).not.toSuggest(['span', 'exact'])
+    expect(result.at('family')).toSuggest(['from', 'inE'])
+    expect(result.at('hover').hover?.documentation).toContain('semantic elevation')
+    expect(result.at('hover').hover?.text).not.toContain('VanityDefinitionMerge')
   })
 
   it('localizes malformed ranges, preset names, and elevation conflicts', () => {
@@ -80,10 +80,12 @@ describe('hail editor DX', () => {
       void ds.${cursor('contrast')}contrastOf
     `
 
-    expect(result.at('hail').hover).toContain('deletable opinionated layer')
-    expect(result.at('size').hover).toContain('unitless')
-    expect(result.at('contrast').hover).toContain('Aesthetic')
-    for (const name of ['hail', 'size', 'contrast'] as const)
-      expect(result.at(name).hover).not.toMatch(/VanityDefinitionMerge|VanityExpressionNode|\bany\b/)
+    expect(result.at('hail').hover?.documentation).toContain('deletable opinionated layer')
+    expect(result.at('size').hover?.documentation).toContain('unitless')
+    expect(result.at('contrast').hover?.documentation).toContain('Aesthetic')
+    for (const name of ['hail', 'size', 'contrast'] as const) {
+      expect(result.at(name).hover?.displayText).toBeTruthy()
+      expect(result.at(name).hover?.text).not.toMatch(/VanityDefinitionMerge|VanityExpressionNode|\bany\b/)
+    }
   })
 })

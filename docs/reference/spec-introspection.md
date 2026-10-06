@@ -249,7 +249,7 @@ Audit categories are advisory by default except for `staleDerivations`, which is
 
 ## 11. Agent and DevTools projections
 
-`buildAgentContext(manifest)` derives bounded structured context:
+`buildAgentContext(manifest)` derives structured context from the primary system and published modules:
 
 - identities, root, and layers;
 - axes and conditions;
@@ -258,6 +258,8 @@ Audit categories are advisory by default except for `staleDerivations`, which is
 - escapes, nonportable values, and overwrite cautions.
 
 `generateAgentContext()` renders those facts as Markdown. DevTools reads the same Manifest v4 modules and system map for tokens, usage, declarations, recipes/anatomies, ports, class provenance, conditions, layers, escapes, and contrast. Neither maintains a second source of truth.
+
+The context contains the complete primary token vocabulary; its size grows with the system. For a focused agent task, start with a selected `ds.explain(handle)` or `vanity explain <semantic-path> --json`, then inspect the recorded dependencies, declarations and audit evidence needed for that question. Use full agent context when the job requires orientation across the system. Field documentation distinguishes token fallback from nominal axis default, emitted contexts from live state, and interchange portability from ordinary CSS use.
 
 ## 12. Evidence
 

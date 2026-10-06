@@ -1,7 +1,12 @@
 catalogMode: strict
 blockExoticSubdeps: true
+
 minimumReleaseAge: 4320
 minimumReleaseAgeExcludePrune: true
+
+# Reviewed editor backend; keep the release-age exception version-specific.
+minimumReleaseAgeExclude:
+  - '@mszr/selenita@0.3.0'
 
 trustPolicy: no-downgrade
 trustPolicyExclude:
@@ -25,6 +30,7 @@ packages:
   - sandbox/canary
   - sandbox/demo-main
   - sandbox/demo-comparisons
+  - spikes/*
 
 # Panda 1.12 pins these versions below their published security fixes.
 overrides:
@@ -40,7 +46,7 @@ allowBuilds:
 catalog:
   '@antfu/eslint-config': ^9.5.1
   '@clack/prompts': ^1.8.1
-  '@mszr/selenita': ^0.2.2
+  '@mszr/selenita': ^0.3.0
   '@nuxt/kit': 4.5.2
   '@nuxt/schema': 4.5.2
   '@pandacss/dev': ^1.12.1
@@ -72,13 +78,13 @@ catalog:
   tailwindcss: ^4.3.3
   tsx: ^4.23.15
   turbo: 2.11.5
+  type-fest: ^5.10.0
   # @typescript-eslint 8.x supports TypeScript < 6.1; do not upgrade to 7 yet.
   typescript: ^6.0.3
   unplugin-auto-import: ^21.1.0
   vite: 8.3.1
   vitefu: ^1.1.3
-  # Selenita 0.2.2 matcher declarations use the Vitest 4 type parameters.
-  vitest: ^4.1.11
+  vitest: ^5.0.3
   vue: ^3.5.43
   vue-tsc: ^3.3.11
   wxt: ^0.21.4
@@ -87,7 +93,7 @@ catalog:
 # versions above that exercise the maintainer workspace and release gates.
 catalogs:
   peers:
-    '@mszr/selenita': '>=0.2.2 <1.0.0'
+    '@mszr/selenita': '>=0.3.0 <0.4.0'
     '@nuxt/kit': '>=4.4.8 <5.0.0'
     '@nuxt/schema': '>=4.4.8 <5.0.0'
     nuxt: '>=4.4.8 <5.0.0'
@@ -95,3 +101,6 @@ catalogs:
     vite: '^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0'
     vue: ^3.5.39
     wxt: '>=0.21.4 <1.0.0'
+  # This experiment owns Vite 6 HTML-hook behavior, not the default host matrix.
+  vite6:
+    vite: 6.4.3

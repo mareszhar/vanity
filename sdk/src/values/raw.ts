@@ -5,29 +5,53 @@ import { throwValueError } from './error'
 import { createRawNode, ExpressionValue } from './protocol'
 
 export interface VanityRawValueConstructors {
+  /** Preserve raw CSS syntax asserted as <unknown>; checks balance rather than this type’s grammar. */
   unknown: (syntax: string) => VanityCssValue<string, 'unknown'>
+  /** Preserve raw CSS syntax asserted as <declaration>; checks balance rather than this type’s grammar. */
   declaration: (syntax: string) => VanityCssValue<string, 'declaration'>
+  /** Preserve raw CSS syntax asserted as <number>; checks balance rather than this type’s grammar. */
   number: (syntax: string) => VanityCssValue<string, 'number'>
+  /** Preserve raw CSS syntax asserted as <integer>; checks balance rather than this type’s grammar. */
   integer: (syntax: string) => VanityCssValue<string, 'integer'>
+  /** Preserve raw CSS syntax asserted as <percentage>; checks balance rather than this type’s grammar. */
   percentage: (syntax: string) => VanityCssValue<string, 'percentage'>
+  /** Preserve raw CSS syntax asserted as <number-percentage>; checks balance rather than this type’s grammar. */
   numberPercentage: (syntax: string) => VanityCssValue<string, 'number-percentage'>
+  /** Preserve raw CSS syntax asserted as <length>; checks balance rather than this type’s grammar. */
   length: (syntax: string) => VanityCssValue<string, 'length'>
+  /** Preserve raw CSS syntax asserted as <length-percentage>; checks balance rather than this type’s grammar. */
   lengthPercentage: (syntax: string) => VanityCssValue<string, 'length-percentage'>
+  /** Preserve raw CSS syntax asserted as <angle>; checks balance rather than this type’s grammar. */
   angle: (syntax: string) => VanityCssValue<string, 'angle'>
+  /** Preserve raw CSS syntax asserted as <time>; checks balance rather than this type’s grammar. */
   time: (syntax: string) => VanityCssValue<string, 'time'>
+  /** Preserve raw CSS syntax asserted as <frequency>; checks balance rather than this type’s grammar. */
   frequency: (syntax: string) => VanityCssValue<string, 'frequency'>
+  /** Preserve raw CSS syntax asserted as <resolution>; checks balance rather than this type’s grammar. */
   resolution: (syntax: string) => VanityCssValue<string, 'resolution'>
+  /** Preserve raw CSS syntax asserted as <flex>; checks balance rather than this type’s grammar. */
   flex: (syntax: string) => VanityCssValue<string, 'flex'>
+  /** Preserve raw CSS syntax asserted as <color>; checks balance rather than this type’s grammar. */
   color: (syntax: string) => VanityCssValue<string, 'color'>
+  /** Preserve raw CSS syntax asserted as <image>; checks balance rather than this type’s grammar. */
   image: (syntax: string) => VanityCssValue<string, 'image'>
+  /** Preserve raw CSS syntax asserted as <position>; checks balance rather than this type’s grammar. */
   position: (syntax: string) => VanityCssValue<string, 'position'>
+  /** Preserve raw CSS syntax asserted as <easing-function>; checks balance rather than this type’s grammar. */
   easingFunction: (syntax: string) => VanityCssValue<string, 'easing-function'>
+  /** Preserve raw CSS syntax asserted as <transform-function>; checks balance rather than this type’s grammar. */
   transformFunction: (syntax: string) => VanityCssValue<string, 'transform-function'>
+  /** Preserve raw CSS syntax asserted as <transform-list>; checks balance rather than this type’s grammar. */
   transformList: (syntax: string) => VanityCssValue<string, 'transform-list'>
+  /** Preserve raw CSS syntax asserted as <custom-ident>; checks balance rather than this type’s grammar. */
   customIdent: (syntax: string) => VanityCssValue<string, 'custom-ident'>
+  /** Preserve raw CSS syntax asserted as <dashed-ident>; checks balance rather than this type’s grammar. */
   dashedIdent: (syntax: string) => VanityCssValue<string, 'dashed-ident'>
+  /** Preserve raw CSS syntax asserted as <string>; checks balance rather than this type’s grammar. */
   string: (syntax: string) => VanityCssValue<string, 'string'>
+  /** Preserve raw CSS syntax asserted as <url>; checks balance rather than this type’s grammar. */
   url: (syntax: string) => VanityCssValue<string, 'url'>
+  /** Preserve raw CSS syntax under an explicit plugin-owned data-type name. */
   plugin: <const Name extends string>(name: Name, syntax: string) => VanityCssValue<string, `plugin:${Name}`>
 }
 

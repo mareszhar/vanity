@@ -6,13 +6,15 @@ The entrypoint is Node/test-only. It never enters application or SSR bundles.
 
 ## 1. Install
 
-Install Selenita and TypeScript only in projects that exercise editor DX:
+For a Vitest suite with editor-DX checks:
 
 ```sh
-pnpm add -D @mszr/vanity @mszr/selenita typescript@^6.0.3 vitest@^4.1.11
+pnpm add -D @mszr/vanity @mszr/selenita@^0.3.0 typescript@^6.0.3 vitest@^5.0.3 @types/node
 ```
 
-`@mszr/selenita` is an optional peer of Vanity because ordinary styling, runtime, compiler, Vue, and Nuxt consumers do not need it. Use TypeScript 6 for its language-service API and Vitest 4 for Selenita 0.2.2's matcher declarations. TypeScript 7's native CLI does not provide that API; Vitest 5's matcher types are incompatible with this Selenita release.
+Editor-DX checks require Selenita 0.3. It is an optional peer of Vanity because ordinary styling, runtime, compiler, Vue, and Nuxt consumers do not need it. Its Vitest integration requires Vitest 5.0.3 or later within major 5. Selenita supplies its own TypeScript 6 language service, independently of the project's compiler. Vanity's compiler and lint tooling use TypeScript 6.
+
+If your test tsconfig restricts `lib`, include `ESNext.Disposable` for Selenita's resource ownership and `DOM` for Vitest/Vite declarations. These declarations do not create a browser test environment.
 
 ## 2. Emitted CSS
 
@@ -112,54 +114,52 @@ Expected values may be exact strings or regular expressions. Values are trimmed,
 
 These helpers inspect a mounted fixture. They do not inject captured CSS or create a DOM. A missing document, selector, or `getComputedStyle()` reports the exact missing test setup.
 
-## 5. Selenita preset
+## 5. Selenita configuration
 
-`defineVanityProject()` wraps Selenita's `defineProject()` and injects one virtual system module, available as `#vanity/system`:
-
-```TS
-import {
-  cursor,
-  defineVanityProject,
-} from '@mszr/vanity/testing'
-import '@mszr/selenita/vitest'
-
-const project = defineVanityProject({
-  tsconfig: './tsconfig.json',
-  system: "export { ds } from './src/system'",
-})
-
-const result = project.query`
-  import { ds } from '#vanity/system'
-  void ds.${cursor}
-`
-
-expect(result.completions).toContainCompletions([
-  'class',
-  'recipe',
-  'runtime',
-])
-```
-
-The default virtual module exports a minimal consolidated system, useful for testing a standalone helper. A design-system or plugin suite normally provides `system` source that re-exports its real locked system.
-
-The complete configuration surface is:
+`createVanityProjectConfig()` returns reusable Selenita configuration with a virtual system module available as `#vanity/system`. Pass it to Selenita's project constructor:
 
 ```TS
-const project = defineVanityProject({
+import { cursor, defineProject } from '@mszr/selenita/vitest'
+import { createVanityProjectConfig } from '@mszr/vanity/testing'
+import { expect, it } from 'vitest'
+
+const project = defineProject(createVanityProjectConfig({
   tsconfig: './tsconfig.json',
   system: "export { ds } from './src/system'",
-  systemFile: '.vanity-system.ts',
-  systemAlias: '#vanity/system',
-  files: {},
-  aliases: {},
-})
+}))
 
-void project
+it('discovers the styling surface', () => {
+  const result = project.query`
+    import { ds } from '#vanity/system'
+    void ds.${cursor}
+  `
+  expect(result).toSuggest(['class', 'recipe', 'runtime'], {
+    requireDocumentation: true,
+  })
+})
 ```
 
-Set `system: false` to keep the wrapper's file/alias merging without injecting a system. User `files` and `aliases` win on collision.
+Declare `defineProject()` at module or `describe` scope; Vitest warms and disposes it for that scope. Standalone tools and projects created inside a test use `createProject()` from Selenita's core with `using` or explicit disposal. The Vanity configuration itself owns no resource and imports no test runner.
 
-`cursor`, `group`, and `snippet` are re-exported from Selenita so a plugin DX suite needs one ordinary import. Matchers stay an explicit `@mszr/selenita/vitest` side-effect import; Vanity does not silently choose a test runner.
+The default virtual module exports a minimal consolidated system, useful for testing a standalone helper. A design-system or plugin suite normally supplies `system` source that re-exports its real locked system.
+
+The preset accepts Selenita's `tsconfig`, `compilerOptions`, `preferences`, `files`, `aliases` and `plugins`, plus:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `system` | minimal consolidated system | Source of the virtual module; `false` omits it. |
+| `systemFile` | `.vanity-system.ts` | Virtual path relative to the project root. |
+| `systemAlias` | `#vanity/system` | Import specifier for that module. |
+
+Caller `files` and `aliases` win on collision. Compose further Selenita configuration layers in the project constructor or `project.extend()`.
+
+Import `cursor`, `mark`, `snippet` and the project constructor from the same Selenita entrypoint. Its private marker registry belongs to that package instance; a package manager can install separate instances for different peer contexts.
+
+Use observations as matcher receivers so failures include source context; use `hover.displayText` for types, `hover.documentation` for prose, and named marks with `rangeOf()` for exact diagnostic underlines. Scoped snippets and `atEach()` compare completion surfaces without repeating fixture source. Selenita's [promise guide](https://github.com/mareszhar/selenita/blob/main/docs/guide/promises.md) covers these patterns and native rename, import and repair actions.
+
+Standalone tools and agents can use the same configuration with core `createProject()`. Read the observations needed for the job: `errors` for code, message and range; a selected completion's documentation for discovery; `signatureHelp.activeParameter` for argument guidance; and a diagnostic's `codeFixes` for native repairs. Recheck the corrected fixture in the same project. Observations are lazy, so read the data you intend to retain before disposal and create a fresh project after changing files on disk. Fixture diagnostics cover the supplied files; run the project's strict compiler separately to check imported sources and declarations.
+
+For semantic troubleshooting, use [`ds.explain()`, `ds.introspect()` and `ds.audit()`](./spec-introspection.md) or the built manifest and CLI. These answer ownership, dependencies, emission and audit questions that TypeScript's editor service cannot decide. An audit's `unevaluated` categories identify missing evidence rather than asserting that an unobserved behavior is sound.
 
 ## 6. Required plugin evidence
 

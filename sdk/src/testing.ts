@@ -3,8 +3,7 @@
  * assert rendered custom properties, and exercise editor DX with Selenita.
  */
 
-import type { DefineProjectConfig } from '@mszr/selenita'
-import { cursor, defineProject, group, snippet } from '@mszr/selenita'
+import type { ProjectConfig } from '@mszr/selenita'
 import { VanityError } from './diagnostics'
 import { substrate } from './substrate'
 import { readTokenFoldEvidence } from './tokens/fold'
@@ -236,7 +235,7 @@ function resolveRenderTarget(target: VanityRenderTarget): VanityRenderElement {
 }
 
 /** Configuration for a Selenita project prewired with `#vanity/system`. */
-export interface VanityProjectConfig extends DefineProjectConfig {
+export interface VanityProjectConfig extends ProjectConfig {
   /**
    * Complete source for the virtual `#vanity/system` module.
    *
@@ -255,12 +254,12 @@ export const ds = createSystem().consolidate()
 `
 
 /**
- * Create a Selenita project with a virtual Vanity system module already aliased.
+ * Create reusable Selenita configuration with a virtual Vanity system module already aliased.
  *
  * @example
- * `const project = defineVanityProject({ system: "export { ds } from './src/system'" })`
+ * `const project = defineProject(createVanityProjectConfig({ system: "export { ds } from './src/system'" }))`
  */
-export function defineVanityProject(config: VanityProjectConfig = {}): ReturnType<typeof defineProject> {
+export function createVanityProjectConfig(config: VanityProjectConfig = {}): ProjectConfig {
   const {
     aliases = {},
     files = {},
@@ -270,7 +269,7 @@ export function defineVanityProject(config: VanityProjectConfig = {}): ReturnTyp
     ...project
   } = config
 
-  return defineProject({
+  return {
     ...project,
     files: {
       ...(system === false ? {} : { [systemFile]: system }),
@@ -280,12 +279,5 @@ export function defineVanityProject(config: VanityProjectConfig = {}): ReturnTyp
       ...(system === false ? {} : { [systemAlias]: `./${systemFile}` }),
       ...aliases,
     },
-  })
+  }
 }
-
-/** Selenita cursor marker re-exported so plugin DX suites need one import. */
-export { cursor }
-/** Selenita parity-group helper re-exported so plugin DX suites need one import. */
-export { group }
-/** Selenita reusable-snippet helper re-exported so plugin DX suites need one import. */
-export { snippet }

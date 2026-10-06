@@ -52,14 +52,14 @@ describe('the vue overlay, at the cursor', () => {
       const d = useAnatomy(dialog)
       void d.value.${cursor}
     `
-    expect(result.completions).toContainCompletions(['backdrop', 'content', 'title'])
+    expect(result).toSuggest(['backdrop', 'content', 'title'])
   })
 
   it('a wrong variant value dies at the key', () => {
     const { errors } = project.check`${defineOverlay}
       void useAnatomy(dialog, { size: 'smm' })
     `
-    expect(errors).toHaveError(/smm|sm|lg/)
+    expect(errors).toHaveError(/smm|sm|lg/, { on: 'size' })
     expect(errors).toHaveErrorCount(1)
   })
 
@@ -75,7 +75,7 @@ describe('the vue overlay, at the cursor', () => {
       const options = ${cursor}propsOf(dialog)
       void options
     `
-    const hover = result.hover ?? ''
+    const hover = result.hover?.displayText ?? ''
     // TypeScript repeats the inferred shape in the generic argument, parameter,
     // and return alias. Removing any one of those sites loses exact projection;
     // the important contract is no extra overload or internal helper noise.
@@ -90,7 +90,7 @@ describe('the vue overlay, at the cursor', () => {
       const options = ${cursor}nuxtPropsOf(dialog)
       void options
     `
-    const hover = result.hover ?? ''
+    const hover = result.hover?.displayText ?? ''
     expect(hover).toMatch(/size\?: "sm" \| "lg"/)
     expect(hover).not.toMatch(/\bany\b/)
     expect(hover).not.toContain('overload')

@@ -32,6 +32,7 @@ export interface VanityScale<
   /** Resolve a named configured step or any finite negative/fractional step. */
   <Step extends keyof Steps & string>(step: Step): Value
   (step: number): Value
+  /** Configured names and their numeric step positions. */
   readonly steps: Readonly<Steps>
   /** Materialize the configured named steps as an immutable token subtree. */
   readonly tokens: () => { readonly [Key in keyof Steps]: Value }
@@ -39,7 +40,9 @@ export interface VanityScale<
 
 type LengthValue = VanityCssValue<string, 'length'>
 
+/** Create callable numeric scales whose named steps can also become token subtrees. */
 export const scale = Object.freeze({
+  /** Create a pixel scale: each step is multiplied by the configured unit size. */
   linear<const Steps extends Readonly<Record<string, number>>>(
     options: VanityLinearScaleOptions<Steps>,
   ): VanityScale<Steps, LengthValue> {
@@ -47,6 +50,7 @@ export const scale = Object.freeze({
     return createScale(options.steps, step => length.px(roundNumber(options.unit * step)))
   },
 
+  /** Create a ratio-based length scale: base × ratio raised to the selected step. */
   modular<const Steps extends Readonly<Record<string, number>>>(
     options: VanityModularScaleOptions<Steps>,
   ): VanityScale<Steps, LengthValue> {

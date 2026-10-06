@@ -7,13 +7,25 @@ const project = vanityProject()
 describe('shared value editor DX', () => {
   it('groups units and typed raw forms into focused namespaces', () => {
     const result = project.query`
-      import { length, rawValue } from '@mszr/vanity'
+      import { angle, flex, frequency, length, rawValue, resolution, time } from '@mszr/vanity'
       void length.${cursor('length')}
+      void angle.${cursor('angle')}
+      void time.${cursor('time')}
+      void frequency.${cursor('frequency')}
+      void resolution.${cursor('resolution')}
+      void flex.${cursor('flex')}
       void rawValue.${cursor('raw')}
     `
 
-    expect(result.at('length').completions).toContainCompletions(['px', 'rem', 'em', 'vh', 'cqi'])
-    expect(result.at('raw').completions).toContainCompletions(['unknown', 'length', 'color', 'transformList'])
+    expect(result.at('length')).toSuggest(['px', 'rem', 'em', 'vh', 'cqi'], { requireDocumentation: true })
+    expect(result.at('raw')).toSuggest(['unknown', 'length', 'color', 'transformList'], { requireDocumentation: true })
+    const inheritedFunctionMembers = new Set(['apply', 'arguments', 'bind', 'call', 'caller', 'length', 'name', 'prototype', 'toString', 'Symbol', '[Symbol.hasInstance]'])
+    for (const namespace of ['length', 'angle', 'time', 'frequency', 'resolution', 'flex', 'raw'] as const) {
+      const observation = result.at(namespace)
+      const members = observation.completionNames.filter(name => !inheritedFunctionMembers.has(name))
+      expect(members.length, namespace).toBeGreaterThan(0)
+      expect(observation).toSuggest(members, { requireDocumentation: true })
+    }
   })
 
   it('keeps custom-property anatomy and color interpolation discoverable', () => {
@@ -24,8 +36,8 @@ describe('shared value editor DX', () => {
       void colorMix(['#fff', '#000']).${cursor('mix')}
     `
 
-    expect(result.at('property').completions).toContainCompletions(['$name', '$var'])
-    expect(result.at('mix').completions).toContainCompletion('in')
+    expect(result.at('property')).toSuggest(['$name', '$var'])
+    expect(result.at('mix')).toSuggest('in')
   })
 
   it('puts an incompatible min operand in one local diagnostic', () => {
@@ -47,9 +59,9 @@ describe('shared value editor DX', () => {
       void resol${cursor('system')}ved
     `
 
-    expect(result.at('self').hover).toContain('VanityUnitValue')
-    expect(result.at('system').hover).toContain('VanitySystemValue')
-    expect(result.at('self').hover).not.toContain('VanityExpressionNode')
-    expect(result.at('system').hover).not.toContain('VanityExpressionNode')
+    expect(result.at('self').hover?.displayText).toContain('VanityUnitValue')
+    expect(result.at('system').hover?.displayText).toContain('VanitySystemValue')
+    expect(result.at('self').hover?.text).not.toContain('VanityExpressionNode')
+    expect(result.at('system').hover?.text).not.toContain('VanityExpressionNode')
   })
 })

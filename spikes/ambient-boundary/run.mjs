@@ -5,16 +5,19 @@
  * and asserts clean-vs-errors against expectation.
  *
  * The only variable across the matrix is the keyword the generated ambient
- * declarations use: `const`, as vanity emits today, or `var`.
+ * declarations use: `const` or `var`.
  */
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const at = path => resolve(root, path)
+// Use the installed compiler and running Node without npx selecting another toolchain.
+const tsc = createRequire(import.meta.url).resolve('typescript/bin/tsc')
 
 /** Byte-shaped like sdk/src/compiler/auto-imports/autoImportDeclarations.ts, keyword aside. */
 function ambientDeclaration(keyword) {
@@ -69,7 +72,7 @@ function generate(keyword) {
 
 function check(project) {
   try {
-    execFileSync('npx', ['tsc', '-p', at(project)], { cwd: root, stdio: 'pipe' })
+    execFileSync(process.execPath, [tsc, '-p', at(project)], { cwd: root, stdio: 'pipe' })
     return { ok: true, out: '' }
   }
   catch (error) {

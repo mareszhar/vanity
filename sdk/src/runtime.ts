@@ -4,8 +4,8 @@
  * ([patterns.md §1]).
  */
 
+import type { VanityPort, VanityPortBindingOptions, VanityPortMeta } from '@mszr/vanity'
 import type { VanityAtoms, VanityAtomsRuntime } from './atoms/types'
-import type { VanityPort, VanityPortBindingOptions, VanityPortMeta } from './ports/types'
 import type { VanityAnatomy, VanityAnatomyRuntime, VanityRecipe, VanityRecipeRuntime } from './recipes/types'
 import type { VanityInternalTokenHandle } from './tokens/handle'
 import { createAtomsHandle } from './atoms/handle'
@@ -17,19 +17,32 @@ import { serializeRuntimeCssText } from './runtime/value'
 import { createHandle } from './tokens/handle'
 
 export type { VanityAtomsRuntime } from './atoms/types'
-export type { VanityPort, VanityPortBindingOptions, VanityPortMeta, VanityPortStyle, VanityPortValue } from './ports/types'
 export type { VanityAnatomyRuntime, VanityRecipeRuntime } from './recipes/types'
+export { VanityRuntimeError } from './runtime/contract'
+export {
+  restoreRuntimeControllerFactory,
+  restoreRuntimeProps,
+  restoreRuntimeReconciler,
+  restoreRuntimeStyle,
+  restoreSnapshotFrom,
+  setCustomProperties,
+  setCustomProperty,
+} from './runtime/controller'
+export type { VanityAxisControl, VanityAxisControlRoot } from './system/axes'
+export type { VanityPort, VanityPortBindingOptions, VanityPortMeta, VanityPortStyle, VanityPortValue } from '@mszr/vanity'
 export type {
   VanityCustomPropertyEntries,
   VanityCustomPropertyReference,
   VanityCustomPropertyTarget,
   VanityRuntimeAxes,
+  VanityRuntimeCaseSelector,
   VanityRuntimeController,
   VanityRuntimeControllerFactory,
   VanityRuntimeCycleOptions,
   VanityRuntimeDiagnostic,
   VanityRuntimeDiagnosticCode,
   VanityRuntimeInput,
+  VanityRuntimeMutableActions,
   VanityRuntimeOptions,
   VanityRuntimeProps,
   VanityRuntimeQueryScope,
@@ -43,18 +56,7 @@ export type {
   VanityRuntimeTarget,
   VanityRuntimeTokens,
   VanitySnapshotFrom,
-} from './runtime/contract'
-export { VanityRuntimeError } from './runtime/contract'
-export {
-  restoreRuntimeControllerFactory,
-  restoreRuntimeProps,
-  restoreRuntimeReconciler,
-  restoreRuntimeStyle,
-  restoreSnapshotFrom,
-  setCustomProperties,
-  setCustomProperty,
-} from './runtime/controller'
-export type { VanityAxisControl, VanityAxisControlRoot } from './system/axes'
+} from '@mszr/vanity'
 
 /** Merge port/style fragments, skipping falsy entries. Re-exported from core. */
 export { ports }
@@ -73,12 +75,17 @@ export function restoreToken(meta: Parameters<typeof createHandle>[0] | string):
  * code. Generated import target — not for hand-written code.
  */
 export function restorePort(meta: VanityPortMeta): VanityPort {
-  return createPortHandle(meta)
+  // Serialized handles enter core's public type identity across bundled entries.
+  return createPortHandle(meta) as unknown as VanityPort
 }
 
-/** Bind app/SSR validator implementations to a restored port without globals. */
-export function bindPort<Port extends VanityPort>(port: Port, options: VanityPortBindingOptions): Port {
-  return port.bind(options) as Port
+/**
+ * Bind application validators to a core or restored port, preserving its declaration type.
+ * @param port - Port handle to bind; the returned handle retains its accepted CSS data type.
+ * @param options - Validator implementations keyed by the port's declared ids, plus the development flag.
+ */
+export function bindPort<Port extends { bind: (options: VanityPortBindingOptions) => Port }>(port: Port, options: VanityPortBindingOptions): Port {
+  return port.bind(options)
 }
 
 /**
