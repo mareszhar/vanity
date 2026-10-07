@@ -318,6 +318,53 @@ export const card = ds.class({ color: 'var(--description-artifact)' })
     }))).rejects.toThrow(/docs: build vanity-docs-1-|@fixture\/description-artifact.*stale|stale.*@fixture\/description-artifact/)
   })
 
+  it.each(['string', 'object', 'strings', 'objects', 'mixed'] as const)('builds compiler.system %s through the Vite host', async (form) => {
+    const root = await temporaryApp(`system-form-${form}`)
+    const first = join(root, 'first.ts')
+    const second = join(root, 'second.ts')
+    await writeFile(first, fixtureSystem('red', 'first'))
+    await writeFile(second, fixtureSystem('blue', 'second'))
+    const single = form === 'string' || form === 'object'
+    await writeFile(join(root, 'first.css.ts'), `import { ds } from './first'\nexport const first = ds.class({ color: ds.t.color.brand })\n`)
+    await writeFile(join(root, 'second.css.ts'), `import { ds } from './second'\nexport const second = ds.class({ color: ds.t.color.brand })\n`)
+    await writeFile(join(root, 'entry.ts'), `export { first } from './first.css.ts'\n${single ? '' : 'export { second } from \'./second.css.ts\'\n'}`)
+    const systems = {
+      string: first,
+      object: { entry: first, exportName: 'ds' },
+      strings: [first, second],
+      objects: [{ entry: first }, { entry: second, exportName: 'ds' }],
+      mixed: [first, { entry: second, exportName: 'ds' }],
+    }
+    try {
+      const output = outputOf(await buildLibrary(root, vanityPlugin({ compiler: { system: systems[form] } })))
+      const css = output.filter((item): item is Rollup.OutputAsset => item.type === 'asset' && item.fileName.endsWith('.css'))
+        .map(item => String(item.source))
+        .join('\n')
+      expect(css).toContain('--first-color-brand: red')
+      if (!single)
+        expect(css).toContain('--second-color-brand: blue')
+      expect(css).not.toContain('undefined')
+    }
+    finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('accepts aliases of one consolidated system but rejects distinct systems in one entry', async () => {
+    const root = await temporaryApp('system-entry-exports')
+    const systemFile = join(root, 'system.ts')
+    const source = fixtureSystem('red', 'first')
+    await writeFile(systemFile, `${source}export { ds as alias }\n`)
+    await writeFile(join(root, 'entry.ts'), `import { ds, alias } from './system'
+export const names = [ds.t.color.brand.$name, alias.t.color.brand.$name]
+`)
+
+    await expect(buildLibrary(root, vanityPlugin({ compiler: { system: systemFile } }))).resolves.toBeDefined()
+
+    await writeFile(systemFile, `${source}export const alias = createSystem().consolidate({ prefix: 'second' })\n`)
+    await expect(buildLibrary(root, vanityPlugin({ compiler: { system: systemFile } }))).rejects.toThrow(/exports 2 different consolidated Vanity systems/)
+  })
+
   it('rejects two different systems that claim one CSS namespace', async () => {
     const root = await temporaryApp('namespace-collision')
     const one = join(root, 'one.ts')

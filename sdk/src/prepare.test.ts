@@ -17,6 +17,41 @@ afterEach(async () => {
 })
 
 describe('prepare-time auto-import declarations', () => {
+  it.each([
+    { form: 'string', system: './authoring.ts' },
+    { form: 'object', system: { entry: './authoring.ts', artifact: './system.json', exportName: 'ds', packageName: '@acme/ds' } },
+    { form: 'strings', system: ['./authoring.ts', './embedded.ts'] },
+    { form: 'objects', system: [{ entry: './authoring.ts' }, { entry: './embedded.ts' }] },
+    { form: 'mixed', system: ['./authoring.ts', { entry: './embedded.ts' }] },
+  ])('loads and prepares compiler.system $form without changing its domain', async ({ system }) => {
+    const root = await fixtureRoot()
+    await writeFile(join(root, 'authoring.ts'), 'export const ds = {}\n')
+    const config = { compiler: { system }, autoImports: { shared: './authoring.ts' } }
+    await writeFile(join(root, 'vanity.config.ts'), `export default ${JSON.stringify(config)}\n`)
+    await expect(loadVanityConfig('./vanity.config.ts', { root })).resolves.toEqual(config)
+    await expect(planAutoImportDeclarations(config, { root })).resolves.toMatchObject({
+      style: { names: ['ds'] },
+      app: { names: ['ds'] },
+    })
+  })
+
+  it.each([
+    { system: 42 },
+    { system: { artifact: './system.json' } },
+    { system: ['./authoring.ts', null] },
+  ])('rejects malformed compiler.system $system before config loading or preparation can crash', async ({ system }) => {
+    const root = await fixtureRoot()
+    const config = { compiler: { system }, autoImports: { shared: '$system' } }
+    await writeFile(join(root, 'vanity.config.ts'), `export default ${JSON.stringify(config)}\n`)
+    const diagnostic = expect.objectContaining({ diagnostics: [expect.objectContaining({
+      code: 'VANITY_COMPILER_INVALID_INPUT',
+      fix: expect.objectContaining({ message: expect.any(String) }),
+    })] })
+    await expect(loadVanityConfig('./vanity.config.ts', { root })).rejects.toThrow(diagnostic)
+    await expect(planAutoImportDeclarations(config as never, { root })).rejects.toThrow(diagnostic)
+    await expect(writeAutoImportDeclarations(config as never, { root })).rejects.toThrow(diagnostic)
+  })
+
   it('plans both module roles statically with portable references', async () => {
     const root = await fixtureRoot()
     await writeFile(join(root, 'authoring.ts'), `

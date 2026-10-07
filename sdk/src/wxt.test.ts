@@ -27,15 +27,54 @@ const wxt = vi.hoisted(() => ({
 
 vi.mock('wxt/modules', () => wxt)
 
+const vite = vi.hoisted(() => ({ vanityPlugin: vi.fn() }))
+
+vi.mock('./vite', async () => {
+  const actual = await vi.importActual<typeof import('./vite')>('./vite')
+  vite.vanityPlugin.mockImplementation(actual.vanityPlugin)
+  return { ...actual, vanityPlugin: vite.vanityPlugin }
+})
+
 const roots: string[] = []
 
 afterEach(async () => {
+  vite.vanityPlugin.mockClear()
   wxt.addViteConfig.mockClear()
   wxt.defineWxtModule.mockClear()
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
 })
 
 describe('wxt integration', () => {
+  it.each([
+    { system: './app/design/system.ts' },
+    { system: { entry: './dist/system.js', artifact: './dist/system.vanity.json', exportName: 'ds' } },
+    { system: ['./app/design/system.ts', './app/design/embedded.ts'] },
+    { system: [{ entry: './app/design/system.ts' }, { entry: '@acme/ds', artifact: '@acme/ds/system.vanity.json' }] },
+    { system: ['./app/design/system.ts', { entry: './app/design/embedded.ts' }] },
+  ])('forwards compiler.system %j unchanged to the Vite compiler', async ({ system }) => {
+    const { default: module } = await import('./wxt')
+    const context: WxtContext = {
+      config: { root: '/project', wxtDir: '/project/.wxt' },
+      hook: vi.fn(),
+    }
+    await (module as unknown as WxtModule).setup(context, { compiler: { system } })
+    const config = wxt.addViteConfig.mock.calls[0]![1]()
+    expect(config.plugins).toBeDefined()
+    expect(vite.vanityPlugin).toHaveBeenCalledWith({ compiler: { system } })
+  })
+
+  it.each([42, '', { artifact: './system.json' }, ['./system.ts', null], [{ entry: './system.ts', exportName: false }]])('rejects malformed compiler.system %j at module setup', async (system) => {
+    const { default: module } = await import('./wxt')
+    const context: WxtContext = {
+      config: { root: '/project', wxtDir: '/project/.wxt' },
+      hook: vi.fn(),
+    }
+    await expect((module as unknown as WxtModule).setup(context, { compiler: { system } })).rejects.toThrow(expect.objectContaining({
+      diagnostics: [expect.objectContaining({ code: 'VANITY_COMPILER_INVALID_INPUT', fix: expect.objectContaining({ message: expect.any(String) }) })],
+    }))
+    expect(wxt.addViteConfig).not.toHaveBeenCalled()
+  })
+
   it('projects the shared declaration plan through prepare:types', async () => {
     const root = await mkdtemp(join(tmpdir(), 'vanity-wxt-'))
     roots.push(root)

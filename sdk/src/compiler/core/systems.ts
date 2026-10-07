@@ -65,13 +65,63 @@ export function clearConfiguredSystemResolutionCache(
   cache.exportedFilesByEntry.clear()
 }
 
+/**
+ * List the configured `compiler.system` entries in configuration order. Every
+ * documented form — a path, a source object, or an array of either — becomes
+ * one list, and anything else fails as configuration rather than surfacing as
+ * a type error inside a host adapter.
+ */
+export function listSystemSources(
+  input: VanityCompilerOptions['system'],
+): readonly (string | VanitySystemSource)[] {
+  if (input === undefined)
+    return []
+  const values: readonly unknown[] = Array.isArray(input) ? input : [input]
+  for (const [index, value] of values.entries()) {
+    if (!isSystemSourceValue(value)) {
+      const path = Array.isArray(input) ? ['compiler', 'system', String(index)] : ['compiler', 'system']
+      throw new VanityError({
+        code: 'VANITY_COMPILER_INVALID_INPUT',
+        message: `${path.join('.')} must be a module path or { entry } source object; received ${describeConfigValue(value)}`,
+        path,
+        fix: 'set compiler.system to a module path such as \'./src/system.ts\', a { entry, artifact? } object, or an array of either',
+      })
+    }
+  }
+  return values as readonly (string | VanitySystemSource)[]
+}
+
+function isSystemSourceValue(value: unknown): value is string | VanitySystemSource {
+  if (typeof value === 'string')
+    return value.length > 0
+  return isSourceObject(value) && findInvalidSourceField(value) === undefined
+}
+
+function isSourceObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function findInvalidSourceField(source: Record<string, unknown>): keyof VanitySystemSource | undefined {
+  if (typeof source.entry !== 'string' || source.entry.length === 0)
+    return 'entry'
+  return (['artifact', 'packageName', 'exportName'] as const)
+    .find(key => source[key] !== undefined && typeof source[key] !== 'string')
+}
+
+function describeConfigValue(value: unknown): string {
+  if (typeof value === 'string')
+    return 'an empty string'
+  if (isSourceObject(value))
+    return `an object with an invalid '${findInvalidSourceField(value)}'`
+  return Array.isArray(value) ? 'a nested array' : value === null ? 'null' : `${typeof value} ${String(value)}`
+}
+
 export function normalizeSystemSources(
   input: VanityCompilerOptions['system'],
   root: string,
   resolvedEntries: ReadonlyMap<string, string> = new Map(),
 ): NormalizedSystemSource[] {
-  const values = input === undefined ? [] : Array.isArray(input) ? input : [input]
-  return values.map((value) => {
+  return listSystemSources(input).map((value) => {
     const source: VanitySystemSource = typeof value === 'string' ? { entry: value } : value
     return {
       configuredEntry: source.entry,

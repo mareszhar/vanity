@@ -99,6 +99,7 @@ import {
   createConfiguredSystemResolutionCache,
   getConfiguredSystemModuleFiles,
   getRuntimeIdentity,
+  listSystemSources,
   normalizeSystemSources,
 } from './compiler/core/systems'
 import { transformStyleModule } from './compiler/core/transform'
@@ -260,6 +261,8 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
     }
     seenLayers.add(identity!)
   }
+  // A malformed `compiler.system` fails as configuration before any host hook.
+  listSystemSources(compiler.system)
   const autoImports = getAutoImportRoles(options)
   const styleImportSources = autoImports.style
   const nativeTypeHost = (options as VanityViteOptions & { [vanityViteHost]?: 'nuxt' })[vanityViteHost]
@@ -454,9 +457,7 @@ export function vanityPlugin(options: VanityViteOptions = {}): PluginOption[] {
   const resolveConfiguredSystemSources = async (state: ViteHostState): Promise<void> => {
     const hostConfig = state.config
     const previousDependencies = new Map(state.systemSources.map(source => [source.entry, source.dependencies]))
-    const values = compiler.system === undefined
-      ? []
-      : Array.isArray(compiler.system) ? compiler.system : [compiler.system]
+    const values = listSystemSources(compiler.system)
     const resolvedEntries = new Map<string, string>()
     const hostResolver = hostConfig.createResolver({ asSrc: true })
 

@@ -176,6 +176,23 @@ describe('the vite build', () => {
     }
   })
 
+  it('accepts every documented compiler.system form and rejects malformed entries at the plugin boundary', () => {
+    for (const system of ['./src/system.ts', { entry: './dist/system.js', artifact: './dist/system.vanity.json' }, ['./src/system.ts', { entry: '@acme/ds' }], []])
+      expect(() => vanityPlugin({ compiler: { system } })).not.toThrow()
+
+    for (const [system, path] of [
+      [42, ['compiler', 'system']],
+      ['', ['compiler', 'system']],
+      [{ artifact: './dist/system.vanity.json' }, ['compiler', 'system']],
+      [['./src/system.ts', null], ['compiler', 'system', '1']],
+      [[{ entry: './src/system.ts', packageName: false }], ['compiler', 'system', '0']],
+    ] as const) {
+      expect(() => vanityPlugin({ compiler: { system: system as never } })).toThrow(expect.objectContaining({
+        diagnostics: [expect.objectContaining({ code: 'VANITY_COMPILER_INVALID_INPUT', path })],
+      }))
+    }
+  })
+
   it('rejects a repeated compiler.layerOrder entry and accepts CSS identifiers', () => {
     expect(() => vanityPlugin({ compiler: { layerOrder: ['vendor', 'vendor'] } })).toThrow(VanityError)
     expect(() => vanityPlugin({ compiler: { layerOrder: ['app', String.raw`\61 pp`] } })).toThrow(VanityError)

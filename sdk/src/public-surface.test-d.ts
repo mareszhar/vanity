@@ -1,12 +1,25 @@
 /** The canonical package surface: author through one open and then locked system. */
 
-import type { VanityAutoImportRouting } from '@mszr/vanity/config'
+import type { VanityAutoImportRouting, VanityCompilerOptions } from '@mszr/vanity/config'
+import type { VanityNuxtOptions } from '@mszr/vanity/nuxt'
 import type { HailSystemRules } from '@mszr/vanity/presets'
 import * as vanity from '@mszr/vanity'
 import * as runtime from '@mszr/vanity/runtime'
 import { describe, it } from 'vitest'
 
 describe('canonical package surface', () => {
+  it('accepts the shared compiler system configuration in Nuxt', () => {
+    const system: VanityCompilerOptions['system'] = [
+      './app/design/system.ts',
+      { entry: './app/design/embedded.ts', artifact: './dist/embedded.vanity.json' },
+    ] as const
+    const options: VanityNuxtOptions = { compiler: { system } }
+    void options
+    // @ts-expect-error — source objects require an entry
+    const invalid: VanityNuxtOptions = { compiler: { system: { artifact: './dist/system.vanity.json' } } }
+    void invalid
+  })
+
   it('exposes system composition, rules, and auto-import routing', () => {
     void vanity.createSystem
     void vanity.definePlugin

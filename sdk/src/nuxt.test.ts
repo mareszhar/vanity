@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { VanityError } from './diagnostics'
 import vanityNuxtModule from './nuxt'
 
 const nuxtKit = vi.hoisted(() => ({
@@ -20,6 +21,14 @@ vi.mock('@nuxt/kit', async () => ({
   ...nuxtKit,
 }))
 
+const vite = vi.hoisted(() => ({ vanityPlugin: vi.fn() }))
+
+vi.mock('./vite', async () => {
+  const actual = await vi.importActual<typeof import('./vite')>('./vite')
+  vite.vanityPlugin.mockImplementation(actual.vanityPlugin)
+  return { ...actual, vanityPlugin: vite.vanityPlugin }
+})
+
 const roots: string[] = []
 
 afterEach(async () => {
@@ -28,6 +37,7 @@ afterEach(async () => {
   nuxtKit.addTypeTemplate.mockClear()
   nuxtKit.addVitePlugin.mockClear()
   nuxtKit.resolveAlias.mockClear()
+  vite.vanityPlugin.mockClear()
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
 })
 
@@ -113,5 +123,95 @@ describe('nuxt auto-import integration', () => {
       .find(([options]) => options.filename === 'vanity-style-auto-imports.d.ts')?.[0]
     expect(template?.getContents()).not.toContain('var ds:')
     expect(template?.getContents()).toContain('declare global')
+  })
+})
+
+describe('nuxt compiler.system', () => {
+  async function createNuxt() {
+    const root = await mkdtemp(join(tmpdir(), 'vanity-nuxt-'))
+    roots.push(root)
+    return {
+      root,
+      nuxt: {
+        options: {
+          _requiredModules: {},
+          alias: {},
+          app: { head: {} },
+          dev: false,
+          experimental: {},
+          postcss: {},
+          rootDir: root,
+          srcDir: join(root, 'app'),
+          typescript: { tsConfig: {} },
+        },
+        hook: vi.fn(),
+      },
+    }
+  }
+
+  it.each([
+    {
+      form: 'a path',
+      system: './app/design/system.ts',
+      expected: (root: string) => join(root, 'app/design/system.ts'),
+    },
+    {
+      form: 'a source object',
+      system: { entry: './dist/system.js', artifact: './dist/system.vanity.json', packageName: '@acme/ds', exportName: 'acme' },
+      expected: (root: string) => ({
+        entry: join(root, 'dist/system.js'),
+        artifact: join(root, 'dist/system.vanity.json'),
+        packageName: '@acme/ds',
+        exportName: 'acme',
+      }),
+    },
+    {
+      form: 'an array of paths',
+      system: ['./app/design/system.ts', './app/design/embedded.ts'],
+      expected: (root: string) => [join(root, 'app/design/system.ts'), join(root, 'app/design/embedded.ts')],
+    },
+    {
+      form: 'an array of source objects',
+      system: [{ entry: './app/design/system.ts' }, { entry: './app/design/embedded.ts', exportName: 'embedded' }],
+      expected: (root: string) => [
+        { entry: join(root, 'app/design/system.ts') },
+        { entry: join(root, 'app/design/embedded.ts'), exportName: 'embedded' },
+      ],
+    },
+    {
+      form: 'an array of paths, package specifiers, and source objects',
+      system: ['./app/design/system.ts', '@acme/ds', { entry: '@acme/ds/embedded', artifact: '@acme/ds/embedded.vanity.json' }],
+      expected: (root: string) => [
+        join(root, 'app/design/system.ts'),
+        '@acme/ds',
+        { entry: '@acme/ds/embedded', artifact: '@acme/ds/embedded.vanity.json' },
+      ],
+    },
+  ])('forwards $form to the Vite compiler resolved from rootDir', async ({ system, expected }) => {
+    const { root, nuxt } = await createNuxt()
+
+    await vanityNuxtModule({ compiler: { system } }, nuxt as never)
+
+    expect(vite.vanityPlugin).toHaveBeenCalledOnce()
+    expect(vite.vanityPlugin.mock.calls[0]![0].compiler.system).toEqual(expected(root))
+    expect(nuxtKit.addVitePlugin).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    { system: 42, path: ['compiler', 'system'] },
+    { system: '', path: ['compiler', 'system'] },
+    { system: { artifact: './dist/system.vanity.json' }, path: ['compiler', 'system'] },
+    { system: ['./app/design/system.ts', null], path: ['compiler', 'system', '1'] },
+    { system: ['./app/design/system.ts', ['./app/design/embedded.ts']], path: ['compiler', 'system', '1'] },
+    { system: [{ entry: './app/design/system.ts', artifact: 1 }], path: ['compiler', 'system', '0'] },
+  ])('rejects compiler.system $system as configuration', async ({ system, path }) => {
+    const { nuxt } = await createNuxt()
+
+    const error = await Promise.resolve(vanityNuxtModule({ compiler: { system: system as never } }, nuxt as never))
+      .then(() => undefined, (error: unknown) => error)
+
+    expect(error).toBeInstanceOf(VanityError)
+    expect((error as VanityError).diagnostics[0]).toMatchObject({ code: 'VANITY_COMPILER_INVALID_INPUT', path })
+    expect(nuxtKit.addVitePlugin).not.toHaveBeenCalled()
   })
 })

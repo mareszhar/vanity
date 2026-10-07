@@ -17,6 +17,7 @@ import type {
   VanityAppAutoImportSource,
   VanityAutoImports,
   VanityStyleAutoImports,
+  VanitySystemSource,
 } from './config'
 import type {
   VanityCompilerOptions,
@@ -35,6 +36,7 @@ import { isPackageSpecifier } from './compiler/auto-imports/applicationImports'
 import { renderStyleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
 import { planAutoImportDeclarations } from './compiler/auto-imports/autoImportPlan'
 import { renderLayerStatement } from './compiler/core/layers'
+import { listSystemSources } from './compiler/core/systems'
 import { configureVanityViteHost } from './compiler/hosts/viteHost'
 import { renderVanityNuxtConfigTypes } from './nuxt/configTypes'
 import { protectRelativeColorSyntax } from './nuxt/postcss'
@@ -44,16 +46,12 @@ import { vanityPlugin } from './vite'
  * Options configured under the `vanity` key in `nuxt.config.ts`.
  *
  * The shape reuses the shared `VanityConfig` contract so `vanity.config.ts`
- * can be passed to Nuxt unchanged. Nuxt narrows `compiler.system` to one
- * project-relative or absolute source entry; paired portable artifacts and
- * multiple system entries are Vite-only options.
+ * can be passed to Nuxt unchanged. Relative `compiler.system` entries and
+ * artifacts resolve from Nuxt's `rootDir`, even when Vite's root is `srcDir`.
  */
-export interface VanityNuxtOptions extends Omit<VanityViteOptions, 'compiler'> {
-  /** Compiler options; Nuxt evaluates one configured plain system entry. */
-  compiler?: Omit<VanityCompilerOptions, 'system'> & {
-    /** Path to the consolidated system module; relative paths use Nuxt's root. */
-    system?: string
-  }
+export interface VanityNuxtOptions extends VanityViteOptions {
+  /** Compiler options; relative system entries and artifacts resolve from Nuxt's rootDir. */
+  compiler?: VanityCompilerOptions
 }
 
 /**
@@ -185,7 +183,7 @@ function resolveRootedViteOptions(options: VanityNuxtOptions, root: string): Van
     ...options,
     compiler: {
       ...compiler,
-      ...(compiler.system === undefined ? {} : { system: resolveRootedSource(compiler.system, root) }),
+      ...(compiler.system === undefined ? {} : { system: resolveRootedSystem(compiler.system, root) }),
     },
     ...(options.autoImports === undefined ? {} : { autoImports: resolveRootedAutoImports(options.autoImports, root) }),
   }
@@ -261,6 +259,24 @@ function resolveRootedApplicationEntry(
   if (typeof source === 'string')
     return resolveRootedSource(source, root)
   return { ...source, from: resolveRootedSource(source.from, root) }
+}
+
+function resolveRootedSystem(
+  value: NonNullable<VanityCompilerOptions['system']>,
+  root: string,
+): NonNullable<VanityCompilerOptions['system']> {
+  const sources = listSystemSources(value).map(source => resolveRootedSystemSource(source, root))
+  return Array.isArray(value) ? sources : sources[0]!
+}
+
+function resolveRootedSystemSource(source: string | VanitySystemSource, root: string): string | VanitySystemSource {
+  if (typeof source === 'string')
+    return resolveRootedSource(source, root)
+  return {
+    ...source,
+    entry: resolveRootedSource(source.entry, root),
+    ...(source.artifact === undefined ? {} : { artifact: resolveRootedSource(source.artifact, root) }),
+  }
 }
 
 function resolveRootedSource(source: string, root: string): string {

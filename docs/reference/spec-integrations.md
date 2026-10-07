@@ -214,6 +214,8 @@ The shared style-module pipeline:
 
 None of this depends on where a style source sits. A source outside the build root, such as a package's `*.css.ts` files compiled by the consuming application, is evaluated, addressed, served, hot-updated, and recovered exactly like one inside it.
 
+`compiler.system` accepts a module path, a `{ entry, artifact?, packageName?, exportName? }` source object, or an array of either in Vite, Nuxt, and WXT. Nuxt resolves relative entries and artifacts from `rootDir`, even when Vite uses `srcDir`; package specifiers and absolute paths retain their meaning. Each entry exports one consolidated system; configure separate entries for distinct systems. Malformed entries fail during adapter setup or shared config loading/preparation with `VANITY_COMPILER_INVALID_INPUT` and an indexed configuration path. `$system` auto-imports still require exactly one entry; for multiple systems, name the intended auto-import source explicitly.
+
 `compiler.system` names the entry the compiler evaluates. It may be a system module or a static barrel that re-exports one, and the host resolves the spelling you write using its own aliases, export conditions, extension rules, directory indexes, and symlink policy — so a package export or a symlinked path resolves the same way your application imports resolve. An arbitrary host virtual module is not a substitute for a real module.
 
 That module may export the consolidated system and values taken from it, including renamed destructured members:
