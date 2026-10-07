@@ -216,6 +216,48 @@ describe('canonical introspection', () => {
     ]))
   })
 
+  it('round-trips recipe and anatomy entries through both manifest readers', async () => {
+    const schema = JSON.parse(await readFile(
+      new URL('../../manifest.schema.json', import.meta.url),
+      'utf8',
+    ))
+    const validate = new Ajv2020({ strict: true }).compile(schema)
+    const ds = fixture()
+    const { records, result } = collectInspection(() => emit(() => {
+      ds.recipe({ base: { color: ds.t.color.brand } }, 'button')
+      ds.anatomy({
+        parts: ['root', 'content'],
+        base: { content: { color: ds.t.color.brand } },
+      }, 'dialog')
+    }))
+    const manifest = JSON.parse(JSON.stringify(buildManifest(records, result.css))) as ReturnType<typeof buildManifest>
+    const [moduleId, module] = Object.entries(manifest.modules)
+      .find(([, entry]) => entry.recipes.dialog !== undefined)!
+
+    expect(module.recipes.button).toMatchObject({ kind: 'recipe', name: 'button' })
+    expect(module.recipes.dialog).toMatchObject({ kind: 'anatomy', name: 'dialog', parts: ['root', 'content'] })
+    expect(() => assertManifest(manifest)).not.toThrow()
+    expect(validate(manifest)).toBe(true)
+    expect(validate.errors).toBeNull()
+
+    for (const [patch, diagnostic] of [
+      [{ kind: 'widget' }, /recipes\.dialog\.kind.*'recipe' or 'anatomy'/],
+      [{ kind: ['anatomy'] }, /recipes\.dialog\.kind.*'recipe' or 'anatomy'/],
+      [{ parts: ['root', 42] }, /recipes\.dialog\.parts/],
+      [{ unexpected: true }, /recipes\.dialog\.unexpected/],
+    ] as const) {
+      const invalid = {
+        ...manifest,
+        modules: {
+          ...manifest.modules,
+          [moduleId]: { ...module, recipes: { ...module.recipes, dialog: { ...module.recipes.dialog, ...patch } } },
+        },
+      }
+      expect(() => assertManifest(invalid)).toThrow(diagnostic)
+      expect(validate(invalid)).toBe(false)
+    }
+  })
+
   it('rejects malformed, unknown, and semantically invalid Manifest v4 data at the CLI boundary', () => {
     const manifest = manifestOf(fixture())
     expect(() => assertManifest(manifest)).not.toThrow()

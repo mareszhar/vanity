@@ -367,7 +367,7 @@ function assertModule(value: unknown, path: string): void {
 
 function assertRecipe(value: unknown, path: string): void {
   const recipe = requireRecord(value, path)
-  assertSemanticEntry(recipe, path, 'recipe', ['name', 'variants', 'toggles', 'defaults', 'ports'], ['parts'])
+  assertSemanticEntry(recipe, path, ['recipe', 'anatomy'], ['name', 'variants', 'toggles', 'defaults', 'ports'], ['parts'])
   assertString(recipe.name, `${path}.name`)
   if (recipe.parts !== undefined)
     assertStringArray(recipe.parts, `${path}.parts`)
@@ -429,14 +429,17 @@ function assertContrast(value: unknown, path: string): void {
 function assertSemanticEntry(
   value: unknown,
   path: string,
-  kind: string,
+  kind: string | readonly string[],
   required: readonly string[],
   optional: readonly string[],
 ): void {
   const entry = requireRecord(value, path)
   assertKeys(entry, ['id', 'kind', 'owner', ...required], ['declaredAt', 'description', 'deprecated', ...optional], path)
   assertNonEmptyString(entry.id, `${path}.id`)
-  assertExactString(entry.kind, kind, `${path}.kind`)
+  if (typeof kind === 'string')
+    assertExactString(entry.kind, kind, `${path}.kind`)
+  else if (typeof entry.kind !== 'string' || !kind.includes(entry.kind))
+    fail(`${path}.kind`, `must be ${kind.map(name => `'${name}'`).join(' or ')}`)
   const owner = requireRecord(entry.owner, `${path}.owner`)
   assertKeys(owner, ['kind', 'id'], [], `${path}.owner`)
   if (!['system', 'module', 'plugin'].includes(String(owner.kind)))
