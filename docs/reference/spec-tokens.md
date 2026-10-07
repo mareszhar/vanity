@@ -347,9 +347,18 @@ const midnightCard = ds.class({
 })
 ```
 
-It declares the named tokens and every build-folded token whose value changes under those substitutions. Live derivations are omitted because their `var()` expressions already recompute in the browser. The graph is resolved from a fresh result map; the locked system and its base token declarations do not change, and the returned record has no placement or emission effect.
+It declares the named tokens, every emitted build-folded token whose value changes under those substitutions in the base or an axis/case context, and every live token whose root declaration reads a property the fragment declares. A browser substitutes `var()` on the element that declares the custom property, and descendants inherit the substituted result, so a live derivation declared at the token root keeps the root's value inside the subtree. Repeating its unchanged expression in the fragment makes the browser substitute it again on the subtree element. Selection follows the CSS references transitively: a live token that reads a repeated live token, or a folded token the fragment re-declares, is repeated as well. A dependent that folds to its previous value in every context, or reads only properties the fragment leaves alone, is not declared. Non-emitted intermediates still participate in resolution but are never published automatically. The graph is resolved from a fresh result map; the locked system and its base token declarations do not change, and the returned record has no placement or emission effect.
 
-If a changed folded dependent resolves to different values across any mode of an axis, `tdec.propagated` reports `VANITY_TOKENS_INVALID_OVERRIDE` instead of emitting an unconditional value that would win over the axis arm. Scope the substitution inside one mode, keep the derivation live, or express the variation as an axis.
+The fragment is unconditional, so each dependent it declares must have one value that is correct in every mode. `tdec.propagated` reports `VANITY_TOKENS_INVALID_OVERRIDE` instead of emitting a declaration that would win over an axis or case arm when:
+
+- an affected folded dependent resolves to different values across an axis, an authored case, or an intersection of its upstream axes;
+- a live dependent's root declaration differs across an axis or in a case;
+- a dependent is mutable, because a subtree declaration would mask its runtime value;
+- a dependent is registered with `inherits: false`, because a declaration on the subtree root cannot supply its descendants.
+
+For varying or mutable dependents, name the dependent in the same call to choose its scoped value explicitly, or express the variation as a system axis. Non-inheriting properties require inheritance enabled or declarations on each consuming element. Putting a fragment inside a condition does not bypass these checks: `propagated` produces data without knowing its later placement. Folded checks cover the complete mode product of relevant upstream axes and apply the authored axis order and case priority.
+
+An element-local native scheme dependent is the exception: its base `light-dark()` expression selects the scheme where it is used, so repeating it remains correct in every scheme mode. Root-local scheme selection is not exempt: repeating its expression must not move scheme selection from the root into the subtree. A token named in the call is a substitution, never a repeated dependent; naming it chooses its scoped value explicitly, subject to the same non-inheriting registration restriction as plain `tdec`.
 
 Choose the vocabulary by ownership and variability:
 
@@ -357,7 +366,7 @@ Choose the vocabulary by ownership and variability:
 | --- | --- | --- |
 | axis | declared, finite, system-wide, runtime-controllable, in the manifest | the whole system knows it |
 | `tdec.propagated` | ad-hoc, unnamed, local | one component or page owns it |
-| `tdec` | ad-hoc, literal, no graph consequences | you own the consequences |
+| `tdec` | ad-hoc, literal, declares exactly the named tokens; dependents keep their root values | you own the consequences |
 
 An axis is a finite system choice; `tdec.propagated` is a local scoped substitution; `tdec` is a direct declaration fragment. The distinction is the same as the distinction between recipes (finite declared choices) and ports (open per-instance values).
 

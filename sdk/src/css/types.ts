@@ -169,10 +169,13 @@ export type VanityTokenDeclarations<T> = {
 /**
  * Produce token declaration data for a resolved system. The direct call
  * declares exactly the tokens supplied; `propagated` also includes every
- * build-folded token invalidated by those substitutions. Live derivations are
- * omitted because the browser recomputes them from the declarations above.
+ * build-folded token invalidated by those substitutions and repeats every live
+ * derivation that reads a declared property, because the browser substitutes
+ * `var()` where a property is declared rather than where it is inherited.
  * Placement remains the caller's responsibility: use the returned data in a
- * class, rule, layer, or condition.
+ * class, rule, layer, or condition. Automatic dependents must be inheriting,
+ * immutable, and reproducible with one declaration across all axis/case
+ * contexts; otherwise name their scoped value explicitly or use an axis.
  */
 export interface VanityTokenDeclarationProducer<T> {
   (declarations: VanityTokenDeclarations<T>): Record<`--${string}`, string | number>

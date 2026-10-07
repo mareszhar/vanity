@@ -302,10 +302,22 @@ export function collectRefs(expr: VanityColorExpr, into: Set<string>): void {
       return
     case 'alpha':
     case 'adjust':
-    case 'channels':
-    case 'relative':
       collectRefs(expr.input, into)
       return
+    case 'channels':
+    case 'relative': {
+      collectRefs(expr.input, into)
+      const channels = expr.kind === 'channels' ? Object.values(expr.channels) : [...expr.channels, expr.alpha]
+      for (const value of channels.flatMap(value => isChannelExpression(value) ? value.operations.map(operation => operation.value) : value)) {
+        if (value === undefined || typeof value === 'number' || typeof value === 'string')
+          continue
+        for (const reference of createInputNode(value as never).dependencies) {
+          if (reference.path)
+            into.add(reference.path)
+        }
+      }
+      return
+    }
     case 'mix':
       collectRefs(expr.input, into)
       collectRefs(expr.other, into)

@@ -10,7 +10,7 @@ The locked system exposes one CSS input language through style-data producers an
 | --- | --- |
 | `ds.fragment(input)` | reusable ordered styling data, no selector and no output effect |
 | `ds.tdec(tree)` | token custom-property declarations as reusable style data |
-| `ds.tdec.propagated(tree)` | token declarations plus changed build-folded dependents as reusable style data |
+| `ds.tdec.propagated(tree)` | token declarations plus changed build-folded and repeated live dependents as reusable style data |
 | `port.dec(value)` | one component-owned custom-property declaration fragment |
 
 ### Style emitters
@@ -147,13 +147,15 @@ const dense = ds.class({
 It:
 
 - accepts exact token-tree paths and compatible values;
-- re-declares public properties so inheritance re-derives dependents;
+- declares exactly the named public properties and nothing else;
 - does not rewrite consumer styles;
 - rejects a non-inheriting registered token with an explanation;
 - records subtree override provenance;
 - remains usable on an open system by utils because it can produce data over logical handles.
 
-Definition replacement is `overwriteTokens`; subtree cascade is `tdec`; runtime mutation is `$set`.
+A consumer style that reads a named token through `var()` follows the new value inside the subtree. A token derived from it does not: the browser substitutes `var()` on the element that declares the custom property, so a dependent declared at the token root is inherited with the value substituted there. `ds.tdec.propagated()` declares the same substitution plus every dependent it changes — re-resolved build-folded values and repeated live expressions — so the subtree re-derives them; [tokens §11](./spec-tokens.md#11-handles-and-projections) owns its selection and mode diagnostics. Use `tdec` when the fragment should change only the named properties.
+
+Definition replacement is `overwriteTokens`; subtree cascade is `tdec` or `tdec.propagated`; runtime mutation is `$set`.
 
 ## 6. Rules and ordinary TypeScript
 

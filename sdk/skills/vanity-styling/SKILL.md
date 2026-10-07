@@ -73,7 +73,7 @@ import * as s from './UiCard.css.ts'
 | `.toolbar .button` (another module's class) | import its handle and interpolate: `` [`& .${button}`]: { … } `` |
 | `.btn--primary`, `.btn--sm` | a **recipe** with variants (§4) |
 | `style="--progress: 0.4"` / `v-bind()` in `<style>` | a **port** + `usePorts` (§5) |
-| `:root { --accent: red }` inside one subtree | `...ds.tdec.propagated({ color: { accent: t.color.danger } })` — re-points accent and every role derived from it for that element and its descendants |
+| `:root { --accent: red }` inside one subtree | `...ds.tdec.propagated({ color: { accent: t.color.danger } })` — re-points accent and re-derives its emitted dependents; resolve any mode/runtime/inheritance diagnostic (`references/dynamic-values.md`) |
 | `@keyframes fade { … }` | `const fade = keyframes({ from: {…}, to: {…} })`, then `` animation: `${fade} ${t.duration.base} ${t.ease.standard}` `` |
 | `@font-face` | `fontFace({ src, fontWeight, fontDisplay }, 'Family')` returns the family name to use |
 | global `html, body, *` rules | `rules({ 'html': {…}, '*, *::before, *::after': {…} })` in the base style module |
@@ -104,7 +104,7 @@ A property can also branch per condition: `color: { base: t.color.inkMuted, hove
 | a multi-part component (dialog, tabs, select, switch) whose parts react to each other | `anatomy({ parts, base, variants })` + `useAnatomy` | one class per part, `'root:open'` part conditions |
 | a value that changes per instance at runtime (progress, a measured size, a user-picked color for one item) | `port(default)` + `usePorts` | typed custom property owned by the component; no hand-built `--vars` |
 | a reusable chunk of declarations | a function returning `fragment({ … })` | typed, condition-aware, composable in arrays |
-| re-theme a subtree (danger zone, inverted card) | `ds.tdec.propagated({ … })` spread into a class | re-points the named roles and re-derives their dependents for the element and its descendants; plain `ds.tdec` changes only the listed roles (`references/dynamic-values.md`) |
+| re-theme a subtree (danger zone, inverted card) | `ds.tdec.propagated({ … })` spread into a class | re-points named roles and re-derives eligible emitted dependents; plain `ds.tdec` changes only the listed roles (`references/dynamic-values.md`) |
 | a system-wide live value or theme switch (accent hue, density, scheme) | mutable token / axis → `vanity-system` skill | the system owns it; runtime writes one slot |
 | a page/document rule | `rules({ … })` in a base module | emitted once, layered |
 

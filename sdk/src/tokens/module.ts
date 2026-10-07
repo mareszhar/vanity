@@ -2757,7 +2757,7 @@ const TOKEN_SUBSTITUTION_RESOLUTION_CACHE = new WeakMap<TokenGraph, TokenSubstit
 const TOKEN_CONTRIBUTING_AXES_CACHE = new WeakMap<TokenGraph, ReadonlyMap<string, readonly string[]>>()
 
 /** Find the token paths referenced by a node's base and authored branches. */
-function getNodeDependencyPaths(node: TokenNode): ReadonlySet<string> {
+export function getNodeDependencyPaths(node: TokenNode): ReadonlySet<string> {
   const paths = new Set<string>()
   const collect = (definition: VanityLeafDefinition): void => {
     if (definition.kind === 'value') {
@@ -2776,6 +2776,27 @@ function getNodeDependencyPaths(node: TokenNode): ReadonlySet<string> {
   for (const branch of node.branches)
     collect(branch.definition)
   return paths
+}
+
+/** Select authored definitions with the same axis order and case priority as CSS emission. */
+export function getTokenContextSubstitutions(graph: TokenGraph, when: Readonly<Record<string, string>>): Map<string, VanityLeafDefinition> {
+  const substitutions = new Map<string, VanityLeafDefinition>()
+  for (const node of graph.nodes.values()) {
+    for (const axis of graph.axes?.order ?? []) {
+      const branch = node.branches.find(branch => branch.kind === 'axis' && branch.axis === axis && branch.mode === when[axis])
+      if (branch && branch.definition.kind !== 'none')
+        substitutions.set(node.key, branch.definition)
+    }
+    const cases = node.branches.filter((branch): branch is TokenBranch & { kind: 'case' } => branch.kind === 'case'
+      && Object.entries(branch.when).every(([axis, mode]) => when[axis] === mode))
+      .map(branch => ({ branch, priority: Math.max(...getCaseArms(node, branch, graph).map(arm => arm.priority)) }))
+      .sort((a, b) => a.priority - b.priority)
+    for (const { branch } of cases) {
+      if (branch.definition.kind !== 'none')
+        substitutions.set(node.key, branch.definition)
+    }
+  }
+  return substitutions
 }
 
 /** Return the declared axes carried by a node's own branches and dependencies. */

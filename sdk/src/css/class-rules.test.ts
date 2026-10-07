@@ -1,4 +1,4 @@
-import { colorMix, colorSchemes, createSystem, fromEntries, mapRecord, range, VanityError } from '@mszr/vanity'
+import { colorMix, colorSchemes, createSystem, data, fromEntries, mapRecord, range, VanityError } from '@mszr/vanity'
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
 
@@ -90,7 +90,7 @@ describe('the class and rules', () => {
       .toThrowError(VanityError)
   })
 
-  it('propagates scoped substitutions through folded dependents without mutating the graph', () => {
+  it('propagates scoped substitutions through folded and live dependents without mutating the graph', () => {
     const open = createSystem()
     const ds = open.addTokens(open.defineTokens({
       color: {
@@ -111,8 +111,100 @@ describe('the class and rules', () => {
     expect(css).toContain('--prop-color-base: white;')
     expect(css).toContain('--prop-color-base: #18181b;')
     expect(css).toContain('--prop-color-on-base: white;')
-    expect(css.match(/--prop-color-live:/g)?.length).toBe(1)
+    expect(css.match(/--prop-color-live: oklch\(from var\(--prop-color-base\) l c h \/ 0\.2\);/g)?.length).toBe(2)
     expect(css).toContain('color: var(--prop-color-on-base);')
+  })
+
+  it('repeats exactly the live dependents that read a property the fragment changes', () => {
+    const open = createSystem()
+    const ds = open.addTokens(open.defineTokens()
+      .add('accent', open.oklch(0.6, 0.15, 265))
+      .add('other', open.oklch(0.5, 0.1, 140))
+      .add('hard', { val: open.color('#336699'), reference: 'val' })
+      .add(m => ({
+        soft: open.oklch.from(m.accent, { l: 0.95 }),
+        link: m.accent,
+        onAccent: open.legibleOn(m.accent),
+        hardSoft: open.oklch.from(m.hard, { l: 0.9 }),
+        unrelated: open.oklch.from(m.other, { l: 0.9 }),
+      }))
+      .add(m => ({
+        wash: open.alpha(m.soft, 0.5),
+        hardEdge: open.oklch.from(m.hardSoft, { c: 0.05 }),
+      }))).consolidate({ prefix: 'live' })
+
+    // `onAccent` reads accent through the graph but folds to the same pick,
+    // and `unrelated` reads only properties this fragment leaves alone.
+    expect(emit(() => ds.tdec.propagated({ accent: open.oklch(0.6, 0.2, 25) })).returned).toEqual({
+      '--live-accent': 'oklch(0.6 0.2 25)',
+      '--live-soft': 'oklch(from var(--live-accent) 0.95 c h)',
+      '--live-link': 'var(--live-accent)',
+      '--live-wash': 'oklch(from var(--live-soft) l c h / 0.5)',
+    })
+    // A folded dependent is re-declared with its new value, and a live
+    // dependent of that folded token follows it.
+    expect(emit(() => ds.tdec.propagated({ hard: '#000000' })).returned).toEqual({
+      '--live-hard': '#000000',
+      '--live-hard-soft': expect.not.stringContaining('var('),
+      '--live-hard-edge': 'oklch(from var(--live-hard-soft) l 0.05 h)',
+    })
+    expect(emit(() => ds.tdec({ accent: open.oklch(0.6, 0.2, 25) })).returned).toEqual({
+      '--live-accent': 'oklch(0.6 0.2 25)',
+    })
+  })
+
+  it('refuses live dependents whose root declaration one subtree value cannot reproduce', () => {
+    const open = createSystem()
+      .addAxis('scheme', colorSchemes())
+      .addAxis('density', { modes: { cozy: data('density', 'cozy'), compact: data('density', 'compact') }, default: 'cozy' })
+    const ds = open.addTokens(open.defineTokens()
+      .add('accent', open.oklch(0.6, 0.15, 265))
+      .add(m => ({
+        dense: open.tdef.color({
+          val: open.oklch.from(m.accent, { l: 0.95 }),
+          axes: { density: { compact: open.oklch.from(m.accent, { l: 0.8 }) } },
+        }),
+        paired: open.tdef.color({
+          val: open.oklch.from(m.accent, { l: 0.95 }),
+          cases: [{ when: { scheme: 'dark', density: 'compact' }, val: open.oklch.from(m.accent, { l: 0.3 }) }],
+        }),
+        runtime: open.tdef.color({ val: open.oklch.from(m.accent, { l: 0.5 }), mutable: true }),
+        schemed: open.tdef.color({
+          axes: { scheme: { light: open.oklch.from(m.accent, { l: 0.9 }), dark: open.oklch.from(m.accent, { l: 0.3 }) } },
+        }),
+      }))).consolidate({ prefix: 'arm' })
+
+    const scoped = { dense: 'red', paired: 'red', runtime: 'red' } as const
+    const diagnose = (named: Partial<Record<keyof typeof scoped, string>>) => {
+      try {
+        emit(() => ds.tdec.propagated({ accent: 'blue', ...named }))
+      }
+      catch (error) {
+        expect(error).toBeInstanceOf(VanityError)
+        return (error as VanityError).diagnostics[0]
+      }
+      return undefined
+    }
+
+    expect(diagnose({ paired: 'red', runtime: 'red' })).toMatchObject({
+      code: 'VANITY_TOKENS_INVALID_OVERRIDE',
+      path: ['dense'],
+      message: expect.stringContaining('cannot scope \'dense\': its live expression differs across the \'density\' axis'),
+    })
+    expect(diagnose({ dense: 'red', runtime: 'red' })).toMatchObject({
+      path: ['paired'],
+      message: expect.stringContaining('differs in the case scheme \'dark\' + density \'compact\''),
+    })
+    expect(diagnose({ dense: 'red', paired: 'red' })).toMatchObject({
+      path: ['runtime'],
+      message: expect.stringContaining('it is runtime-mutable'),
+    })
+    // Naming each dependent chooses its scoped value; an element-local
+    // light-dark() base already selects the scheme arm where it is used.
+    expect(diagnose(scoped)).toBeUndefined()
+    expect(emit(() => ds.tdec.propagated({ accent: 'blue', ...scoped })).returned).toMatchObject({
+      '--arm-schemed': 'light-dark(oklch(from var(--arm-accent) 0.9 c h), oklch(from var(--arm-accent) 0.3 c h))',
+    })
   })
 
   it('diagnoses propagated folded dependents that vary across an axis', () => {
@@ -146,7 +238,7 @@ describe('the class and rules', () => {
       path: ['color', 'onBlend'],
       message: expect.stringContaining('cannot scope \'onBlend\': its folded value differs across the \'scheme\' axis'),
       fix: expect.objectContaining({
-        message: 'scope the substitution inside a single mode, keep the derivation live so the browser recomputes it, or express the variation as an axis',
+        message: 'name this dependent in the same tdec.propagated call to choose its scoped value, or express the variation as an axis',
       }),
     }))
   })

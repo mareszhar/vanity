@@ -70,7 +70,7 @@ Everything inside that styles itself with these roles now renders in the danger 
 
 A derived token (`accentSoft = oklch.from(accent, …)`) is computed where the system declares it, on the root, and descendants inherit the finished value, so declaring only `accent` lower in the tree doesn't change it. `ds.tdec.propagated({ … })` also declares every dependent the change reaches, whether folded at build time or live (`var()`-based), so they re-derive inside the subtree. Name a dependent yourself when the system already designs its counterpart (`accentSoft: t.color.dangerSoft`) and you want that instead of the derived value.
 
-If a dependent has its own per-mode or per-case value that one declaration can't reproduce (or is a mutable token), `propagated` stops with `VANITY_TOKENS_INVALID_OVERRIDE` and names it; add that token to the call with the value you want.
+If a dependent varies across modes, cases, or axis intersections that one declaration can't reproduce (or is a mutable token), `propagated` stops with `VANITY_TOKENS_INVALID_OVERRIDE` and names it; add that token to the call with the value you want, or design the variation as an axis. Putting the fragment inside a condition doesn't bypass the check. Non-emitted intermediates participate in derivation but aren't published. A dependent registered with `inherits: false` also gets a diagnostic: enable inheritance or declare it directly on each consuming element. Element-local `light-dark()` can retain its scheme selection; a root-local scheme must not silently become subtree-local.
 
 Plain `ds.tdec({ … })` declares exactly the tokens you list and nothing else. Use it only when the dependents should keep their root values.
 

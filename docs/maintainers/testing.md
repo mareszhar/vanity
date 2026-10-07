@@ -317,6 +317,8 @@ The large fixture is the accepted performance reference; its measurements and me
 
 ## 7. Runtime/browser contract
 
+`tests/vanity/token-declarations.spec.ts` resolves SDK-emitted CSS in Chromium. Run it directly with `pnpm exec playwright test tests/vanity/token-declarations.spec.ts --config playwright.vanity.config.ts`; the production browser suite also discovers it during `demo:e2e` and CI.
+
 Browser tests assert:
 
 - no failed stylesheet/resource requests;
@@ -324,6 +326,7 @@ Browser tests assert:
 - first styled paint remains styled under SSR;
 - omitted-root document binding works only for a `:root` system; widget roots remain explicit;
 - custom-property inheritance and axis selection produce real computed values;
+- `tdec.propagated` re-declares live dependency chains and invariant folded dependents inside a subtree, including axis intersections; plain `tdec` leaves inherited dependents alone;
 - mutable base/mode/case writes update expected descendants;
 - `$unset()` restores authored values;
 - inner widget runtimes do not leak to siblings;

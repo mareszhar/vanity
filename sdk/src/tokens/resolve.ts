@@ -31,6 +31,7 @@ import { formatNumber, formatOklch, measureApcaContrast, measureWcagContrast, pa
 import {
   buildTokens,
   getNode,
+  getTokenContextSubstitutions,
   isTokenModule,
   serializeTokenCss,
   VANITY_MODULE_TOKEN_REF,
@@ -433,6 +434,41 @@ export function resolveTokenSubstitutionsByAxisMode(
     }
   }
 
+  return { resolutions, diagnostics }
+}
+
+const TOKEN_CONTEXT_RESULTS = new WeakMap<TokenGraph, Map<string, Map<string, NodeResult>>>()
+
+interface TokenSubstitutionContextResolution {
+  readonly when: Readonly<Record<string, string>>
+  readonly results: ReadonlyMap<string, NodeResult>
+  readonly substitutionChanges: ReadonlySet<string>
+}
+
+/** Compare local substitutions with the authored graph in each reachable context. */
+export function resolveTokenSubstitutionsByContext(
+  graph: TokenGraph,
+  substitutions: ReadonlyMap<string, VanityOverride>,
+  contexts: readonly Readonly<Record<string, string>>[],
+): { resolutions: readonly TokenSubstitutionContextResolution[], diagnostics: VanityDiagnostic[] } {
+  const cached = TOKEN_CONTEXT_RESULTS.get(graph) ?? new Map<string, Map<string, NodeResult>>()
+  TOKEN_CONTEXT_RESULTS.set(graph, cached)
+  const diagnostics: VanityDiagnostic[] = []
+  const resolutions = contexts.map((when) => {
+    const address = JSON.stringify(when)
+    const context = `tdec.propagated ${Object.entries(when).map(([axis, mode]) => `${axis} "${mode}"`).join(' + ')}`
+    const authored = getTokenContextSubstitutions(graph, when)
+    const baseline = cached.get(address) ?? resolveGraph(graph, authored).results
+    cached.set(address, baseline)
+    for (const [key, value] of substitutions)
+      authored.set(key, value)
+    const resolved = resolveGraph(graph, authored, context)
+    diagnostics.push(...resolved.diagnostics)
+    const substitutionChanges = new Set([...resolved.results]
+      .filter(([key, result]) => result.emitted !== baseline.get(key)?.emitted)
+      .map(([key]) => graph.nodes.get(key)!.name))
+    return { when, results: resolved.results, substitutionChanges }
+  })
   return { resolutions, diagnostics }
 }
 
