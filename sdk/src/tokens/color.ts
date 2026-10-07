@@ -772,11 +772,12 @@ export interface VanityLegibleOptions {
 
 /**
  * The color legible on `target` — named for what it produces, carrying its
- * check ([spec-tokens.md §12]). Checked at build over exactly foldable targets;
- * over a live or deliberately unfoldable target it uses a representative
- * selected from the target's authored defaults. That static pick remains in
- * use if runtime values later drift far from those defaults, and the
- * approximation is retained in introspection and the contrast audit.
+ * check ([spec-tokens.md §12]). Enforces the threshold at authored defaults,
+ * per scheme and authored axis/case, including mutable inputs and token-valued
+ * channels. A deliberately unfoldable mix uses an explained representative
+ * approximation. The static pick remains in use if runtime values later drift;
+ * this build check does not guarantee contrast across future runtime writes.
+ * Approximation metadata is retained in introspection and the contrast audit.
  */
 export function legibleOn<S extends VanityColorish>(
   target: S,

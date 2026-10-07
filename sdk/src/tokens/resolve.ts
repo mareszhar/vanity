@@ -21,6 +21,7 @@ import {
   foldContrastTarget,
   foldExpr,
   getExpressionTraits,
+  getValueExpressionTraits,
   resolveContrastPick,
   serializeContrastResolution,
   serializeExpr,
@@ -87,14 +88,14 @@ export function resolveGraph(
     foldRefForContrast: (handle, scheme) => foldContrastNode(requireNode(handle), scheme),
     foldValue: (value, scheme) => authoredValues.foldValue(value, scheme),
     serializeValue: value => authoredValues.serializeValue(value),
-    getRefTraits: (handle) => {
-      const referenced = requireNode(handle)
-      const traits = resolveNode(referenced).traits
-      return {
-        cssLive: traits.cssLive || (referenced.contract.canonical && referenced.contract.reference === 'var'),
-        volatile: traits.volatile || (referenced.contract.canonical && referenced.contract.mutable),
-        conditional: traits.conditional,
-      }
+    getRefTraits: handle => referenceTraits(requireNode(handle)),
+    getReferenceTraits: (reference) => {
+      if (reference.kind !== 'token')
+        return { cssLive: true, volatile: true, conditional: false }
+      const node = reference.path === undefined ? undefined : graph.nodes.get(reference.path)
+      if (!node)
+        return resolver.invalidColor('a referenced token does not belong to this token module')
+      return referenceTraits(node)
     },
     serializeRef: (handle) => {
       const referenced = requireNode(handle)
@@ -111,6 +112,15 @@ export function resolveGraph(
         fix: fix ?? 'give it a color value, or reference a color token',
       })
     },
+  }
+
+  function referenceTraits(node: TokenNode) {
+    const traits = resolveNode(node).traits
+    return {
+      cssLive: traits.cssLive || (node.contract.canonical && node.contract.reference === 'var'),
+      volatile: traits.volatile || (node.contract.canonical && node.contract.mutable),
+      conditional: traits.conditional,
+    }
   }
 
   function requireNode(handle: import('./handle').VanityInternalTokenHandle): TokenNode {
@@ -235,7 +245,6 @@ export function resolveGraph(
 
     if (definition.kind === 'value') {
       const valueNode = valueNodeOf(definition.value)
-      const reactive = valueNode.dependencies.length > 0
 
       // `reference: 'val'` asks for the authored representative of a value
       // expression. Resolve its graph references before serialization so an
@@ -249,7 +258,7 @@ export function resolveGraph(
       }
 
       return {
-        traits: { cssLive: reactive, volatile: reactive, conditional: false },
+        traits: getValueExpressionTraits(valueNode, resolver),
         emitted: serializeTokenCss(graph, definition.value),
       }
     }
@@ -296,16 +305,11 @@ export function resolveGraph(
           reason: resolution.fallbackReason,
         }
 
-    if (traits.volatile) {
-      // The guarantee cannot be total over a live target, so keep the checked
-      // authored-default pick. Chromium's experimental `contrast-color()`
-      // implementation has made that result follow `color-scheme` even when
-      // the target itself is scheme-invariant; that breaks an opaque
-      // background/foreground pairing. Revisit a native upgrade once that
-      // implementation is interoperable with the CSS Color 5 contract.
-      return { traits, emitted, ...(contrastFallback === undefined ? {} : { contrastFallback }) }
-    }
-
+    // Check the representative at authored defaults even for mutable targets.
+    // This cannot guarantee contrast across future writes. Keep the static
+    // pick: Chromium's experimental contrast-color() can follow color-scheme
+    // even for a scheme-invariant target, breaking an opaque pairing. Revisit
+    // native output once implementations honor the CSS Color 5 contract.
     const schemes: VanityScheme[] = traits.cssLive ? ['light', 'dark'] : ['light']
 
     for (const scheme of schemes) {
@@ -743,6 +747,17 @@ export function createTokenCheckResolver(graph: TokenGraph, _scheme: VanitySchem
     return resolution
   }
 
+  function referenceTraits(node: TokenNode | undefined) {
+    if (!node || graph.nodes.get(node.key) !== node)
+      return resolver.invalidColor('a referenced token does not belong to this token module')
+    const traits = graph.results.get(node.key)!.traits
+    return {
+      cssLive: traits.cssLive || (node.contract.canonical && node.contract.reference === 'var'),
+      volatile: traits.volatile || (node.contract.canonical && node.contract.mutable),
+      conditional: traits.conditional,
+    }
+  }
+
   resolver = {
     policies: graph.policies,
     foldRef: (handle, targetScheme) => {
@@ -763,11 +778,10 @@ export function createTokenCheckResolver(graph: TokenGraph, _scheme: VanitySchem
     },
     foldValue: (value, targetScheme) => authoredValues.foldValue(value, targetScheme),
     serializeValue: value => authoredValues.serializeValue(value),
-    getRefTraits: (handle) => {
-      const node = getNode(handle)
-      const result = node === undefined ? undefined : graph.results.get(node.key)
-      return result?.traits ?? { cssLive: false, volatile: false, conditional: false }
-    },
+    getRefTraits: handle => referenceTraits(getNode(handle)),
+    getReferenceTraits: reference => reference.kind === 'token'
+      ? referenceTraits(reference.path === undefined ? undefined : graph.nodes.get(reference.path))
+      : { cssLive: true, volatile: true, conditional: false },
     invalidColor: (detail, fix) => {
       throw new VanityError({
         code: 'VANITY_TOKENS_INVALID_COLOR',

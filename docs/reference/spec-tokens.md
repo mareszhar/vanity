@@ -384,6 +384,14 @@ Preserve:
 
 Manifest v4 contains one system map plus source-grouped module facts without duplicating the portable compiler artifact.
 
+### Foreground selection
+
+`legibleOn(background)` defines a black or white foreground and enforces APCA Lc 60 by default. `{ contrast: n }` records an explicit accepted threshold. The compiler checks the authored representative in each light/dark scheme and rechecks authored axis modes and cases; an illegible best pairing fails with `VANITY_TOKENS_CONTRAST`, the measured contrast, and the offending context.
+
+A dependency is volatile only when it reaches a mutable token or an unresolved external reference. Immutable aliases, numeric channel tokens, channel operations, and mix percentages do not become mutable merely because their CSS retains a `var()` edge. CSS liveness, mutability, and scheme selection are independent traits across every color-expression family.
+
+Mutable backgrounds are checked at their authored defaults too. Their selected foreground stays fixed while runtime writes can move the background; the build check cannot guarantee an arbitrary runtime range. Validate the retained foreground across the range the application permits. Deliberately unfoldable mix shapes retain an explained representative approximation in introspection and contrast audit data. A form with no supported authored representative, such as an unsupported relative-color fold or an external channel without a default, fails with an actionable color diagnostic rather than silently passing a contrast check.
+
 ### Cross-token checks
 
 `check.textContrast(text, background)` registers a build-time pairing check for a token module. It defaults to APCA Lc 60; `.aa()` selects WCAG 2 at 4.5, `.aaa()` selects WCAG 2 at 7, and `.lc(min)` selects an explicit APCA threshold:

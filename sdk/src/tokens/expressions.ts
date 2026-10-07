@@ -16,7 +16,7 @@
  */
 
 import type { VanityResolvedPolicies } from '../values/policies'
-import type { VanitySerializeContext } from '../values/protocol'
+import type { VanityExpressionNode, VanityReference, VanitySerializeContext } from '../values/protocol'
 import type { VanityCssValue } from '../values/types'
 import type { VanityChannelOperation, VanityColorChannel, VanityColorExpr } from './color'
 import type { VanityInternalTokenHandle } from './handle'
@@ -70,6 +70,8 @@ export interface VanityResolver {
   ) => VanityContrastTargetResolution
   /** Classify a graph edge (cycle-guarded by the graph). */
   getRefTraits: (handle: VanityInternalTokenHandle) => VanityExprTraits
+  /** Classify a shared value-IR dependency in its owning graph. */
+  getReferenceTraits?: (reference: VanityReference) => VanityExprTraits
   /** Reject an invalid color value with a diagnostic naming the offending token. */
   invalidColor: (detail: string, fix?: string) => never
   /** Choose a token's declared val/var projection at a graph edge. */
@@ -93,15 +95,8 @@ export function getExpressionTraits(
     case 'oklch':
     case 'parse':
       return { cssLive: false, volatile: false, conditional: false }
-    case 'value': {
-      const node = getNode(expr.value)
-      const dependency = node.dependencies.length > 0
-      return {
-        cssLive: dependency || shouldPreserveNativeNode(node),
-        volatile: dependency,
-        conditional: false,
-      }
-    }
+    case 'value':
+      return getValueExpressionTraits(getNode(expr.value), resolver)
     case 'scheme': {
       const inner = join(getExpressionTraits(expr.light, resolver, context), getExpressionTraits(expr.dark, resolver, context))
       return { cssLive: true, volatile: inner.volatile, conditional: true }
@@ -123,42 +118,47 @@ export function getExpressionTraits(
         isChannelExpression(value) ? value.operations.map(operation => operation.value) : value,
       )
       const dynamic = channelValues.some(value => value !== undefined && typeof value !== 'number')
-      const volatile = channelValues.some((value) => {
-        if (!value || (typeof value !== 'object' && typeof value !== 'function'))
-          return false
-        return createInputNode(value as never).dependencies.length > 0
-      })
-      return { cssLive: inner.cssLive || dynamic, volatile: inner.volatile || volatile, conditional: inner.conditional }
+      const channels = getInputTraits(channelValues, resolver)
+      return { ...join(inner, channels), cssLive: inner.cssLive || dynamic }
     }
     case 'relative': {
       const inner = getExpressionTraits(expr.input, resolver, context)
       const values = [...expr.channels, expr.alpha].flatMap(value =>
         isChannelExpression(value) ? value.operations.map(operation => operation.value) : value,
       )
-      const volatile = values.some((value) => {
-        if (!value || (typeof value !== 'object' && typeof value !== 'function'))
-          return false
-        return createInputNode(value as never).dependencies.length > 0
-      })
-      return { cssLive: true, volatile: inner.volatile || volatile, conditional: inner.conditional }
+      return { ...join(inner, getInputTraits(values, resolver)), cssLive: true }
     }
     case 'mix': {
       const inner = join(getExpressionTraits(expr.input, resolver, context), getExpressionTraits(expr.other, resolver, context))
       const percentages = [expr.inputPercentage, expr.otherPercentage]
-      const volatile = percentages.some((value) => {
-        if (value === undefined || typeof value === 'number')
-          return false
-        return createInputNode(value as never).dependencies.length > 0
-      })
       return {
-        ...inner,
+        ...join(inner, getInputTraits(percentages, resolver)),
         cssLive: inner.cssLive || !isMixShapeFoldable(expr),
-        volatile: inner.volatile || volatile,
       }
     }
     case 'contrast':
       return getExpressionTraits(expr.target, resolver, context)
   }
+}
+
+/** Keep CSS dependency edges while distinguishing mutability from dependency. */
+export function getValueExpressionTraits(node: VanityExpressionNode, resolver: VanityResolver): VanityExprTraits {
+  const dependencies = node.dependencies.reduce((traits, reference) => join(
+    traits,
+    resolver.getReferenceTraits?.(reference) ?? { cssLive: true, volatile: true, conditional: false },
+  ), { cssLive: false, volatile: false, conditional: false })
+  return {
+    ...dependencies,
+    cssLive: node.dependencies.length > 0 || shouldPreserveNativeNode(node),
+  }
+}
+
+function getInputTraits(values: readonly unknown[], resolver: VanityResolver): VanityExprTraits {
+  return values.reduce<VanityExprTraits>((traits, value) => {
+    if (!value || (typeof value !== 'object' && typeof value !== 'function'))
+      return traits
+    return join(traits, getValueExpressionTraits(createInputNode(value as never), resolver))
+  }, { cssLive: false, volatile: false, conditional: false })
 }
 
 function shouldPreserveNativeNode(node: import('../values/protocol').VanityExpressionNode): boolean {
@@ -501,7 +501,7 @@ export function foldContrastTarget(
         }
       }
 
-      const representative = getRepresentativeMixAmount(expr)
+      const representative = getRepresentativeMixAmount(expr, scheme, resolver)
       if (representative === undefined)
         return { color: foldExpr(expr, scheme, resolver, context), approximate: false }
 
@@ -532,9 +532,21 @@ export function foldContrastTarget(
 
 function getRepresentativeMixAmount(
   expr: VanityMixExpr,
+  scheme: VanityScheme,
+  resolver: VanityResolver,
 ): { readonly amount: number, readonly alphaScale: number } | undefined {
-  const input = typeof expr.inputPercentage === 'number' ? expr.inputPercentage : undefined
-  const other = typeof expr.otherPercentage === 'number' ? expr.otherPercentage : undefined
+  function percentage(value: VanityMixExpr['inputPercentage']): number | undefined {
+    if (value === undefined || typeof value === 'number')
+      return value
+    const expression = new ExpressionValue(createInputNode(value))
+    const css = resolver.foldValue?.(expression as VanityCssValue, scheme) ?? serializeSelf(expression)
+    const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)%$/i.exec(css.trim())
+    if (!match)
+      return resolver.invalidColor(`color-mix percentage '${css}' has no numeric authored default`)
+    return Number(match[1])
+  }
+  const input = percentage(expr.inputPercentage)
+  const other = percentage(expr.otherPercentage)
 
   if (input === undefined && other === undefined)
     return { amount: 0.5, alphaScale: 1 }
@@ -715,7 +727,10 @@ function foldChannelValue(
 
   const css = typeof value === 'string'
     ? value
-    : resolver.foldValue?.(value as VanityCssValue, scheme) ?? serializeSelf(value)
+    : (() => {
+        const expression = new ExpressionValue(createInputNode(value))
+        return resolver.foldValue?.(expression as VanityCssValue, scheme) ?? serializeSelf(expression)
+      })()
   const match = /^(-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)(%|deg|grad|rad|turn)?$/i.exec(css.trim())
 
   if (!match)

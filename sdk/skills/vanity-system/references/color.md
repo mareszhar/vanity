@@ -32,8 +32,8 @@ const palette = open.defineTokens()
 
 - `legibleOn(background)` picks black or white for text on that background; use it for `on*` roles. It's a token definition, not a style value.
 - Define text/background roles in pairs (`accent` + `onAccent`, `danger` + `onDanger`) so components never guess.
-- `legibleOn` picks once, at build time, from the background's authored value. For a **static** background it **fails the build** (APCA Lc 60, per scheme and axis mode) when even the best pick is illegible. Static covers literal colors, `lightDark()` literals, per-mode literals, aliases of static tokens, and `alpha`/`lighten`/`darken`/`from`/`colorMix` over static tokens.
-- Two kinds of background currently skip the check silently and keep the authored-default pick: one that depends on a **mutable** token, and one whose **channels are tokens** (`oklch(0.6, 0.15, m.hue)`), even when that token is immutable. Treat other forms that embed a token in a raw CSS value the same way until you've seen them fail.
+- `legibleOn` picks once, at build time, from the background's authored value. It **fails the build** below APCA Lc 60, per scheme and authored axis mode or case. The authored-default check includes literals, aliases, mutable backgrounds, token-valued channels, and supported `alpha`/`lighten`/`darken`/`from`/`colorMix` derivations. Deliberately unfoldable mixes use a representative approximation recorded in introspection; unsupported representatives fail with an actionable color diagnostic.
+- A mutable background is checked at its authored default, but keeps that foreground when the runtime changes the seed. This does not guarantee contrast throughout the runtime range. Test the retained foreground against every sampled background, as below.
 
 For those, test the pairing yourself. With a live seed, the page keeps the foreground picked at the authored seed while the runtime moves the background, so check **that** foreground across the seed's whole range, not just its endpoints (hue 0° and 360° are the same color; failures hide in between). Share the color formula between the system and a test:
 
