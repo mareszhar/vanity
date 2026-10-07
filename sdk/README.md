@@ -106,6 +106,17 @@ runtime.t.color.brand.$set('#16a34a')
 runtime.t.color.brand.$unset()
 ```
 
+## Agent skills
+
+Vanity ships skills for coding agents in `node_modules/@mszr/vanity/skills/`: styling with a system, designing the system itself, setting Vanity up, and inspecting it with tools. Link them into your project so they always match the installed version:
+
+```sh
+mkdir -p .agents/skills
+for skill in node_modules/@mszr/vanity/skills/*/; do ln -sfn "../../$skill" ".agents/skills/$(basename "$skill")"; done
+```
+
+`.agents/skills/` is a [cross-client convention](https://agentskills.io/client-implementation/adding-skills-support#where-to-scan). Follow your agent harness's skill-discovery and setup instructions; if it uses another location or registration step, link or register these same skill directories there.
+
 ## Documentation
 
 Start with the [getting-started guide](https://github.com/mareszhar/vanity/blob/main/docs/guides/getting-started.md), then choose the contract that matches the work in front of you.

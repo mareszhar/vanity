@@ -1,7 +1,8 @@
 /**
  * Extract and typecheck executable TypeScript examples from the documentation.
- * The docs are part of Vanity's public contract, so examples must stay aligned
- * with the package API instead of becoming plausible-looking stale snippets.
+ * The docs and the shipped agent skills are part of Vanity's public contract,
+ * so examples must stay aligned with the package API instead of becoming
+ * plausible-looking stale snippets.
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
@@ -12,10 +13,16 @@ import ts from 'typescript'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const docsRoot = join(root, 'docs')
 const examplesRoot = join(docsRoot, 'examples')
-const markdownFiles = readdirSync(docsRoot, { recursive: true, withFileTypes: true })
-  .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
-  .map(entry => relative(docsRoot, join(entry.parentPath, entry.name)))
-  .sort()
+const skillsRoot = join(root, 'sdk/skills')
+
+function listMarkdown(directory: string): string[] {
+  return readdirSync(directory, { recursive: true, withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
+    .map(entry => relative(docsRoot, join(entry.parentPath, entry.name)))
+    .sort()
+}
+
+const markdownFiles = [...listMarkdown(docsRoot), ...listMarkdown(skillsRoot)]
 const formatHost: ts.FormatDiagnosticsHost = {
   getCanonicalFileName: file => file,
   getCurrentDirectory: () => root,
@@ -97,5 +104,5 @@ if (semanticDiagnostics.length > 0) {
 
 if (process.exitCode !== 1) {
   const fixtureCount = parsed.fileNames.filter(file => !file.endsWith('ambient.d.ts')).length
-  console.log(`✓ canonical docs: ${fenceCount} TypeScript fences parsed; ${fixtureCount} package-backed fixtures typechecked`)
+  console.log(`✓ canonical docs and agent skills: ${fenceCount} TypeScript fences parsed; ${fixtureCount} package-backed fixtures typechecked`)
 }

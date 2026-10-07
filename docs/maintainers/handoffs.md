@@ -13,7 +13,7 @@ The method does not assume who does the work. A planner, an implementer, and a r
 | round report | one execution pass and the next | `__temp__/<version>-round-<n>-report.md`, one per round | reviewer |
 | changelog | one released version and the next, for a consumer | `__temp__/<version>-changelog.md`, then the GitHub release | planner |
 
-A handoff states what the next release changes about the released one: the defects it removes, the behavior it requires, the design it commits to, the evidence that closes it, and the sequence to reach it. It is written against the released state, so it reads the same on the first pass and the fourth.
+A handoff states what the next release changes about the released one: the defects it removes, the behavior it requires, the design it commits to, the evidence that closes it, and the sequence to reach it. Its documentation list includes the [agent skills](./workspace.md#9-agent-skills) whose teaching the release changes. It is written against the released state, so it reads the same on the first pass and the fourth.
 
 An execution tracker is the implementer's own record and the thing that survives a compressed context. Everything needed to resume belongs in it rather than in recollection. It names files, commands, and decisions as they were at the time; it is not maintained after the change ships. A pass closes with one row for every item in the round report's working-tree table and the handoff's documentation list. Each row is answered with a `file:line` or a gate result, and the reviewer reads that table before anything else.
 

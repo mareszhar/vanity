@@ -94,6 +94,7 @@
     "bin",
     "dist",
     "manifest.schema.json",
+    "skills",
     "typescript.cjs"
   ],
   "scripts": {

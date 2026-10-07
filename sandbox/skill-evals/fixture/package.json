@@ -1,0 +1,20 @@
+{
+  "name": "skill-eval-fixture",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "prep": "nuxt prepare",
+    "typecheck": "nuxi typecheck",
+    "build": "nuxt build"
+  },
+  "dependencies": {
+    "@mszr/vanity": "*",
+    "nuxt": "*",
+    "vue": "*"
+  },
+  "devDependencies": {
+    "@vue/language-plugin-pug": "*",
+    "pug": "*",
+    "vue-tsc": "*"
+  }
+}

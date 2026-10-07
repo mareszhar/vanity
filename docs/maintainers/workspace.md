@@ -12,7 +12,7 @@ vanity/
   turbo.json
   tsconfig.base.json
   eslint.config.ts
-  sdk/                     @mszr/vanity
+  sdk/                     @mszr/vanity (its skills/ folder ships the agent skills)
   docs/                    canonical product and maintainer documentation
   scripts/                 audits, benchmarks, smoke tests, release tooling
   tests/                   browser and development integration tests
@@ -22,6 +22,7 @@ vanity/
     fixtures/              shared comparison data
     demo-main/             flagship Nuxt studio
     demo-comparisons/      Vite comparison matrix
+    skill-evals/           agent-skill tasks and their fixture app
   .github/workflows/       repository CI
 ```
 
@@ -120,8 +121,10 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run check:fast` | run cached lint, root tooling/browser-spec typechecking, incremental SDK typechecking, and non-editor SDK tests for the normal edit loop |
 | `pnpm run clean:validation` | remove the exact ignored application-generated declaration, adapter-cache, and `.vanity/` paths before validation; release state is preserved |
 | `pnpm run check` | run non-browser quality gates |
-| `pnpm run validate` | run non-browser gates, the permanent canary, all demo builds, optimized-CSS checks, production/development browsers, and lifecycle cleanup |
+| `pnpm run validate` | run non-browser gates, the permanent canary, all demo builds, optimized-CSS checks, production/development browsers, lifecycle cleanup, and the skill-snippet gate |
 | `pnpm run audit` | build and audit the canonical SDK fixture |
+| `pnpm run skills:verify` | typecheck and build every mapped code block in the agent skills, then execute the system examples and run the test examples (§9) |
+| `pnpm run skills:eval prepare <run-dir> <model>` / `grade <run-dir>` | materialize or grade an agent-skill evaluation run (§9) |
 | `pnpm run docs:examples` | parse documentation fences and typecheck canonical examples |
 | `pnpm run upi` | review default-catalog updates with a catalog-aware Clack multiselect |
 
@@ -264,3 +267,30 @@ Failure handling is explicit:
 - Validation and packaging receipts under ignored `.vanity/` are keyed to a digest of repository content with the manifest version masked, so unchanged inputs are never revalidated — not even after the bump itself. `VANITY_FORCE_VERIFY=1` ignores receipts; `VANITY_UNSAFE_PUBLISH_SKIP_CHECKS=1` skips the gate entirely and is never appropriate for a real release.
 - A failure before publication restores `sdk/package.json` and leaves no release state.
 - Once published, the bump is permanent: the release is recorded under `.vanity/`, and re-running the same `publish:sdk:<bump>` command resumes registry propagation, commit, tag, and push individually — whichever of those didn't complete — instead of re-bumping or re-publishing.
+
+## 9. Agent skills
+
+`sdk/skills/` holds the skills adopter agents load to use Vanity: `vanity-styling` (style modules and the components that consume them), `vanity-system` (tokens, conditions, axes, color, runtime), `vanity-setup` (installation, hosts, monorepos, upgrades), and `vanity-tooling` (introspection, CLI, DTCG, testing kit). They ship in the package, so an adopter's installed version always carries the matching skills. They are adopter documentation: they teach the public surface in the adopter's vocabulary and defer to the [reference specifications](../README.md#reference) for exact contracts.
+
+Each skill is a `SKILL.md` whose frontmatter `description` decides when an agent loads it, plus `references/` files the skill points to for detail. Keep each skill to one job, so an agent reads only what its task needs; when a topic fits none of the four, add a skill rather than growing an unrelated one.
+
+### Keeping skills current
+
+A change that alters something a skill teaches — an API shape, a default, a diagnostic, a recommended pattern — updates the affected skill in the same change, and the handoff's documentation list names it.
+
+Two checks keep the skills honest, and they answer different questions:
+
+- **Do the examples compile and run?** `pnpm run skills:verify` copies every mapped code block verbatim into a fixture app (`sandbox/skill-evals/snippets.ts` maps each block to a file and supplies only the context it assumes), then typechecks and builds it, executes the system examples, and runs the test examples with Vitest. A block that moved or changed without its map entry fails, and so does an unmapped one. Blocks that need a toolchain the fixture lacks are excluded explicitly and listed with the reason on every run. It runs in `validate`, so no release ships a mapped skill example that doesn't compile. Its scope is narrower than "the skills are correct":
+  - excluded blocks are only syntax-checked by `docs:examples`;
+  - the fixture runs with `ssr: false`, so server rendering and hydration advice (the SSR settings section) needs its own probe;
+  - building doesn't prove rendered behavior, so a rule about focus, motion, contrast, or accessibility also needs a browser probe when it changes;
+  - prose claims aren't checked at all: verify a behavioral claim with a probe before writing it.
+- **Do they teach well?** An agent evaluation, run when a release changes what a skill teaches:
+  1. `pnpm run skills:eval prepare __temp__/<version>-probes/skill-evals/<run> <model>` copies a snapshot of the skills, records the model and the skills' digest in `run.json`, and gives every task in `sandbox/skill-evals/evals.json` its own fixture copy with a generated `prompt.md`.
+  2. Give each `prompt.md` to a fresh agent that knows nothing but the skills. Results hold for the model that ran them; a different model can make different mistakes, so evaluate the models adopters actually use.
+  3. `pnpm run skills:eval grade <run>` typechecks and builds each project, flags hardcoded design values and hand-built custom properties, checks each task's assertions, and writes `grading.json` per task. The assertions look at source, so they show an agent reached for the right tools, not that the result looks or behaves right; review the output visually when the task is about craft.
+  4. Read every agent's `REPORT.md`: its list of guesses and gaps is the most valuable signal. Fix the skill (or the API, when the guess exposes a design problem), verify the fix, then run a new iteration.
+
+Agent runs cost real usage; reach for them when teaching changes, not as a routine gate.
+
+The task set grows with real usage: when an adopter agent misuses Vanity in a way a skill should have prevented, add a task that reproduces it.

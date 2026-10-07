@@ -7,6 +7,7 @@ Vanity’s documentation has one public product path and one maintainer path. St
 - [Getting started](./guides/getting-started.md) — install Vanity, create a system, compile styles, and choose the next document.
 - [Vision](./vision.md) — product promise, capability boundary, and the principles that govern every surface.
 - [Language](./language.md) — canonical terms, ownership boundaries, file roles, and authoring style.
+- [Agent skills](../sdk/skills/) — what adopter agents load to style with, design, set up, and inspect Vanity; shipped in the package.
 
 ## Reference
 
@@ -37,6 +38,7 @@ These records govern implementation, evidence, and the repository rather than co
 - [Capability-preservation matrix](./maintainers/capability-matrix.md) and [CSS parity ledger](./maintainers/parity-ledger.md)
 - [Testing and evidence](./maintainers/testing.md), [benchmarks](./maintainers/benchmarks.md), and [demos](./maintainers/demo.md)
 - [Workspace manual](./maintainers/workspace.md) and [handoffs and round reports](./maintainers/handoffs.md)
+- [Agent skills upkeep and evaluation](./maintainers/workspace.md#9-agent-skills)
 
 ## Contract status
 

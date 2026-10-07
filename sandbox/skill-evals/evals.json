@@ -1,0 +1,329 @@
+{
+  "skill_name": "vanity-skills",
+  "evals": [
+    {
+      "id": 1,
+      "name": "settings-row",
+      "prompt": "Add a `UiSettingsRow` component for our settings screens: a label (and optional description under it) on the left, a control slot on the right, vertically centered. Consecutive rows are separated by thin dividers. On wide screens give it a bit more breathing room. Rows can be focusable (tabindex) so they need a clear keyboard focus style, and hovering a row should subtly highlight it. We also need a 'danger' version for destructive settings (e.g. 'Delete account') where the label reads as dangerous. Put three example rows (one danger) on the index page.",
+      "expected_output": "A recipe whose danger variant drives the label, consumed through propsOf; dividers from stroke + border tokens; focusVisible and hover states; the wide condition; no raw design values.",
+      "assertions": [
+        {
+          "text": "styles the component with a recipe",
+          "glob": "**/*.css.ts",
+          "pattern": "recipe\\(",
+          "expect": "present"
+        },
+        {
+          "text": "derives Vue props from the recipe with propsOf",
+          "glob": "**/*.vue",
+          "pattern": "propsOf\\(",
+          "expect": "present"
+        },
+        {
+          "text": "draws dividers with the stroke token",
+          "glob": "**/*.css.ts",
+          "pattern": "t\\.stroke\\.",
+          "expect": "present"
+        },
+        {
+          "text": "has a keyboard focus style",
+          "glob": "**/*.css.ts",
+          "pattern": "focusVisible",
+          "expect": "present"
+        },
+        {
+          "text": "uses the system's wide condition",
+          "glob": "**/*.css.ts",
+          "pattern": "\\bwide\\s*:",
+          "expect": "present"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "button-system",
+      "prompt": "We need a real button component (`UiButton`) to replace ad-hoc buttons. Intents: primary, secondary, quiet, danger. Sizes: sm and md. It should support an icon-only square mode, a full-width option, a disabled look, and a loading state that keeps the button's width but hides the label and shows a small spinner in the middle. Pug template please. Show every variant on the index page.",
+      "expected_output": "One recipe with intent/size variants and toggles, consumed through propsOf; a keyframes spinner gated on motion preferences; focus and disabled states; tokens only.",
+      "assertions": [
+        {
+          "text": "styles the button with a recipe",
+          "glob": "**/*.css.ts",
+          "pattern": "recipe\\(",
+          "expect": "present"
+        },
+        {
+          "text": "declares boolean modes as toggles",
+          "glob": "**/*.css.ts",
+          "pattern": "toggles\\s*:",
+          "expect": "present"
+        },
+        {
+          "text": "derives Vue props from the recipe with propsOf",
+          "glob": "**/*.vue",
+          "pattern": "propsOf\\(",
+          "expect": "present"
+        },
+        {
+          "text": "animates the spinner with keyframes",
+          "glob": "**/*.css.ts",
+          "pattern": "keyframes\\(",
+          "expect": "present"
+        },
+        {
+          "text": "respects reduced-motion preferences",
+          "glob": "**/*.css.ts",
+          "pattern": "motion(Ok|Reduce)",
+          "expect": "present"
+        },
+        {
+          "text": "has a keyboard focus style",
+          "glob": "**/*.css.ts",
+          "pattern": "focusVisible",
+          "expect": "present"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "upload-item",
+      "prompt": "Build an `UploadItem` row for an upload list: file name on the left (long names should cut off with an ellipsis, never wrap), a thin progress bar under it that reflects a `progress` prop from 0 to 1 and animates smoothly as it changes, and a status: uploading, done, or failed. The bar should use the accent while uploading, a success-ish look when done, and the danger color when failed; failed rows show a small 'Retry' button on the right. Add a few demo items on the index page with different states.",
+      "expected_output": "A port bound with usePorts for the progress value; status as a recipe variant or a data-state condition; ellipsis truncation; tokens only.",
+      "assertions": [
+        {
+          "text": "declares the progress value as a port",
+          "glob": "**/*.css.ts",
+          "pattern": "port\\(",
+          "expect": "present"
+        },
+        {
+          "text": "binds the port with usePorts",
+          "glob": "**/*.vue",
+          "pattern": "usePorts\\(",
+          "expect": "present"
+        },
+        {
+          "text": "truncates the file name with an ellipsis",
+          "glob": "**/*.css.ts",
+          "pattern": "textOverflow",
+          "expect": "present"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "tabs",
+      "prompt": "Create a `UiTabs` component: a row of tabs and the active panel below. The selected tab gets an accent underline, others are muted and brighten on hover; keyboard focus must be clearly visible. Add an alternate 'pills' appearance where the selected tab gets a soft filled background instead of the underline. Use proper ARIA roles. Demo both appearances on the index page.",
+      "expected_output": "An anatomy (or recipes) with the selected state addressed on the element itself (`&[aria-selected=\"true\"]` or a registered condition), useAnatomy/propsOf, focusVisible, tokens only.",
+      "assertions": [
+        {
+          "text": "models the parts with an anatomy or recipes",
+          "glob": "**/*.css.ts",
+          "pattern": "(anatomy|recipe)\\(",
+          "expect": "present"
+        },
+        {
+          "text": "keeps anatomy classes reactive with useAnatomy (or uses recipes)",
+          "glob": "**/*.vue",
+          "pattern": "useAnatomy\\(|propsOf\\(",
+          "expect": "present"
+        },
+        {
+          "text": "has a keyboard focus style",
+          "glob": "**/*.css.ts",
+          "pattern": "focusVisible",
+          "expect": "present"
+        },
+        {
+          "text": "does not style a bare (descendant) attribute selector for selection",
+          "glob": "**/*.css.ts",
+          "pattern": "['\"]\\[aria-selected",
+          "expect": "absent"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "live-theming",
+      "prompt": "I want users to personalize the app: a density setting (compact / comfortable) that tightens spacing and control heights, and an accent color they pick with a hue slider — the whole accent family (accent, its soft background, the text on top of it) should follow. Build a small settings panel on the index page with those two controls, and remember the user's choice across reloads. Keep everything else looking the same by default.",
+      "expected_output": "A density axis with an activatable data() mode and tokens that vary on it; a mutable hue seed with derived accent roles (legibleOn for the on-accent text); the runtime driven from a composable with persisted settings; no hand-built custom-property names.",
+      "assertions": [
+        {
+          "text": "declares a density axis",
+          "glob": "app/design/**/*.ts",
+          "pattern": "addAxis\\(\\s*['\"]density",
+          "expect": "present"
+        },
+        {
+          "text": "makes the density mode activatable with data()",
+          "glob": "app/design/**/*.ts",
+          "pattern": "data\\(\\s*['\"]density",
+          "expect": "present"
+        },
+        {
+          "text": "declares a mutable seed token",
+          "glob": "app/design/**/*.ts",
+          "pattern": "mutable\\s*:\\s*true",
+          "expect": "present"
+        },
+        {
+          "text": "derives the on-accent text with legibleOn",
+          "glob": "app/design/**/*.ts",
+          "pattern": "legibleOn\\(",
+          "expect": "present"
+        },
+        {
+          "text": "drives values through the runtime",
+          "glob": "app/**/*.{ts,vue}",
+          "pattern": "\\.runtime\\(",
+          "expect": "present"
+        },
+        {
+          "text": "persists the settings",
+          "glob": "app/**/*.{ts,vue}",
+          "pattern": "useCookie|localStorage",
+          "expect": "present"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "scheme-and-skin",
+      "prompt": "Right now the app follows the OS light/dark setting. Add an explicit Light / Dark / System switch, and a second theme option called 'Crisp' (vs the default) where corners become sharp and cards lose their shadows and get a solid border instead. Both choices should be switchable at runtime from a small control bar on the index page. Restyle UiCard so it participates.",
+      "expected_output": "A colorSchemes() scheme axis; a skin axis with data() modes; radius/shadow/border tokens varying per mode so components never branch on the mode; runtime controls.",
+      "assertions": [
+        {
+          "text": "adds an explicit scheme axis with colorSchemes()",
+          "glob": "app/design/**/*.ts",
+          "pattern": "colorSchemes\\(",
+          "expect": "present"
+        },
+        {
+          "text": "makes the skin mode activatable with data()",
+          "glob": "app/design/**/*.ts",
+          "pattern": "data\\(\\s*['\"](skin|theme|style)",
+          "expect": "present"
+        },
+        {
+          "text": "switches modes through the runtime",
+          "glob": "app/**/*.{ts,vue}",
+          "pattern": "\\$switchTo\\(",
+          "expect": "present"
+        },
+        {
+          "text": "UiCard does not branch on the skin with a raw selector",
+          "glob": "app/components/UiCard/*.css.ts",
+          "pattern": "data-(skin|theme)",
+          "expect": "absent"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "shared-package",
+      "prompt": "We're about to add a browser extension (WXT) and a marketing site (a second Nuxt app) that must share this app's design system and components. Move the design system into a workspace package (`packages/design-system`) and plan the wiring. You can't install anything or run the other apps here — write the files: the package (package.json, entry modules, the Vanity config), the updated config for this app, and the configs the WXT extension and the second Nuxt app would need. Explain the layout in a short README in the package. Keep this app building.\n\nNote: this project is not inside a pnpm workspace, so the new package cannot be linked as a dependency here. Write the package files under `packages/design-system/` inside the project directory, and for this app it's fine to point the Vanity config at the package's files by relative path — say in your README how it would be wired in a real workspace.",
+      "expected_output": "A package exporting ., ./authoring, ./system, ./vanity; a host-neutral config resolved with import.meta.resolve; this app consuming that config; WXT using @mszr/vanity/wxt with a re-exported vanity.config; a Nuxt layer or extends for the second app.",
+      "assertions": [
+        {
+          "text": "exports the authoring barrel",
+          "glob": "packages/design-system/package.json",
+          "pattern": "\"\\./authoring\"",
+          "expect": "present"
+        },
+        {
+          "text": "exports the system entry",
+          "glob": "packages/design-system/package.json",
+          "pattern": "\"\\./system\"",
+          "expect": "present"
+        },
+        {
+          "text": "exports one shared Vanity config",
+          "glob": "packages/design-system/package.json",
+          "pattern": "\"\\./vanity\"",
+          "expect": "present"
+        },
+        {
+          "text": "resolves config entries from the package",
+          "glob": "packages/**/*",
+          "pattern": "import\\.meta\\.resolve",
+          "expect": "present"
+        },
+        {
+          "text": "wires the WXT module",
+          "glob": "**/*",
+          "pattern": "@mszr/vanity/wxt",
+          "expect": "present"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "dialog",
+      "prompt": "Build a confirmation dialog (`UiDialog`): a dimmed backdrop over the page, a centered panel with title, body text, and an actions row (Cancel + Confirm). It should fade and rise in when it opens (but respect people who prefer reduced motion), close on Escape and on backdrop click, and support a 'danger' tone where the confirm action reads as destructive. Add a button on the index page that opens it.",
+      "expected_output": "An anatomy for backdrop/panel/parts with useAnatomy; scrim and z-index roles from tokens; enter animation via keyframes or @starting-style gated by motion preferences; the danger tone as a variant; tokens only.",
+      "assertions": [
+        {
+          "text": "models the dialog parts with an anatomy or recipes",
+          "glob": "**/*.css.ts",
+          "pattern": "(anatomy|recipe)\\(",
+          "expect": "present"
+        },
+        {
+          "text": "dims the page with the scrim role",
+          "glob": "**/*.css.ts",
+          "pattern": "t\\.color\\.scrim",
+          "expect": "present"
+        },
+        {
+          "text": "stacks with a z-index role",
+          "glob": "**/*.css.ts",
+          "pattern": "t\\.layer\\.",
+          "expect": "present"
+        },
+        {
+          "text": "animates the entrance",
+          "glob": "**/*.css.ts",
+          "pattern": "keyframes\\(|@starting-style",
+          "expect": "present"
+        },
+        {
+          "text": "respects reduced-motion preferences",
+          "glob": "**/*.css.ts",
+          "pattern": "motion(Ok|Reduce)",
+          "expect": "present"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "dashboard-layout",
+      "prompt": "Lay out the index page as a small dashboard: a header bar, a sidebar navigation that sits above the content on narrow screens and beside it on wide ones, and a grid of stat cards (reuse UiCard) that fits as many columns as the space allows. Each stat card shows a big number and a label underneath, and switches to number-and-label side by side when the card itself is wide enough (regardless of the viewport).",
+      "expected_output": "Page layout with the wide condition; an auto-fill/minmax grid; container queries for the card-internal switch; minmax(0, 1fr)/minInlineSize: 0 for shrinkable columns; tokens only.",
+      "assertions": [
+        {
+          "text": "uses the system's wide condition for the page layout",
+          "glob": "**/*.css.ts",
+          "pattern": "\\bwide\\s*:",
+          "expect": "present"
+        },
+        {
+          "text": "fits columns with an auto-fill/auto-fit grid",
+          "glob": "**/*.css.ts",
+          "pattern": "auto-(fill|fit)",
+          "expect": "present"
+        },
+        {
+          "text": "switches the card on its own width with a container query",
+          "glob": "**/*.{ts,vue}",
+          "pattern": "containerType|container\\(|@container",
+          "expect": "present"
+        },
+        {
+          "text": "keeps the stat cards in a component, not inline in the page",
+          "glob": "app/pages/**/*.css.ts",
+          "pattern": ".",
+          "expect": "absent"
+        }
+      ]
+    }
+  ]
+}
