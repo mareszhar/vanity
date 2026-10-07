@@ -35,7 +35,7 @@ const palette = open.defineTokens()
 - `legibleOn` picks once, at build time, from the background's authored value. It **fails the build** below APCA Lc 60, per scheme and authored axis mode or case. The authored-default check includes literals, aliases, mutable backgrounds, token-valued channels, and supported `alpha`/`lighten`/`darken`/`from`/`colorMix` derivations. Deliberately unfoldable mixes use a representative approximation recorded in introspection; unsupported representatives fail with an actionable color diagnostic.
 - A mutable background is checked at its authored default, but keeps that foreground when the runtime changes the seed. This does not guarantee contrast throughout the runtime range. Test the retained foreground against every sampled background, as below.
 
-For those, test the pairing yourself. With a live seed, the page keeps the foreground picked at the authored seed while the runtime moves the background, so check **that** foreground across the seed's whole range, not just its endpoints (hue 0° and 360° are the same color; failures hide in between). Share the color formula between the system and a test:
+To test a live seed, remember that the page keeps the foreground picked at the authored seed while the runtime moves the background, so check **that** foreground across the seed's whole range, not just its endpoints (hue 0° and 360° are the same color; failures hide in between). Share the color formula between the system and a test:
 
 ```ts
 // design/accent.ts — one formula for the system and the test
