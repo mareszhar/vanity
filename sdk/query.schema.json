@@ -1,0 +1,501 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mszr.dev/vanity/query-1.schema.json",
+  "title": "Vanity manifest query",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "command",
+    "manifest",
+    "warnings",
+    "result"
+  ],
+  "properties": {
+    "format": {
+      "const": "vanity.query/1"
+    },
+    "version": {
+      "const": 1
+    },
+    "command": {
+      "enum": [
+        "roles",
+        "examples",
+        "explain",
+        "context"
+      ]
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "identities",
+        "writtenAt"
+      ],
+      "properties": {
+        "version": {
+          "const": 5
+        },
+        "identities": {
+          "$ref": "https://schemas.mszr.dev/vanity/manifest-5.schema.json#/$defs/identities"
+        },
+        "writtenAt": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T.*Z$"
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "result": {
+      "anyOf": [
+        {
+          "type": "array"
+        },
+        {
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "roles"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "roles",
+              "warnings"
+            ],
+            "properties": {
+              "roles": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/role"
+                }
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/role"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "examples"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "module",
+                "style",
+                "exports",
+                "declaration"
+              ],
+              "properties": {
+                "module": {
+                  "type": "string"
+                },
+                "style": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "exports": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "declaration": {
+                  "$ref": "https://schemas.mszr.dev/vanity/manifest-5.schema.json#/$defs/styleDeclaration"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "explain"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "module",
+                  "export",
+                  "styles",
+                  "declarations"
+                ],
+                "properties": {
+                  "module": {
+                    "type": "string"
+                  },
+                  "export": {
+                    "type": "string"
+                  },
+                  "part": {
+                    "type": "string"
+                  },
+                  "styles": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "https://schemas.mszr.dev/vanity/manifest-5.schema.json#/$defs/style"
+                    }
+                  },
+                  "declarations": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "https://schemas.mszr.dev/vanity/manifest-5.schema.json#/$defs/styleDeclaration"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "kind"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "context"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "manifestVersion",
+              "identities",
+              "system",
+              "environment",
+              "tokens",
+              "modules",
+              "policy"
+            ],
+            "properties": {
+              "manifestVersion": {
+                "const": 5
+              },
+              "identities": {
+                "$ref": "https://schemas.mszr.dev/vanity/manifest-5.schema.json#/$defs/identities"
+              },
+              "system": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "root",
+                  "layers"
+                ],
+                "properties": {
+                  "root": {
+                    "type": "string"
+                  },
+                  "tokenLayer": {
+                    "type": "string"
+                  },
+                  "layers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "environment": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "axes",
+                  "conditions"
+                ],
+                "properties": {
+                  "axes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "name",
+                        "modes"
+                      ],
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "modes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "covers": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "shared": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "defaultMode": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "conditions": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "tokens": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "type",
+                    "reference",
+                    "mutable",
+                    "dependencies",
+                    "contexts"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "reference": {
+                      "enum": [
+                        "val",
+                        "var"
+                      ]
+                    },
+                    "mutable": {
+                      "type": "boolean"
+                    },
+                    "dependencies": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "contexts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "usage": {
+                      "$ref": "https://schemas.mszr.dev/vanity/manifest-5.schema.json#/$defs/tokenUsage"
+                    },
+                    "restrict": {
+                      "$ref": "https://schemas.mszr.dev/vanity/manifest-5.schema.json#/$defs/tokenRestriction"
+                    },
+                    "range": {
+                      "$ref": "https://schemas.mszr.dev/vanity/manifest-5.schema.json#/$defs/tokenRange"
+                    }
+                  }
+                }
+              },
+              "modules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "recipes",
+                    "ports"
+                  ],
+                  "properties": {
+                    "source": {
+                      "type": "string"
+                    },
+                    "recipes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "ports": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "policy": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "rawAssertions",
+                  "aliasEscapes",
+                  "nonportableTokens",
+                  "overwrites"
+                ],
+                "properties": {
+                  "rawAssertions": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "aliasEscapes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "nonportableTokens": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "overwrites": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "type",
+        "matches"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "https://schemas.mszr.dev/vanity/manifest-5.schema.json#/$defs/tokenUsage"
+        },
+        "matches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field",
+              "text"
+            ],
+            "properties": {
+              "field": {
+                "enum": [
+                  "usage.for",
+                  "description",
+                  "path",
+                  "usage.avoid"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

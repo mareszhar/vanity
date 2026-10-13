@@ -1,0 +1,71 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`manifest-sourced CLI queries > finds guided roles, emitted examples, export parts and focused context with snapshot metadata > context --focus components/card.css.ts 1`] = `
+"Manifest v5; <compatibility>; written 2026-10-10T00:00:00.000Z
+Warning: components/card.css.ts is newer than the manifest; regenerate before relying on this answer
+# vanity system context
+
+Manifest v5; system <compatibility>; root :root.
+Cascade layers: reset → tokens → recipes → utilities → overrides.
+
+Token vocabulary:
+- color.border: <color>, var — Quiet divider between cards; emits root :root @layer vanity.tokens.base; for quiet divider
+- space.sm: <length>, var; emits root :root @layer vanity.tokens.base; for quiet inset
+
+Published component contracts:
+- components/card.css.ts: recipes/anatomies parts; ports none
+
+Authoring policy:
+- Prefer declared tokens, conditions, recipes, anatomies, and ports; emitted contexts above are the cascade contract.
+- Raw assertions: 0; aliases-only escapes: 0; overwrite/augment history: 0.
+- Nonportable authored-interchange values: none."
+`;
+
+exports[`manifest-sourced CLI queries > finds guided roles, emitted examples, export parts and focused context with snapshot metadata > context --focus space 1`] = `
+"Manifest v5; <compatibility>; written 2026-10-10T00:00:00.000Z
+Warning: components/card.css.ts is newer than the manifest; regenerate before relying on this answer
+# vanity system context
+
+Manifest v5; system <compatibility>; root :root.
+Cascade layers: reset → tokens → recipes → utilities → overrides.
+
+Token vocabulary:
+- space.sm: <length>, var; emits root :root @layer vanity.tokens.base; for quiet inset
+
+Published component contracts:
+- components/card.css.ts: recipes/anatomies parts; ports none
+
+Authoring policy:
+- Prefer declared tokens, conditions, recipes, anatomies, and ports; emitted contexts above are the cascade contract.
+- Raw assertions: 0; aliases-only escapes: 0; overwrite/augment history: 0.
+- Nonportable authored-interchange values: none."
+`;
+
+exports[`manifest-sourced CLI queries > finds guided roles, emitted examples, export parts and focused context with snapshot metadata > examples color.border 1`] = `
+"Manifest v5; <compatibility>; written 2026-10-10T00:00:00.000Z
+Warning: components/card.css.ts is newer than the manifest; regenerate before relying on this answer
+components/card.css.ts#<style0> border-color: var(--vanity-color-border) (1:94)
+components/card.css.ts#<style1> color: var(--vanity-color-border) (1:217)"
+`;
+
+exports[`manifest-sourced CLI queries > finds guided roles, emitted examples, export parts and focused context with snapshot metadata > explain components/card.css.ts#card 1`] = `
+"Manifest v5; <compatibility>; written 2026-10-10T00:00:00.000Z
+Warning: components/card.css.ts is newer than the manifest; regenerate before relying on this answer
+components/card.css.ts#card
+.<style0> padding: var(--vanity-space-sm); token (space.sm); environments
+.<style0> border-color: var(--vanity-color-border); token (color.border); type"
+`;
+
+exports[`manifest-sourced CLI queries > finds guided roles, emitted examples, export parts and focused context with snapshot metadata > explain components/card.css.ts#parts.label 1`] = `
+"Manifest v5; <compatibility>; written 2026-10-10T00:00:00.000Z
+Warning: components/card.css.ts is newer than the manifest; regenerate before relying on this answer
+components/card.css.ts#parts.label
+.<style1> color: var(--vanity-color-border); token (color.border); type"
+`;
+
+exports[`manifest-sourced CLI queries > finds guided roles, emitted examples, export parts and focused context with snapshot metadata > roles --for quiet divider 1`] = `
+"Manifest v5; <compatibility>; written 2026-10-10T00:00:00.000Z
+Warning: components/card.css.ts is newer than the manifest; regenerate before relying on this answer
+color.border  matched: usage.for "quiet divider"; description "Quiet divider between cards"
+space.sm  matched: usage.for "quiet inset""
+`;

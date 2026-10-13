@@ -19,6 +19,7 @@ import type {
 import type {
   VanityAdditiveGraph,
   VanityCanonicalTokens,
+  VanityCheck,
   VanityCompositionGuard,
   VanityConfiguredToken,
   VanityDefaultTokenPolicy,
@@ -479,6 +480,7 @@ type VanityOpenRegistrationMember
     | 'tdef'
     | 'addToken'
     | 'addTokens'
+    | 'addChecks'
     | 'augmentToken'
     | 'augmentTokens'
     | 'overwriteToken'
@@ -660,6 +662,10 @@ export interface VanityAxisPatch {
   readonly control?: import('./axes').VanityAxisControl<any>
   /** Configure native scheme behavior for the axis. */
   readonly native?: import('./axes').VanityNativeSchemePolicy
+  /** Token leaves or groups every mode must account for. */
+  readonly covers?: readonly string[]
+  /** Token leaves or groups deliberately identical across modes. */
+  readonly shared?: readonly string[]
   /** Describe the axis in introspection and editor tooling. */
   readonly description?: string
 }
@@ -863,6 +869,10 @@ export interface VanityOpenSystemMethods<
       factory: (system: VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>) => Input & VanityCompositionGuard<Tokens, GraphOf<Input>>,
     ): VanityOpenSystem<Shape, VanityAdditiveGraph<Tokens, GraphOf<Input>>, Conditions, Consts, Utils, Plugins>
   }
+  /** Register additive build-time guarantees over this system's tokens. */
+  readonly addChecks: (
+    factory: (tokens: ResolvedTokens<Tokens, string, ShapePolicy<Shape>>) => readonly VanityCheck[],
+  ) => VanityOpenSystem<Shape, Tokens, Conditions, Consts, Utils, Plugins>
   /** Add one absent token name; returns a new open system. */
   readonly addToken: {
     <const Name extends string, const Input extends VanityLeafInput | VanityDerivedResult | VanityTokenConfig>(
@@ -2197,6 +2207,9 @@ export function materializeOpen(
       }
       return surface
     },
+    addChecks(factory: (tokens: object) => readonly VanityCheck[]) {
+      return materializeNextOpenSystem({ checks: Object.freeze([...(state.checks ?? []), factory]) })
+    },
     addTokens(input: unknown) {
       if (Array.isArray(input)) {
         return input.reduce(
@@ -2876,6 +2889,7 @@ function createPluginSetupSurface(system: object, id: string): object {
   const chaining = new Set([
     'addToken',
     'addTokens',
+    'addChecks',
     'augmentToken',
     'augmentTokens',
     'addCondition',
@@ -3104,7 +3118,7 @@ function applyOpenAxisPatch(
         )
       }
     }
-    for (const key of ['default', 'modeOrder', 'control', 'native', 'description'] as const) {
+    for (const key of ['default', 'modeOrder', 'control', 'native', 'description', 'covers', 'shared'] as const) {
       const existingKey = key === 'default' ? existing.defaultMode : existing[key]
       if (patch[key] !== undefined && existingKey !== undefined) {
         throwOpenError(
@@ -3144,6 +3158,8 @@ function applyOpenAxisPatch(
     ...((patch.native ?? existing.native) === undefined
       ? {}
       : { native: patch.native ?? existing.native }),
+    ...((patch.covers ?? existing.covers) === undefined ? {} : { covers: patch.covers ?? existing.covers }),
+    ...((patch.shared ?? existing.shared) === undefined ? {} : { shared: patch.shared ?? existing.shared }),
     ...((patch.description ?? existing.description) === undefined
       ? {}
       : { description: patch.description ?? existing.description }),

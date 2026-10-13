@@ -1,5 +1,8 @@
-/** Manifest v4: the canonical system map plus build-module provenance. */
+/** Manifest v5: the canonical system map plus build-module provenance. */
 
+import type { VanityDeclarationComponent } from '../css/declaration'
+import type { VanityArm } from '../css/rule'
+import type { VanityValueSourceSpan } from '../diagnostics'
 import type {
   VanityEscapeForm,
   VanityInspectRecord,
@@ -17,15 +20,18 @@ import type {
   VanitySemanticEntry,
   VanitySystemMap,
 } from './system'
+import { createHash } from 'node:crypto'
+import { getArmKey } from '../css/rule'
+import { serializeDeclarationNumber } from '../css/validation'
 import { VanityError } from '../diagnostics'
 import { introspectSystem, normalizeSourceId } from './system'
 
 /** Stable manifest format discriminator: `manifest.format === VANITY_MANIFEST_FORMAT`. */
-export const VANITY_MANIFEST_FORMAT = 'vanity.manifest/4' as const
+export const VANITY_MANIFEST_FORMAT = 'vanity.manifest/5' as const
 /** Current manifest schema version: `manifest.version === VANITY_MANIFEST_VERSION`. */
-export const VANITY_MANIFEST_VERSION = 4 as const
+export const VANITY_MANIFEST_VERSION = 5 as const
 /** Published JSON Schema identifier: `manifest.$schema === VANITY_MANIFEST_SCHEMA`. */
-export const VANITY_MANIFEST_SCHEMA = 'https://schemas.mszr.dev/vanity/manifest-4.schema.json' as const
+export const VANITY_MANIFEST_SCHEMA = 'https://schemas.mszr.dev/vanity/manifest-5.schema.json' as const
 
 /** Source location attached to a manifest record. */
 export type VanityManifestSource = VanityDeclaredAt
@@ -54,6 +60,7 @@ export interface VanityManifestRecipe extends VanitySemanticEntry {
   readonly defaults: Readonly<Record<string, string | boolean>>
   /** Ports published by the recipe or anatomy. */
   readonly ports: Readonly<Record<string, string>>
+  readonly classes: NonNullable<VanityRecipeRecord['classes']>
 }
 
 /** Manifest record for a component-owned custom-property port. */
@@ -84,6 +91,8 @@ export interface VanityManifestEscape extends VanitySemanticEntry {
   readonly reason?: string
   /** Layer receiving the escaped output. */
   readonly layer?: string
+  readonly style?: string
+  readonly property?: string
 }
 
 /** Manifest record for a contrast guarantee or check. */
@@ -102,8 +111,31 @@ export interface VanityManifestContrast extends VanitySemanticEntry {
   readonly min: number
   /** Whether the threshold was consciously accepted at the definition site. */
   readonly accepted: boolean
+  readonly evidence?: import('../evidence').VanityEvidence
+  readonly samples?: number
+  readonly step?: Readonly<Record<string, string>>
+  readonly worst?: Readonly<Record<string, string | number>>
+  readonly profile?: 'development' | 'production' | 'both'
+  readonly note?: string
+  readonly tokens?: readonly string[]
+  readonly environment?: Readonly<Record<string, string>>
   /** The pick used a representative target because exact folding was declined. */
   readonly fallback?: string
+}
+
+/** One emitted declaration; origins and evidence remain on its classified components. */
+export interface VanityManifestStyleDeclaration {
+  readonly id: string
+  readonly property: string
+  readonly value: string
+  readonly condition: readonly string[]
+  readonly arm: VanityArm & { selector: string, ordinal: number }
+  readonly layer: string
+  readonly components: readonly VanityDeclarationComponent[]
+  readonly tokens: readonly string[]
+  readonly source?: VanityValueSourceSpan
+  readonly editable: boolean
+  readonly reason?: string
 }
 
 /** Manifest record for one emitted style class. */
@@ -116,6 +148,9 @@ export interface VanityManifestStyle extends VanitySemanticEntry {
   readonly name?: string
   /** Semantic token paths referenced by the style. */
   readonly tokens: readonly string[]
+  readonly declarations: readonly VanityManifestStyleDeclaration[]
+  readonly exports: readonly string[]
+  readonly layer: string
 }
 
 /** Build-time records grouped by one source module. */
@@ -124,6 +159,8 @@ export interface VanityManifestModule extends VanitySemanticEntry {
   readonly kind: 'module'
   /** Package-relative source id. */
   readonly source: string
+  /** Project-declared surface layer, when configured. */
+  readonly layer?: 'primitive' | 'pattern' | 'feature'
   /** Recipes and anatomies declared by the module. */
   readonly recipes: Readonly<Record<string, VanityManifestRecipe>>
   /** Ports declared by the module. */
@@ -170,7 +207,7 @@ export interface VanityManifestBuildOptions {
 }
 
 /**
- * Build one stable Manifest v4 from collected semantic records and emitted CSS.
+ * Build one stable Manifest v5 from collected semantic records and emitted CSS.
  *
  * @example
  * `const manifest = buildManifest(records, css, { root: process.cwd() })`
@@ -193,7 +230,7 @@ export function buildManifest(
   if (!primary) {
     throw new VanityError({
       code: 'VANITY_MANIFEST_INVALID',
-      message: 'Manifest v4 requires a consolidated system record',
+      message: 'Manifest v5 requires a consolidated system record',
       path: ['records'],
       fix: 'consolidate a system before building its manifest',
     })
@@ -220,7 +257,7 @@ export function buildManifest(
   }
   const pathsByVar = new Map(primary.tokenRecords.map(token => [token.var, token.path]))
 
-  for (const record of records) {
+  for (const record of [...records, ...portableSystems.flatMap(system => system.checks ?? [])]) {
     switch (record.kind) {
       case 'recipe':
       case 'anatomy': {
@@ -238,7 +275,7 @@ export function buildManifest(
       }
       case 'style': {
         const target = getModule(record.file)
-        target.styles[record.class] = createStyleEntry(record, target.source, system.id, pathsByVar)
+        target.styles[record.class] = createStyleEntry(record, target.source)
         break
       }
       case 'escape': {
@@ -252,13 +289,15 @@ export function buildManifest(
           detail: record.detail,
           ...(record.reason === undefined ? {} : { reason: record.reason }),
           ...(record.layer === undefined ? {} : { layer: record.layer }),
+          ...(record.style === undefined ? {} : { style: record.style }),
+          ...(record.property === undefined ? {} : { property: record.property }),
         })
         break
       }
       case 'contrast': {
         const target = getModule(record.file)
         target.contrast.push({
-          id: `contrast:${target.source}:${record.pairing}:${record.scheme}:${record.algorithm}:${record.line ?? 0}:${record.column ?? 0}`,
+          id: `contrast:${target.source}:${record.pairing}:${record.scheme}:${record.algorithm}:${record.min}:${record.line ?? 0}:${record.column ?? 0}${record.profile ? `:${record.profile}` : ''}${record.environment ? `:${JSON.stringify(record.environment)}` : ''}`,
           kind: 'contrast',
           owner: { kind: 'module', id: `module:${target.source}` },
           ...getSource(record, options.root),
@@ -268,6 +307,14 @@ export function buildManifest(
           measured: record.measured,
           min: record.min,
           accepted: record.accepted,
+          ...(record.evidence === undefined ? {} : { evidence: record.evidence }),
+          ...(record.samples === undefined ? {} : { samples: record.samples }),
+          ...(record.step === undefined ? {} : { step: record.step }),
+          ...(record.worst === undefined ? {} : { worst: record.worst }),
+          ...(record.profile === undefined ? {} : { profile: record.profile }),
+          ...(record.note === undefined ? {} : { note: record.note }),
+          ...(record.tokens === undefined ? {} : { tokens: record.tokens }),
+          ...(record.environment === undefined ? {} : { environment: record.environment }),
           ...(record.fallback === undefined ? {} : { fallback: record.fallback }),
         })
         break
@@ -320,7 +367,7 @@ export function buildManifest(
         ports: entry.ports,
         styles: entry.styles,
         escapes: [...entry.escapes].sort((left, right) => left.id.localeCompare(right.id)),
-        contrast: [...entry.contrast].sort((left, right) => left.id.localeCompare(right.id)),
+        contrast: [...new Map(entry.contrast.map(contrast => [contrast.id, contrast])).values()].sort((left, right) => left.id.localeCompare(right.id)),
         tokenUsage: entry.tokenUsage,
       },
     ])),
@@ -352,6 +399,7 @@ function createRecipeEntry(record: VanityRecipeRecord, moduleId: string): Vanity
     toggles: record.toggles,
     defaults: record.defaults,
     ports: record.ports,
+    classes: record.classes!,
   }
 }
 
@@ -380,9 +428,8 @@ function createPortEntry(
 function createStyleEntry(
   record: VanityStyleRecord,
   moduleId: string,
-  _systemId: string,
-  pathsByVar: ReadonlyMap<string, string>,
 ): VanityManifestStyle {
+  const declarations = createStyleDeclarations(record, moduleId)
   return {
     id: `style:${record.class}`,
     kind: 'style',
@@ -390,8 +437,34 @@ function createStyleEntry(
     ...getSource(record),
     class: record.class,
     ...(record.name === undefined ? {} : { name: record.name }),
-    tokens: record.vars.flatMap(variable => pathsByVar.get(variable) ?? []),
+    tokens: [...new Set(declarations.flatMap(declaration => declaration.tokens))],
+    declarations,
+    exports: record.exports ?? [],
+    layer: record.layer!,
   }
+}
+
+function createStyleDeclarations(record: VanityStyleRecord, moduleId: string): VanityManifestStyleDeclaration[] {
+  const ordinals = new Map<string, number>()
+  return (record.emittedDeclarations ?? []).map((declaration) => {
+    const armId = createHash('sha256').update(JSON.stringify([getArmKey(declaration.arm), declaration.arm.ordinal])).digest('hex').slice(0, 16)
+    const key = `${armId}:${declaration.property}`
+    const ordinal = ordinals.get(key) ?? 0
+    ordinals.set(key, ordinal + 1)
+    return {
+      id: `declaration:${moduleId}:${record.class}:${key}:${ordinal}`,
+      property: declaration.property,
+      value: typeof declaration.value === 'number' ? serializeDeclarationNumber(declaration.property, declaration.value) : declaration.value,
+      condition: declaration.conditionPath ?? [],
+      arm: declaration.arm,
+      layer: declaration.layer,
+      components: declaration.components,
+      tokens: [...new Set(declaration.components.flatMap(component => component.tokens))],
+      ...(declaration.source === undefined ? {} : { source: declaration.source }),
+      editable: declaration.editable === true,
+      ...(declaration.editable === true ? {} : { reason: declaration.reason ?? 'no independently authored value span is available' }),
+    }
+  })
 }
 
 function getPortKey(record: VanityPortRecord): string {

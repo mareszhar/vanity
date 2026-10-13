@@ -49,6 +49,8 @@ const fillStyle = usePorts(() => [
 
 ---
 
+Style-module imports may use `./Card.css` or `./Card.css.ts`. Both retain their class exports and support Nuxt's production SSR stylesheet collection. A CSS query such as `?inline` instead returns the compiled stylesheet as a default string; `?raw` returns the authored source. See [CSS queries](./spec-integrations.md#css-queries).
+
 ## 2. `useAnatomy` and `propsOf`
 
 **Why.** An anatomy call returns a record of part classes, and Vue's reactivity has a trap waiting there: `const d = dialog(props)` in `<script setup>` computes once and silently stops tracking. The correct `computed(() => dialog(props))` works but is the kind of pattern every first-timer discovers via a confused bug. This is the one place the "a typed function needs no wrapper" rule bends — because here the wrapper carries reactivity, not ceremony.

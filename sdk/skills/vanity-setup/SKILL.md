@@ -17,7 +17,9 @@ design/base.css.ts    document rules (reset, html/body), imported once by the ap
 **/*.css.ts           style modules: evaluated at build time, emit CSS, export class handles
 ```
 
-Vanity compiles through Vite. Nuxt, WXT, and plain Vite apps all mount the same compiler.
+Vanity compiles through Vite 6, 7 or 8. Nuxt, WXT, and plain Vite apps all mount the same compiler.
+
+Style imports use the host's client aliases, resolver plugins and virtual modules. Import a package by name when its Node entry is needed: style modules execute in Node at build time, so a named request selects Node unless the host redirects it into another package. Other aliases keep their selected files, even browser entries. An alias to a different entry of the same named package still resolves from the written package request. Native imports such as `node:fs` are valid in authoring code.
 
 ## 2. A Nuxt app
 
@@ -83,7 +85,13 @@ import '~/design/base.css.ts'
 
 Listing it in Nuxt's `css` option works too (`css: ['~/design/base.css.ts']`); Vanity compiles `*.css.ts` entries there like any other style module. That's the better home in a Nuxt layer shared by several apps.
 
+Component imports can use `./Card.css` or `./Card.css.ts`; both support Nuxt's production SSR styles. Keep the host's inline-styles setting appropriate to the app. `?inline` requests a default CSS string instead of class exports; `?raw` requests authored source and does not compile it.
+
 Run `nuxi prepare` (or start the dev server) once so Nuxt generates the auto-import declarations, then `nuxi typecheck`. A first `nuxt build` proves the compiler path end to end.
+
+Nuxt's framework build supplies compiler evidence; the headless check command cannot acquire its configured client pipeline and exits 2 with that explanation. Outside Nuxt, check supports Vite, WXT and Vitest configurations. For gradual declarations-policy adoption, a reviewed baseline belongs at the project root, including in Nuxt 4 projects whose Vite source root is `app/`. `compiler.baseline` can select another project-relative or absolute file. Check and host builds read the same baseline.
+
+Role guidance (`usage`) is advisory. Token property restrictions (`restrict`) operate even without a declarations policy; a reviewed policy baseline can accept their existing findings, and new violations still fail.
 
 Where style modules live is a project convention: colocated next to the component (`UiCard/UiCard.vue` + `UiCard/UiCard.css.ts`) or in a separate tree reached through an alias. Pick one and write it in the project's conventions doc.
 
@@ -106,6 +114,8 @@ and import third-party CSS into `@layer vendor` (e.g. `@import url('lib.css') la
 ## 5. Upgrading Vanity
 
 Stop the dev server before installing a new version, then start it again: a running server keeps the old compiler in memory and can fail with errors such as `VANITY_VITE_BUILD_FAILED` that disappear after a restart. Read the release notes for breaking changes (pre-1.0 minors may break), rerun `nuxi prepare`, typecheck, and build.
+
+Runtime snapshots use version 2. A stored version 1 snapshot is rejected with a diagnostic and falls back to defaults; do not rewrite its version field. Runtime validators receive CSS text or finite numbers, so adapt schemas that previously inspected value objects or token handles. Keep validator implementations pure and bind the same IDs on the client and server.
 
 ## 6. Agent skills
 

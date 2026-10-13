@@ -28,6 +28,12 @@ Helpers are literal:
 - `selector()` is needed only to begin fluent composition;
 - every condition is usable directly, registrable by name, and usable as an axis mode.
 
+A registered selector without `&` follows CSS nesting: `selected: data('selected')` styles `[data-selected]` descendants of the styled element. Use `data('selected').self` for `&[data-selected]`, or `aria('expanded', 'true').self` for `&[aria-expanded='true']`, to match the element itself. The `descendantConditions` audit warns for registered bare data/ARIA conditions, suggests `.self`, and honors `off`, `warn` and `error`; an intentional descendant condition can remain bare. Axis activation uses its own placement and is unchanged by style nesting.
+
+Raw pseudo keys without `&` also match descendants: `'::before'` emits a descendant pseudo-element and `':hover'` matches hovered descendants. Use `'&::before'` or `'&:hover'` for the styled element. `VANITY_SELECTOR_UNANCHORED` names that anchored spelling; the `unanchoredSelectors` audit level defaults to `warn`, supports explicit `error`, and accepts `off` for intentional descendants.
+
+Negation respects the rule anchor. `selector('&').and(data('density', 'compact')).not()` matches the anchor without the compact state; the complement of the anchor itself contributes no arm. Conjunctions, disjunctions and nested negation follow the same condition algebra in styles and axis modes, including under custom roots. Roots, `scope()` and runtime controls retain their own placement and attribute writes; a negated condition needs an explicit control to switch at runtime.
+
 ## 2. Algebra
 
 Conditions support:
@@ -183,6 +189,8 @@ The object form accepts:
 | `derive` | Fills a missing mode's value from its authored siblings at token finalization. |
 | `control` | A query-free runtime control for an axis condition metadata cannot activate ([§11](#11-runtime-activation-metadata)). |
 | `native` | Preserves native `light-dark()` behavior and its fallback policy ([§9](#9-scheme-convenience)). |
+| `covers` | Token leaves or groups each mode must account for at consolidation ([system coverage](./spec-system.md#axis-coverage)). |
+| `shared` | Token leaves or groups deliberately identical across the axis's modes. |
 | `description` | Human-readable axis description shown in introspection. |
 
 Every authoring form accepts these same fields and honors them identically: `addAxis`, `addAxes`, detached `defineAxes` modules, and a complete `axis()` definition. A derivation fills a missing mode value, and a value authored for that mode always wins:
@@ -218,6 +226,7 @@ Every axis records:
 - literal name and modes;
 - conditions/arms;
 - default;
+- optional `covers` and `shared` token paths ([system coverage](./spec-system.md#axis-coverage));
 - mode order;
 - description and source;
 - activation metadata or explicit control adapter;

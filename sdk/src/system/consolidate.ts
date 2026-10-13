@@ -65,6 +65,7 @@ export function consolidateSystem(
       tokens: finalState.tokens as any,
       conditions: finalState.conditions,
       ...systemOptions,
+      ...(finalState.checks?.length ? { checks: (tokens: object) => finalState.checks!.flatMap(factory => factory(tokens)) } : {}),
     } as any,
     {
       ...(source === undefined ? {} : { source }),

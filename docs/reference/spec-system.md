@@ -162,6 +162,16 @@ Consolidation is pure with respect to CSS and files:
 
 Calling `consolidate()` from a `*.css.ts` file is a dedicated error: `VANITY_SYSTEM_IN_STYLE_MODULE`. The fix is to move the chain to a plain `system.ts` and import the locked result.
 
+### Axis coverage
+
+An axis can declare the roles each mode must account for with `covers`, and roles deliberately identical across its modes with `shared`. Both accept token leaf or group paths. Groups expand at consolidation, including leaves added by later contributions; an unmatched path is an error when coverage is enabled.
+
+The base value accounts for the default mode. Each other mode needs an authored arm on the covered leaf or in its transitive dependencies, unless the leaf is listed in `shared`. Derived roles therefore need no redundant arm. A native scheme axis created with `colorSchemes()` also accounts for a leaf on its light and dark modes when its emitted CSS preserves `lightDark()` selection, directly or through dependencies. This never accounts for a different axis or an additional mode; a constant representative does not count. Intersection cases do not claim a whole mode: axes are checked independently, without requiring their Cartesian product.
+
+A missing role fails consolidation with `VANITY_AXIS_UNCOVERED`, naming the axis, mode and token, with both repairs: add a mode arm to the token or a dependency, or explicitly list the role in `shared`. An axis without `covers` has no coverage obligation. `shared` alone records intent without enabling a check.
+
+The declared paths appear in `explain` and agent context and contribute to compatibility identity. They change no emitted CSS or runtime-schema identity. Adding modes retains the declaration; use `overwriteAxis` to replace an existing coverage field.
+
 ## 6. Locked-system contract
 
 The locked surface contains resolved reads and build and runtime families:
@@ -196,7 +206,7 @@ interface VanityEmissionScope {
 
 The emission closure and optional compiler-owned emission scope are compiler-only. The scope identifies physical ownership while projecting a system without a style importer; it is not authored provenance and does not replace the source recorded by authoring instrumentation. Its portable system contract is validated, cycle-free JSON data with format discriminator `vanity.system/2`. It contains normalized policies, explicit capabilities and origins, extensions, axes, conditions, token restoration data, token semantic records, runtime contract, constants, ownership, provenance, and four identities. It contains no functions. This interchange form is private compiler restoration data rather than the public tool schema.
 
-`ds.introspect()` projects that contract into the normalized, versioned `vanity.introspection/2` semantic map. Manifest v4's primary `system` field is byte-order/deep-equal to that map. The compiler continues to materialize a portable JSON artifact under `.vanity/systems/` when application/SSR restoration needs it; tools never need to interpret its private handle records.
+`ds.introspect()` projects that contract into the normalized, versioned `vanity.introspection/2` semantic map. Manifest v5's primary `system` field is byte-order/deep-equal to that map. The compiler continues to materialize a portable JSON artifact under `.vanity/systems/` when application/SSR restoration needs it; tools never need to interpret its private handle records.
 
 ## 8. Four identities
 

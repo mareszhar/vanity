@@ -35,6 +35,7 @@ import {
   prefixTokenModule,
 } from './derive'
 import {
+  assertTokenKey,
   definePortableTokenModule,
   isTokenModule,
   VANITY_MODULE_TOKEN_REF,
@@ -365,8 +366,12 @@ interface TypedTdef<
   Axes extends VanityAxisDefinitions,
 > {
   (): VanityTokenDefinitionValue<Record<never, never> & VanityTokenConfig<never>, Type, Axes>
-  <const Config extends Omit<VanityTdefConfig<Axes>, 'val'>>(
-    config: Config & NoInfer<TdefVocabularyGuard<Config, Axes>>,
+  <const Config extends VanityTdefConfig<Axes>>(
+    config: Config & NoInfer<Config extends { readonly val: unknown }
+      ? Exclude<keyof Config, 'val'> extends never
+        ? { readonly 'A token with only a value doesn\'t need `tdef`; write the value directly.': never }
+        : TdefVocabularyGuard<Config, Axes>
+      : TdefVocabularyGuard<Config, Axes>>,
   ): VanityTokenDefinitionValue<FinalizeTdefConfig<Config, Axes>, Type, Axes>
 }
 
@@ -464,7 +469,9 @@ export interface VanityTokenBuilder<
     /** Add one named leaf value or configured token definition. */
     <const Name extends string, const Input extends VanityBuilderTokenInput<Bound>>(
       name: AdditiveName<Graph, Name>,
-      input: Input,
+      input: Input & NoInfer<Input extends VanityConfiguredTokenShape
+        ? { readonly 'add(name, config) accepts the raw config; remove the unnecessary tdef() wrapper': never }
+        : unknown>,
     ): VanityTokenBuilder<
       Graph & Record<Name, NamedTokenNode<Input>>,
       Policy,
@@ -693,6 +700,7 @@ function createTokenBuilder(context: TokenBuilderContext, id = Symbol('vanity.to
           'choose a token name that does not begin with \'$\'',
         )
       }
+      assertTokenKey(first)
       const moduleRef = getModuleRef(second)
       if (moduleRef?.module === id) {
         return createNextBuilder(deriveTokenModule(context.module, (m: Record<string, unknown>) => ({
@@ -807,6 +815,7 @@ function prepareSeed(
   const visit = (group: object, path: readonly string[]): Record<string, unknown> => {
     const result: Record<string, unknown> = {}
     for (const [name, value] of Object.entries(group)) {
+      assertTokenKey(name, path)
       if (name === '$axes')
         continue
       if (name.startsWith('$')) {

@@ -35,6 +35,7 @@ export function bindRecipe(system: VanitySystemContext) {
   const recipe = (options: VanityRecipeOptionsLoose, debugId?: string): VanityRecipe<Record<string, unknown>> => {
     const file = requireStyleModuleFile('recipe')
     const build = startBuild(options, system, file)
+    build.ctx.styleName = debugId
 
     const variants = options.variants ?? {}
     const toggles = options.toggles ?? {}
@@ -131,6 +132,7 @@ export function bindRecipe(system: VanitySystemContext) {
       ...getDiagnosticSource(),
       ...(debugId === undefined ? {} : { name: debugId }),
       ...recordVariantShape(variants, toggles, defaults, ports),
+      classes: { base: baseClass, variants: variantClasses, toggles: toggleClasses, compound: compoundClasses },
     })
 
     substrate.modules.registerFunctionSerialization(handle as unknown as (...args: unknown[]) => unknown, {

@@ -45,6 +45,13 @@ export default defineBuildConfig({
     },
     {
       type: 'bundle',
+      input: ['./src/runtime-range.ts'],
+      rolldown: {
+        platform: 'browser',
+      },
+    },
+    {
+      type: 'bundle',
       input: ['./src/config.ts'],
       rolldown: {
         platform: 'neutral',
@@ -94,6 +101,7 @@ export default defineBuildConfig({
       input: ['./src/cli.ts'],
       rolldown: {
         platform: 'node',
+        external: ['vite', 'wxt', 'vitest', 'vitest/node', 'unplugin-auto-import'],
       },
     },
     {

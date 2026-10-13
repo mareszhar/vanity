@@ -1,0 +1,24 @@
+{
+  "name": "spike-review-decision-reach",
+  "type": "module",
+  "private": true,
+  "description": "Can a review reach live decisions and authored values without a DevTools host?",
+  "scripts": {
+    "check": "node check.mjs",
+    "test": "node run.mjs && node audit.mjs && node hosts.mjs && node nuxt.mjs && node nuxt.mjs --kit && node production.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@vitejs/devtools": "catalog:",
+    "@vitejs/devtools-kit": "catalog:",
+    "@vitejs/devtools-vite": "catalog:",
+    "nuxt": "catalog:nuxt46",
+    "oxc-parser": "catalog:",
+    "postcss": "catalog:nuxt46",
+    "pug": "catalog:",
+    "vite": "catalog:nuxt46",
+    "vite6": "catalog:reviewHosts",
+    "vite7": "catalog:reviewHosts",
+    "vue": "catalog:"
+  }
+}

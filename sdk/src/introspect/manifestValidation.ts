@@ -15,8 +15,12 @@ import {
   assertOriginShape,
   assertRuntimeContractShape,
   assertSemanticAddressShape,
+  assertTokenRangeShape,
   assertTokenRecordRuntimeShape,
+  assertTokenRestrictionShape,
+  assertTokenUsageShape,
 } from '../system/contractValidation'
+import { getContrastEvidenceError, getContrastRecordError } from './contrast'
 import {
   VANITY_MANIFEST_FORMAT,
   VANITY_MANIFEST_SCHEMA,
@@ -31,10 +35,12 @@ type RecordValue = Record<string, unknown>
 
 const SYSTEM_IDENTITIES = ['compatibility', 'css', 'runtime', 'docs'] as const
 
-/** Validate Manifest v4 as a closed recursive boundary contract. */
+/** Validate Manifest v5 as a closed recursive boundary contract. */
 export function assertManifestShape(value: unknown): asserts value is VanityManifest {
   assertJsonValueShape(value, 'manifest')
   const manifest = requireRecord(value, 'manifest')
+  if (manifest.format === 'vanity.manifest/4' || manifest.version === 4)
+    fail('manifest.version', 'Manifest v4 is not supported; regenerate with the current version')
   assertKeys(manifest, ['$schema', 'format', 'version', 'system', 'systems', 'modules'], [], 'manifest')
   assertExactString(manifest.$schema, VANITY_MANIFEST_SCHEMA, 'manifest.$schema')
   assertExactString(manifest.format, VANITY_MANIFEST_FORMAT, 'manifest.format')
@@ -205,9 +211,13 @@ function assertSystemMap(value: unknown, path: string): asserts value is VanityS
 
 function assertAxis(value: unknown, path: string): void {
   const axis = requireRecord(value, path)
-  assertSemanticEntry(axis, path, 'axis', ['name', 'modeOrder', 'modes'], ['defaultMode', 'control', 'native'])
+  assertSemanticEntry(axis, path, 'axis', ['name', 'modeOrder', 'modes'], ['defaultMode', 'control', 'native', 'covers', 'shared'])
   assertString(axis.name, `${path}.name`)
   assertStringArray(axis.modeOrder, `${path}.modeOrder`)
+  if (axis.covers !== undefined)
+    assertStringArray(axis.covers, `${path}.covers`)
+  if (axis.shared !== undefined)
+    assertStringArray(axis.shared, `${path}.shared`)
   assertOptionalString(axis.defaultMode, `${path}.defaultMode`)
   if (axis.control !== undefined) {
     const control = requireRecord(axis.control, `${path}.control`)
@@ -262,7 +272,7 @@ function assertIntrospectedToken(value: unknown, path: string): void {
     'portability',
     'preview',
     'metadata',
-  ], ['axisCoverage', 'scopes', 'module', 'name', 'registration', 'runtime'])
+  ], ['axisCoverage', 'scopes', 'module', 'name', 'registration', 'runtime', 'usage', 'restrict', 'range', 'contrast'])
   assertStringArray(token.path, `${path}.path`)
   assertString(token.root, `${path}.root`)
   if (token.scopes !== undefined)
@@ -272,6 +282,21 @@ function assertIntrospectedToken(value: unknown, path: string): void {
   if (token.name !== undefined)
     assertCssName(token.name, `${path}.name`)
   assertCssTypeShape(token.type, `${path}.type`)
+  if (token.usage !== undefined)
+    assertTokenUsageShape(token.usage, `${path}.usage`)
+  if (token.restrict !== undefined)
+    assertTokenRestrictionShape(token.restrict, `${path}.restrict`)
+  if (token.range !== undefined)
+    assertTokenRangeShape(token.range, token.type, `${path}.range`)
+  if (token.contrast !== undefined) {
+    assertArray(token.contrast, `${path}.contrast`)
+    token.contrast.forEach((entry, index) => {
+      const check = requireRecord(entry, `${path}.contrast[${index}]`)
+      const error = getContrastRecordError(check)
+      if (error)
+        fail(`${path}.contrast[${index}]`, error)
+    })
+  }
   assertReference(token.reference, `${path}.reference`)
   assertBoolean(token.emit, `${path}.emit`)
   assertBoolean(token.mutable, `${path}.mutable`)
@@ -342,8 +367,10 @@ function assertAxisCoverageShape(value: unknown, path: string): void {
 
 function assertModule(value: unknown, path: string): void {
   const module = requireRecord(value, path)
-  assertSemanticEntry(module, path, 'module', ['source', 'recipes', 'ports', 'styles', 'escapes', 'contrast', 'tokenUsage'], [])
+  assertSemanticEntry(module, path, 'module', ['source', 'recipes', 'ports', 'styles', 'escapes', 'contrast', 'tokenUsage'], ['layer'])
   assertString(module.source, `${path}.source`)
+  if (module.layer !== undefined && !['primitive', 'pattern', 'feature'].includes(String(module.layer)))
+    fail(`${path}.layer`, 'must name primitive, pattern or feature')
   assertRecord(module.recipes, `${path}.recipes`)
   for (const [name, recipe] of Object.entries(module.recipes))
     assertRecipe(recipe, `${path}.recipes.${name}`)
@@ -367,7 +394,7 @@ function assertModule(value: unknown, path: string): void {
 
 function assertRecipe(value: unknown, path: string): void {
   const recipe = requireRecord(value, path)
-  assertSemanticEntry(recipe, path, ['recipe', 'anatomy'], ['name', 'variants', 'toggles', 'defaults', 'ports'], ['parts'])
+  assertSemanticEntry(recipe, path, ['recipe', 'anatomy'], ['name', 'variants', 'toggles', 'defaults', 'ports', 'classes'], ['parts'])
   assertString(recipe.name, `${path}.name`)
   if (recipe.parts !== undefined)
     assertStringArray(recipe.parts, `${path}.parts`)
@@ -375,6 +402,7 @@ function assertRecipe(value: unknown, path: string): void {
   assertStringArray(recipe.toggles, `${path}.toggles`)
   assertStringBooleanRecord(recipe.defaults, `${path}.defaults`)
   assertStringRecord(recipe.ports, `${path}.ports`)
+  assertRecipeClasses(recipe.classes, recipe.kind === 'anatomy', `${path}.classes`)
 }
 
 function assertPort(value: unknown, path: string): void {
@@ -396,25 +424,127 @@ function assertPort(value: unknown, path: string): void {
 
 function assertStyle(value: unknown, path: string): void {
   const style = requireRecord(value, path)
-  assertSemanticEntry(style, path, 'style', ['class', 'tokens'], ['name'])
+  assertSemanticEntry(style, path, 'style', ['class', 'tokens', 'declarations', 'exports', 'layer'], ['name'])
   assertString(style.class, `${path}.class`)
   assertOptionalString(style.name, `${path}.name`)
   assertStringArray(style.tokens, `${path}.tokens`)
+  assertStringArray(style.exports, `${path}.exports`)
+  assertString(style.layer, `${path}.layer`)
+  assertArray(style.declarations, `${path}.declarations`)
+  style.declarations.forEach((declaration, index) => assertStyleDeclaration(declaration, `${path}.declarations[${index}]`))
+}
+
+function assertRecipeClasses(value: unknown, anatomy: boolean, path: string): void {
+  const classes = requireRecord(value, path)
+  assertKeys(classes, ['base', 'variants', 'toggles', 'compound'], [], path)
+  const assertClasses: (value: unknown, path: string) => void = anatomy ? assertStringRecord : assertString
+  assertClasses(classes.base, `${path}.base`)
+  assertRecord(classes.variants, `${path}.variants`)
+  for (const [axis, variants] of Object.entries(classes.variants)) {
+    assertRecord(variants, `${path}.variants.${axis}`)
+    for (const [variant, selection] of Object.entries(variants))
+      assertClasses(selection, `${path}.variants.${axis}.${variant}`)
+  }
+  assertRecord(classes.toggles, `${path}.toggles`)
+  for (const [toggle, selection] of Object.entries(classes.toggles))
+    assertClasses(selection, `${path}.toggles.${toggle}`)
+  assertArray(classes.compound, `${path}.compound`)
+  classes.compound.forEach((entry, index) => {
+    const compound = requireRecord(entry, `${path}.compound[${index}]`)
+    const key = anatomy ? 'classes' : 'class'
+    assertKeys(compound, ['when', key], [], `${path}.compound[${index}]`)
+    assertStringBooleanRecord(compound.when, `${path}.compound[${index}].when`)
+    assertClasses(compound[key], `${path}.compound[${index}].${key}`)
+  })
+}
+
+function assertStyleDeclaration(value: unknown, path: string): void {
+  const declaration = requireRecord(value, path)
+  assertKeys(declaration, ['id', 'property', 'value', 'condition', 'arm', 'layer', 'components', 'tokens', 'editable'], ['source', 'reason'], path)
+  for (const key of ['id', 'property', 'value', 'layer'])
+    assertString(declaration[key], `${path}.${key}`)
+  assertStringArray(declaration.condition, `${path}.condition`)
+  assertStringArray(declaration.tokens, `${path}.tokens`)
+  assertBoolean(declaration.editable, `${path}.editable`)
+  assertOptionalString(declaration.reason, `${path}.reason`)
+  if (!declaration.editable && typeof declaration.reason !== 'string')
+    fail(`${path}.reason`, 'an uneditable declaration must name its reason')
+  if (declaration.editable && declaration.source === undefined)
+    fail(`${path}.source`, 'an editable declaration must carry an authored value span')
+  if (declaration.source !== undefined) {
+    const source = requireRecord(declaration.source, `${path}.source`)
+    assertKeys(source, ['file', 'start', 'end', 'text', 'line', 'column'], [], `${path}.source`)
+    assertString(source.file, `${path}.source.file`)
+    assertString(source.text, `${path}.source.text`)
+    for (const key of ['start', 'end', 'line', 'column'])
+      assertInteger(source[key], `${path}.source.${key}`)
+    if (Number(source.start) < 0 || Number(source.end) < Number(source.start) || Number(source.end) - Number(source.start) !== String(source.text).length || Number(source.line) < 1 || Number(source.column) < 1)
+      fail(`${path}.source`, 'must carry consistent UTF-16 offsets and positive source coordinates')
+  }
+  const arm = requireRecord(declaration.arm, `${path}.arm`)
+  assertKeys(arm, ['selector', 'ordinal'], ['media', 'supports', 'container', 'scopes', 'startingStyle'], `${path}.arm`)
+  assertInteger(arm.ordinal, `${path}.arm.ordinal`)
+  if (arm.ordinal < 0)
+    fail(`${path}.arm.ordinal`, 'must be non-negative')
+  for (const key of ['selector', 'media', 'supports', 'container'])
+    assertOptionalString(arm[key], `${path}.arm.${key}`)
+  if (arm.scopes !== undefined)
+    assertStringArray(arm.scopes, `${path}.arm.scopes`)
+  if (arm.startingStyle !== undefined)
+    assertBoolean(arm.startingStyle, `${path}.arm.startingStyle`)
+  assertArray(declaration.components, `${path}.components`)
+  declaration.components.forEach((input, index) => {
+    const at = `${path}.components[${index}]`
+    const component = requireRecord(input, at)
+    assertKeys(component, ['component', 'value', 'origin', 'tokens', 'dataType', 'evidence'], ['derivation', 'incompatible'], at)
+    assertString(component.component, `${at}.component`)
+    assertString(component.value, `${at}.value`)
+    if (!['token', 'derived', 'port', 'literal', 'unsafe', 'external'].includes(String(component.origin)))
+      fail(`${at}.origin`, 'must name a declaration component origin')
+    assertStringArray(component.tokens, `${at}.tokens`)
+    assertCssTypeShape(component.dataType, `${at}.dataType`)
+    const evidenceError = getContrastEvidenceError({ evidence: component.evidence })
+    if (component.evidence === undefined || evidenceError)
+      fail(`${at}.evidence`, evidenceError ?? 'must carry evidence')
+    if (component.incompatible !== undefined) {
+      const incompatible = requireRecord(component.incompatible, `${at}.incompatible`)
+      assertKeys(incompatible, ['expected', 'reason'], [], `${at}.incompatible`)
+      assertString(incompatible.expected, `${at}.incompatible.expected`)
+      assertString(incompatible.reason, `${at}.incompatible.reason`)
+    }
+    if (component.derivation !== undefined) {
+      const derivation = requireRecord(component.derivation, `${at}.derivation`)
+      assertKeys(derivation, ['terms', 'allowed', 'audit'], ['reason'], `${at}.derivation`)
+      assertBoolean(derivation.allowed, `${at}.derivation.allowed`)
+      assertBoolean(derivation.audit, `${at}.derivation.audit`)
+      assertOptionalString(derivation.reason, `${at}.derivation.reason`)
+      assertArray(derivation.terms, `${at}.derivation.terms`)
+      derivation.terms.forEach((term, index) => {
+        const atTerm = `${at}.derivation.terms[${index}]`
+        const entry = requireRecord(term, atTerm)
+        assertKeys(entry, ['token', 'factor'], [], atTerm)
+        assertString(entry.token, `${atTerm}.token`)
+        assertNumber(entry.factor, `${atTerm}.factor`)
+      })
+    }
+  })
 }
 
 function assertEscape(value: unknown, path: string): void {
   const escape = requireRecord(value, path)
-  assertSemanticEntry(escape, path, 'escape', ['form', 'detail'], ['reason', 'layer'])
+  assertSemanticEntry(escape, path, 'escape', ['form', 'detail'], ['reason', 'layer', 'style', 'property'])
   if (!['class.standard', 'raw', 'rules', 'unsafe', 'overrides'].includes(String(escape.form)))
     fail(`${path}.form`, 'contains an invalid escape form')
   assertString(escape.detail, `${path}.detail`)
   assertOptionalString(escape.reason, `${path}.reason`)
   assertOptionalString(escape.layer, `${path}.layer`)
+  assertOptionalString(escape.style, `${path}.style`)
+  assertOptionalString(escape.property, `${path}.property`)
 }
 
 function assertContrast(value: unknown, path: string): void {
   const contrast = requireRecord(value, path)
-  assertSemanticEntry(contrast, path, 'contrast', ['pairing', 'scheme', 'algorithm', 'measured', 'min', 'accepted'], ['fallback'])
+  assertSemanticEntry(contrast, path, 'contrast', ['pairing', 'scheme', 'algorithm', 'measured', 'min', 'accepted'], ['fallback', 'evidence', 'samples', 'step', 'worst', 'profile', 'note', 'tokens', 'environment'])
   assertString(contrast.pairing, `${path}.pairing`)
   if (contrast.scheme !== 'light' && contrast.scheme !== 'dark')
     fail(`${path}.scheme`, 'must be light or dark')
@@ -424,6 +554,9 @@ function assertContrast(value: unknown, path: string): void {
   assertNumber(contrast.min, `${path}.min`)
   assertBoolean(contrast.accepted, `${path}.accepted`)
   assertOptionalString(contrast.fallback, `${path}.fallback`)
+  const error = getContrastEvidenceError(contrast)
+  if (error)
+    fail(path, error)
 }
 
 function assertSemanticEntry(
@@ -662,8 +795,8 @@ function assertOptionalPositiveInteger(value: unknown, path: string): void {
 function fail(path: string, message: string): never {
   throw new VanityError({
     code: 'VANITY_MANIFEST_INVALID',
-    message: `invalid Manifest v4 at ${path}: ${message}`,
+    message: `invalid Manifest v5 at ${path}: ${message}`,
     path: [path],
-    fix: 'regenerate the manifest with Vanity or correct the reported field',
+    fix: 'regenerate with the current version of Vanity or correct the reported field',
   })
 }

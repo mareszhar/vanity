@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { vanityPlugin } from '@mszr/vanity/vite'
 import { build, createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
+import { installTestSdk } from '../test-support/installedSdk'
 import { getViteGraphModuleUrl, resolveViteVirtualId } from './hosts/viteHmr'
 
 function local(path: string): string {
@@ -24,6 +25,8 @@ const aliases = {
 async function writeFixture(root: string, path: string, source: string): Promise<string> {
   const file = join(root, path)
   await mkdir(join(file, '..'), { recursive: true })
+  if (path === 'package.json')
+    await installTestSdk(root)
   await writeFile(file, source)
   return file
 }

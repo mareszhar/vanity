@@ -71,7 +71,7 @@ export function clearConfiguredSystemResolutionCache(
  * one list, and anything else fails as configuration rather than surfacing as
  * a type error inside a host adapter.
  */
-export function listSystemSources(
+export function getSystemSources(
   input: VanityCompilerOptions['system'],
 ): readonly (string | VanitySystemSource)[] {
   if (input === undefined)
@@ -121,7 +121,7 @@ export function normalizeSystemSources(
   root: string,
   resolvedEntries: ReadonlyMap<string, string> = new Map(),
 ): NormalizedSystemSource[] {
-  return listSystemSources(input).map((value) => {
+  return getSystemSources(input).map((value) => {
     const source: VanitySystemSource = typeof value === 'string' ? { entry: value } : value
     return {
       configuredEntry: source.entry,

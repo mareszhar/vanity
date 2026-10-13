@@ -8,7 +8,7 @@ Vanity is a design-system engine and TypeScript harness for CSS. It uses TypeScr
 npm install @mszr/vanity vite
 ```
 
-`vite` is required for the compiler integration. Add `vue`, `nuxt`, `typescript`, or `@mszr/selenita` only when the corresponding Vanity entrypoint is part of the project.
+Vite 6, 7 or 8 is required for the compiler integration. Add `vue`, `nuxt`, `wxt`, `vitest`, `typescript`, or `@mszr/selenita` only when the corresponding integration or tool is part of the project.
 
 For an existing application, see [restarting after dependency updates](../reference/spec-integrations.md#91-updating-dependencies).
 
@@ -37,6 +37,8 @@ export const ds = createSystem()
 ```
 
 The open system grows additively. `consolidate()` produces an immutable locked system with resolved tokens, styling emitters, runtime binding, and introspection. It performs no I/O and emits no CSS.
+
+For a new project, pass `declarations: { level: 'forbid', tokens: ['length', 'color'] }` to `createSystem()` to require component spacing and colors to use the system's roles. Token definitions can still use literal values. A reasoned `unsafe.value()` declaration handles an intentional exception; [the declarations policy](../reference/spec-system-authoring.md#8-the-policy-book) defines admitted origins and derivations.
 
 ## 3. Compile styles
 
@@ -68,6 +70,12 @@ export const card = ds.class({
 ```
 
 The result is ordinary CSS with recognizable classes and custom properties. No client-side style graph rebuilds the design graph.
+
+## 4. Check the work
+
+Run `pnpm exec vanity check` before an application build in Vite, WXT or Vitest 5 projects. It evaluates every source style module and continues past independent failures. Read coverage and unevaluated entries before treating the result as complete; `--json` provides the versioned report for tools. Nuxt assembles its compiler pipeline during its framework build, so use `nuxt build` there; headless check explains the limit and exits 2.
+
+When adopting the declarations policy in an existing project, fix invalid CSS and token-kind mismatches first. Review `vanity check --write-baseline` findings to accept existing policy exceptions, then keep checking: a new finding still fails, line movement keeps acceptance, and interrupted entries remain unevaluated. Hosts read `vanity.baseline.json` from the project root by default; `compiler.baseline` selects another path. Nuxt builds accept the same format, but the unsupported headless command cannot generate it there. See [policy baselines](../reference/spec-introspection.md#policy-baselines) for identity and reconciliation.
 
 ## Next
 

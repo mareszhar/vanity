@@ -55,7 +55,7 @@ const tokens = open.defineTokens({
   }))
 ```
 
-- **Use typed constructors for values**: `open.oklch(…)`, `open.color('#635bff')`, `open.length.rem(1)`, `open.length.px(1)`, `open.time.ms(150)`, `open.percent(50)`. A raw string (`'1rem'`, `'#fff'`) becomes an `unknown`-typed token: it still emits, but it loses type information that tools (DTCG export, `explain`, future checks) rely on. Strings are fine for values without a typed constructor (font stacks, easing curves, shadows).
+- **Use typed constructors for values**: `open.oklch(…)`, `open.color('#635bff')`, `open.length.rem(1)`, `open.length.px(1)`, `open.time.ms(150)`, `open.percent(50)`. Unambiguous raw strings (`'1rem'`, `'#fff'`) also gain their type at build, and aliases keep their dependency’s type. Ambiguous strings stay unknown with an informational typed-authoring hint. Typed constructors retain stronger cursor inference and state the intended meaning; strings remain appropriate for composite values such as font stacks and shadows.
 - **Doc comments on tokens** (`/** … */`) show up in editor hovers and `explain()` output: they are how agents and designers learn what a role is for. Write one for every role whose name alone could be misread.
 - **Bundles** (groups of CSS properties) carry composite decisions: type roles, and composite edges such as `edge: { hairline: { border: `${m.stroke.hairline} solid ${m.color.border}` } }` → `...t.edge.hairline.$dec`. Each leaf stays an individually addressable token.
 - **Derivation**: `.add(m => ({ … }))` is a method of the token module (`open.defineTokens(…)`), not of the system: derive inside the module, then pass the module to `addTokens`. The callback sees everything added before it, at the same paths as `t` (`m.color.hue`). Split a dependency into two `.add` calls when a token needs a sibling defined in the same batch. Declare axes on the open system *before* defining tokens that vary on them, so `axes: { … }` knows their modes.
@@ -74,6 +74,11 @@ open.tdef({ val: open.length.px(12), mutable: true, description: 'Corner seed; t
 open.tdef({ val: 265, mutable: true, register: true })            // registered: typed and animatable
 open.tdef({ val: open.length.rem(1), axes: { density: { compact: open.length.rem(0.75) } } })
 open.tdef.color()                                                // a typed reservation, filled per mode later
+open.tdef({
+  val: open.color('#87909c'),
+  usage: { for: ['quiet divider', 'card edge'], avoid: 'text and icons' },
+  restrict: { properties: ['borderColor', 'outlineColor'], level: 'forbid', reason: 'Text needs an ink role.' },
+})
 ```
 
 | Trait | Meaning |
@@ -82,18 +87,25 @@ open.tdef.color()                                                // a typed rese
 | `register: true` | emits `@property` so the browser types/animates it (pairs well with `mutable`) |
 | `axes: { axis: { mode: value } }` | per-mode values on a declared axis (§5) |
 | `description` | documentation for hovers and `explain` |
+| `usage` | intended uses and cautions in hovers, explain and agent context; guidance never fails authoring |
+| `restrict` | permitted declaration properties, at `discourage` or `forbid`, independently of the declarations policy |
+| `range: [min, max]` | inclusive domain of a mutable number, integer, percentage, angle, time or length token; checked after validation |
+
+A property restriction includes shorthand longhands and logical family members: `borderColor` admits the color component of `border`, physical border colors and logical border colors. It does not admit `color` for text. Use existing `deprecated: { reason, use }` for renamed roles; diagnostic suggestions follow the replacement.
+
+Ranges require comparable units: absolute lengths and times convert exactly; other lengths need the same unit as both bounds. Angles convert between `deg`, `grad` and `turn`; radians compare only with radians. Range enforcement ships only when the system declares a range. A runtime validator receives canonical CSS text or a finite number, never a value object or token handle. Keep it pure. Snapshot version 2 records its input, so a transforming schema runs once from that input on every replay; version 1 saved settings fall back to authored defaults with a diagnostic.
 
 Gotchas the types don't fully explain:
 
-- `open.tdef({ val: x })` with **only** `val` is rejected as ceremony (the error reads "'val' does not exist") — write the bare value.
-- In the builder's named form, pass the raw config, not a `tdef`: `.add('hue', { val: 265, mutable: true })`. `.add('hue', open.tdef({ … }))` type-checks but fails at consolidation with "remove the unnecessary tdef() wrapper".
+- `open.tdef({ val: x })` with **only** `val` is rejected as ceremony — write the bare value.
+- In the builder's named form, pass the raw config, not a `tdef`: `.add('hue', { val: 265, mutable: true })`. `.add('hue', open.tdef({ … }))` is rejected at the cursor with "remove the unnecessary tdef() wrapper".
 
 ## 4. Conditions
 
 Named conditions become keys every style can use. Name them by meaning, so one edit moves every use:
 
 ```ts
-import { container, media, selector, supports } from '@mszr/vanity'
+import { aria, container, data, media, selector, supports } from '@mszr/vanity'
 
 open.addConditions({
   wide: media({ width: { '>=': '48rem' } }),
@@ -101,8 +113,8 @@ open.addConditions({
   panelWide: container('panel', { inlineSize: { '>=': '30rem' } }),
   open: '&[data-state="open"]',               // headless UI states (Reka, Ark set data-state)
   checked: '&[data-state="checked"]',
-  selected: '&[data-selected]',
-  invalid: '&[aria-invalid="true"]',
+  selected: data('selected').self,
+  invalid: aria('invalid', 'true').self,
   pressed: selector('&:active').or('&[aria-pressed="true"]'),
   canHover: media('(hover: hover)'),
   hasBackdrop: supports('(backdrop-filter: blur(1px))'),
@@ -111,7 +123,7 @@ open.addConditions({
 
 Built in, no registration needed: `hover`, `hoverFocus`, `active`, `focusVisible`, `disabled`, `motionOk`, `motionReduce`, `dark`, `light`, `ltr`, `rtl`. Conditions compose: `.and()`, `.or()`, `.not()`. Plain strings are real CSS selectors/queries; `&` is the styled element.
 
-**Element states need `&`.** A selector without `&` matches descendants: `'[data-selected]'` as a condition styles children that carry the attribute, not the element. The `data()` and `aria()` helpers produce exactly that bare form, so use them for axis modes (§5), and write element states as `'&[…]'` strings. Condition names must not collide with CSS property names (`d`, `inset`, `content`…); consolidation rejects them.
+**Element states need `&`.** A selector without `&` matches descendants: `'[data-selected]'` as a condition styles children that carry the attribute, not the element. Use `data('selected').self` or `aria('invalid', 'true').self` for the element itself; the bare helpers remain appropriate for axis modes (§5). The default `descendantConditions` audit warns for registered bare states and suggests `.self`; silence it only when descendants are intended. Condition names must not collide with CSS property names (`d`, `inset`, `content`…); consolidation rejects them.
 
 ## 5. Themes and modes
 
@@ -132,10 +144,13 @@ const open = createSystem()
   .addAxis('density', {
     modes: { compact: data('density', 'compact'), comfortable: '&' },  // '&' = the default arm
     default: 'comfortable',
+    covers: ['space'],
+    shared: ['space.hairline'],
   })
 
 const tokens = open.defineTokens({
   space: {
+    hairline: open.length.px(1),
     md: open.tdef({ val: open.length.rem(1), axes: { density: { compact: open.length.rem(0.75) } } }),
   },
   color: {
@@ -146,6 +161,8 @@ const tokens = open.defineTokens({
 
 Write activatable modes with helpers (`data('density', 'compact')`, `colorSchemes()`): a raw selector string mode can't be switched by the runtime. An axis takes effect only where tokens vary on it.
 
+Declare an axis's responsibility with `covers` (token leaves or groups), and deliberately identical roles with `shared`. Groups include later additions. The default mode uses base values; other modes need an arm on the role or a dependency, so derived roles need no duplicate arm. On `colorSchemes()` only, preserved native `lightDark()` selection counts for its light and dark modes, directly or through dependencies; it never satisfies another axis or a constant representative. `VANITY_AXIS_UNCOVERED` names each missing role and mode: add an arm or explicitly share the role. `vanity check` also counts component declarations using explicitly registered `axis.mode` conditions; it reports structure without judging it.
+
 `lightDark()` tokens keep working when you add `colorSchemes()`: pinning the scheme sets `color-scheme` on the root, which is exactly what `lightDark()` follows. No need to rewrite them as per-mode values. The axis also declares `color-scheme: light dark` itself, so a base `:root { colorScheme: 'light dark' }` rule becomes redundant (harmless; remove it for clarity).
 
 Token handles are valid anywhere a value is, including per-mode values: `open.tdef({ val: m.color.border, axes: { skin: { crisp: m.color.borderStrong } } })`. To add modes to an existing literal token, replace the literal with a `tdef` in place. Read `references/theming.md` for multi-axis themes, bulk per-mode values, skins, and scheme details.
@@ -154,7 +171,7 @@ Token handles are valid anywhere a value is, including per-mode values: `open.td
 
 ```ts
 const palette = open.defineTokens()
-  .add('hue', { val: 265, mutable: true, register: true, description: 'The brand hue, in degrees.' })
+  .add('hue', { val: 265, mutable: true, register: true, range: [0, 360], description: 'The brand hue, in degrees.' })
   .add('accent', m => open.oklch(0.58, 0.16, m.hue))
   .add(m => ({
     onAccent: open.legibleOn(m.accent),                       // black or white, whichever reads
@@ -169,7 +186,7 @@ const palette = open.defineTokens()
 
 Author in OKLCH so lightness steps are perceptually even. Derive related colors from a seed instead of hand-picking each, and keep the seed's channels separate (a mutable `hue`) when users or a theme should re-tint everything. `references/color.md` covers derivation, contrast, and palettes.
 
-`legibleOn(background)` picks black or white once, at build time, from the background's authored value, per scheme (a `lightDark()` background yields `light-dark(white, black)` as needed). It **checks contrast at the authored defaults**, per scheme and authored axis mode or case: the build fails when even the best pick is under APCA Lc 60 and reports the measured contrast. This includes literals, fixed aliases, mutable backgrounds, token-valued channels, and supported `alpha`/`lighten`/`darken`/`from`/`colorMix` derivations. Deliberately unfoldable mixes use an explained representative approximation; unsupported representatives fail with a color diagnostic. For a mutable seed, the foreground stays fixed while runtime writes move the background, so the build check cannot guarantee an arbitrary runtime range. Verify those pairs as `references/color.md` shows, against the foreground the system actually uses. Fix the background's lightness; pass `{ contrast: n }` only as a deliberate, documented exception. Changing an existing role's color is a design decision: make the smallest change that passes and call it out in your summary. When a brief says "keep the current look", keep a hand-tuned `on*` pair that already reads well and doesn't depend on a live seed; switch to `legibleOn` when the background becomes derived or live.
+`legibleOn(background)` picks black or white once, at build time, from the background's authored value, per scheme (a `lightDark()` background yields `light-dark(white, black)` as needed). It **checks contrast at the authored defaults**, per scheme and authored axis mode or case: the build fails when even the best pick is under APCA Lc 60 and reports the measured contrast. This includes literals, fixed aliases, mutable backgrounds, token-valued channels, and supported `alpha`/`lighten`/`darken`/`from`/`colorMix` derivations. Deliberately unfoldable mixes use an explained representative approximation; unsupported representatives fail with a color diagnostic. For a mutable seed, the foreground stays fixed while runtime writes move the background. Declare its `range` and register `open.addChecks(t => [check.textContrast(t.color.onAccent, t.color.accent)])` as `references/color.md` shows. The compiler samples both sides under the same reachable runtime states and labels the grid, profile and limits; passing samples are evidence, not proof over an arbitrary runtime range. Fix the background's lightness; pass `{ contrast: n }` only as a deliberate, documented exception. Changing an existing role's color is a design decision: make the smallest change that passes and call it out in your summary. When a brief says "keep the current look", keep a hand-tuned `on*` pair that already reads well and doesn't depend on a live seed; switch to `legibleOn` when the background becomes derived or live.
 
 ## 7. Live values and the runtime
 
@@ -191,3 +208,28 @@ The runtime writes private custom-property slots and data attributes on the root
 4. Summarize added/renamed roles in your reply so the designer knows the vocabulary moved.
 
 Extending the system with plugins, custom constructors, consts, utilities, property aliases, or the Hail preset: `references/extending.md`.
+
+## 9. Declare component value provenance
+
+For a system that expects component spacing and color to follow its roles, enable the declarations policy in the initial policy book:
+
+```ts
+import { createSystem } from '@mszr/vanity'
+
+export const guided = createSystem({
+  declarations: {
+    level: 'forbid',
+    reason: 'Themes must reach spacing, color and motion decisions.',
+    tokens: ['color', 'length', 'time', 'easing-function'],
+    properties: { zIndex: 'token', boxShadow: 'token', fontFamily: 'token' },
+    mechanics: ['0', 'auto', 'none', '100%', '1fr', 'min-content', 'max-content', 'fit-content'],
+    derivations: 'audit',
+  },
+}).consolidate({ prefix: 'guided' })
+```
+
+The policy checks component declaration origins, not literal token definitions or the finite atom vocabulary. `discourage` reports warnings while compiling; `forbid` rejects findings after module evaluation. Use `audit` to inventory derived values, `allow` to admit them, or `restrict` to admit integer/reciprocal scaling and sums of unscaled tokens after nested operations fold. Restricting transformations does not prove scale membership. There is no `enforce` option because component style modules have no contribution order.
+
+Mark a raw scale token with `usage: { tier: 'primitive' }` when direct component use should be a finding. Put role intent in `usage.for` and `description` so nearest-value suggestions explain their meaning. Deliberate declaration exceptions use `unsafe.value` with a reason; they still must be valid CSS.
+
+Adopt the policy gradually with a reviewed project baseline when existing components already contain raw values. The compiler accepts those policy findings and still reports new ones; a baseline cannot suppress invalid CSS, token-kind mismatches or system errors. Check reports accepted and unevaluated findings explicitly, while host builds keep accepted findings silent. Nuxt uses its framework build for compiler evidence because the headless check command cannot obtain its configured client pipeline.

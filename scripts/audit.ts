@@ -18,6 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import ts from 'typescript'
 import { audit, formatAuditFindings } from '../sdk/src/introspect/audit'
+import { installTestSdk } from '../sdk/src/test-support/installedSdk'
 
 const execFileAsync = promisify(execFile)
 
@@ -56,6 +57,33 @@ const historyVocabularyAllowlist = [
 
 const historyVocabularyPattern = /\b(?:legacy|formerly|previously|obsolete|superseded|characterization|realignment|phase\s?\d+|backwards?[- ]compat|compatibility (?:bridge|layer|shim)|old (?:api|surface|name|way)|used to be|deprecated alias|historical)\b/gi
 
+/** CSS owns these current keywords and grammar productions from Webref. */
+const currentCssGrammarTerms = new Set([
+  '-webkit-legacy',
+  'display-legacy',
+  'historical-forms',
+  'historical-lig-values',
+  'historical-ligatures',
+  'no-historical-ligatures',
+  'legacy',
+  'legacy-border-radius-syntax',
+  'legacy-device-cmyk-syntax',
+  'legacy-hsl-syntax',
+  'legacy-hsla-syntax',
+  'legacy-pseudo-element-selector',
+  'legacy-rgb-syntax',
+  'legacy-rgba-syntax',
+])
+const cssGrammarFiles = new Set(['sdk/src/css/property-grammar.generated.json', 'spikes/property-grammar-agreement/grammar.generated.json'])
+
+function isCurrentCssGrammarTerm(file: string, line: string, index: number, value: string): boolean {
+  if (!cssGrammarFiles.has(file) || !/^\s*"(?:(?:name|syntax)"\s*:\s*"|Type:)/.test(line))
+    return false
+  const before = line.slice(0, index).match(/[a-z-]*$/)?.[0] ?? ''
+  const after = line.slice(index + value.length).match(/^[a-z-]*/)?.[0] ?? ''
+  return currentCssGrammarTerms.has(before + value + after)
+}
+
 /** Tooling resolves from the package, exactly as the plugin ships it. */
 const requireFromPackage = createRequire(join(packageDir, 'package.json'))
 
@@ -71,6 +99,8 @@ async function main(): Promise<void> {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-audit-')))
   await cp(source, root, { recursive: true })
   await writeFile(join(root, 'package.json'), '{ "name": "vanity-audit-surface", "type": "module" }')
+  // Named imports evaluate through Node, including aliases into this package.
+  await installTestSdk(root)
 
   const { build } = await import(pathToFileURL(requireFromPackage.resolve('vite')).href) as typeof import('vite')
   const { default: vanityPlugin } = await import('../sdk/src/vite')
@@ -277,10 +307,18 @@ const NAMING_VERB_PREFIXES = [
   'reject',
 ] as const
 
-/** Host-protocol names are exceptions only inside the adapter that owns them. */
+/** External protocol names are exceptions only inside the source that owns them. */
 const NAMING_FILE_ALLOWLIST = new Map([
-  ['vite.ts', new Set(['watchChange', 'closeWatcher', 'closeBundle'])],
+  ['vite.ts', new Set(['watchChange', 'closeWatcher', 'closeBundle', 'hotUpdate'])],
   ['compiler/hosts/viteHmr.ts', new Set(['invalidateModule'])],
+  // Oxc dispatches this visitor by its JavaScript AST node name.
+  ['compiler/modules/source.ts', new Set(['ExportDefaultDeclaration', 'FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])],
+  // css-tree owns the walk visitor's entry callback.
+  ['css/grammar-math.ts', new Set(['enter'])],
+  // lightningcss names AST visitor callbacks after the node they visit.
+  ['css/tdec.ts', new Set(['Variable'])],
+  // Selector audits use their public category ids as runner keys.
+  ['introspect/audit.ts', new Set(['descendantConditions', 'unanchoredSelectors'])],
 ])
 
 /** Concrete names owned by public DSLs, host protocols, and serialized contracts. */
@@ -595,6 +633,7 @@ export function findHistoryVocabularyInSource(file: string, source: string): His
     for (const match of line.matchAll(historyVocabularyPattern)) {
       const value = match[0]
       const allowed = historyVocabularyAllowlist.some(entry => entry.file === file && line.includes(entry.line))
+        || isCurrentCssGrammarTerm(file, line, match.index, value)
       if (!allowed) {
         findings.push({
           file,
@@ -707,7 +746,7 @@ async function historyFiles(path: string): Promise<string[]> {
   for (const entry of entries) {
     const file = join(path, entry.name)
     if (entry.isDirectory()) {
-      if (!['.cache', '.git', '.nuxt', '.output', '.turbo', '.vanity', 'coverage', 'dist', 'dist-ssr', 'node_modules', 'styled-system'].includes(entry.name))
+      if (!['.cache', '.git', '.nuxt', '.output', '.turbo', '.vanity', 'coverage', 'dist', 'dist-ssr', 'node_modules', 'styled-system', 'test-results'].includes(entry.name))
         files.push(...await historyFiles(file))
     }
     else if (entry.isFile() && historyScanExtensions.has(extname(file))) {

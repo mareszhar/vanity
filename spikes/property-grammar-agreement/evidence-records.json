@@ -1,0 +1,10 @@
+{
+  "description": "Proposed shared evidence record shape; fixture data, not a claim that the SDK produces these records.",
+  "levels": ["type", "environments", "sampled", "unresolved"],
+  "records": [
+    { "level": "type", "dataType": "color", "component": "border-color", "tokens": ["color.edge"] },
+    { "level": "environments", "component": "padding", "tokens": ["space.pad"], "environments": ["scheme=light;density=cozy;skin=calm", "scheme=dark;density=compact;skin=crisp"], "result": "compatible" },
+    { "level": "sampled", "tokens": ["seed"], "parameters": [{ "token": "seed", "type": "integer", "range": [0, 1], "values": [0, 1] }], "samples": 2, "profile": "production", "result": "compatible" },
+    { "level": "unresolved", "component": "padding", "tokens": [], "reason": "External substitution var(--external)" }
+  ]
+}

@@ -281,6 +281,7 @@ export function createViteHmrHost(options: {
   readonly base: string
   readonly server?: ViteDevServer
   readonly clientServer?: ViteDevServer
+  readonly getStyleModuleCssId?: (file: string) => string
   readonly sendNotification?: (server: ViteDevServer, message: ViteHmrNotification) => void
 }): CompilerHmrHost {
   const servers = [...new Set([options.server, options.clientServer]
@@ -337,9 +338,25 @@ export function createViteHmrHost(options: {
       }
       for (const server of servers) {
         for (const id of ids)
-          removeRetiredCssModules(server, id)
+          removeRetiredModules(server, id)
       }
       return [...paths]
+    },
+    hasStyleImporters: file => getAllViteModuleGraphs().some(graph => [...graph.getModulesByFile(file) ?? []].some(module => module.importers.size > 0)),
+    removeStyleModule: (file) => {
+      for (const server of servers)
+        removeRetiredModules(server, file, true)
+    },
+    markFailedImportsInvalid: () => {
+      for (const graphValue of getAllViteModuleGraphs()) {
+        const graph = getRetiredModuleGraph(graphValue)
+        for (const module of [...graph._hasResolveFailedErrorModules]) {
+          // SSR hosts may omit native create HMR. Preserve
+          // the host's pending set for the client's own create transition.
+          graph.invalidateModule(module)
+          graph._hasResolveFailedErrorModules.add(module)
+        }
+      }
     },
     sendStyleModuleUpdate: sendUpdate,
     sendFullReload: () => {
@@ -350,7 +367,17 @@ export function createViteHmrHost(options: {
     // compatibility graph. Vite 8 adapts those nodes back into the client and
     // SSR graphs; returning an EnvironmentModuleNode directly is ignored by
     // that public hook contract.
-    findModulesByFile: file => [...getServerModuleGraph(requireServer(updateServer)).getModulesByFile(file) ?? []],
+    findModulesByFile: (file) => {
+      const graph = getServerModuleGraph(requireServer(updateServer))
+      const cssId = options.getStyleModuleCssId?.(file)
+      // CSS views retain distinct query IDs in the same host graph. A URL
+      // wrapper's edge reaches the self-accepting JS source, so source changes
+      // must include the views themselves in the compiler's existing fan-out.
+      return [...new Set([
+        ...graph.getModulesByFile(file) ?? [],
+        ...cssId === undefined ? [] : graph.getModulesByFile(cssId) ?? [],
+      ])]
+    },
     findModulesById: (id) => {
       const module = getServerModuleGraph(requireServer(updateServer)).getModuleById(id)
       return module === undefined ? [] : [module]
@@ -377,16 +404,15 @@ export function createViteHmrHost(options: {
     compileStyle: async (file) => {
       const server = requireServer(options.server ?? options.clientServer)
       const environments = getViteEnvironments(server)
-      const transform = environments?.client?.pluginContainer?.transform
-        ?? getServerPluginContainer(server)?.transform
+      const transform = environments.client?.pluginContainer?.transform
       if (transform === undefined)
         throw new TypeError('Vanity cannot recompile a style: the Vite client plugin container is unavailable')
       // An SSR-only consumer has no client node yet. Native import analysis
       // requires that node even when this eager compile precedes a page request.
-      const graph = environments?.client?.moduleGraph ?? getServerModuleGraph(server)
+      const graph = getClientModuleGraph(server)
       await graph.ensureEntryFromUrl(getViteSourceModuleUrl(file, options.root))
       await transform.call(
-        environments?.client?.pluginContainer ?? getServerPluginContainer(server),
+        environments.client?.pluginContainer,
         await readFile(file, 'utf8'),
         file,
       )
@@ -400,44 +426,21 @@ type ViteEnvironmentMap = Readonly<Record<string, {
   readonly pluginContainer?: { transform?: (source: string, id: string) => Promise<unknown> }
 }>>
 
-function getViteEnvironments(server: ViteDevServer): ViteEnvironmentMap | undefined {
-  return (server as unknown as { environments?: ViteEnvironmentMap }).environments
+function getViteEnvironments(server: ViteDevServer): ViteEnvironmentMap {
+  return server.environments as unknown as ViteEnvironmentMap
 }
 
 function getViteModuleGraphs(server: ViteDevServer): ViteModuleGraph[] {
   const environments = getViteEnvironments(server)
-  const environmentGraphs = Object.values(environments ?? {}).map(environment => environment.moduleGraph)
-  const serverGraph = server.moduleGraph
-  const serverGraphIsDirect = isDirectViteModuleGraph(serverGraph)
-  return [...new Set([
-    ...(serverGraphIsDirect ? [serverGraph] : []),
-    ...environmentGraphs,
-  ].filter((graph): graph is ViteModuleGraph => graph !== undefined))]
-}
-
-function isDirectViteModuleGraph(value: unknown): value is ViteModuleGraph {
-  const graph = value as Partial<RetiredModuleGraph> | undefined
-  return graph !== undefined
-    && graph.urlToModuleMap instanceof Map
-    && graph.idToModuleMap instanceof Map
-    && graph.etagToModuleMap instanceof Map
-    && graph.fileToModulesMap instanceof Map
-    && graph._unresolvedUrlToModuleMap instanceof Map
-    && graph._hasResolveFailedErrorModules instanceof Set
+  return [...new Set(Object.values(environments).map(environment => environment.moduleGraph))]
 }
 
 function getClientModuleGraph(server: ViteDevServer): ViteModuleGraph {
-  return getViteEnvironments(server)?.client?.moduleGraph ?? server.moduleGraph
+  return getViteEnvironments(server).client!.moduleGraph
 }
 
 function getServerModuleGraph(server: ViteDevServer): ViteModuleGraph {
   return server.moduleGraph
-}
-
-function getServerPluginContainer(server: ViteDevServer) {
-  return (server as unknown as {
-    pluginContainer?: { transform?: (source: string, id: string) => Promise<unknown> }
-  }).pluginContainer
 }
 
 function requireServer(server: ViteDevServer | undefined): ViteDevServer {
@@ -452,20 +455,21 @@ function getModuleUrl(module: object): string | undefined {
 }
 
 /**
- * Retire a semantic CSS module from every Vite environment graph.
+ * Retire a compiler module from every Vite environment graph.
  *
- * Vite's supported peer range is `^5 || ^6 || ^7 || ^8`, but it exposes no
+ * Vite's supported peer range is `^6 || ^7 || ^8`, but it exposes no
  * public “remove module” operation. The client/SSR graph maps used here are
  * therefore a narrow private seam, exercised against real graphs in
  * `viteGraph.compat.test.ts`; keep it isolated and fail loudly if a future
  * host removes it rather than leaving a stale CSS node that SSR can re-emit.
  */
-export function removeRetiredCssModules(
+export function removeRetiredModules(
   server: ViteDevServer,
   virtualId: string,
+  missingSource = false,
 ): void {
   for (const graph of getViteModuleGraphs(server))
-    removeModuleFromViteGraph(graph, virtualId)
+    removeModuleFromViteGraph(graph, virtualId, missingSource)
 }
 
 interface RetiredModuleNode {
@@ -490,10 +494,7 @@ interface RetiredModuleGraph {
   readonly invalidateModule: (module: RetiredModuleNode) => void
 }
 
-function removeModuleFromViteGraph(
-  graphValue: unknown,
-  virtualId: string,
-): void {
+function getRetiredModuleGraph(graphValue: unknown): RetiredModuleGraph {
   const graph = graphValue as Partial<RetiredModuleGraph>
   if (
     !(graph.urlToModuleMap instanceof Map)
@@ -508,8 +509,17 @@ function removeModuleFromViteGraph(
     throw new TypeError('Vanity cannot retire a compiler module: the installed Vite module-graph seam is unsupported')
   }
 
-  const unresolvedUrlToModuleMap = graph._unresolvedUrlToModuleMap!
-  const modules = [...graph.getModulesByFile!(virtualId) ?? []]
+  return graph as RetiredModuleGraph
+}
+
+function removeModuleFromViteGraph(
+  graphValue: unknown,
+  virtualId: string,
+  missingSource: boolean,
+): void {
+  const graph = getRetiredModuleGraph(graphValue)
+  const unresolvedUrlToModuleMap = graph._unresolvedUrlToModuleMap
+  const modules = [...graph.getModulesByFile(virtualId) ?? []]
   for (const module of modules) {
     const importers = [...module.importers]
     const etag = module.transformResult?.etag
@@ -532,8 +542,14 @@ function removeModuleFromViteGraph(
     // lookup above. Re-invalidate the captured importers after detachment so
     // the graph that will serve the next browser request cannot retain a
     // transform produced with the retired namespace URL.
-    for (const importer of importers)
+    for (const importer of importers) {
       graph.invalidateModule(importer)
+      if (missingSource) {
+        // Native create handling retries these existing importer nodes even
+        // after the missing source's own graph entries have been retired.
+        graph._hasResolveFailedErrorModules.add(importer)
+      }
+    }
 
     if (graph.urlToModuleMap.get(module.url) === module)
       graph.urlToModuleMap.delete(module.url)

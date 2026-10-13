@@ -1,4 +1,4 @@
-// Run the client/SSR ownership assertions once per supported Vite major; every adapter decision must hold at each host boundary.
+// Run the client/SSR ownership assertions on Vite 6–8, derived from the peers catalog.
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -6,26 +6,11 @@ import { delimiter, dirname, join, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
+import { getSupportedViteMajors } from './vite-compat'
+
 const workspaceDir = fileURLToPath(new URL('../', import.meta.url))
 const sdkDir = join(workspaceDir, 'sdk')
 const scriptPath = fileURLToPath(import.meta.url)
-
-function supportedViteMajors(): number[] {
-  const workspace = readFileSync(join(workspaceDir, 'pnpm-workspace.yaml'), 'utf8')
-  const line = workspace.match(/^\s{4}vite:\s*(?:'([^']+)'|"([^"]+)"|([^\s#]+))/m)
-  const range = line?.[1] ?? line?.[2] ?? line?.[3]
-  if (range === undefined)
-    throw new Error('Could not read vite from the peers catalog in pnpm-workspace.yaml')
-
-  const majors = [...new Set([...range.matchAll(/(?:^|\|\|)\s*\^(\d+)\.\d+\.\d+/g)]
-    .map(match => Number(match[1])))].sort((left, right) => left - right)
-  if (majors.length === 0) {
-    throw new Error(
-      `Could not derive supported Vite majors from the peers range '${range}'; update this parser for the new range form`,
-    )
-  }
-  return majors
-}
 
 function vitePackageFromPath(): { directory: string, entry: string, version: string } {
   const binaryDirectory = process.env.PATH?.split(delimiter)[0]
@@ -85,8 +70,8 @@ function runMajor(major: number): number {
 const childIndex = process.argv.indexOf('--single-major')
 if (childIndex !== -1) {
   const major = Number(process.argv[childIndex + 1])
-  if (!Number.isInteger(major) || major < 5)
-    throw new Error('Pass a Vite major after --single-major')
+  if (!getSupportedViteMajors(readFileSync(join(workspaceDir, 'pnpm-workspace.yaml'), 'utf8')).includes(major))
+    throw new Error('Pass a supported Vite major after --single-major')
   process.exitCode = runMajor(major)
 }
 else {
@@ -94,7 +79,7 @@ else {
   if (pnpm === undefined)
     throw new Error('Run pnpm run sdk:test:vite-compat to use the workspace package manager.')
 
-  for (const major of supportedViteMajors()) {
+  for (const major of getSupportedViteMajors(readFileSync(join(workspaceDir, 'pnpm-workspace.yaml'), 'utf8'))) {
     console.log(`\n• Vite ${major}`)
     const result = spawnSync(pnpm, [
       'dlx',

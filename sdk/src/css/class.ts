@@ -1,6 +1,5 @@
 import type { VanitySystemContext } from './context'
 import type { VanityClassEmitter } from './types'
-import { getDiagnosticSource } from '../diagnostics'
 import { record } from '../introspect/records'
 import { createLayerContext, requireStyleModuleFile } from './context'
 import { emitStyle } from './emit'
@@ -26,22 +25,13 @@ export function createClassEmitter(
       ...(useStandard ? { propertyAliases: undefined } : {}),
       standardEmitterName: 'class.standard',
       file,
+      styleName: debugId,
     })
 
     if (compiled.layer === 'overrides')
       record({ kind: 'escape', form: 'overrides', file, detail: debugId ?? 'class()', layer: compiled.layer })
 
-    const className = emitStyle(compiled, debugId)
-    const source = getDiagnosticSource()
-    record({
-      kind: 'style',
-      file,
-      class: className,
-      ...(debugId === undefined ? {} : { name: debugId }),
-      vars: collectReferencedVariables(compiled.units.flatMap(unit => Object.values(unit.declarations))),
-      ...(source === undefined ? {} : source),
-    })
-    return className
+    return emitStyle(compiled, debugId)
   }
 
   const classEmitter = ((rule: unknown, debugId?: string) => emit(rule, debugId, standard)) as any
@@ -53,15 +43,6 @@ export function createClassEmitter(
     layer: (name: string) => createClassEmitter(createLayerContext(system, name), true),
   })
   return classEmitter as VanityClassEmitter<string, string>
-}
-
-function collectReferencedVariables(values: Array<string | number | Array<string | number>>): string[] {
-  const vars = new Set<string>()
-  for (const value of values.flat()) {
-    for (const match of String(value).matchAll(/var\((--[\w-]+)/g))
-      vars.add(match[1]!)
-  }
-  return [...vars]
 }
 
 function isObject(value: unknown): value is object {

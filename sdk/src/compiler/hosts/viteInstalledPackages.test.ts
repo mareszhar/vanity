@@ -8,6 +8,7 @@ import { vanityPlugin } from '@mszr/vanity/vite'
 import { build, createLogger, createServer } from 'vite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSystemContract, getSystemContract } from '../../system/contract'
+import { installTestSdk } from '../../test-support/installedSdk'
 
 const sdkRoot = fileURLToPath(new URL('../../../', import.meta.url))
 const aliases = {
@@ -281,6 +282,7 @@ describe('physically installed packages in client and SSR graphs', () => {
   it('serves an installed kit style through a design package beneath an application shell', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-nested-installed-package-')))
     roots.push(root)
+    await installTestSdk(root)
     await put(root, 'package.json', JSON.stringify({
       name: 'vanity-nested-installed-consumer',
       type: 'module',

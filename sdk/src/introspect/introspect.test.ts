@@ -67,7 +67,7 @@ describe('the manifest', () => {
   const usage = getManifestTokenUsage(manifest)
 
   it('is versioned and carries the system: layers in order, conditions serialized', () => {
-    expect(manifest.version).toBe(4)
+    expect(manifest.version).toBe(5)
     expect(manifest.system.layers.map(layer => layer.name)).toEqual(['reset', 'tokens', 'recipes', 'utilities', 'overrides'])
     expect(manifest.system.conditions.open.readable).toBe('&[data-state="open"]')
     expect(manifest.system.conditions.md.readable).toBe('@media (min-width: 768px)')

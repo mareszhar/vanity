@@ -175,7 +175,7 @@ describe('class() diagnostics', () => {
         style({ color: legibleOn(t.color.brand) as never })
       }),
       'VANITY_CSS_INVALID_VALUE',
-      /legibleOn, which is graph knowledge/,
+      /legibleOn defines a token/,
     )
   })
 

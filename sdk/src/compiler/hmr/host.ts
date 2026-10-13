@@ -9,6 +9,12 @@ export interface CompilerHmrHost {
   readonly markCssModulesInvalid: (ids: ReadonlySet<string>) => void
   /** Retire CSS modules from every host graph when their last owner leaves. */
   readonly removeCssModules: (ids: ReadonlySet<string>) => readonly string[]
+  /** Whether a source has importers in any active host graph. */
+  readonly hasStyleImporters: (file: string) => boolean
+  /** Retire a deleted authored source and invalidate its importers. */
+  readonly removeStyleModule: (file: string) => void
+  /** Retry missing importers through the host graph when a source appears. */
+  readonly markFailedImportsInvalid: () => void
   /** Tell the client to update an already loaded style source before pruning its retired imports. */
   readonly sendStyleModuleUpdate: (url: string) => void
   /** Request a full browser reload after an incompatible module export change. */

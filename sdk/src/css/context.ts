@@ -7,6 +7,7 @@ import { checkLayer } from './rule'
 
 /** Neutral inputs shared by the canonical CSS emitters. */
 export interface VanitySystemContext {
+  tokenGraph?: import('../tokens/module').TokenGraph
   conditions: Map<string, readonly import('../system/conditions').VanityConditionArm[]>
   layers: readonly string[]
   defaultLayer: string
@@ -18,6 +19,8 @@ export interface VanitySystemContext {
   }
   /** Resolved system policy, so a style emitter resolves `color.adjustSpace` for bare channel adjustments exactly as token-graph resolution does. */
   policies?: VanityResolvedPolicies
+  /** Style authoring warnings honor the system's audit levels. */
+  audit?: import('../introspect/records').VanityAuditConfig
 }
 
 export function createLayerContext(system: VanitySystemContext, name: string): VanitySystemContext {

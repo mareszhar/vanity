@@ -30,11 +30,13 @@ import type {
 } from './types'
 import { setOwn } from '../collections'
 import { getStyleModuleFile } from '../css/context'
+import { getLiteralTokenType } from '../css/grammar'
 import { emitTokenCss } from '../css/tokens'
 import { checkSelector } from '../css/validation'
 import { didYouMean, getDiagnosticSource, VanityError } from '../diagnostics'
-import { collectInspection, isInspecting, record } from '../introspect/records'
+import { collectInspection, collectInspectionWarning, isInspecting, record } from '../introspect/records'
 import { sealRuntimeContract } from '../runtime/contract'
+import { serializeRuntimeCssText } from '../runtime/value'
 import { substrate } from '../substrate'
 import {
   collectNodeRequirements,
@@ -128,6 +130,10 @@ export interface TokenNode {
 }
 
 interface TokenContract {
+  readonly deprecated?: import('./types').VanityTokenDeprecation
+  readonly usage?: import('./types').VanityTokenUsage
+  readonly restrict?: import('./types').VanityTokenRestriction
+  readonly range?: readonly [string, string]
   readonly canonical: boolean
   readonly reference: 'val' | 'var'
   readonly emit: boolean
@@ -185,6 +191,7 @@ export interface TokenGraph {
   file?: string
   runtime?: VanityRuntimeContract
   runtimeSchemas?: Readonly<Record<string, import('./types').VanityStandardSchemaV1>>
+  checks?: readonly import('../introspect/records').VanityContrastRecord[]
   /** Installed authored-interchange codecs, keyed by extension id. */
   dtcgCodecIds?: ReadonlySet<string>
 }
@@ -512,12 +519,27 @@ export function createTokenModule(
   return Object.freeze(module)
 }
 
+/** All contribution forms use the same addressability check, including lazy stages. */
+export function assertTokenKey(key: string, path: readonly string[] = []): void {
+  if (/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(key)) {
+    throwTokenModuleError(
+      'VANITY_TOKENS_NUMERIC_KEY',
+      `numeric token key '${[...path, key].join('.')}' is not addressable through token projections`,
+      [...path, key],
+      `use s${key.replaceAll(/[^a-z0-9]/gi, '_')}, or a word, as the token key`,
+    )
+  }
+}
+
 /** Resolve an inert module at the owning system boundary. */
-export function freezeTokenGroup(group: object): object {
-  return Object.freeze(Object.fromEntries(Object.entries(group).map(([key, value]) => [
-    key,
-    isGroup(value) ? freezeTokenGroup(value) : value,
-  ])))
+export function freezeTokenGroup(group: object, path: readonly string[] = []): object {
+  return Object.freeze(Object.fromEntries(Object.entries(group).map(([key, value]) => {
+    assertTokenKey(key, path)
+    return [
+      key,
+      isGroup(value) ? freezeTokenGroup(value, [...path, key]) : value,
+    ]
+  })))
 }
 
 function validateModuleOptions(options: VanityTokenModuleOptions): void {
@@ -740,16 +762,15 @@ export function buildTokens<T extends object, Prefix extends string = 'vanity'>(
   }
   const { results, diagnostics } = resolveGraph(unresolved)
   const resolved: TokenGraph = { ...unresolved, results }
-
+  hydrateGraphHandles(resolved)
+  resolved.runtime = buildRuntimeContract(resolved)
+  resolved.runtimeSchemas = collectRuntimeSchemas(resolved)
   diagnostics.push(...runTokenChecks(options.checks?.(tree as VanityTokens<T, Prefix>) ?? [], resolved))
 
   if (diagnostics.length > 0)
     throw new VanityError(diagnostics)
 
-  hydrateGraphHandles(resolved)
   attachTokenDeclarationGetters(tree, { file })
-  resolved.runtime = buildRuntimeContract(resolved)
-  resolved.runtimeSchemas = collectRuntimeSchemas(resolved)
   attachRuntimeAddresses(resolved)
 
   for (const node of nodes.values()) {
@@ -1069,6 +1090,7 @@ function createTokenRestorationMeta(
     mutable: node.contract.mutable,
     type: node.contract.type,
     ...(node.definition.kind === 'none' ? {} : { value: result.emitted }),
+    ...(node.contract.restrict === undefined ? {} : { restrict: node.contract.restrict }),
     ...(node.meta.description === undefined ? {} : { description: node.meta.description }),
     ...(node.meta.deprecated === undefined ? {} : { deprecated: node.meta.deprecated }),
     ...(node.contract.metadata === undefined ? {} : { metadata: node.contract.metadata }),
@@ -1239,6 +1261,7 @@ function buildRuntimeContract(graph: TokenGraph): VanityRuntimeContract {
       ...(node.meta.deprecated === undefined ? {} : { deprecated: node.meta.deprecated }),
       ...(node.contract.metadata === undefined ? {} : { metadata: node.contract.metadata }),
       ...(validation === undefined ? {} : { validation }),
+      ...(node.contract.range === undefined ? {} : { range: node.contract.range }),
       ...(hasMutableSlots(node) ? { baseSlot: createPrivateAddress(graph.prefix, node.key, 'base') } : {}),
       branches: Object.freeze(branches),
     }))
@@ -1486,6 +1509,7 @@ function walkInto(
     : getGroupEmission(group, emission, path, file)
 
   for (const [key, raw] of Object.entries(group)) {
+    assertTokenKey(key, path)
     if (tokenPolicy !== undefined && (key === '$description' || key === '$root'))
       continue
     if (tokenPolicy !== undefined && key === '$axes') {
@@ -1642,6 +1666,18 @@ function createNode(
 ): TokenNode {
   const key = path.join('.')
   const normalized = normalizeToken(raw, key, tokenPolicy, axes)
+  if (normalized.contract.type === 'unknown'
+    && [normalized.definition, ...normalized.branches.map(branch => branch.definition)]
+      .some(definition => definition.kind === 'literal' && typeof definition.value === 'string')) {
+    collectInspectionWarning({
+      code: 'VANITY_TOKENS_INVALID_DEFINITION',
+      severity: 'info',
+      path: key,
+      ...getDiagnosticSource(key),
+      message: `${key}: the literal has no unambiguous CSS data type`,
+      fix: 'use a typed spelling such as color(\'red\') or length.px(16), or an explicit tdef type for the intended role',
+    })
+  }
   const name = getTokenName(prefix, path)
   const handle = createHandle({
     name,
@@ -1927,6 +1963,10 @@ function normalizeToken(
       ...(config?.register === undefined ? {} : { register: config.register }),
       ...(config?.validate === undefined ? {} : { validate: config.validate }),
       ...(config?.metadata === undefined ? {} : { metadata: config.metadata }),
+      ...(config?.usage === undefined ? {} : { usage: config.usage }),
+      ...(config?.deprecated === undefined ? {} : { deprecated: config.deprecated }),
+      ...(config?.restrict === undefined ? {} : { restrict: config.restrict }),
+      ...(config?.range === undefined ? {} : { range: config.range.map(serializeRuntimeCssText) as [string, string] }),
     },
     meta,
     branches,
@@ -1980,6 +2020,11 @@ function assertValidTrait(path: string, field: string, fix: string): never {
 }
 
 function inferTokenType(raw: unknown): import('../values/types').VanityCssDataType {
+  if (typeof raw === 'function') {
+    const node = getNode(raw as VanityInternalTokenHandle)
+    if (node)
+      return node.contract.type
+  }
   if (isColorValue(raw) || isContrastValue(raw))
     return 'color'
   if ((typeof raw === 'object' || typeof raw === 'function') && raw !== null && Object.hasOwn(raw, 'type')) {
@@ -1989,6 +2034,8 @@ function inferTokenType(raw: unknown): import('../values/types').VanityCssDataTy
   }
   if (typeof raw === 'number')
     return Number.isInteger(raw) ? 'integer' : 'number'
+  if (typeof raw === 'string')
+    return getLiteralTokenType(raw)
   return 'unknown'
 }
 
@@ -2045,6 +2092,8 @@ function classifyLeaf(result: unknown, node: TokenNode): VanityLeafDefinition {
  * accepted thresholds included. Runs only under an open collector.
  */
 function recordGraph(graph: TokenGraph): void {
+  for (const entry of graph.checks ?? [])
+    record(entry)
   const resolvers = { light: createTokenCheckResolver(graph, 'light'), dark: createTokenCheckResolver(graph, 'dark') } as const
   const runtimeTokensByPath = graph.runtime === undefined ? undefined : getRuntimeTokenIndex(graph.runtime)
 
@@ -2332,6 +2381,9 @@ function recordGraph(graph: TokenGraph): void {
         portability,
         metadata: node.contract.metadata ?? {},
       },
+      ...(node.contract.usage === undefined ? {} : { usage: node.contract.usage }),
+      ...(node.contract.restrict === undefined ? {} : { restrict: node.contract.restrict }),
+      ...(node.contract.range === undefined ? {} : { range: node.contract.range }),
       ...(node.meta.description === undefined ? {} : { description: node.meta.description }),
       ...(node.meta.deprecated === undefined ? {} : { deprecated: node.meta.deprecated }),
     })
@@ -2353,6 +2405,7 @@ function recordGraph(graph: TokenGraph): void {
           measured: Math.round(Math.abs(pick.lc) * 10) / 10,
           min: expr.contrast,
           accepted: expr.explicitContrast,
+          evidence: { level: 'environments', environments: ['light', 'dark'] },
           ...(resolved.fallbackSchemes.includes(scheme) ? { fallback: resolved.fallbackReason } : {}),
         })
       }
@@ -2429,7 +2482,7 @@ function getExpressionRecord(
   if (definition.kind === 'literal') {
     return {
       kind: 'literal',
-      type: typeof definition.value === 'number' ? (Number.isInteger(definition.value) ? 'integer' : 'number') : 'unknown',
+      type: inferTokenType(definition.value),
       detail: { val: definition.value },
     }
   }
@@ -2521,9 +2574,15 @@ function getColorExpressionRecord(
       break
     case 'value':
       return getExpressionNodeRecord(valueNodeOf(expr.value), css)
-    case 'ref':
-      detail.path = getNode(expr.handle)?.key ?? readHandlePath(expr.handle)
-      break
+    case 'ref': {
+      const path = getNode(expr.handle)?.key ?? readHandlePath(expr.handle)
+      const dependency = graph.nodes.get(path)
+      return {
+        kind: 'var',
+        type: dependency?.contract.type ?? 'unknown',
+        detail: { referenceKind: 'token', path },
+      }
+    }
     case 'alpha':
       detail.amount = expr.amount
       children.push(getColorExpressionRecord(expr.input, undefined, graph))

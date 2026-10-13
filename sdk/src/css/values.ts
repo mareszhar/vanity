@@ -10,6 +10,7 @@ import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
 import type { VanityInternalTokenHandle } from '../tokens/handle'
 import type { VanityResolver } from '../tokens/resolve'
 import type { VanityResolvedPolicies } from '../values/policies'
+import { isUnsafeValue } from '../atoms/handle'
 import { VanityError } from '../diagnostics'
 import { isPort } from '../ports/port'
 import { isColorValue, isContrastValue } from '../tokens/color'
@@ -18,6 +19,7 @@ import { hasContrastExpression, serializeExpr } from '../tokens/resolve'
 import { isCssValue } from '../values/types'
 
 export interface VanityValueContext {
+  tokenGraph?: import('../tokens/module').TokenGraph
   file?: string
   /** Resolved system policy; a rule-position color adjustment reads `color.adjustSpace` from it, matching token-graph resolution. */
   policies?: VanityResolvedPolicies
@@ -27,6 +29,12 @@ export interface VanityValueContext {
 
 /** Serialize one declared value; `path` names the offending key in diagnostics. */
 export function serializeStyleValue(value: unknown, path: string, ctx: VanityValueContext): string | number {
+  if (isUnsafeValue(value)) {
+    if (typeof value.reason !== 'string' || value.reason.trim().length === 0) {
+      throw new VanityError({ code: 'VANITY_CSS_INVALID_VALUE', message: `${path}: unsafe.value needs a non-empty reason`, path, file: ctx.file, fix: 'state why this declaration intentionally leaves the system vocabulary' })
+    }
+    return serializeStyleValue(value.value, path, ctx)
+  }
   if (typeof value === 'string' || typeof value === 'number')
     return value
 
@@ -73,10 +81,10 @@ export function serializeStyleValue(value: unknown, path: string, ctx: VanityVal
 function createContrastDiagnostic(path: string, ctx: VanityValueContext): VanityDiagnostic {
   return {
     code: 'VANITY_CSS_INVALID_VALUE',
-    message: `${path} uses legibleOn, which is graph knowledge — the check needs both endpoints at build time`,
+    message: `${path}: legibleOn defines a token; define onX: legibleOn(…) and reference t.….onX`,
     path,
     file: ctx.file,
-    fix: 'define it in a derived token — defineTokens(...).add(m => ({ color: { onX: legibleOn(m.color.x) } })) — then reference that token here',
+    fix: 'define onX: legibleOn(…) in the token graph, then reference t.….onX',
   }
 }
 

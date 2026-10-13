@@ -8,12 +8,13 @@
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
 import type { VanitySystemContext } from './context'
 import type { VanityFontFaceFunction, VanityKeyframesFunction } from './types'
+import { isUnsafeValue } from '../atoms/handle'
 import { VanityError } from '../diagnostics'
 import { substrate } from '../substrate'
 import { convertToKebab } from '../tokens/names'
 import { createLayerContext, requireStyleModuleFile } from './context'
-import { isPlainObject, isSelectorKey } from './rule'
-import { checkCssBlock, checkDeclaration } from './validation'
+import { compileStyleRule, isPlainObject, isSelectorKey } from './rule'
+import { checkCssBlock, serializeDeclarationNumber } from './validation'
 import { serializeStyleValue } from './values'
 
 const TIME = /^(?:from|to|\d+(?:\.\d+)?%)(?:\s*,\s*(?:from|to|\d+(?:\.\d+)?%))*$/
@@ -48,7 +49,7 @@ export function bindKeyframes(system: VanitySystemContext): VanityKeyframesFunct
         continue
       }
 
-      const declarations: Record<string, string | number | Array<string | number>> = {}
+      const declarations: Record<string, unknown> = {}
 
       for (const [property, value] of Object.entries(step)) {
         if (value === undefined || value === null)
@@ -56,7 +57,7 @@ export function bindKeyframes(system: VanitySystemContext): VanityKeyframesFunct
 
         const path = `${time}.${property}`
 
-        if (system.conditions.has(property) || isSelectorKey(property) || property.startsWith('@') || (isPlainObject(value) && !property.startsWith('--'))) {
+        if (system.conditions.has(property) || isSelectorKey(property) || property.startsWith('@') || (isPlainObject(value) && !isUnsafeValue(value) && !property.startsWith('--'))) {
           diagnostics.push({
             code: 'VANITY_CSS_INVALID_KEY',
             message: `${path} — conditions and selectors are meaningless inside a keyframe step`,
@@ -67,38 +68,17 @@ export function bindKeyframes(system: VanitySystemContext): VanityKeyframesFunct
           continue
         }
 
-        try {
-          const serialized = Array.isArray(value)
-            ? value.map(entry => serializeStyleValue(entry, path, { file }))
-            : serializeStyleValue(value, path, { file })
-
-          for (const entry of Array.isArray(serialized) ? serialized : [serialized]) {
-            if (typeof entry !== 'string')
-              continue
-
-            const issue = checkDeclaration(convertToKebab(property), entry)
-
-            if (issue !== undefined) {
-              diagnostics.push({
-                code: issue.kind === 'unknown-property' ? 'VANITY_CSS_UNKNOWN_PROPERTY' : 'VANITY_CSS_INVALID_VALUE',
-                message: `${path}: ${issue.reason}`,
-                path,
-                file,
-              })
-            }
-          }
-
-          declarations[property] = serialized
-        }
-        catch (error) {
-          if (!(error instanceof VanityError))
-            throw error
-
-          diagnostics.push(...error.diagnostics)
-        }
+        declarations[property] = value
       }
 
-      compiled[time] = declarations
+      try {
+        compiled[time] = compileStyleRule(declarations, { ...system, file, rootPath: [time], styleName: debugId }).units[0]?.declarations ?? {}
+      }
+      catch (error) {
+        if (!(error instanceof VanityError))
+          throw error
+        diagnostics.push(...error.diagnostics)
+      }
     }
 
     if (diagnostics.length > 0)
@@ -172,8 +152,11 @@ function serializeDeclarations(
   indent = '',
 ): string {
   return Object.entries(declarations)
-    .flatMap(([property, value]) => (Array.isArray(value) ? value : [value])
-      .map(entry => `${indent}${property.startsWith('--') ? property : convertToKebab(property)}: ${String(entry)};`))
+    .flatMap(([property, value]) => {
+      const name = property.startsWith('--') ? property : convertToKebab(property)
+      return (Array.isArray(value) ? value : [value])
+        .map(entry => `${indent}${name}: ${typeof entry === 'number' ? serializeDeclarationNumber(name, entry) : entry};`)
+    })
     .join('\n')
 }
 

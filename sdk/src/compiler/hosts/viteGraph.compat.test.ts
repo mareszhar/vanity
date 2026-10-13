@@ -1,15 +1,24 @@
 import type { Plugin, ViteDevServer } from 'vite'
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { Buffer } from 'node:buffer'
+import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join, posix } from 'node:path'
+import { dirname, join, posix } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { runInNewContext } from 'node:vm'
 import { vanityPlugin } from '@mszr/vanity/vite'
+import vue from '@vitejs/plugin-vue'
 import { describe, expect, it, vi } from 'vitest'
+import { installTestSdk } from '../../test-support/installedSdk'
 import { createPromiseGate } from '../../test-support/promises'
 import { invokeVanityHotUpdate } from '../../test-support/vite'
 import * as styleBuild from '../modules/build'
 import { createViteHmrHost, resolveViteVirtualId } from './viteHmr'
 import { vanityViteHost } from './viteHost'
+
+const flags = ['inline', 'used', 'url', 'raw', 'direct', 'import']
+const cssQueryForms = Array.from({ length: 64 }, (_, bits) => flags.filter((_, index) => bits & (1 << index)).join('&'))
+cssQueryForms.push('inline&used&t=123', 'inline=&used=', 'vue&type=style&index=0&src=true&lang.css', 'vue&type=style&index=0&src=true&direct&lang.css', 'transform-only', 'inline-css', 'vue&type=style&index=0&src=scope&scoped=scope&lang.css', 'vue&type=style&index=0&src=true&inline&lang.css', 'vue&type=style&index=0&src=true&lang.module.css')
 
 const vanityRoot = fileURLToPath(new URL('../../', import.meta.url))
 const alias = {
@@ -27,8 +36,18 @@ async function loadViteRuntime(): Promise<typeof import('vite')> {
 async function put(root: string, file: string, contents: string): Promise<string> {
   const path = join(root, file)
   await mkdir(join(path, '..'), { recursive: true })
+  if (file === 'package.json')
+    await installTestSdk(root)
   await writeFile(path, contents)
   return path
+}
+
+/** Read the fixture's native default string without prescribing a quote style. */
+function defaultExportedString(code: string): string {
+  expect(code).toMatch(/^export default\s/)
+  const value: unknown = runInNewContext(code.replace(/^export default\s+/, ''))
+  expect(typeof value).toBe('string')
+  return value as string
 }
 
 function bundleCode(result: unknown): string {
@@ -93,14 +112,12 @@ function errorText(error: unknown): string {
 
 function graphEnvironments(server: ViteDevServer) {
   const environments = Object.entries((server as ViteDevServer & {
-    environments?: Record<string, { moduleGraph: ViteDevServer['moduleGraph'] }>
-  }).environments ?? {}).map(([name, environment]) => ({
+    environments: Record<string, { moduleGraph: ViteDevServer['moduleGraph'] }>
+  }).environments).map(([name, environment]) => ({
     name,
     moduleGraph: environment.moduleGraph,
   }))
-  return environments.length === 0
-    ? [{ name: 'default', moduleGraph: server.moduleGraph }]
-    : environments
+  return environments
 }
 
 function importsIn(code: string): string[] {
@@ -110,11 +127,10 @@ function importsIn(code: string): string[] {
 
 function graphNode(server: ViteDevServer, file: string, ssr: boolean): { id?: string } | undefined {
   const compatibleServer = server as unknown as {
-    environments?: Record<string, { moduleGraph?: { idToModuleMap: Map<string, { id?: string }> } }>
+    environments: Record<string, { moduleGraph?: { idToModuleMap: Map<string, { id?: string }> } }>
     moduleGraph: { idToModuleMap: Map<string, { id?: string }> }
   }
-  const moduleGraph = compatibleServer.environments?.[ssr ? 'ssr' : 'client']?.moduleGraph
-    ?? compatibleServer.moduleGraph
+  const moduleGraph = compatibleServer.environments[ssr ? 'ssr' : 'client']!.moduleGraph!
   return [...moduleGraph.idToModuleMap.values()]
     .find(module => module.id?.split('?')[0] === file)
 }
@@ -156,6 +172,353 @@ function wrapHook(
 }
 
 describe('vite virtual CSS graph compatibility', () => {
+  it('matches headless check CSS and diagnostics with the installed host compiler', async () => {
+    const { build } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-check-host-parity-')))
+    const receiptKey = Symbol.for(root)
+    const receipts = globalThis as unknown as Record<symbol, { css: string[], diagnostics: unknown[], configure: number }>
+    try {
+      await put(root, 'package.json', '{"name":"check-host-parity","type":"module"}')
+      const sdk = join(vanityRoot, '..')
+      const installed = join(root, 'node_modules/@mszr/vanity')
+      // A copied package binds check's Vite peer to the matrix host, rather
+      // than silently using the workspace's Vite major through a symlink.
+      await unlink(join(installed, 'dist'))
+      await cp(join(sdk, 'dist'), join(installed, 'dist'), { recursive: true })
+      const metadata = JSON.parse(await readFile(join(sdk, 'package.json'), 'utf8')) as { dependencies: Record<string, string> }
+      for (const dependency of Object.keys(metadata.dependencies)) {
+        const target = join(installed, 'node_modules', dependency)
+        await mkdir(dirname(target), { recursive: true })
+        await symlink(join(sdk, 'node_modules', dependency), target)
+      }
+      const entry = process.env.VANITY_VITE_TEST_ENTRY
+      const vite = entry === undefined
+        ? dirname(createRequire(import.meta.url).resolve('vite/package.json'))
+        : dirname(dirname(dirname(entry)))
+      await symlink(vite, join(installed, 'node_modules/vite'))
+      await symlink(vite, join(root, 'node_modules/vite'))
+      await put(root, 'system.ts', `import{createSystem}from'@mszr/vanity';export const ds=createSystem({declarations:{level:'discourage',tokens:['length']}}).consolidate()`)
+      await put(root, 'chosen.ts', `export const chosen='client'`)
+      await put(root, 'node_modules/@fixture/choice/package.json', JSON.stringify({ name: '@fixture/choice', type: 'module', exports: { browser: './browser.js', node: './node.js', default: './node.js' } }))
+      await put(root, 'node_modules/@fixture/choice/browser.js', `export const chosen='browser'`)
+      await put(root, 'node_modules/@fixture/choice/node.js', `export const chosen='node'`)
+      await put(root, 'row.css.ts', `import{chosen as a}from'string-alias';import{chosen as b}from'regex-alias';import{chosen as c}from'plugin-choice';import{chosen as d}from'@fixture/choice';import{chosen as e}from'virtual-choice';export const row=ds.class({padding:'13px',fontFamily:JSON.stringify([a,b,c,d,e].join(' '))})`)
+      const application = await put(root, 'entry.ts', `import{row}from'./row.css.ts';console.log(row)`)
+      await put(root, 'vite.config.mjs', `
+        import { vanityPlugin } from '@mszr/vanity/vite'
+        import { fileURLToPath } from 'node:url'
+        const root = fileURLToPath(new URL('.', import.meta.url))
+        const receipt = globalThis[Symbol.for(${JSON.stringify(root)})] = { css: [], diagnostics: [], configure: 0 }
+        export default {
+          resolve: { alias: [
+            { find: 'string-alias', replacement: root + 'chosen.ts' },
+            { find: /^regex-alias$/, replacement: root + 'chosen.ts' },
+          ] },
+          plugins: [{
+            name: 'parity-receipt', enforce: 'pre',
+            configureServer() { receipt.configure++ },
+            resolveId(id) {
+              if (id === 'plugin-choice') return root + 'chosen.ts'
+              if (id === 'virtual-choice') return '\\0virtual-choice'
+            },
+            load(id) { if (id === '\\0virtual-choice') return 'export const chosen="virtual"' },
+            transform(code, id) { if (id.split('?')[0].endsWith('.vanity.css')) receipt.css.push(code) },
+          }, ...vanityPlugin({ compiler: { system: './system.ts', diagnostics: d => receipt.diagnostics.push(d) }, autoImports: { style: '$system' } })],
+        }
+      `)
+      const { checkProject } = await import(pathToFileURL(join(installed, 'dist/cli.mjs')).href) as typeof import('../../cli')
+      const checked = await checkProject({ root })
+      expect(checked.report.exitCode).toBe(0)
+      expect(receipts[receiptKey]?.configure).toBe(1)
+      await build({ root, logLevel: 'silent', build: { write: false, lib: { entry: application, formats: ['es'] } } })
+      const host = receipts[receiptKey]!
+      expect(host.css.toSorted()).toEqual([...checked.css.values()].toSorted())
+      expect(host.diagnostics).toEqual(checked.report.diagnostics.map(({ identity: _identity, evidence: _evidence, accepted: _accepted, ...diagnostic }) => diagnostic))
+    }
+    finally {
+      delete receipts[receiptKey]
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each(['normal', 'scoped', 'custom-element', 'module'])('compiles the actual Vue %s stylesheet request as CSS', async (form) => {
+    const { build } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vue-style-query-')))
+    await put(root, 'package.json', '{"name":"vue-style-query","type":"module"}')
+    await symlink(join(vanityRoot, '../node_modules/vue'), join(root, 'node_modules/vue'))
+    await put(root, 'system.ts', `import{createSystem}from'@mszr/vanity';export const ds=createSystem().consolidate()`)
+    await put(root, 'card.css.ts', `import{ds}from'./system';export const card=ds.class({padding:'13px'})`)
+    const component = await put(root, 'Card.vue', `<template><main>Style</main></template><style src="./card.css.ts" ${form === 'scoped' ? 'scoped' : form === 'module' ? 'module' : ''}></style>`)
+    const result = await build({ root, configFile: false, logLevel: 'silent', plugins: [...vanityPlugin({ compiler: { system: './system.ts' } }), vue({ customElement: form === 'custom-element' })], build: { write: false, minify: false, cssMinify: false, lib: { entry: component, formats: ['es'] }, rollupOptions: { external: ['vue'] } } })
+    const outputs = Array.isArray(result) ? result : [result]
+    const css = outputs.flatMap((part) => {
+      if (!('output' in part))
+        throw new Error('expected one-shot Vue build output')
+      return part.output
+    }).filter(item => item.type === 'asset').map(item => String(item.source)).join('\n')
+    const contents = form === 'custom-element' ? bundleCode(result) : css
+    expect(contents).toMatch(/padding:\s*13px/)
+    expect(contents).toContain('@layer vanity')
+  })
+
+  it.each([undefined, 'accepted.json'])('reconciles baseline creation, edits and deletion in the same dev server (%s)', async (configured) => {
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-baseline-hmr-')))
+    await put(root, 'package.json', '{"name":"baseline-hmr","type":"module"}')
+    await put(root, 'system.ts', `import{createSystem}from'@mszr/vanity';export const ds=createSystem({declarations:{level:'forbid',tokens:['length']}}).consolidate()`)
+    await put(root, 'row.css.ts', `import{ds}from'./system';export const card=ds.class({padding:'13px'})`)
+    const baselineFile = join(root, configured ?? 'vanity.baseline.json')
+    const baseline = JSON.stringify({ format: 'vanity.baseline/1', entries: [{ code: 'VANITY_DECLARATION_RAW', module: 'row.css.ts', style: { export: 'card', name: 'card' }, property: 'padding', condition: [], value: '13px', count: 1 }] })
+    const server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: vanityPlugin({ compiler: { system: './system.ts', baseline: configured } }), server: { host: '127.0.0.1', port: 0 } })
+    try {
+      const origin = await devHttpBase(server)
+      const response = async (accepted: boolean) => {
+        await vi.waitFor(async () => {
+          const result = await fetch(new URL('/row.css.ts', origin))
+          const body = await result.text()
+          expect(result.status, body).toBe(accepted ? 200 : 500)
+          expect(body).toContain(accepted ? 'card' : configured && !await readFile(baselineFile).catch(() => undefined) ? 'VANITY_BASELINE_INVALID' : 'VANITY_DECLARATION_RAW')
+        }, { timeout: 15_000 })
+      }
+      await response(false)
+      await writeFile(baselineFile, baseline)
+      await response(true)
+      await writeFile(baselineFile, JSON.stringify({ format: 'vanity.baseline/1', entries: [] }))
+      await response(false)
+      await writeFile(baselineFile, baseline)
+      await response(true)
+      await unlink(baselineFile)
+      await response(false)
+      await writeFile(baselineFile, baseline)
+      await response(true)
+    }
+    finally {
+      await server.close()
+    }
+  })
+
+  it('answers inline style requests with the client CSS and preserves raw source requests', async () => {
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-css-query-')))
+    await put(root, 'package.json', '{"name":"css-query-contract","type":"module"}')
+    const system = await put(root, 'system.ts', 'import {createSystem} from "@mszr/vanity";export const ds=createSystem().addTokens({space:{gap:"13px"}}).consolidate()')
+    const authored = 'import {ds} from "./system";export const card=ds.class({padding:ds.t.space.gap})'
+    await put(root, 'style.css.ts', authored)
+    const server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system, layerOrder: ['vendor', 'vanity'] } })], optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } })
+    try {
+      const rawFirst = (await server.transformRequest('/style.css.ts?raw'))!.code
+      expect(defaultExportedString(rawFirst)).toBe(authored)
+      const ordinary = (await server.transformRequest('/style.css.ts'))!.code
+      expect(ordinary).toMatch(/export (?:var|const) card/)
+      const urls = importsIn(ordinary).filter(url => url.includes('/.vanity/virtual/'))
+      const clientCss = (await Promise.all(urls.map(async url => (await server.transformRequest(`${url}?inline`))!.code)))
+        .map(defaultExportedString)
+        .join('\n')
+      for (const query of ['inline', 'inline&used', 'inline&used&t=123']) {
+        const code = (await server.transformRequest(`/style.css.ts?${query}`))!.code
+        expect(code).toMatch(/^export default /)
+        expect(defaultExportedString(code)).toBe(clientCss)
+        expect(code).not.toContain('import.meta.hot')
+      }
+      for (const query of ['raw', 'raw&inline', 'raw&url', 'raw&direct']) {
+        const code = (await server.transformRequest(`/style.css.ts?${query}`))!.code
+        expect(defaultExportedString(code)).toBe(authored)
+      }
+    }
+    finally {
+      await server.close()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('applies host CSS processing to inline views and preserves vanilla-extract stylesheet identity', async () => {
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-query-processing-')))
+    await put(root, 'package.json', '{"name":"query-processing-contract","type":"module"}')
+    const system = await put(root, 'system.ts', 'import{createSystem}from"@mszr/vanity";export const ds=createSystem().consolidate()')
+    await put(root, 'style.css.ts', 'import{ds}from"./system";export const card=ds.class({padding:"13px"})')
+    await put(root, 'native.css.ts', 'import{style}from"@vanilla-extract/css";export const card=style({padding:"13px"})')
+    const server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } })], resolve: { alias: { '@vanilla-extract/css': join(vanityRoot, '../node_modules/@vanilla-extract/css') } }, css: { postcss: { plugins: [{ postcssPlugin: 'fixture-processing', Declaration(declaration: { prop: string, value: string }) {
+      if (declaration.prop === 'padding' && declaration.value === '13px')
+        declaration.value = '14px'
+    } }] } }, optimizeDeps: { noDiscovery: true }, server: { host: '127.0.0.1', port: 0, hmr: false, ws: false, watch: null } })
+    try {
+      const origin = await devHttpBase(server)
+      const compiled = (await server.transformRequest('/style.css.ts?inline'))!.code
+      expect(compiled).toMatch(/padding: ?14px/)
+      const ordinary = (await server.transformRequest('/native.css.ts'))!.code
+      expect(ordinary).toMatch(/export (?:var|const) card/)
+      const cssUrl = importsIn(ordinary).find(url => url.includes('.vanilla.css'))!
+      const css = (await server.transformRequest(`${cssUrl}?inline`))!.code
+      const queried = (await server.transformRequest('/native.css.ts?inline'))!.code
+      expect(queried).toBe(css)
+      const response = await fetch(new URL('/__vanity/manifest.json', origin))
+      const manifest = await response.json() as { modules: Record<string, unknown> }
+      expect(Object.keys(manifest.modules)).not.toContain('native.css.ts')
+      await put(root, 'native.css.ts', 'import{style}from"@vanilla-extract/css";export const card=style({padding:"15px"})')
+      for (const environment of Object.values(server.environments))
+        environment.moduleGraph.invalidateAll()
+      const updated = (await server.transformRequest('/native.css.ts?inline'))!.code
+      expect(updated).toMatch(/padding: ?15px/)
+    }
+    finally {
+      await server.close()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('answers CSS query combinations through the development stylesheet pipeline', async () => {
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-css-query-domain-')))
+    await put(root, 'package.json', '{"name":"css-query-domain","type":"module"}')
+    const system = await put(root, 'system.ts', 'import {createSystem} from "@mszr/vanity";export const ds=createSystem().consolidate()')
+    const authored = 'import {ds} from "./system";export const card=ds.class({padding:"13px"})'
+    await put(root, 'style.css.ts', authored)
+    const options = () => ({ root, configFile: false as const, logLevel: 'silent' as const, plugins: [vanityPlugin({ compiler: { system, layerOrder: ['vendor', 'vanity'] } })], optimizeDeps: { noDiscovery: true } })
+    const server = await createServer({ ...options(), server: { host: '127.0.0.1', port: 0, hmr: false, ws: false, watch: null } })
+    try {
+      const origin = await devHttpBase(server)
+      for (const query of cssQueryForms) {
+        const parameters = new URLSearchParams(query)
+        const inline = parameters.has('inline') || parameters.has('inline-css')
+        const id = `/style.css.ts${query ? `?${query}` : ''}`
+        const code = (await server.transformRequest(id))!.code
+        if (parameters.has('raw')) {
+          expect(defaultExportedString(code), query).toBe(authored)
+        }
+        else if (parameters.has('url')) {
+          const url = defaultExportedString(code)
+          if (inline) {
+            expect(url, query).toMatch(/^data:text\/css;base64,/)
+            expect(Buffer.from(url.split(',')[1]!, 'base64').toString(), query).toMatch(/padding: ?13px/)
+          }
+          else {
+            const response = await fetch(new URL(url, origin), { headers: { accept: 'text/css' } })
+            expect(response.headers.get('content-type'), query).toContain('text/css')
+            expect(await response.text(), query).toMatch(/padding: ?13px/)
+          }
+        }
+        else if (parameters.has('direct')) {
+          expect(code, query).toMatch(/padding: ?13px/)
+          expect(code, query).not.toContain('export ')
+          const response = await fetch(new URL(id, origin), { headers: { accept: 'text/css' } })
+          expect(response.headers.get('content-type'), query).toContain('text/css')
+        }
+        else if (inline) {
+          expect(defaultExportedString(code), query).toMatch(/padding: ?13px/)
+          expect(defaultExportedString(code), query).toContain('@layer vendor, vanity;')
+        }
+        else if (parameters.has('vue') || parameters.has('transform-only')) {
+          expect(code, query).toContain('__vite__updateStyle(')
+        }
+        else {
+          expect(code, query).toMatch(/export (?:var|const) card/)
+        }
+      }
+    }
+    finally {
+      await server.close()
+    }
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it.each(cssQueryForms)('answers the CSS build query %j', async (query) => {
+    const { build } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-css-build-query-')))
+    await put(root, 'package.json', '{"name":"css-build-query-domain","type":"module"}')
+    const system = await put(root, 'system.ts', 'import {createSystem} from "@mszr/vanity";export const ds=createSystem().consolidate()')
+    await put(root, 'style.css.ts', 'import {ds} from "./system";export const card=ds.class({padding:"13px"})')
+    const parameters = new URLSearchParams(query)
+    const inline = parameters.has('inline') || parameters.has('inline-css')
+    try {
+      const entry = await put(root, 'entry.js', `import * as contents from './style.css.ts${query ? `?${query}` : ''}';export {contents}`)
+      const outcome = await capture(() => build({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system, layerOrder: ['vendor', 'vanity'] } })], build: { write: false, minify: false, cssMinify: false, assetsInlineLimit: 0, lib: { entry, formats: ['es'] } } }))
+      // Vite's native CSS URL hook cannot emit an inline transform-only stylesheet.
+      if (parameters.has('url') && inline && !parameters.has('raw')) {
+        expect(errorText(outcome.error), query).toMatch(/css content.*not found/s)
+        return
+      }
+      expect(outcome.error, query).toBeUndefined()
+      const code = bundleCode(outcome.value)
+      if (parameters.has('raw')) {
+        expect(code, query).toContain('ds.class')
+      }
+      else if (inline) {
+        expect(code, query).toMatch(/padding: ?13px/)
+        expect(code, query).toContain('@layer vendor, vanity;')
+      }
+      else {
+        if (parameters.has('url')) {
+          expect(code, query).not.toContain('ds.class')
+          expect(code, query).toContain('.css')
+        }
+        else if (!parameters.has('vue') && !parameters.has('transform-only') && !parameters.has('direct')) {
+          expect(code, query).toContain('card')
+        }
+        if (!parameters.has('transform-only')) {
+          const outputs = (Array.isArray(outcome.value) ? outcome.value : [outcome.value]) as Array<{ output: Array<{ type: string, source?: unknown }> }>
+          expect(outputs.flatMap(output => output.output).filter(item => item.type === 'asset').map(item => String(item.source)).join('\n'), query).toMatch(/padding: ?13px/)
+        }
+      }
+    }
+    finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps authored filesystem builtins native and a builtin-named client polyfill installed', async () => {
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-builtins-')))
+    await put(root, 'package.json', '{"name":"builtin-fixture","type":"module"}')
+    const system = await put(root, 'system.ts', 'import {createSystem} from "@mszr/vanity";export const ds=createSystem().consolidate({prefix:"builtins"})')
+    const data = await put(root, 'padding.txt', '5px')
+    await put(root, 'node_modules/buffer/package.json', '{"name":"buffer","type":"module","exports":{"browser":"./browser.js","node":"./node.js","default":"./node.js"}}')
+    await put(root, 'node_modules/buffer/browser.js', 'export const selected="7px"')
+    await put(root, 'node_modules/buffer/node.js', 'export const selected="2px"')
+    await put(root, 'style.css.ts', `import {ds} from "./system";import {readFileSync} from "node:fs";import {readFileSync as bare} from "fs";import {selected} from "buffer";if(bare!==readFileSync)throw new Error("native identity lost");export const card=ds.class({padding:readFileSync(${JSON.stringify(data)},"utf8"),width:selected})`)
+    const server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } })], optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } })
+    try {
+      const result = await server.transformRequest('/style.css.ts')
+      const urls = importsIn(result!.code).filter(id => id.endsWith('.vanity.css'))
+      const css = (await Promise.all(urls.map(id => server.transformRequest(id)))).map(result => result?.code ?? '').join('\n')
+      expect(css).toMatch(/padding: ?5px/)
+      expect(css).toMatch(/width: ?7px/)
+    }
+    finally {
+      await server.close()
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  })
+
+  it.each(['exports-null', 'main-disabled', 'subpath-disabled'] as const)('resolves a named browser-disabled %s for Node while preserving package redirects', async (kind) => {
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-browser-null-')))
+    await put(root, 'package.json', '{"name":"browser-null-fixture","type":"module"}')
+    const system = await put(root, 'system.ts', 'import {createSystem} from "@mszr/vanity";export const ds=createSystem().consolidate({prefix:"browsernull"})')
+    for (const name of ['disabled', 'redirected']) {
+      await put(root, `node_modules/@fixture/${name}/package.json`, JSON.stringify({ name: `@fixture/${name}`, type: 'module', ...(kind === 'exports-null' ? { exports: { '.': { browser: null, node: './node.js', default: './node.js' } } } : { main: './node.js', browser: { [kind === 'main-disabled' ? './node.js' : './disabled.js']: false } }) }))
+      await put(root, `node_modules/@fixture/${name}/node.js`, 'export const padding="1px"')
+      if (kind === 'subpath-disabled')
+        await put(root, `node_modules/@fixture/${name}/disabled.js`, 'export const padding="1px"')
+    }
+    const other = await put(root, 'node_modules/@fixture/other/index.js', 'export const padding="3px"')
+    await put(root, 'node_modules/@fixture/other/package.json', '{"name":"@fixture/other","type":"module","exports":"./index.js"}')
+    const suffix = kind === 'subpath-disabled' ? '/disabled.js' : ''
+    await put(root, 'style.css.ts', `import {ds} from "./system";import {padding} from "@fixture/disabled${suffix}";import {padding as redirected} from "@fixture/redirected${suffix}";export const card=ds.class({padding,width:redirected})`)
+    const server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } })], resolve: { alias: { [`@fixture/redirected${suffix}`]: other } }, optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } })
+    try {
+      const result = await server.transformRequest('/style.css.ts')
+      const urls = importsIn(result!.code).filter(id => id.endsWith('.vanity.css'))
+      const css = (await Promise.all(urls.map(id => server.transformRequest(id)))).map(result => result?.code ?? '').join('\n')
+      expect(css).toMatch(/padding: ?1px/)
+      expect(css).toMatch(/width: ?3px/)
+    }
+    finally {
+      await server.close()
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  })
+
   it.each(['/', '/sub/'].flatMap(base => [false, true].map(first => ({ base, first }))))('serves overlapping system saves without false errors under $base, first=$first', async ({ base, first }) => {
     const { chromium } = await import('@playwright/test')
     const browser = await chromium.launch({ headless: true })
@@ -561,15 +924,14 @@ export const ds = createSystem().addTokens({ color: { brand: '#123456' } })
     { layerOrder: [], nuxt: false },
     { layerOrder: ['vendor'], nuxt: true },
   ])('leaves document CSS to the host when no Vite layer statement is needed %j', async ({ layerOrder, nuxt }) => {
-    const { build, version } = await loadViteRuntime()
+    const { build } = await loadViteRuntime()
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-host-css-')))
     try {
       await put(root, 'package.json', '{ "name": "vite-host-css", "type": "module" }')
       await put(root, 'index.html', '<!doctype html><html><head></head><body><script type="module" src="/main.ts"></script></body></html>')
       await put(root, 'main.ts', `import './main.css'`)
       await put(root, 'main.css', 'body { color: red }')
-      const plugins = vanityPlugin({ compiler: { layerOrder }, ...(nuxt ? { [vanityViteHost]: 'nuxt' as const } : {}) })
-      const overlapping = Number.parseInt(version.split('.')[0]!, 10) >= 6
+      const plugins = vanityPlugin({ compiler: { layerOrder }, ...(nuxt ? { [vanityViteHost]: { name: 'nuxt' as const, root } } : {}) })
       let entered = 0
       let release = () => {}
       const bothHtmlHosts = new Promise<void>((resolve) => {
@@ -587,12 +949,12 @@ export const ds = createSystem().addTokens({ color: { brand: '#123456' } })
         root,
         configFile: false,
         logLevel: 'silent',
-        plugins: overlapping ? [holdHtml, ...plugins] : plugins,
+        plugins: [holdHtml, ...plugins],
         build: { write: false, minify: false, cssMinify: false },
       })
       // Vite 6 has no HTML environment. Shared inputs are ambiguous only when
       // Vanity needs a build-specific asset; otherwise both builds are valid.
-      const results = overlapping ? await Promise.all([runBuild(), runBuild()]) : [await runBuild(), await runBuild()]
+      const results = await Promise.all([runBuild(), runBuild()])
       for (const result of results) {
         const outputs = (Array.isArray(result) ? result : [result]) as Array<{
           output: Array<{ type: string, fileName: string, source?: string | Uint8Array }>
@@ -613,7 +975,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#123456' } })
   })
 
   it.each(['/sub/', './'])('resolves the first layer-order stylesheet through the host under base %s', async (base) => {
-    const { build, createLogger, version } = await loadViteRuntime()
+    const { build, createLogger } = await loadViteRuntime()
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-layer-link-')))
     const warnings: string[] = []
     const logger = createLogger('silent')
@@ -652,42 +1014,40 @@ export const ds = createSystem().addTokens({ color: { brand: '#123456' } })
           expect(warnings).toEqual([])
         }
       }
-      if (Number.parseInt(version.split('.')[0]!, 10) >= 6) {
-        const otherRoot = join(root, 'other-root')
-        for (const file of ['package.json', 'index.html', 'main.ts', 'main.css'])
-          await put(otherRoot, file, await readFile(join(root, file), 'utf8'))
-        let entered = 0
-        let release = () => {}
-        const bothHtmlHosts = new Promise<void>((resolve) => {
-          release = resolve
-        })
-        const holdHtml: Plugin = {
-          name: 'hold-overlapping-html-inputs',
-          transformIndexHtml: { order: 'pre', async handler() {
-            if (++entered === 2)
-              release()
-            await bothHtmlHosts
-          } },
-        }
-        const results = await Promise.all([root, otherRoot].map((buildRoot, index) => build({
-          root: buildRoot,
-          base,
-          configFile: false,
-          customLogger: logger,
-          plugins: [holdHtml, ...plugins],
-          build: { write: false, assetsDir: `static-${index}`, minify: false, cssMinify: false },
-        })))
-        for (const [index, result] of results.entries()) {
-          const assets = (result as { output: Array<{ type: string, fileName: string, source?: string | Uint8Array }> }).output.filter(output => output.type === 'asset')
-          const html = String(assets.find(asset => asset.fileName === 'index.html')?.source)
-          const firstHref = [...html.matchAll(/<link\b[^>]+rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g)][0]?.[1]
-          const firstPath = new URL(firstHref!, 'https://fixture.test/sub/index.html').pathname.slice('/sub/'.length)
-          const firstAsset = assets.find(asset => asset.fileName === firstPath)
-          expect(firstAsset?.fileName).toMatch(new RegExp(`^static-${index}/vanity-layer-order-[\\w-]+\\.css$`))
-          expect(String(firstAsset?.source)).toBe('@layer vendor, app;\n')
-        }
-        expect(warnings).toEqual([])
+      const otherRoot = join(root, 'other-root')
+      for (const file of ['package.json', 'index.html', 'main.ts', 'main.css'])
+        await put(otherRoot, file, await readFile(join(root, file), 'utf8'))
+      let entered = 0
+      let release = () => {}
+      const bothHtmlHosts = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const holdHtml: Plugin = {
+        name: 'hold-overlapping-html-inputs',
+        transformIndexHtml: { order: 'pre', async handler() {
+          if (++entered === 2)
+            release()
+          await bothHtmlHosts
+        } },
       }
+      const results = await Promise.all([root, otherRoot].map((buildRoot, index) => build({
+        root: buildRoot,
+        base,
+        configFile: false,
+        customLogger: logger,
+        plugins: [holdHtml, ...plugins],
+        build: { write: false, assetsDir: `static-${index}`, minify: false, cssMinify: false },
+      })))
+      for (const [index, result] of results.entries()) {
+        const assets = (result as { output: Array<{ type: string, fileName: string, source?: string | Uint8Array }> }).output.filter(output => output.type === 'asset')
+        const html = String(assets.find(asset => asset.fileName === 'index.html')?.source)
+        const firstHref = [...html.matchAll(/<link\b[^>]+rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g)][0]?.[1]
+        const firstPath = new URL(firstHref!, 'https://fixture.test/sub/index.html').pathname.slice('/sub/'.length)
+        const firstAsset = assets.find(asset => asset.fileName === firstPath)
+        expect(firstAsset?.fileName).toMatch(new RegExp(`^static-${index}/vanity-layer-order-[\\w-]+\\.css$`))
+        expect(String(firstAsset?.source)).toBe('@layer vendor, app;\n')
+      }
+      expect(warnings).toEqual([])
     }
     finally {
       await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
@@ -715,14 +1075,14 @@ export const ds = createSystem().addTokens({ color: { brand: '#123456' } }).cons
       })
 
       const devServer = server as ViteDevServer & {
-        environments?: Record<string, { pluginContainer?: {
+        environments: Record<string, { pluginContainer: {
           resolveId: (source: string, importer: string, options: { scan: true }) => Promise<string | { id: string } | null>
         } }>
         pluginContainer?: {
           resolveId: (source: string, importer: string, options: { scan: true }) => Promise<string | { id: string } | null>
         }
       }
-      const client = devServer.environments?.client?.pluginContainer ?? devServer.pluginContainer
+      const client = devServer.environments.client.pluginContainer
       if (client === undefined)
         throw new Error('the Vite development environment has no plugin container')
       const resolveForScan = client.resolveId as unknown as (
@@ -793,14 +1153,14 @@ export const raw = style({ color: 'rebeccapurple', padding: length.rem(1).css })
       const vanityStyle = await server.transformRequest('/src/card.css.ts')
       const rawStyle = await server.transformRequest('/src/raw.css.ts')
       const compatibleServer = server as {
-        environments?: Record<string, { pluginContainer?: {
+        environments: Record<string, { pluginContainer: {
           resolveId: (source: string, importer: string, options: { scan?: boolean }) => Promise<string | { id: string } | null>
         } }>
         pluginContainer?: {
           resolveId: (source: string, importer: string, options: { scan?: boolean }) => Promise<string | { id: string } | null>
         }
       }
-      const client = compatibleServer.environments?.client?.pluginContainer ?? compatibleServer.pluginContainer
+      const client = compatibleServer.environments.client.pluginContainer
       if (client === undefined)
         throw new Error('the Vite development environment has no plugin container')
       const scan = await capture(() => client.resolveId('@mszr/vanity', authoring, { scan: true }))
@@ -849,8 +1209,7 @@ export const raw = style({ color: 'rebeccapurple', padding: length.rem(1).css })
   }, 120_000)
 
   it('projects installed system members across client, SSR, and shared build/dev hosts', async () => {
-    const { build, createServer, version } = await loadViteRuntime()
-    const major = Number.parseInt(version.split('.')[0] ?? '', 10)
+    const { build, createServer } = await loadViteRuntime()
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-member-hosts-')))
     const packageRoot = join(root, 'node_modules/conditional-member-design')
     const browserMember = join(packageRoot, 'browser.ts')
@@ -914,134 +1273,54 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
         return originalLoad.call(this, id, ...args)
       }
 
-      let clientCode: string
-      let ssrCode: string
-      if (major === 5) {
-        const guardedPlugin = vanityPlugin({ compiler: { system: 'conditional-member-design', layerOrder: ['vendor'] } })
-        let releaseFirstHost!: () => void
-        let signalFirstHost!: () => void
-        const firstHostGate = new Promise<void>((resolve) => {
-          releaseFirstHost = resolve
-        })
-        const firstHostConfigured = new Promise<void>((resolve) => {
-          signalFirstHost = resolve
-        })
-        const firstHostGatePlugin: Plugin = {
-          name: 'vanity-vite-compat-vite-5-host-gate',
-          enforce: 'post',
-          async configResolved() {
-            signalFirstHost()
-            await firstHostGate
-          },
-        }
-        const firstHostBuild = build({
-          root,
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [guardedPlugin, firstHostGatePlugin],
-          resolve: { alias },
-          build: { write: false, minify: false, ssr: entry, rollupOptions: { input: entry } },
-        })
-        await firstHostConfigured
-        let concurrentHostError: unknown
-        try {
-          await build({
-            root,
-            configFile: false,
-            logLevel: 'silent',
-            plugins: [guardedPlugin],
-            resolve: { alias },
-            build: { write: false, minify: false },
-          })
-        }
-        catch (error) {
-          concurrentHostError = error
-        }
-        finally {
-          releaseFirstHost()
-        }
-        const firstHostOutput = await firstHostBuild
-        expect(bundleCode(firstHostOutput)).toContain('--compat-server-color-brand')
-        expect(concurrentHostError).toBeInstanceOf(Error)
-        expect((concurrentHostError as Error).message)
-          .toContain('One vanityPlugin() instance cannot serve two concurrent Vite 5 hosts')
-
-        const clientBuild = await build({
-          root,
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [plugin],
-          resolve: { alias },
-          build: { write: false, minify: false },
-        })
-        const ssrBuild = await build({
-          root,
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [plugin],
-          resolve: { alias },
-          build: { write: false, minify: false, ssr: entry, rollupOptions: { input: entry } },
-        })
-        const outputs = (Array.isArray(clientBuild) ? clientBuild : [clientBuild]) as Array<{ output: Array<{ fileName: string, source?: string | Uint8Array }> }>
-        const assets = outputs.flatMap(output => output.output)
-        const html = String(assets.find(asset => asset.fileName === 'index.html')?.source)
-        const layerAsset = assets.find(asset => String(asset.source) === '@layer vendor;\n')
-        expect(html).toContain(`href="/${layerAsset!.fileName}"`)
-        clientCode = bundleCode(clientBuild)
-        const ssrOutputs = (Array.isArray(ssrBuild) ? ssrBuild : [ssrBuild]) as Array<{ output: Array<{ type: string, source?: string | Uint8Array }> }>
-        expect(ssrOutputs.flatMap(output => output.output).filter(output => output.type === 'asset' && String(output.source) === '@layer vendor;\n')).toEqual([])
-        ssrCode = bundleCode(ssrBuild)
+      let resolveClientFilterReady!: () => void
+      let rejectClientFilterReady!: (error: unknown) => void
+      const clientFilterReady = new Promise<void>((resolve, reject) => {
+        resolveClientFilterReady = resolve
+        rejectClientFilterReady = reject
+      })
+      const clientGate = new Promise<void>((resolve) => {
+        releaseClientBuild = resolve
+      })
+      const filterGate: Plugin = {
+        name: 'vanity-vite-compat-client-filter-gate',
+        enforce: 'post',
+        transformIndexHtml: { order: 'pre', async handler() {
+          resolveClientFilterReady()
+          await clientGate
+        } },
       }
-      else {
-        let resolveClientFilterReady!: () => void
-        let rejectClientFilterReady!: (error: unknown) => void
-        const clientFilterReady = new Promise<void>((resolve, reject) => {
-          resolveClientFilterReady = resolve
-          rejectClientFilterReady = reject
-        })
-        const clientGate = new Promise<void>((resolve) => {
-          releaseClientBuild = resolve
-        })
-        const filterGate: Plugin = {
-          name: 'vanity-vite-compat-client-filter-gate',
-          enforce: 'post',
-          transformIndexHtml: { order: 'pre', async handler() {
-            resolveClientFilterReady()
-            await clientGate
-          } },
-        }
-        clientBuildPromise = build({
-          root,
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [plugin, filterGate],
-          resolve: { alias },
-          build: { write: false, minify: false },
-        }).catch((error: unknown) => {
-          rejectClientFilterReady(error)
-          throw error
-        })
-        await clientFilterReady
-        const ssrBuild = await build({
-          root,
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [plugin],
-          resolve: { alias },
-          build: { write: false, minify: false, ssr: entry, rollupOptions: { input: entry } },
-        })
-        releaseClientBuild()
-        const clientBuild = await clientBuildPromise
-        const outputs = (Array.isArray(clientBuild) ? clientBuild : [clientBuild]) as Array<{ output: Array<{ fileName: string, source?: string | Uint8Array }> }>
-        const assets = outputs.flatMap(output => output.output)
-        const html = String(assets.find(asset => asset.fileName === 'index.html')?.source)
-        const layerAsset = assets.find(asset => String(asset.source) === '@layer vendor;\n')
-        expect(html).toContain(`href="/${layerAsset!.fileName}"`)
-        clientCode = bundleCode(clientBuild)
-        const ssrOutputs = (Array.isArray(ssrBuild) ? ssrBuild : [ssrBuild]) as Array<{ output: Array<{ type: string, source?: string | Uint8Array }> }>
-        expect(ssrOutputs.flatMap(output => output.output).filter(output => output.type === 'asset' && String(output.source) === '@layer vendor;\n')).toEqual([])
-        ssrCode = bundleCode(ssrBuild)
-      }
+      clientBuildPromise = build({
+        root,
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [plugin, filterGate],
+        resolve: { alias },
+        build: { write: false, minify: false },
+      }).catch((error: unknown) => {
+        rejectClientFilterReady(error)
+        throw error
+      })
+      await clientFilterReady
+      const ssrBuild = await build({
+        root,
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [plugin],
+        resolve: { alias },
+        build: { write: false, minify: false, ssr: entry, rollupOptions: { input: entry } },
+      })
+      releaseClientBuild()
+      const clientBuild = await clientBuildPromise
+      const outputs = (Array.isArray(clientBuild) ? clientBuild : [clientBuild]) as Array<{ output: Array<{ fileName: string, source?: string | Uint8Array }> }>
+      const assets = outputs.flatMap(output => output.output)
+      const html = String(assets.find(asset => asset.fileName === 'index.html')?.source)
+      const layerAsset = assets.find(asset => String(asset.source) === '@layer vendor;\n')
+      expect(html).toContain(`href="/${layerAsset!.fileName}"`)
+      const clientCode = bundleCode(clientBuild)
+      const ssrOutputs = (Array.isArray(ssrBuild) ? ssrBuild : [ssrBuild]) as Array<{ output: Array<{ type: string, source?: string | Uint8Array }> }>
+      expect(ssrOutputs.flatMap(output => output.output).filter(output => output.type === 'asset' && String(output.source) === '@layer vendor;\n')).toEqual([])
+      const ssrCode = bundleCode(ssrBuild)
       expect({
         browserProjection: clientCode.includes('--compat-browser-color-brand'),
         serverProjection: ssrCode.includes('--compat-server-color-brand'),
@@ -1175,7 +1454,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
       })
 
       const dev = server as ViteDevServer & {
-        environments?: Record<string, { pluginContainer?: {
+        environments: Record<string, { pluginContainer: {
           load: (id: string) => Promise<string | { code?: string } | null>
           resolveId: (source: string, importer: string, options: { scan: true }) => Promise<{ id: string } | null>
         } }>
@@ -1184,7 +1463,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
           resolveId: (source: string, importer: string, options: { scan: true }) => Promise<{ id: string } | null>
         }
       }
-      const client = dev.environments?.client?.pluginContainer ?? dev.pluginContainer
+      const client = dev.environments.client.pluginContainer
       if (client === undefined)
         throw new Error('the Vite development environment has no plugin container')
       const projected = await client.load(developmentMember)
@@ -1229,7 +1508,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
         server: { middlewareMode: true, hmr: false, ws: false, watch: null },
       })
       const secondDev = server as ViteDevServer & {
-        environments?: Record<string, { pluginContainer?: {
+        environments: Record<string, { pluginContainer: {
           load: (id: string) => Promise<string | { code?: string } | null>
           resolveId: (source: string, importer: string, options: { scan: true }) => Promise<{ id: string } | null>
         } }>
@@ -1238,7 +1517,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
           resolveId: (source: string, importer: string, options: { scan: true }) => Promise<{ id: string } | null>
         }
       }
-      const secondClient = secondDev.environments?.client?.pluginContainer ?? secondDev.pluginContainer
+      const secondClient = secondDev.environments.client.pluginContainer
       if (secondClient === undefined)
         throw new Error('the later Vite development environment has no client plugin container')
       const developmentCallsBeforeSecondServer = loadCalls.filter(id => id === developmentMember).length
@@ -1276,8 +1555,7 @@ export const ds = createSystem().addTokens({ color: { brand: '#778899' } }).cons
   }, 120_000)
 
   it('holds filters across the first serve config only on hosts with a development filter cache', async () => {
-    const { build, createServer, version } = await loadViteRuntime()
-    const major = Number.parseInt(version.split('.')[0] ?? '', 10)
+    const { build, createServer } = await loadViteRuntime()
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-dev-filter-cache-window-')))
     const system = await put(root, 'system.ts', `import { createSystem } from '@mszr/vanity'
 export const ds = createSystem().addTokens({ color: { brand: '#123456' } }).consolidate({ prefix: 'filter-cache-window' })
@@ -1346,15 +1624,14 @@ export const brandName = ds.t.color.brand.$name
         build: { write: false, minify: false, lib: { entry, formats: ['es'] } },
       })
       const code = bundleCode(result)
-      const hostHasDevFilterCache = major >= 6
       expect({
         projection: code.includes('--filter-cache-window-color-brand'),
         theBuildSawUnservedEntry: entryLoadCalls.includes(entry),
         theBuildSawOrdinaryImport: plainResolveCalls.includes('./plain.ts'),
       }).toEqual({
         projection: true,
-        theBuildSawUnservedEntry: hostHasDevFilterCache,
-        theBuildSawOrdinaryImport: hostHasDevFilterCache,
+        theBuildSawUnservedEntry: true,
+        theBuildSawOrdinaryImport: true,
       })
     }
     finally {
@@ -1366,8 +1643,7 @@ export const brandName = ds.t.color.brand.$name
   }, 120_000)
 
   it('releases each development filter hold only after that hook has its first dev call', async () => {
-    const { build, createServer, version } = await loadViteRuntime()
-    const major = Number.parseInt(version.split('.')[0] ?? '', 10)
+    const { build, createServer } = await loadViteRuntime()
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-vite-filter-first-call-')))
     const packageRoot = join(root, 'node_modules/conditional-first-call-design')
     const browserMember = await put(packageRoot, 'browser.ts', `import { createSystem } from '@mszr/vanity'
@@ -1441,43 +1717,40 @@ export const brandName = ds.t.color.brand.$name
       })
       await configResolvedPaused
 
-      const supportsDevFilterCache = major >= 6
       let serverCode = ''
       let buildWasUnfiltered = false
-      if (supportsDevFilterCache) {
-        const serverBuild = await build({
-          root,
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [plugin],
-          resolve: { alias },
-          build: { write: false, minify: false, ssr: true, rollupOptions: { input: entry } },
-        })
-        serverCode = bundleCode(serverBuild)
-        buildWasUnfiltered = unservedEntryLoads.includes(entry)
-          && ordinaryResolves.includes('./plain.ts')
+      const serverBuild = await build({
+        root,
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [plugin],
+        resolve: { alias },
+        build: { write: false, minify: false, ssr: true, rollupOptions: { input: entry } },
+      })
+      serverCode = bundleCode(serverBuild)
+      buildWasUnfiltered = unservedEntryLoads.includes(entry)
+        && ordinaryResolves.includes('./plain.ts')
 
-        // If a build hook releases the hold before a dev hook runs, this
-        // second build narrows the plugin object before the dev cache exists.
-        const secondServerBuild = await build({
-          root,
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [plugin],
-          resolve: { alias },
-          build: { write: false, minify: false, ssr: true, rollupOptions: { input: entry } },
-        })
-        expect(bundleCode(secondServerBuild)).toContain('--first-call-server-color-brand')
-      }
+      // If a build hook releases the hold before a dev hook runs, this
+      // second build narrows the plugin object before the dev cache exists.
+      const secondServerBuild = await build({
+        root,
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [plugin],
+        resolve: { alias },
+        build: { write: false, minify: false, ssr: true, rollupOptions: { input: entry } },
+      })
+      expect(bundleCode(secondServerBuild)).toContain('--first-call-server-color-brand')
 
       releaseConfigResolved()
       server = await serverPromise
       const client = (server as ViteDevServer & {
-        environments?: Record<string, { pluginContainer?: {
+        environments: Record<string, { pluginContainer: {
           load: (id: string) => Promise<string | { code?: string } | null>
           resolveId: (source: string, importer?: string, options?: object) => Promise<{ id: string } | null>
         } }>
-      }).environments?.client?.pluginContainer ?? server.pluginContainer
+      }).environments.client.pluginContainer
       if (client === undefined)
         throw new Error('the Vite development server has no client plugin container')
 
@@ -1489,25 +1762,12 @@ export const brandName = ds.t.color.brand.$name
         options: { scan: true },
       ) => Promise<{ id: string } | null>
       const scan = await resolveForScan.call(client, 'conditional-first-call-design', entry, { scan: true })
-      if (!supportsDevFilterCache) {
-        await server.close()
-        server = undefined
-        const serverBuild = await build({
-          root,
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [plugin],
-          resolve: { alias },
-          build: { write: false, minify: false, ssr: true, rollupOptions: { input: entry } },
-        })
-        serverCode = bundleCode(serverBuild)
-      }
       expect({
         serverProjection: serverCode.includes('--first-call-server-color-brand'),
         clientProjection: !/createSystem|addTokens|consolidate/.test(projectedCode)
           && projectedCode.includes('vanity:system-runtime:browser:'),
         scanShield: scan?.id.startsWith('\0vanity:system-scan:') ?? false,
-        buildDuringWindowStayedUnfiltered: buildWasUnfiltered === supportsDevFilterCache,
+        buildDuringWindowStayedUnfiltered: buildWasUnfiltered === true,
       }).toEqual({
         serverProjection: true,
         clientProjection: true,
@@ -1680,33 +1940,22 @@ console.log(result)
 
       const entryCallsBeforeConcurrentBuild = unservedEntryCalls.length
       const resolveCallsBeforeConcurrentBuild = unservedPackageResolveCalls.length
-      let whileWatching: unknown
-      let concurrentVite5HostRejected = false
-      try {
-        whileWatching = await build({
-          root,
-          configFile: false,
-          logLevel: 'silent',
-          plugins: [sharedPlugin],
-          resolve: { alias },
-          build: {
-            write: false,
-            minify: false,
-            ssr: true,
-            rollupOptions: { input: entry },
-          },
-        })
-      }
-      catch (error) {
-        if (!String(error).includes('One vanityPlugin() instance cannot serve two concurrent Vite 5 hosts'))
-          throw error
-        concurrentVite5HostRejected = true
-      }
-      if (!concurrentVite5HostRejected) {
-        expect(bundleCode(whileWatching)).toContain('--watch-filter-server-color-brand')
-        expect(unservedEntryCalls.length).toBeGreaterThan(entryCallsBeforeConcurrentBuild)
-        expect(unservedPackageResolveCalls.length).toBeGreaterThan(resolveCallsBeforeConcurrentBuild)
-      }
+      const whileWatching = await build({
+        root,
+        configFile: false,
+        logLevel: 'silent',
+        plugins: [sharedPlugin],
+        resolve: { alias },
+        build: {
+          write: false,
+          minify: false,
+          ssr: true,
+          rollupOptions: { input: entry },
+        },
+      })
+      expect(bundleCode(whileWatching)).toContain('--watch-filter-server-color-brand')
+      expect(unservedEntryCalls.length).toBeGreaterThan(entryCallsBeforeConcurrentBuild)
+      expect(unservedPackageResolveCalls.length).toBeGreaterThan(resolveCallsBeforeConcurrentBuild)
 
       await put(root, 'plain.ts', 'export const plain = "after"\n')
       await waitForBuild(2)
@@ -1902,6 +2151,249 @@ export const result = [ds.t.color.brand.$name, card, appValue, dependencyValue, 
       await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
     }
   }, 120_000)
+
+  it.each([false, true])('retires a deleted style and recovers its importers without restarting (imported=%s)', async (imported) => {
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-retirement-')))
+    let server: ViteDevServer | undefined
+    try {
+      await put(root, 'package.json', '{"name":"retirement-contract","type":"module"}')
+      const system = await put(root, 'system.ts', `import {createSystem} from '@mszr/vanity';export const ds=createSystem().consolidate()`)
+      const helper = await put(root, 'helper.ts', 'export const padding=4')
+      const source = `import {ds} from './system';import {padding} from './helper';export const row=ds.class({padding})`
+      const style = await put(root, 'row.css.ts', source)
+      await put(root, 'entry.ts', `import {row} from './row.css.ts';console.log(row)`)
+      server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } })], optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } })
+      const first = await server.transformRequest('/row.css.ts')
+      const cssUrl = first!.code.match(/import ["']([^"']+\/virtual\/style\/[^"']+)["']/)?.[1]
+      expect(cssUrl).toBeDefined()
+      await server.transformRequest(cssUrl!)
+      const cssId = resolveViteVirtualId(cssUrl!, root)!
+      if (imported)
+        await server.transformRequest('/entry.ts')
+      await unlink(style)
+      await Promise.all(Object.values(server.environments).map(environment => environment.pluginContainer.watchChange(style, { event: 'delete' })))
+      expect(server.moduleGraph.getModulesByFile(cssId)?.size ?? 0).toBe(0)
+      expect(server.moduleGraph.getModulesByFile(style)?.size ?? 0).toBe(0)
+      await writeFile(helper, 'export const padding=8')
+      await expect(invokeVanityHotUpdate(server, helper)).resolves.not.toThrow()
+      if (imported) {
+        const missing = await capture(() => server!.transformRequest('/entry.ts'))
+        expect(errorText(missing.error)).toContain('Failed to resolve import "./row.css.ts"')
+        expect(missing.error).toMatchObject({ plugin: 'vite:import-analysis', id: join(root, 'entry.ts') })
+      }
+      await writeFile(style, source)
+      await Promise.all(Object.values(server.environments).map(environment => environment.pluginContainer.watchChange(style, { event: 'create' })))
+      expect((await server.transformRequest('/row.css.ts'))?.code).toContain('export var row')
+      if (imported)
+        await expect(server.transformRequest('/entry.ts')).resolves.toBeTruthy()
+    }
+    finally {
+      await server?.close()
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  }, 60000)
+
+  it('retires deleted styles from the manifest when a watch rebuild removes their last consumer', async () => {
+    const { build } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-retirement-watch-')))
+    let watcher: { on: (event: string, listener: (event: any) => void) => void, close: () => Promise<void> } | undefined
+    let nextBuild: (() => void) | undefined
+    let buildError: unknown
+    try {
+      await put(root, 'package.json', '{"name":"retirement-watch-contract","type":"module"}')
+      const system = await put(root, 'system.ts', `import {createSystem} from '@mszr/vanity';export const ds=createSystem().consolidate()`)
+      const style = await put(root, 'row.css.ts', `import {ds} from './system';export const row=ds.class({padding:4})`)
+      const entry = await put(root, 'entry.ts', `import {row} from './row.css.ts';console.log(row)`)
+      watcher = await build({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } })], build: { write: false, watch: {}, lib: { entry, formats: ['es'] } } }) as unknown as typeof watcher
+      watcher!.on('event', async (event) => {
+        if (event.code === 'BUNDLE_END')
+          await event.result.close()
+        if (event.code === 'ERROR')
+          buildError = event.error
+        if (event.code === 'END' || event.code === 'ERROR') {
+          const finish = nextBuild
+          nextBuild = undefined
+          finish?.()
+        }
+      })
+      const wait = () => new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('watch retirement did not finish')), 15000)
+        nextBuild = () => {
+          clearTimeout(timeout)
+          resolve()
+        }
+      })
+      await wait()
+      const initial = JSON.parse(await readFile(join(root, '.vanity/manifest.json'), 'utf8'))
+      expect(initial.modules).toHaveProperty('row.css.ts')
+      const removed = wait()
+      await writeFile(entry, 'console.log("removed")')
+      await unlink(style)
+      await removed
+      expect(buildError).toBeUndefined()
+      const manifest = JSON.parse(await readFile(join(root, '.vanity/manifest.json'), 'utf8'))
+      expect(Object.keys(manifest.modules)).not.toContain('row.css.ts')
+    }
+    finally {
+      await watcher?.close()
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  }, 60000)
+
+  it.each(['create', 'update'] as const)('restores substrate CSS when the host reports the restored source as %s', async (event) => {
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-substrate-restore-event-')))
+    let server: ViteDevServer | undefined
+    try {
+      await put(root, 'package.json', '{"name":"substrate-restore-event","type":"module"}')
+      const system = await put(root, 'system.ts', `import {createSystem} from '@mszr/vanity';export const ds=createSystem().consolidate()`)
+      await mkdir(join(root, 'node_modules/@vanilla-extract'), { recursive: true })
+      await symlink(join(vanityRoot, '../node_modules/@vanilla-extract/css'), join(root, 'node_modules/@vanilla-extract/css'), 'dir')
+      const source = `import {style} from '@vanilla-extract/css';export const row=style({padding:4})`
+      const style = await put(root, 'row.css.ts', source)
+      server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } })], optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } })
+      const first = await server.transformRequest('/row.css.ts')
+      const cssUrl = first!.code.match(/import\s+["']([^"']+\.vanilla\.css(?:\?[^"']*)?)["']/)?.[1]
+      expect(cssUrl).toBeDefined()
+      expect((await server.transformRequest(cssUrl!))?.code).toContain('padding: 4px')
+      await unlink(style)
+      await Promise.all(Object.values(server.environments).map(environment => environment.pluginContainer.watchChange(style, { event: 'delete' })))
+      await writeFile(style, source.replace('padding:4', 'padding:8'))
+      await Promise.all(Object.values(server.environments).map(environment => environment.pluginContainer.watchChange(style, { event })))
+      const restored = await server.transformRequest('/row.css.ts')
+      expect(restored?.code).toContain(cssUrl)
+      expect((await server.transformRequest(cssUrl!))?.code).toContain('padding: 8px')
+    }
+    finally {
+      await server?.close()
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  })
+
+  it('retires and restores substrate styles with current CSS through one watch build without substrate filesystem events', async () => {
+    const { build } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-substrate-retirement-watch-')))
+    let watcher: { on: (event: string, listener: (event: any) => void) => void, close: () => Promise<void> } | undefined
+    let finish: (() => void) | undefined
+    let error: unknown
+    let css = ''
+    const next = () => new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('substrate watch rebuild did not finish')), 15000)
+      finish = () => {
+        clearTimeout(timeout)
+        resolve()
+      }
+    })
+    try {
+      await put(root, 'package.json', '{"name":"substrate-retirement-watch-contract","type":"module"}')
+      const system = await put(root, 'system.ts', `import {createSystem} from '@mszr/vanity';export const ds=createSystem().consolidate()`)
+      await mkdir(join(root, 'node_modules/@vanilla-extract'), { recursive: true })
+      await symlink(join(vanityRoot, '../node_modules/@vanilla-extract/css'), join(root, 'node_modules/@vanilla-extract/css'), 'dir')
+      const authored = `import {style} from '@vanilla-extract/css';export const row=style({padding:4})`
+      const style = await put(root, 'row.css.ts', authored)
+      const entry = await put(root, 'entry.ts', `import {row} from './row.css.ts';console.log(row)`)
+      watcher = await build({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } }), {
+        name: 'substrate-retirement-output',
+        generateBundle(_options, bundle) {
+          css = Object.values(bundle).filter(item => item.type === 'asset' && item.fileName.endsWith('.css')).map(item => item.type === 'asset' ? item.source : '').join('\n')
+        },
+      }], server: { watch: null, hmr: false, ws: false }, build: { write: false, minify: false, watch: {}, rollupOptions: { input: entry } } }) as unknown as typeof watcher
+      watcher!.on('event', async (event) => {
+        if (event.code === 'START')
+          error = undefined
+        if (event.code === 'BUNDLE_END')
+          await event.result.close()
+        if (event.code === 'ERROR')
+          error = event.error
+        if (event.code === 'END') {
+          const done = finish
+          finish = undefined
+          done?.()
+        }
+      })
+      await next()
+      expect(error).toBeUndefined()
+      expect(css).toMatch(/padding: 4px/)
+      let rebuilt = next()
+      await writeFile(style, authored.replace('padding:4', 'padding:6'))
+      await rebuilt
+      expect(error).toBeUndefined()
+      expect(css).toMatch(/padding: 6px/)
+      rebuilt = next()
+      await writeFile(entry, 'console.log("removed")')
+      await unlink(style)
+      await rebuilt
+      expect(error).toBeUndefined()
+      expect(css).not.toMatch(/padding:/)
+      const renamed = join(root, 'renamed.css.ts')
+      rebuilt = next()
+      await writeFile(renamed, authored)
+      await writeFile(entry, `import {row} from './renamed.css.ts';console.log(row)`)
+      await rebuilt
+      expect(error).toBeUndefined()
+      expect(css).toMatch(/padding: 4px/)
+      rebuilt = next()
+      await unlink(renamed)
+      await rebuilt
+      expect(String(error)).toMatch(/renamed\.css\.ts/)
+      rebuilt = next()
+      await writeFile(renamed, authored.replace('padding:4', 'padding:8'))
+      await rebuilt
+      expect(error).toBeUndefined()
+      expect(css).toMatch(/padding: 8px/)
+    }
+    finally {
+      await watcher?.close()
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  }, 60000)
+
+  it('discards CSS from a style capture that finishes after the source is deleted', async () => {
+    const { createServer } = await loadViteRuntime()
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-retirement-flight-')))
+    const started = createPromiseGate()
+    const held = createPromiseGate()
+    let server: ViteDevServer | undefined
+    let pending: Promise<unknown> | undefined
+    try {
+      await put(root, 'package.json', '{"name":"retirement-flight-contract","type":"module"}')
+      const system = await put(root, 'system.ts', `import {createSystem} from '@mszr/vanity';export const ds=createSystem().consolidate()`)
+      const style = await put(root, 'pending.css.ts', `import {ds} from './system';import {padding} from 'retirement-held';export const row=ds.class({padding})`)
+      server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } }), {
+        name: 'retirement-held',
+        resolveId(id) {
+          if (id === 'retirement-held')
+            return '\0retirement-held'
+        },
+        async load(id) {
+          if (id !== '\0retirement-held')
+            return
+          started.resolve()
+          await held.promise
+          return 'export const padding=12'
+        },
+      }], optimizeDeps: { noDiscovery: true }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } })
+      pending = capture(() => server!.transformRequest('/pending.css.ts'))
+      await started.promise
+      await unlink(style)
+      await Promise.all(Object.values(server.environments).map(environment => environment.pluginContainer.watchChange(style, { event: 'delete' })))
+      held.resolve()
+      const result = await pending as { value?: { code: string }, error?: unknown }
+      expect(result.value?.code ?? '').not.toContain('.vanity.css')
+      await vi.waitFor(async () => {
+        const manifest = JSON.parse(await readFile(join(root, '.vanity/manifest.json'), 'utf8'))
+        expect(Object.keys(manifest.modules)).not.toContain('pending.css.ts')
+      })
+      expect([...server.moduleGraph.idToModuleMap.keys()].filter(id => id.includes('pending.css.ts.vanity.css'))).toEqual([])
+    }
+    finally {
+      held.resolve()
+      await pending?.catch(() => {})
+      await server?.close()
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })
+    }
+  }, 60000)
 
   it('retires an old system identity from the actual client and SSR graphs', async () => {
     const { createServer } = await loadViteRuntime()

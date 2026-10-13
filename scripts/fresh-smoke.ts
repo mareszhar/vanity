@@ -471,7 +471,7 @@ export default defineNuxtConfig({
 `)
   write(join(nuxtDir, 'app/design/design-system.ts'), `import { createSystem } from '@mszr/vanity'
 
-export const open = createSystem()
+export const open = createSystem({ declarations: { level: 'forbid', tokens: ['length'] } })
 `)
   write(join(nuxtDir, 'app/design/palette.tokens.ts'), `import { open } from './design-system'
 
@@ -489,7 +489,7 @@ export const ds = open.addTokens(palette).consolidate()
 `)
   write(join(nuxtDir, 'app/app.css.ts'), `
 
-export const page = ds.class({ color: ds.t.color.brand, background: ds.t.color.brandSoft, padding: ds.length.rem(2) })
+export const page = ds.class({ color: ds.t.color.brand, background: ds.t.color.brandSoft, padding: '13px' })
 `)
   write(join(nuxtDir, 'app/app.vue'), `<script setup lang="ts">
 import { page } from './app.css.ts'
@@ -497,6 +497,11 @@ import { page } from './app.css.ts'
 
 <template><main :class="page">Fresh Nuxt</main></template>
 `)
+
+  write(join(nuxtDir, 'vanity.baseline.json'), JSON.stringify({
+    format: 'vanity.baseline/1',
+    entries: [{ code: 'VANITY_DECLARATION_RAW', module: 'app/app.css.ts', style: { export: 'page', name: 'page' }, property: 'padding', condition: [], value: '13px', count: 1 }],
+  }, null, 2))
 
   write(join(testingDir, 'package.json'), JSON.stringify({
     name: 'vanity-fresh-testing',
@@ -725,7 +730,7 @@ finally {
   run('pnpm', ['--dir', plainDir, 'exec', 'vanity', 'diff', '.vanity/manifest.json', '.vanity/manifest.json'])
   run('node', [
     '-e',
-    `const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('node_modules/@mszr/vanity/manifest.schema.json','utf8'));if(s.$id!=='https://schemas.mszr.dev/vanity/manifest-4.schema.json')process.exit(1)`,
+    `const fs=require('node:fs');for(const [name,id]of [['manifest','manifest-5'],['query','query-1']]){const s=JSON.parse(fs.readFileSync(require.resolve('@mszr/vanity/'+name+'.schema.json'),'utf8'));if(s.$id!=='https://schemas.mszr.dev/vanity/'+id+'.schema.json')process.exit(1)}`,
   ], plainDir)
   const vitePort = await openPort()
   await smokeDev(plainDir, ['vite', '--host', '127.0.0.1', '--port', String(vitePort), '--strictPort'], vitePort, /src\/main\.ts/)
@@ -743,7 +748,7 @@ finally {
     /Fresh Nuxt/,
     assertNuxtLayerOrder,
   )
-  console.log('✓ fresh Nuxt: strict types, build, and HTTP/HMR lifecycle')
+  console.log('✓ fresh Nuxt: strict types, production SSR with a project-root baseline, and HTTP/HMR lifecycle')
   console.log(`✓ packed SDK smoke passed (${tarballName})`)
 }
 

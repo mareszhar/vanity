@@ -1,8 +1,11 @@
 /** Compiler projection from an evaluated system contract to one CSS artifact. */
 
 import type { VanityIdentifierMode } from '../../config'
-import type { VanityInspectRecord } from '../../introspect/records'
+import type { VanityFindingFinalization } from '../../css/findings'
+import type { VanityDiagnosticInput } from '../../diagnostics'
+import type { VanityInspectionCapture, VanityInspectRecord } from '../../introspect/records'
 import type { VanityEmissionScope, VanityInProcessSystemContract } from '../../system/contract'
+import { resolveDeclarationFindings } from '../../css/findings'
 import { collectInspection } from '../../introspect/records'
 import { substrate } from '../../substrate'
 import { VANITY_RETRY_SYSTEM_EMISSION } from '../../system/contract'
@@ -28,6 +31,8 @@ export function emitSystemCss(
   contract: VanityInProcessSystemContract,
   scope: VanityEmissionScope,
   identOption: VanityIdentifierMode,
+  warning?: (diagnostic: VanityDiagnosticInput) => void,
+  finalization?: VanityFindingFinalization & { collectCapture?: (capture: VanityInspectionCapture) => void },
 ): SystemCssProjection {
   const captured = createStyleCssCapture(identOption)
   let captureInstalled = false
@@ -35,7 +40,8 @@ export function emitSystemCss(
   try {
     substrate.backend.installCapture(captured.capture)
     captureInstalled = true
-    const { records } = collectInspection(() => contract.emit(scope))
+    const { records, findings, warnings } = collectInspection(() => contract.emit(scope), finalization?.collectCapture)
+    resolveDeclarationFindings(findings, warning, finalization, warnings)
     // Keep the shared capture's composition callbacks intact for semantic
     // parity, but do not apply the unused-composition filter here: that filter
     // removes unused JavaScript exports during style-module serialization, not

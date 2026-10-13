@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.mszr.dev/vanity/baseline-1.schema.json",
+  "title": "Vanity baseline",
+  "description": "Counted acceptance of declarations-policy and token-restriction findings, independent of source positions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "entries"
+  ],
+  "properties": {
+    "format": {
+      "const": "vanity.baseline/1"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "module",
+        "style",
+        "property",
+        "condition",
+        "value",
+        "count"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "VANITY_DECLARATION_RAW",
+            "VANITY_DECLARATION_DERIVED",
+            "VANITY_DECLARATION_PRIMITIVE",
+            "VANITY_TOKEN_RESTRICTED"
+          ]
+        },
+        "module": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [],
+          "properties": {
+            "export": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        "property": {
+          "type": "string",
+          "minLength": 1
+        },
+        "condition": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "value": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    }
+  }
+}

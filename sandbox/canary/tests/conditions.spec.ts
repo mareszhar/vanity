@@ -58,3 +58,12 @@ test('the projected condition, scope, root, and color-scheme contracts agree in 
   expect(relativeColors).toHaveLength(8)
   expect(relativeColors.every(color => color !== '' && color !== 'rgba(0, 0, 0, 0)')).toBe(true)
 })
+
+test('numeric keyframes use property units in standards mode', async ({ page }) => {
+  await page.goto('/')
+  expect(await page.evaluate(() => document.compatMode)).toBe('CSS1Compat')
+  const animation = page.locator('[data-numeric-animation]')
+  await expect(animation).toHaveCSS('padding', '1px')
+  await expect(animation).toHaveCSS('opacity', '1')
+  expect(await animation.evaluate(element => getComputedStyle(element).getPropertyValue('--canary-count').trim())).toBe('1')
+})

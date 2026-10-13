@@ -7,7 +7,7 @@ description: Style UI in a project that uses Vanity (@mszr/vanity) — writing o
 
 Vanity is a design-system engine for CSS written in TypeScript. A project defines one **design system** (tokens, conditions, themes) in a plain `system.ts`. Components style themselves in `*.css.ts` **style modules**, which run at build time and emit ordinary CSS. The component imports the generated class names.
 
-Your job when styling is to express the design through the system's vocabulary, so the product stays consistent and stays re-themeable. A raw `13px` or `#e5e5e5` renders fine today, but it's a place no theme, density mode, or palette change can ever reach — and nothing will warn you. Tokens are the point.
+Your job when styling is to express the design through the system's vocabulary, so the product stays consistent and stays re-themeable. A raw `13px` or `#e5e5e5` renders fine today, but it's a place no theme, density mode, or palette change can ever reach — and a declarations policy can report it. Tokens are the point.
 
 ## 1. Orient before writing (2 minutes, every time)
 
@@ -48,10 +48,13 @@ import * as s from './UiCard.css.ts'
 </script>
 ```
 
+- Import the module normally for its class and recipe exports. `?inline` returns its compiled CSS as a default string; `?url` returns a stylesheet URL; `?raw` returns authored source. Both `./Card.css` and `./Card.css.ts` imports support Nuxt production SSR styles.
 - A style module runs **at build time in Node**. Each export becomes a class string or a typed handle the component imports. Keep app logic, DOM access, and fetches out of it.
 - Property names are CSS's camelCase names. Values are CSS strings/numbers or **token handles** (`t.color.ink` emits `var(--app-color-ink)`); handles interpolate inside strings too.
+- JavaScript numbers use the same property unit rule in classes, recipes, anatomy, rules, fragments, keyframes and atoms: numeric `padding: 1` emits `1px`, while the string `'1'` is invalid padding. Custom-property and token/port numeric defaults stay numbers, so use a length constructor when a default means a length.
 - Keys that are not properties are **conditions** (`hover`, `wide`, `open`), **selectors** (any key containing `&`, or starting with `.`, `:`, `[`, `>`, `+`, `~`), or **at-rules** (`'@media …'`, `'@supports …'`, `'@container …'`, `'@starting-style'`). They nest freely (`open: { motionOk: { … } }`), and they work the same inside every recipe/anatomy arm.
 - `&` is the element being styled — the class this call (or this recipe arm, or this anatomy part) generates, so `'& + &'` means "this element right after another one like it". A selector key **without** `&` targets descendants: `'[aria-selected="true"]'` styles children, `'&[aria-selected="true"]'` styles the element itself. Pseudo-elements work the same way: `'&::before'`, `'&::-webkit-slider-thumb'`.
+- A registered bare `data()`/`aria()` condition targets descendants too. `data('selected').self` or `aria('expanded', 'true').self` explicitly targets the styled element. Follow `VANITY_CONDITION_DESCENDANT` by choosing `.self` or confirming that descendants are intended.
 - Token paths follow the system's groups: `t.color.accent`, `t.text.body`. Names that aren't valid identifiers need brackets: `t.space['2xs']`.
 - Combine classes in templates with arrays: `:class="[s.row, isActive && s.rowActive]"` — but if you are toggling look-alike modifier classes, you want a recipe (§4).
 
@@ -67,7 +70,7 @@ import * as s from './UiCard.css.ts'
 | `.card:hover`, `:focus-visible`, `:active`, `:disabled` | built-in condition keys: `hover`, `focusVisible`, `active`, `disabled` (also `hoverFocus`, `dark`, `light`, `motionOk`, `motionReduce`, `ltr`, `rtl`) |
 | `@media (min-width: 48rem)` | the system's named condition key (`wide: { … }`); write `'@media (…)': { … }` only for a one-off query the system doesn't name |
 | `@container card (inline-size >= 30rem)` | a named container condition (add one with `container()` in the system, see `vanity-system` §4); the name must match the `containerName` an **ancestor** sets — it isn't type-checked — and the threshold measures that ancestor's content box. The ancestor sets `containerType: 'inline-size'` and `containerName` (a container query can't restyle the container element itself, so wrap the component's content when the component should respond to its own width) |
-| `[data-state="open"]`, `[aria-selected="true"]` on the element | the system's named state conditions (`open`, `checked`, `selected`, `invalid`); otherwise a raw selector key `'&[aria-selected="true"]'`. Drive state from ARIA attributes when the semantics exist (`aria-selected`, `aria-expanded`, `aria-pressed`, `aria-current`, `aria-invalid`) so styling and accessibility can't disagree |
+| `[data-state="open"]`, `[aria-selected="true"]` on the element | the system's named state conditions (`open`, `checked`, `selected`, `invalid`); otherwise register `aria('selected', 'true').self` in the system, or use a raw selector key `'&[aria-selected="true"]'`. Drive state from ARIA attributes when the semantics exist (`aria-selected`, `aria-expanded`, `aria-pressed`, `aria-current`, `aria-invalid`) so styling and accessibility can't disagree |
 | `:hover` that shouldn't fire on disabled controls | `'&:hover:not(:disabled, [aria-disabled="true"])': { … }` (or the system's named condition for it, if one exists) |
 | `.card > img`, `.item + .item`, `.card:has(img)` | selector keys `'& > img'`, `'& + &'`, `'&:has(> img)'` |
 | `.toolbar .button` (another module's class) | import its handle and interpolate: `` [`& .${button}`]: { … } `` |
@@ -92,6 +95,8 @@ export const row = cls([
   { wide: { gap: t.space.md } },
 ])
 ```
+
+Anchor pseudo keys to the styled element: write `'&::before'` and `'&:hover'`. Bare `'::before'` and `':hover'` match descendants and warn with `VANITY_SELECTOR_UNANCHORED`; silence `unanchoredSelectors` only when descendants are intended.
 
 A property can also branch per condition: `color: { base: t.color.inkMuted, hover: t.color.ink }`.
 
@@ -137,12 +142,11 @@ const fillStyle = usePorts(() => [s.fraction.dec(props.value)])
 
 States driven by the DOM (`data-state`, `aria-*`, `:checked`) are conditions, not dynamic values: set the attribute in the template (`:data-state="open ? 'open' : 'closed'"`) and style the `open` key.
 
-## 6. Consistency rules that nothing checks for you
+## 6. Follow the declared conventions
 
-The compiler catches unknown properties, unknown condition keys, misspelled token paths (while typing) and invalid keyword values like `display: 'flexx'` (at build). It does **not** catch these — review your diff for them before you finish:
+The compiler catches unknown properties, unknown condition keys, misspelled token paths (while typing), known token data-type mismatches, and invalid keyword values like `display: 'flexx'` (at build). `VANITY_CSS_TOKEN_KIND` names the token, property, and shorthand component it cannot fill: choose a role with the correct data type rather than changing its value or casting away the error. A number token whose default is zero still has number type; it is not a length token. A `reference: 'val'` interpolation loses token identity, so pass its handle directly or use a var-reference token when identity matters. Unresolved grammar and external custom properties do not establish compatibility. A declarations policy can require token provenance and report raw, derived, and direct primitive-tier decisions. Read its requirements before choosing values. Review these remaining design decisions before you finish:
 
 - **Raw design values** where a token exists: hex/rgb/oklch colors, `px`/`rem` lengths, `ms` durations, easing curves, shadows, z-index numbers, radii. Search your diff: `rg "#[0-9a-f]{3,8}\b|\b\d+(\.\d+)?(px|rem|ms)\b" --glob '*.css.ts'`.
-- **Token kind mismatches**: `padding: t.color.ink` or `color: t.space.md` type-check today. Use color tokens for colors, length tokens for lengths.
 - **Off-scale values**: if the scale has 12 and 16, don't write 13. Pick the nearest role; if the design genuinely needs a new step, add it to the system (`vanity-system`) and say so in your summary.
 - **Selector typos**: `'&:hovr'` is valid syntax and silently never matches. Prefer named condition keys, which are type-checked.
 - **Hand-written custom properties**: `` `var(--app-${name})` `` breaks on rename and bypasses the runtime. Use `t.*`, a port, or the runtime controller.
@@ -152,6 +156,22 @@ When no token fits, don't invent a value silently. If the design needs a new dec
 Media and container query thresholds can't read custom properties (a CSS limitation), so breakpoints live in the system as named conditions, defined once; that's why you use their names instead of writing `@media` yourself.
 
 Raw values are right for **mechanics** that aren't design decisions: `0`, `100%`, `1fr`, `auto`, `'none'`, `'transparent'`, rotation angles in a spinner, the 1px box of a visually-hidden element, `linear` for a continuous rotation, the stops of a hue-spectrum track on a color slider. Leave a short comment when the reason isn't obvious.
+
+When `VANITY_DECLARATION_RAW` names a component, use the suggested role only if its meaning fits. For a deliberate one-off adjustment, label the exception with the existing `unsafe` import:
+
+```ts
+import { unsafe } from '@mszr/vanity'
+
+export const alignedIcon = cls({
+  marginInlineStart: unsafe.value('13px', 'optical alignment with the icon'),
+})
+```
+
+`VANITY_DECLARATION_DERIVED` under `derivations: 'restrict'` means the net calculation leaves the declared convention: multiplying by 13 then dividing by 16 still fails. Integer scaling, reciprocal scaling, and unscaled token sums are admitted; they are not promises that the result lies on a scale. `VANITY_DECLARATION_PRIMITIVE` asks for a semantic role. A labeled escape still receives CSS validation and must state a non-empty reason. Follow the project's `mechanics` exemptions exactly; `transparent` and `currentColor` are not universal exemptions.
+
+`VANITY_TOKEN_RESTRICTED` means the selected role's property contract does not permit this component. Read its `usage` intent and `restrict` reason before choosing a replacement. Border-color families include physical and logical borders and the color component of `border`; a hairline role is not thereby a text color. `discourage` warns; `forbid` rejects; deliberate exceptions use the same labeled `unsafe.value` escape.
+
+For mutable roles, `$set` validates before writing and checks the declared `range` on the accepted output. Do not replace a rejected unit with an approximate conversion that needs layout. Runtime validators receive CSS text or finite numbers; snapshots store those inputs and replay validation once. Use `snapshotFrom` and `runtimeProps` for server state, then hydrate the same snapshot.
 
 ## 7. Craft defaults
 
@@ -169,6 +189,7 @@ These make interfaces feel finished; apply them unless the design says otherwise
 ## 8. Verify
 
 1. Typecheck (`nuxi typecheck` in Nuxt projects) — catches token typos, unknown keys/conditions, recipe prop typos.
+   Check source style modules for compiler findings in Vite, WXT or Vitest projects; use the framework build in Nuxt. Read coverage and unevaluated entries before claiming a complete result. A baseline accepts existing policy findings, and a new violation still fails; repair invalid CSS and token-kind mismatches directly.
 2. Build or run the dev server and read the output — Vanity reports `VANITY_*` diagnostics with the file, the property path, and a fix. A build stops at the first failing style module; fix and re-run until clean.
 3. Re-read the diff against §6.
 4. If something renders wrong (a rule doesn't apply, a theme doesn't switch, a value is stale), read `references/troubleshooting.md`.

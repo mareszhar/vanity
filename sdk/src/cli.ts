@@ -2,14 +2,18 @@
 
 import type { VanityManifest } from './introspect/manifest'
 import { realpathSync } from 'node:fs'
-import { readFile as readFileAsync } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { readFile as readFileAsync, stat } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 import { argv, cwd, exitCode } from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { VanityError } from './diagnostics'
 import { diffManifests, formatManifestDiff } from './introspect/diff'
 import { assertManifestShape } from './introspect/manifestValidation'
+import { formatManifestQuery, queryManifest } from './introspect/queries'
 import { formatExplanation } from './introspect/semantic'
+
+export { checkProject } from './check'
+export type { VanityCheckOptions, VanityCheckReport, VanityCheckResult } from './check'
 
 /** Read and validate a manifest file: `await readManifest('.vanity/manifest.json')`. */
 export async function readManifest(path = '.vanity/manifest.json'): Promise<VanityManifest> {
@@ -33,6 +37,10 @@ export function inspectManifest(manifest: VanityManifest, json = false): string 
 
 /** Explain one semantic path from a manifest: `explainManifestPath(manifest, 'color.brand')`. */
 export function explainManifestPath(manifest: VanityManifest, rawPath: string, json = false): string {
+  if (rawPath.includes('#')) {
+    const value = queryManifest(manifest, 'explain', rawPath)
+    return json ? JSON.stringify(value, null, 2) : formatManifestQuery('explain', value)
+  }
   const path = rawPath.replace(/^system\./, '').replace(/^tokens?\./, '')
   const systemCollections = [
     manifest.system.tokens,
@@ -64,7 +72,7 @@ export function explainManifestPath(manifest: VanityManifest, rawPath: string, j
   return json ? JSON.stringify(value, null, 2) : formatExplanation(value as Readonly<Record<string, unknown>>)
 }
 
-/** Validate unknown JSON as Manifest v4: `assertManifest(JSON.parse(source))`. */
+/** Validate unknown JSON as Manifest v5: `assertManifest(JSON.parse(source))`. */
 export function assertManifest(value: unknown): asserts value is VanityManifest {
   assertManifestShape(value)
 }
@@ -78,6 +86,10 @@ export async function runVanityCli(args: readonly string[] = argv.slice(2)): Pro
   }
 
   if (rest.includes('--help') || rest.includes('-h')) {
+    if (command === 'check') {
+      printCheckUsage()
+      return
+    }
     if (command === 'prepare') {
       printPrepareUsage()
       return
@@ -88,6 +100,16 @@ export async function runVanityCli(args: readonly string[] = argv.slice(2)): Pro
       path: ['arguments'],
       fix: 'use --help with the top-level command or prepare command',
     })
+  }
+
+  if (command === 'check') {
+    const options = parseCheckOptions(rest)
+    const { checkProject, formatCheckReport } = await import('./check')
+    const { report } = await checkProject(options)
+    console.log(options.json ? JSON.stringify(report, null, 2) : formatCheckReport(report, options))
+    // eslint-disable-next-line node/prefer-global/process
+    process.exitCode = report.exitCode
+    return
   }
 
   if (command === 'prepare') {
@@ -108,22 +130,48 @@ export async function runVanityCli(args: readonly string[] = argv.slice(2)): Pro
     return
   }
 
+  if (command === 'roles' || command === 'examples' || command === 'explain' || command === 'context') {
+    const options = parseQueryOptions(command, rest)
+    const file = resolve(options.manifest ?? '.vanity/manifest.json')
+    const manifest = await readManifest(file)
+    const written = await stat(file)
+    const root = options.root ?? (basename(dirname(file)) === '.vanity' ? dirname(dirname(file)) : cwd())
+    const warnings: string[] = []
+    for (const source of Object.keys(manifest.modules).filter(source => source !== '$project')) {
+      try {
+        if ((await stat(resolve(root, source))).mtimeMs > written.mtimeMs)
+          warnings.push(`${source} is newer than the manifest; regenerate before relying on this answer`)
+      }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
+          throw error
+      }
+    }
+    const result = command === 'explain' && !options.subject?.includes('#')
+      ? JSON.parse(explainManifestPath(manifest, options.subject!, true))
+      : queryManifest(manifest, command, options.subject)
+    const report = {
+      format: 'vanity.query/1',
+      version: 1,
+      command,
+      manifest: { version: manifest.version, identities: manifest.system.identities, writtenAt: written.mtime.toISOString() },
+      warnings,
+      result,
+    }
+    console.log(options.json
+      ? JSON.stringify(report, null, 2)
+      : [
+          `Manifest v${manifest.version}; ${manifest.system.identities.compatibility}; written ${report.manifest.writtenAt}`,
+          ...warnings.map(warning => `Warning: ${warning}`),
+          command === 'explain' && !options.subject?.includes('#') ? formatExplanation(result) : formatManifestQuery(command, result),
+        ].join('\n'))
+    return
+  }
+
   const json = rest.includes('--json')
   const positional = rest.filter(argument => !argument.startsWith('--'))
   if (command === 'inspect') {
     console.log(inspectManifest(await readManifest(positional[0]), json))
-    return
-  }
-  if (command === 'explain') {
-    if (!positional[0]) {
-      throw new VanityError({
-        code: 'VANITY_CLI_INVALID_USAGE',
-        message: 'usage: vanity explain <semantic-path> [manifest] [--json]',
-        path: ['arguments'],
-        fix: 'provide the semantic path to explain',
-      })
-    }
-    console.log(explainManifestPath(await readManifest(positional[1]), positional[0], json))
     return
   }
   if (command === 'diff') {
@@ -141,10 +189,41 @@ export async function runVanityCli(args: readonly string[] = argv.slice(2)): Pro
   }
   throw new VanityError({
     code: 'VANITY_CLI_INVALID_USAGE',
-    message: `unknown command '${command}'; use inspect, explain, diff, or prepare`,
+    message: `unknown command '${command}'; use inspect, explain, roles, examples, context, diff, prepare, or check`,
     path: ['command'],
-    fix: 'use inspect, explain, diff, or prepare',
+    fix: 'use inspect, explain, roles, examples, context, diff, prepare, or check',
   })
+}
+
+function parseQueryOptions(command: string, args: readonly string[]): { json: boolean, subject?: string, manifest?: string, root?: string } {
+  const options: { json: boolean, subject?: string, manifest?: string, root?: string } = { json: false }
+  const positional: string[] = []
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index]!
+    if (argument === '--json') {
+      options.json = true
+      continue
+    }
+    if (argument === '--root' || (argument === '--for' && command === 'roles') || (argument === '--focus' && command === 'context')) {
+      const value = args[++index]
+      if (!value || value.startsWith('--'))
+        throw new VanityError({ code: 'VANITY_CLI_INVALID_USAGE', message: `${argument} needs a value`, fix: 'provide the flag value' })
+      if (argument === '--root')
+        options.root = resolve(value)
+      else
+        options.subject = value
+      continue
+    }
+    if (argument.startsWith('--'))
+      throw new VanityError({ code: 'VANITY_CLI_INVALID_USAGE', message: `unknown ${command} flag '${argument}'`, fix: 'use the documented query flags' })
+    positional.push(argument)
+  }
+  if (command === 'explain' || command === 'examples')
+    options.subject = positional.shift()
+  options.manifest = positional.shift()
+  if (positional.length || ((command === 'roles' || command === 'explain' || command === 'examples') && !options.subject))
+    throw new VanityError({ code: 'VANITY_CLI_INVALID_USAGE', message: `invalid ${command} arguments`, fix: 'provide the subject and at most one manifest path' })
+  return options
 }
 
 function printUsage(): void {
@@ -153,10 +232,47 @@ function printUsage(): void {
     '',
     'commands:',
     '  inspect [manifest] [--json]',
-    '  explain <semantic-path> [manifest] [--json]',
+    '  explain <semantic-path|module#export[.part]> [manifest] [--json]',
+    '  roles --for <intent> [manifest] [--json]',
+    '  examples <token-path> [manifest] [--json]',
+    '  context [--focus <token-group|module>] [manifest] [--json]',
     '  diff <old-manifest> <new-manifest> [--json]',
     '  prepare [--config <path>] [--root <path>]',
+    '  check [--json] [--against <manifest>] [--write-baseline] [--unresolved] [--exceptions] [--derivations] [--roles] [--config <path>] [--root <path>]',
   ].join('\n'))
+}
+
+function printCheckUsage(): void {
+  console.log('usage: vanity check [--json] [--against <manifest>] [--write-baseline] [--unresolved] [--exceptions] [--derivations] [--roles] [--config <path>] [--root <path>]')
+}
+
+function parseCheckOptions(args: readonly string[]) {
+  const options: import('./check').VanityCheckOptions & { json?: boolean, unresolved?: boolean, exceptions?: boolean, derivations?: boolean, roles?: boolean } = {}
+  const flags = new Map<string, 'json' | 'writeBaseline' | 'unresolved' | 'exceptions' | 'derivations' | 'roles'>([
+    ['--json', 'json'],
+    ['--write-baseline', 'writeBaseline'],
+    ['--unresolved', 'unresolved'],
+    ['--exceptions', 'exceptions'],
+    ['--derivations', 'derivations'],
+    ['--roles', 'roles'],
+  ] as const)
+  for (let index = 0; index < args.length; index++) {
+    const argument = args[index]
+    const flag = flags.get(argument)
+    if (flag !== undefined) {
+      options[flag] = true
+      continue
+    }
+    const path = argument.match(/^--(root|config|against)(?:=(.*))?$/)
+    if (!path)
+      throw new VanityError({ code: 'VANITY_CLI_INVALID_USAGE', message: `unknown check option '${argument}'`, fix: 'use vanity check --help for supported options' })
+    const value = path[2] ?? args[++index]
+    if (!value || value.startsWith('-'))
+      throw new VanityError({ code: 'VANITY_CLI_INVALID_USAGE', message: `${argument} requires a path`, fix: `provide a path after --${path[1]}` })
+    options[path[1] as 'root' | 'config' | 'against'] = value
+  }
+  options.root = resolve(cwd(), options.root ?? '.')
+  return options
 }
 
 function printPrepareUsage(): void {

@@ -9,7 +9,7 @@ import type { VanityPortStyle } from './types'
 
 /** Merge port/style fragments, skipping falsy entries. */
 export function ports(
-  ...styles: Array<VanityPortStyle | false | null | undefined>
+  ...styles: Array<VanityPortStyle | false | 0 | 0n | '' | null | undefined>
 ): VanityPortStyle {
   return Object.assign({}, ...styles.filter(Boolean))
 }

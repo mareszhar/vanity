@@ -260,7 +260,7 @@ function getLiveCandidates(graph: TokenGraph): readonly LiveCandidate[] {
 /** Return the one declaration that reproduces the root's value in every state. */
 function assertUnconditionalDeclaration(node: TokenNode, plan: PlannedTokenEmission, file: string): string {
   const shortName = node.key.split('.').at(-1) ?? node.key
-  const refuse: (reason: string, fix: string) => never = (reason, fix) => {
+  const rejectScopedDeclaration: (reason: string, fix: string) => never = (reason, fix) => {
     throw new VanityError({
       code: 'VANITY_TOKENS_INVALID_OVERRIDE',
       message: `tdec.propagated cannot scope '${shortName}': ${reason}`,
@@ -275,7 +275,7 @@ function assertUnconditionalDeclaration(node: TokenNode, plan: PlannedTokenEmiss
 
   const base = plan.baseVars[node.name]
   if (base === undefined)
-    refuse('it has no unconditional declaration to repeat in the subtree', nameIt)
+    rejectScopedDeclaration('it has no unconditional declaration to repeat in the subtree', nameIt)
 
   // An element-local `light-dark()` base already selects the scheme arm on the
   // element that uses it, so repeating it stays correct in every scheme mode,
@@ -293,7 +293,7 @@ function assertUnconditionalDeclaration(node: TokenNode, plan: PlannedTokenEmiss
     const where = entry.when === undefined
       ? `across the '${entry.axis}' axis`
       : `in the case ${Object.entries(entry.when).map(([axis, mode]) => `${axis} '${mode}'`).join(' + ')}`
-    refuse(
+    rejectScopedDeclaration(
       `its live expression differs ${where}, so one declaration cannot be correct in every mode`,
       nameIt,
     )

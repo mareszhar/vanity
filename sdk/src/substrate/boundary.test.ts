@@ -66,6 +66,7 @@ describe('substrate boundary', () => {
   it('keeps backend lifecycle references in the declared infrastructure boundary', async () => {
     const allowedCallers = new Set([
       'compiler/core/transform.ts',
+      'compiler/core/prepareSystem.ts',
       'compiler/modules/capture.ts',
       'compiler/modules/build.ts',
       'compiler/modules/evaluate.ts',

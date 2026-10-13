@@ -558,7 +558,7 @@ describe('mutable runtime', () => {
     })
 
     const snapshot = runtime.snapshot()
-    expect(snapshot.version).toBe(1)
+    expect(snapshot.version).toBe(2)
     expect(snapshot.overrides.map(entry => [entry.token.join('.'), entry.address.kind])).toEqual([
       ['color.brand', 'base'],
       ['color.brand', 'axis'],
@@ -614,7 +614,7 @@ describe('mutable runtime', () => {
       runtime.axes.scheme.$switchTo('dark')
     })
 
-    expect(seed.version).toBe(1)
+    expect(seed.version).toBe(2)
     expect(seed.overrides).toEqual([
       expect.objectContaining({
         token: ['color', 'brand'],
@@ -650,6 +650,8 @@ describe('mutable runtime', () => {
     source.axes.scheme.$switchTo('dark')
     const snapshot = source.snapshot()
     const props = ds.runtimeProps(snapshot)
+    expect(Object.keys(ds.runtimeProps({ ...snapshot, overrides: [...snapshot.overrides].reverse() }).$system!.style))
+      .toEqual(Object.keys(props.$system!.style))
 
     const root = new MemoryRoot()
     for (const [name, value] of Object.entries(props.$system!.style))
@@ -704,7 +706,7 @@ describe('mutable runtime', () => {
     expect(diagnostics).toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_UNKNOWN_ADDRESS' }))
     expect(diagnostics).toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_INVALID_VALUE', token: ['ratio'] }))
     expect(diagnostics).toContainEqual(expect.objectContaining({ code: 'VANITY_RUNTIME_UNKNOWN_MODE', axis: 'motion' }))
-    expect(() => target.reconcileRuntimeSnapshot({ ...sourceSnapshot, version: 2 })).toThrow(/unsupported runtime snapshot protocol/)
+    expect(target.reconcileRuntimeSnapshot({ ...sourceSnapshot, version: 1 }).diagnostics).toContainEqual(expect.objectContaining({ message: expect.stringMatching(/unsupported runtime snapshot version 1/) }))
   })
 
   it('uses synchronous Standard Schema output and app-supplied schema registries', () => {
@@ -713,11 +715,11 @@ describe('mutable runtime', () => {
     const runtime = ds.runtime({ within: root })
 
     runtime.t.ratio.$set(1.26)
-    expect(runtime.snapshot().overrides[0]?.val).toBe('1.3')
-    expect(ds.reconcileRuntimeSnapshot(runtime.snapshot()).snapshot.overrides[0]?.val).toBe('1.3')
+    expect(runtime.snapshot().overrides[0]?.val).toBe(1.26)
+    expect(ds.reconcileRuntimeSnapshot(runtime.snapshot()).snapshot.overrides[0]?.val).toBe(1.26)
     expect(() => runtime.t.ratio.$set(-1)).toThrow(/positive number/)
     runtime.t.fallbackRatio.$set(-1)
-    expect(runtime.snapshot().overrides.find(entry => entry.token.join('.') === 'fallbackRatio')?.val).toBe('1')
+    expect(runtime.snapshot().overrides.find(entry => entry.token.join('.') === 'fallbackRatio')?.val).toBe(-1)
     const beforeOmit = runtime.snapshot().overrides.length
     runtime.t.optionalRatio.$set(-1)
     expect(runtime.snapshot().overrides).toHaveLength(beforeOmit)
@@ -727,7 +729,7 @@ describe('mutable runtime', () => {
       validators: { 'positive-ratio': positive },
     })
     restored.t.ratio.$set(2)
-    expect(restored.snapshot().overrides[0]?.val).toBe('2')
+    expect(restored.snapshot().overrides[0]?.val).toBe(2)
 
     const asyncSchema = {
       '~standard': {

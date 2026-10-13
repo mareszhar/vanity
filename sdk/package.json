@@ -38,6 +38,10 @@
       "types": "./dist/runtime.d.mts",
       "import": "./dist/runtime.mjs"
     },
+    "./runtime/range": {
+      "types": "./dist/runtime-range.d.mts",
+      "import": "./dist/runtime-range.mjs"
+    },
     "./imports": {
       "types": "./dist/imports.d.mts",
       "import": "./dist/imports.mjs"
@@ -59,6 +63,9 @@
       "import": "./dist/testing.mjs"
     },
     "./manifest.schema.json": "./manifest.schema.json",
+    "./query.schema.json": "./query.schema.json",
+    "./check.schema.json": "./check.schema.json",
+    "./baseline.schema.json": "./baseline.schema.json",
     "./vite": {
       "types": "./dist/vite.d.mts",
       "import": "./dist/vite.mjs"
@@ -91,9 +98,12 @@
   "files": [
     "LICENSE",
     "README.md",
+    "baseline.schema.json",
     "bin",
+    "check.schema.json",
     "dist",
     "manifest.schema.json",
+    "query.schema.json",
     "skills",
     "typescript.cjs"
   ],
@@ -115,6 +125,7 @@
     "nuxt": "catalog:peers",
     "typescript": "catalog:peers",
     "vite": "catalog:peers",
+    "vitest": "catalog:peers",
     "vue": "catalog:peers",
     "wxt": "catalog:peers"
   },
@@ -137,6 +148,9 @@
     "vite": {
       "optional": true
     },
+    "vitest": {
+      "optional": true
+    },
     "vue": {
       "optional": true
     },
@@ -148,6 +162,7 @@
     "@vanilla-extract/css": "catalog:",
     "@vanilla-extract/integration": "catalog:",
     "@vanilla-extract/vite-plugin": "catalog:",
+    "css-tree": "catalog:",
     "csstype": "catalog:",
     "culori": "catalog:",
     "esbuild": "catalog:",
@@ -162,8 +177,10 @@
     "@mszr/selenita": "catalog:",
     "@nuxt/kit": "catalog:",
     "@nuxt/schema": "catalog:",
+    "@types/css-tree": "catalog:",
     "@types/culori": "catalog:",
     "@types/node": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
     "ajv": "catalog:",
     "nuxt": "catalog:",
     "obuild": "catalog:",

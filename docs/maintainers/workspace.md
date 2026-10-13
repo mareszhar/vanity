@@ -82,7 +82,7 @@ This is separate from `pnpm run upi`: `pnpm:self-update` changes the package man
 
 `pnpm-workspace.yaml` holds pnpm's own settings, in camelCase. The pinned pnpm reads its configuration there and ignores pnpm keys left in `.npmrc`, which keeps only genuine npm settings such as `registry` — a pnpm setting placed in `.npmrc` is silently inert, so it reads as protection that is not in force. `verifyDepsBeforeRun: false` is set deliberately: a Git hook has no TTY, so pnpm's pre-run dependency check can abort a commit when it decides to auto-install. Dependency integrity is gated explicitly by `pnpm install --frozen-lockfile` in `check` and in CI, which fails on real lockfile or manifest drift rather than on a benign manifest edit.
 
-Third-party version ranges live in `pnpm-workspace.yaml`. The default `catalog` is the exact maintainer test matrix consumed with `catalog:` by the SDK, demos and spikes; the named `peers` catalog is the broader SDK compatibility contract consumed with `catalog:peers`. This keeps “what this checkout verifies” separate from “what consumers may install” without duplicating either policy across package manifests. The `vite6` catalog pins the HTML-host experiment to its named Vite 6 question. A workspace alone does not enforce common versions; the catalog references and shared root lockfile do.
+Third-party version ranges live in `pnpm-workspace.yaml`. The default `catalog` is the exact maintainer test matrix consumed with `catalog:` by the SDK, demos and spikes; the named `peers` catalog is the broader SDK compatibility contract consumed with `catalog:peers`. This keeps “what this checkout verifies” separate from “what consumers may install” without duplicating either policy across package manifests. The `vite6` catalog pins the HTML-host experiment to its named Vite 6 question. The `nuxt46` catalog owns the review experiment’s Nuxt, Vite and PostCSS host versions, while `reviewHosts` supplies its Vite 6 and 7 aliases. A workspace alone does not enforce common versions; the catalog references and shared root lockfile do.
 
 Packing and publication use pnpm, which natively materializes both catalog and workspace references as ordinary npm-compatible ranges inside the artifact. It does not rewrite `sdk/package.json` on disk, so the authored manifest and Git always retain `catalog:` references—even after an interrupted pack or publish. Fresh-package smoke tests inspect and install that real tarball outside the workspace.
 
@@ -95,7 +95,7 @@ Run `pnpm run upi` to review and select eligible upgrades from the default catal
 - the parser tolerates a pnpm reporter prefix, so diagnostics cannot corrupt the JSON review;
 - Space toggles an entry, the arrow keys move, and Enter confirms; cancellation or an empty submission is a no-op;
 - TypeScript and Vitest keep reviewed compatibility ranges: the compiler API must match lint/Vue tooling, and the test runner must satisfy Selenita’s peer contract;
-- named catalogs remain intact: `peers` defines the SDK's published compatibility contract, and `vite6` owns the version-specific HTML-host experiment;
+- named catalogs remain intact: `peers` defines the SDK's published compatibility contract, and `vite6`, `nuxt46` and `reviewHosts` own version-specific experiments;
 - a pnpm exit without a changed catalog or lockfile is a no-op.
 
 Follow a dependency upgrade with `pnpm run validate` before release work.
@@ -140,7 +140,7 @@ Markdown uses `TS` fences for illustrative fragments and lowercase `ts` fences f
 | `pnpm run sdk:test:dx` | run the Selenita editor-DX evidence dimension |
 | `pnpm run sdk:test:types` | run the compile-time evidence dimension |
 | `pnpm run sdk:test:watch` | run SDK tests in watch mode |
-| `pnpm run sdk:test:vite-compat` | run the real client/SSR module-graph gate against every supported Vite major |
+| `pnpm run sdk:test:vite-compat` | run the real client/SSR module-graph gate against Vite 6–8 |
 
 ### Spikes
 
@@ -290,6 +290,8 @@ Two checks keep the skills honest, and they answer different questions:
   2. Give each `prompt.md` to a fresh agent that knows nothing but the skills. Results hold for the model that ran them; a different model can make different mistakes, so evaluate the models adopters actually use.
   3. `pnpm run skills:eval grade <run>` typechecks and builds each project, flags hardcoded design values and hand-built custom properties, checks each task's assertions, and writes `grading.json` per task. The assertions look at source, so they show an agent reached for the right tools, not that the result looks or behaves right; review the output visually when the task is about craft.
   4. Read every agent's `REPORT.md`: its list of guesses and gaps is the most valuable signal. Fix the skill (or the API, when the guess exposes a design problem), verify the fix, then run a new iteration.
+
+Both `verify` and `prepare` copy authored fixture sources without `node_modules`, `.nuxt`, `.output`, or `.vanity` directories, including nested ones. `verify` applies the same boundary to its snippet sources. Each copy links the pinned toolchain and generates its own build artifacts. Run probes in temporary fixture copies so generated state cannot affect the maintained sources.
 
 Agent runs cost real usage; reach for them when teaching changes, not as a routine gate.
 

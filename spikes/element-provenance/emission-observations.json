@@ -1,0 +1,33 @@
+{
+  "observed": {
+    "recipe": {
+      "default": "vanity.testing_row__lc0c100",
+      "small": "vanity.testing_row__lc0c100",
+      "large": "vanity.testing_row__lc0c100 vanity.testing_row_size_large__lc0c101",
+      "absent": "vanity.testing_row__lc0c100"
+    },
+    "empty": {
+      "default": "vanity.testing_empty__lc0c102",
+      "quiet": "vanity.testing_empty__lc0c102",
+      "loud": "vanity.testing_empty__lc0c102"
+    },
+    "anatomy": {
+      "compact": {
+        "root": "vanity.testing_anatomyRow_root__lc0c103",
+        "label": "vanity.testing_anatomyRow_label__lc0c104"
+      },
+      "comfy": {
+        "root": "vanity.testing_anatomyRow_root__lc0c103 vanity.testing_anatomyRow_density_comfy_root__lc0c105",
+        "label": "vanity.testing_anatomyRow_label__lc0c104"
+      }
+    },
+    "compound": {
+      "quiet": "vanity.testing_compound__lc0c106",
+      "loud": "vanity.testing_compound__lc0c106",
+      "active": "vanity.testing_compound__lc0c106 vanity.testing_compound_active__lc0c107",
+      "loudActive": "vanity.testing_compound__lc0c106 vanity.testing_compound_active__lc0c107 vanity.testing_compound_compound_0__lc0c108",
+      "empty": "vanity.testing_compound__lc0c106"
+    }
+  },
+  "css": "@layer provenance;\n@layer provenance.reset;\n@layer provenance.tokens;\n@layer provenance.recipes;\n@layer provenance.utilities;\n@layer provenance.overrides;\n@layer provenance.tokens.base;\n@layer provenance.tokens.axes;\n@layer provenance.tokens.cases;\n@layer provenance.tokens.base {\n  :root {\n    --provenance-space-sm: 8px;\n    --provenance-space-md: 16px;\n    --provenance-color-ink: oklch(0.2 0.02 265);\n  }\n}\n@layer provenance.recipes {\n  .vanity\\.testing_row__lc0c100 {\n    color: var(--provenance-color-ink);\n    padding: var(--provenance-space-sm);\n  }\n  .vanity\\.testing_row_size_large__lc0c101 {\n    padding: var(--provenance-space-md);\n  }\n  .vanity\\.testing_empty__lc0c102 {\n    display: block;\n  }\n  .vanity\\.testing_anatomyRow_root__lc0c103 {\n    display: grid;\n    gap: var(--provenance-space-sm);\n  }\n  .vanity\\.testing_anatomyRow_label__lc0c104 {\n    color: var(--provenance-color-ink);\n  }\n  .vanity\\.testing_anatomyRow_density_comfy_root__lc0c105 {\n    gap: var(--provenance-space-md);\n  }\n  .vanity\\.testing_compound__lc0c106 {\n    display: block;\n  }\n  .vanity\\.testing_compound_active__lc0c107 {\n    opacity: 0.5;\n  }\n  .vanity\\.testing_compound_compound_0__lc0c108 {\n    color: var(--provenance-color-ink);\n  }\n}"
+}

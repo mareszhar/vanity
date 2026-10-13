@@ -21,7 +21,7 @@ import type {
 } from '../tokens/types'
 import type { VanityCssDataType } from '../values/types'
 
-export const VANITY_RUNTIME_SNAPSHOT_VERSION = 1 as const
+export const VANITY_RUNTIME_SNAPSHOT_VERSION = 2 as const
 export const VANITY_RUNTIME_CONTRACT_PROTOCOL = 2 as const
 
 /** Value accepted by a runtime token setter for the token's CSS data type. */
@@ -136,6 +136,8 @@ export interface VanityRuntimeTokenContract {
   readonly metadata?: VanityHandleMeta['metadata']
   /** Runtime validation contract for mutable updates. */
   readonly validation?: VanityRuntimeValidationContract
+  /** Inclusive comparable bounds checked after validation. */
+  readonly range?: readonly [string, string]
   /** Base custom-property slot for mutable updates. */
   readonly baseSlot?: string
   /** Axis branches and their semantic addresses. */
@@ -202,8 +204,8 @@ export interface VanityRuntimeSnapshotOverride {
   readonly token: readonly string[]
   /** Semantic address of the base or branch override. */
   readonly address: VanitySemanticTokenAddress
-  /** Serialized value written to the runtime slot. */
-  readonly val: string
+  /** Canonical write input, validated once whenever the snapshot is replayed. */
+  readonly val: string | number
 }
 
 /** JSON-safe runtime state that can cross SSR and hydration boundaries. */
@@ -531,6 +533,7 @@ export function sealRuntimeContract(draft: VanityRuntimeContractDraft): VanityRu
       root: token.root,
       type: token.type,
       validation: token.validation,
+      ...(token.range === undefined ? {} : { range: token.range }),
       branches: token.branches.map(branch => branch.address),
     })),
   })

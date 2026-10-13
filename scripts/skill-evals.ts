@@ -25,6 +25,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { skillSnippets, skippedSkillSnippets } from '../sandbox/skill-evals/snippets.ts'
+import { copySkillSources } from './skill-sources'
 
 interface Assertion {
   readonly text: string
@@ -113,7 +114,7 @@ function prepare(): void {
 
   for (const task of evals) {
     const project = join(runDir, task.name, 'project')
-    cpSync(fixtureDir, project, { recursive: true })
+    copySkillSources(fixtureDir, project)
     linkDependencies(project)
     const prepared = runNuxt(project, ['nuxi', 'prepare'])
     if (!prepared.ok)
@@ -246,8 +247,8 @@ async function verify(): Promise<void> {
 
   const project = mkdtempSync(join(tmpdir(), 'vanity-skill-snippets-'))
   try {
-    cpSync(fixtureDir, project, { recursive: true })
-    cpSync(join(evalsDir, 'snippets'), project, { recursive: true })
+    copySkillSources(fixtureDir, project)
+    copySkillSources(join(evalsDir, 'snippets'), project)
     linkDependencies(project)
     if (!existsSync(join(project, 'node_modules/vitest')))
       symlinkSync(vitestDir, join(project, 'node_modules/vitest'))

@@ -1,13 +1,92 @@
 import { hail } from '@mszr/vanity/presets'
 import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
-import { createSystem, VanityError } from '../index'
+import { createSystem, data, VanityError } from '../index'
 import { collectInspection } from '../introspect/records'
 import { substrate } from '../substrate'
 import { getTokenGraph } from './module'
 import { resolveGraph } from './resolve'
 
 describe('token-module output', () => {
+  it('infers unambiguous literal token types without guessing ambiguous syntax', () => {
+    const ds = createSystem().addTokens({
+      length: '16px',
+      color: '#fff',
+      angle: '1turn',
+      time: '120ms',
+      percentage: '50%',
+      frequency: '2kHz',
+      resolution: '2dppx',
+      flex: '1fr',
+      string: '"hello"',
+      named: 'red',
+      zero: '0',
+      variable: 'var(--outside)',
+      calculation: 'calc(1px + 2px)',
+    }).consolidate({ prefix: 'literal-types' })
+    const { records } = collectInspection(() => emit(() => {
+      void ds.class
+    }))
+    for (const type of ['length', 'color', 'angle', 'time', 'percentage', 'frequency', 'resolution', 'flex', 'string']) {
+      expect(records.find(record => record.kind === 'token' && record.path === type)).toMatchObject({
+        semantic: { type, expression: { kind: 'literal', type } },
+      })
+    }
+    for (const path of ['named', 'zero', 'variable', 'calculation']) {
+      expect(records.find(record => record.kind === 'token' && record.path === path)).toMatchObject({ semantic: { type: 'unknown' } })
+    }
+    expect(() => emit(() => ds.class({ padding: ds.t.color }, 'mismatch'))).toThrowError(/VANITY_CSS_TOKEN_KIND/)
+  })
+
+  it('gives ambiguous literal definitions an informational typed-authoring fix', () => {
+    const { warnings } = collectInspection(() => createSystem().addTokens({ ink: 'red' }).consolidate())
+    expect(warnings).toContainEqual(expect.objectContaining({
+      code: 'VANITY_TOKENS_INVALID_DEFINITION',
+      severity: 'info',
+      path: 'ink',
+      fix: expect.stringContaining('color'),
+    }))
+  })
+
+  it.each(['default', 'axis', 'case'])('gives an ambiguous configured %s a typed-authoring hint', (form) => {
+    const open = createSystem()
+      .addAxis('density', { modes: { compact: data('density', 'compact'), normal: '&' }, default: 'normal' })
+      .addAxis('size', { modes: { small: data('size', 'small'), large: data('size', 'large') }, default: 'small' })
+    const definition = form === 'default'
+      ? open.tdef({ val: 'auto' })
+      : form === 'axis'
+        ? open.tdef({ axes: { density: { compact: 'auto', normal: 'auto' } } })
+        : open.tdef({ val: 'auto', cases: [{ when: { density: 'compact', size: 'small' }, val: 'auto' }] })
+    const { warnings } = collectInspection(() => open.addTokens({ gap: definition, reserved: open.tdef.unknown() }).consolidate())
+    expect(warnings).toContainEqual(expect.objectContaining({ code: 'VANITY_TOKENS_INVALID_DEFINITION', severity: 'info', path: 'gap', fix: expect.stringContaining('explicit tdef type') }))
+    expect(warnings.some(warning => warning.path === 'reserved')).toBe(false)
+  })
+
+  it('records token aliases as references with their actual data type', () => {
+    const open = createSystem()
+    const module = open.defineTokens({
+      step: { px16: '16px', unknown: 'auto', typed: open.length.px(16) },
+      color: { ink: open.color('#fff') },
+    }).add(m => ({
+      space: { md: m.step.px16, unknown: m.step.unknown, typed: m.step.typed },
+      color: { onSurface: m.color.ink },
+    }))
+    const ds = open.addTokens(module).consolidate({ prefix: 'alias-types' })
+    const { records } = collectInspection(() => emit(() => {
+      void ds.class
+    }))
+    for (const [path, target, type] of [
+      ['space.md', 'step.px16', 'length'],
+      ['space.unknown', 'step.unknown', 'unknown'],
+      ['space.typed', 'step.typed', 'length'],
+      ['color.onSurface', 'color.ink', 'color'],
+    ]) {
+      expect(records.find(record => record.kind === 'token' && record.path === path)).toMatchObject({
+        semantic: { type, expression: { kind: 'var', type, detail: { path: target, referenceKind: 'token' } } },
+      })
+    }
+  })
+
   it('emits only declared public properties and living standards expressions', () => {
     const { css } = emit(() => substrate.modules.runInFileScope({
       filePath: 'src/tokens/tokens.module.system.ts',

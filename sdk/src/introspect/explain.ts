@@ -128,6 +128,12 @@ export interface VanityTokenExplanation {
   readonly runtime?: VanityTokenRecord['runtime']
   /** Whether the expression can cross the build/runtime boundary and any restriction. */
   readonly portability: VanityTokenRecord['semantic']['portability']
+  /** Guidance for choosing this role. */
+  readonly usage?: VanityTokenRecord['usage']
+  /** Permitted declaration properties and enforcement severity. */
+  readonly restrict?: VanityTokenRecord['restrict']
+  /** Inclusive mutable domain, in authored units. */
+  readonly range?: VanityTokenRecord['range']
   /** Authored application metadata preserved without interpretation. */
   readonly metadata: Readonly<Record<string, unknown>>
   /** Authored human-readable token documentation. */
@@ -164,6 +170,9 @@ export function explainToken(graph: TokenGraph, handle: VanityTokenHandleAny): V
     ...(token.runtime === undefined ? {} : { runtime: token.runtime }),
     portability: token.semantic.portability,
     metadata: token.semantic.metadata,
+    ...(token.usage === undefined ? {} : { usage: token.usage }),
+    ...(token.restrict === undefined ? {} : { restrict: token.restrict }),
+    ...(token.range === undefined ? {} : { range: token.range }),
     ...(token.description === undefined ? {} : { description: token.description }),
     ...(token.deprecated === undefined ? {} : { deprecated: token.deprecated }),
   })

@@ -36,7 +36,7 @@ import { isPackageSpecifier } from './compiler/auto-imports/applicationImports'
 import { renderStyleAutoImportDeclarations } from './compiler/auto-imports/autoImportDeclarations'
 import { planAutoImportDeclarations } from './compiler/auto-imports/autoImportPlan'
 import { renderLayerStatement } from './compiler/core/layers'
-import { listSystemSources } from './compiler/core/systems'
+import { getSystemSources } from './compiler/core/systems'
 import { configureVanityViteHost } from './compiler/hosts/viteHost'
 import { renderVanityNuxtConfigTypes } from './nuxt/configTypes'
 import { protectRelativeColorSyntax } from './nuxt/postcss'
@@ -93,6 +93,18 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
       getContents: renderVanityNuxtConfigTypes,
     })
 
+    nuxt.hook('pages:extend', (pages) => {
+      const visit = (entries: typeof pages): void => {
+        for (const page of entries) {
+          if (page.file?.endsWith('.css.ts'))
+            console.warn(`[vanity] VANITY_STYLE_MODULE_MISUSE: ${page.file} is a style module under pages; move it beside a component or into a styles folder`)
+          if (page.children)
+            visit(page.children)
+        }
+      }
+      visit(pages)
+    })
+
     let plan = await planAutoImportDeclarations(options, { root: nuxt.options.rootDir })
     if (plan.style) {
       const styleTemplate = addTypeTemplate({
@@ -127,6 +139,7 @@ const vanityNuxtModule: NuxtModule<VanityNuxtOptions, VanityNuxtOptions, false> 
     addVitePlugin(createVitePlugins(vanityPlugin(configureVanityViteHost(
       resolveRootedViteOptions(options, nuxt.options.rootDir),
       'nuxt',
+      nuxt.options.rootDir,
     ))))
     const layerStatement = renderLayerStatement(options.compiler?.layerOrder ?? [])
     if (layerStatement) {
@@ -183,6 +196,7 @@ function resolveRootedViteOptions(options: VanityNuxtOptions, root: string): Van
     ...options,
     compiler: {
       ...compiler,
+      ...(compiler.baseline === undefined ? {} : { baseline: resolve(root, compiler.baseline) }),
       ...(compiler.system === undefined ? {} : { system: resolveRootedSystem(compiler.system, root) }),
     },
     ...(options.autoImports === undefined ? {} : { autoImports: resolveRootedAutoImports(options.autoImports, root) }),
@@ -265,7 +279,7 @@ function resolveRootedSystem(
   value: NonNullable<VanityCompilerOptions['system']>,
   root: string,
 ): NonNullable<VanityCompilerOptions['system']> {
-  const sources = listSystemSources(value).map(source => resolveRootedSystemSource(source, root))
+  const sources = getSystemSources(value).map(source => resolveRootedSystemSource(source, root))
   return Array.isArray(value) ? sources : sources[0]!
 }
 

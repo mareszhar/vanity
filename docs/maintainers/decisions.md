@@ -46,6 +46,10 @@ When the brief requires maintainer approval, obtain an explicit answer before tr
 | --- | --- |
 | `consolidate()` is pure and emission-free. | Plain TypeScript, SSR, and tools import system modules without compiler state or I/O. |
 | The compiler owns CSS and portable projection. | Build-only closures remain in the in-process contract; browser and SSR modules contain data-only projections. |
+| Style-module imports use the host's client resolver; named package requests select Node unless redirected to another package. | Application aliases and plugins remain authoritative while package requests preserve build-time Node execution. Answers are never inverted into requests, and no second plugin pipeline initializes. |
+| Optimized dependency answers are replaced by the host metadata's original sources before style evaluation. | Browser prebundling cannot change development CSS or detach ownership and HMR from the authored dependency. |
+| Configured systems evaluate through one shared attempt after plugin initialization; failed attempts retain accepted artifacts and repair edges. | Every consumer sees one complete generation, and a relevant edit can recover the same server. |
+| CSS queries select the compiled stylesheet through the host's native CSS pipeline; raw queries retain source-file meaning. | Nuxt SSR, Vue and ordinary CSS consumers receive the same layer statements and stylesheet bytes without adapter-specific content rules. |
 | Compatibility, CSS, runtime, and documentation identities are separate. | Each consumer invalidates only for the change that affects it. |
 | System CSS and style-module CSS are separate virtual modules. | System CSS deduplicates while component CSS preserves lazy splitting. |
 | Every stylesheet carrying a system's rules declares that system's complete layer order, and every compiler-owned stylesheet declares the host's root order. | The cascade is a property of the emitted CSS, so no host's stylesheet delivery order can change it. |
@@ -71,7 +75,7 @@ When the brief requires maintainer approval, obtain an explicit answer before tr
 | Raw CSS remains an explicit standards form. | Typed support never creates a capability cliff. |
 | Conditions are typed AST values; axes declare ordered alternatives. | Selector, at-rule, precedence, locality, and runtime activation stay inspectable. |
 | Build-folded derivations are re-resolved wherever their inputs vary — axis modes and scoped substitutions use one primitive. | Build-time derivation stays trustworthy instead of silently going stale under variation. |
-| `tdec.propagated` produces declaration data; placement belongs to the caller. | `class`, `rules`, and `raw` remain the only style emitters, and no capability owns a hidden cascade layer. |
+| `tdec.propagated` produces declaration data; placement belongs to the caller. | Style emitters own placement, and a declaration bundle owns no hidden cascade layer. |
 | `tdec.propagated` repeats every live dependent whose root declaration reads a property it declares; `tdec` stays literal. | `var()` substitutes where a custom property is declared, so only a subtree declaration re-derives an inherited dependent; `tdec` remains the exact fragment whose consequences the author owns. |
 | A build surface emits the system's CSS when it is called, not when it is read. | An authoring barrel may alias `ds.class` at module scope without that read being mistaken for styling work. |
 | Token emission has base, axis, and case phases. | The cascade advertises only the layers the compiler writes into. |
@@ -89,6 +93,10 @@ When the brief requires maintainer approval, obtain an explicit answer before tr
 | --- | --- |
 | Plugins add or require public system shape through the same immutable chain as applications. | Built-ins and extensions share one ownership model. |
 | Hail is the optional opinionated layer. | Core remains CSS-capable without prescribing design taste. |
+| Declaration policies collect findings and finalize them after the authored body; they have no `enforce` level. | Component style modules have no contribution order, and one early finding cannot hide later findings. |
+| Baselines accept policy identities and authored repeat counts, never invalid CSS or token-kind mismatches. | Migration preserves visible findings without claiming missing evidence or pruning interrupted entries. |
+| Headless check drives the existing compiler through one configured host pipeline without an application build. | CSS, diagnostics and baseline acceptance share implementation with builds; a host that cannot supply that pipeline, including Nuxt, receives an explicit unsupported result. |
+| Host tool entrypoints remain native optional-peer imports. | Package-owned loading contracts and the project's host instance survive publication instead of being relocated into Vanity's bundle. |
 | Introspection, manifest, diagnostics, audit, DTCG, and CLI derive from one semantic record. | Humans and agents receive one consistent explanation surface. |
 | Hover text, completion, TSDoc, and diagnostics are tested API behavior. | The cursor is part of the product, not a secondary presentation. |
 | Style consumers wait for known system evaluations and revalidate their bundle's system snapshot; genuine failures have no diagnostic grace period. | Replaced work cannot report false errors or publish stale output. Retained CSS is disclosed, and unrelated future saves do not excuse an invalid expression. |

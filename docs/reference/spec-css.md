@@ -238,6 +238,34 @@ Not every at-rule needs a dedicated helper. `ds.raw()` is the complete CSS escap
 
 Every emitted declaration, selector, query, descriptor, and raw block receives appropriate CSS parsing. TypeScript handles names/data-type compatibility; parsers handle grammar.
 
+The declaration validator supplements native parsing with generated property ranges and unitless rules. Nonzero unitless length strings (`padding: '1'`), negative padding/width/flex growth, integer lower bounds, and established dimensioned bounds fail. JavaScript numbers use the selected substrate's property unit rule in classes, recipes, anatomy, rules, fragments, keyframes and atoms, including atom escapes: `padding: 1` emits `1px`, while negative numeric padding fails. Font-face numeric descriptors use that same rule (`fontWeight: 1` stays unitless). Custom-property declarations and token and port defaults preserve numbers for substitution; they do not acquire a length unit. Numeric math in `calc`, `min`, `max`, and `clamp` checks compatible dimensions. Declaration priority is parsed separately from the value grammar; `!important` does not bypass numeric validation or erase token provenance.
+
+CSS-wide keywords, native keyword grammar, and vendor fallback arrays retain their native verdicts. External `var()`/`env()`, unknown functions, incomplete grammar, and explicit platform-gap families receive no new verdict. A family marked unresolved preserves both existing acceptance and existing rejection. Internal validator exceptions fail; they are never an unresolved result. The [property grammar spike](../../spikes/property-grammar-agreement/README.md) names the measured platform limits.
+
+The pinned Chromium corpus contains 95,973 boundary-value cells: 31,968 resolved agreements and 64,005 unresolved cells, with no errors or resolved disagreements. Coverage is higher for the properties the repository's adopters use. Crossing those properties with the same corpus gives:
+
+| Property set | Properties used | Resolved cells | Unresolved cells |
+| --- | --- | --- | --- |
+| Sandbox demos and canary | 109 | 6,210 (81.4%) | 1,420 |
+| Agent skill fixture | 13 | 751 (82.5%) | 159 |
+| Benchmark fixtures | 4 | 251 (89.6%) | 29 |
+
+These are grammar coverage figures over boundary inputs, including resolved rejections, not a claim that every emitted declaration was checked. Whole declarations containing `var()` remain unresolved until owned references can be established. The compiler records that evidence separately for each component. Agreement is measured in pinned Chromium; arbitrary syntax and other browsers are outside that corpus's guarantee.
+
+Declarations retain a component record: the property position, authored origin, token paths, data type, and evidence. Direct handles and `$dec` leaves retain token identity. System custom-property references in strings identify their tokens; a `reference: 'val'` interpolation is a literal, even when its text equals a token's default. Typed calculations and string calculations over tokens are derived values; ports and external custom properties have their own origins.
+
+A declared type incompatible with its property position produces `VANITY_CSS_TOKEN_KIND`, including inside a shorthand. Unbounded named grammar positions carry `type` evidence. Positions with bounds check the relevant authored axis and case products in light and dark schemes and carry `environments` evidence. A surrounding mode condition narrows that product, respecting conjunctions, alternatives, and negation. Subtree custom-property declarations supply the values actually emitted: an inherited dependent substitutes at its declaration point and stays fixed; a dependent repeated by `tdec.propagated()` reads the subtree's values. A reservation without an authored default, an external variable, and a platform-gap family remain `unresolved`. Unexpected exceptions fail the compiler.
+
+With the opt-in `declarations` policy, each governed component must come from a token, a derivation, a port, or a labeled `unsafe.value(value, reason)`. An explicit-unit constructor used directly is literal under this policy. A value that loses identity through val interpolation is also literal; equal token values are suggestions, never recovered identities. External substitutions cannot establish system provenance. Components of other types remain outside the policy, and `mechanics` exempts only the exact listed literals. CSS grammar validation still runs on exempt and unsafe values.
+
+`derivations: 'allow'` accepts token-derived values; `audit` accepts them and retains their terms for reporting. `restrict` checks each token term's net factor after nested calculations fold: integer or reciprocal scaling of one token, either sign, and sums of unscaled tokens are allowed. `min`, `max` and `clamp` require every argument to satisfy that rule. A net factor of 13/16 fails with `VANITY_DECLARATION_DERIVED`; integer multiplication followed by its inverse is allowed. This bounds arbitrary adjustment; it does not promise membership in a scale. An unestablished transformation is not claimed to satisfy the restriction.
+
+`unsafe.value('13px', 'optical alignment with the icon')` labels one declaration's exception. It requires a non-empty reason when declared, uses the same numeric unit rule, and does not bypass CSS validity. Its escape record names the source, declaring style and property. Raw CSS remains an explicit separate escape. The scale-stray audit reports only properties outside the declarations policy, avoiding duplicate convention findings.
+
+Compatibility and policy findings are collected on the evaluation capture and finalized after the module evaluates. A token-kind mismatch or a `forbid` finding fails the module; `discourage` findings warn and compile. Later declarations are reached even after a finding. Other authoring errors still stop evaluation, and no unresolved result is presented as checked.
+
+The same generated grammar produces the cursor's property data-type table. Known color, length, and number token mismatches fail there; literal zero remains valid in length positions. Calculation values keep CSS integer rounding. Incomplete and platform-gap families retain permissive cursor inputs, since their grammar cannot establish exclusion.
+
 Diagnostics:
 
 - use stable codes and structured locality;
@@ -250,6 +278,8 @@ Diagnostics:
 A system created in `*.css.ts` receives the dedicated plain-`system.ts` fix, not the substrate's invalid-export error.
 
 Under an aliases-only property policy, `ds.class.standard({...})` preserves exact standard-property object authoring and `ds.raw(...)` preserves full raw CSS. An alias policy may change the preferred completion vocabulary but cannot make a platform property unreachable.
+
+Authoring repairs name the mistaken position: a condition object cannot be an object-literal style key; register it in `createSystem({ conditions })` and use its name. `legibleOn` defines a token: define `onX: legibleOn(…)` in the graph and reference `t.….onX` in styles. Registered selectors without `&` follow the same descendant nesting as raw selector keys, and negating an anchored conjunction contributes no complement-of-anchor arm.
 
 ## 11. Delivery
 

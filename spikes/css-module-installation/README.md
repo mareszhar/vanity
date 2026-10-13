@@ -22,11 +22,10 @@ Native Vite serves a source that imports a new CSS module and separately updates
 
 ## Observed result
 
-Vite 5.4.21, 6.4.3, 7.3.6, and 8.3.1 all report completion after native `updateStyle`. Stable and new-ID CSS, and two clients delayed by 600 ms and 1200 ms, prune without a gap.
+Vite 6.4.3, 7.3.6, and 8.3.1 all report completion after native `updateStyle`. Stable and new-ID CSS, and two clients delayed by 600 ms and 1200 ms, prune without a gap.
 
 | Observation | Result |
 | --- | --- |
-| Vite 5.4.21 | Completion and per-client native prune pass |
 | Vite 6.4.3 | Completion and per-client native prune pass |
 | Vite 7.3.6 | Completion and per-client native prune pass |
 | Vite 8.3.1 | Completion and per-client native prune pass |

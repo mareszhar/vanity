@@ -8,13 +8,16 @@
  */
 
 import type * as CSS from 'csstype'
+import type { VanityUnsafeValue } from '../atoms/types'
 import type {
   VanityBaseConditionName,
   VanityConditionKeyHover,
   VanityConditionKeyName,
 } from '../system/conditions'
 import type { VanityAuthoredColor, VanityTokenFallback, VanityTokenHandleAny } from '../tokens/types'
-import type { VanityCssValue, VanityTokenInput } from '../values/types'
+import type { VanityCalc } from '../values/math'
+import type { VanityCompatibleTokenInput, VanityCssDataType, VanityCssValue, VanityTokenInput } from '../values/types'
+import type { VanityPropertyDataTypes } from './property-types.generated'
 
 type CSSTypeProperties = CSS.Properties<number | (string & {})>
 
@@ -28,17 +31,26 @@ export type VanityPropertyAliasMode = 'both' | 'aliases-only'
  * the default in the reference (`var(--name, 0)`); tokens don't (`var(--name)`).
  * Both satisfy this structural type, so style values accept either.
  */
-export interface VanityVarReference {
+export interface VanityVarReference<Type extends VanityCssDataType = VanityCssDataType> {
   readonly var: `var(--${string})`
+  readonly type?: Type
 }
+
+type DeclarationDataType<P extends VanityCssPropertyName>
+  = P extends keyof VanityPropertyDataTypes
+    ? VanityCompatibleTokenInput<VanityPropertyDataTypes[P]>['$type'] | 'unknown' | 'declaration' | `plugin:${string}`
+    : VanityCssDataType
 
 /**
  * One declared value: the property's csstype grammar, a token handle, or a
- * color-helper expression (`alpha(t.color.ink, 0.42)`). Open-valued by
- * design — the token map guides, it never gates.
+ * color-helper expression (`alpha(t.color.ink, 0.42)`). Known data types must
+ * fit the generated property grammar; unresolved types retain CSS's open floor.
  */
 export type VanityStyleValue<P extends VanityCssPropertyName = VanityCssPropertyName>
-  = CSSTypeProperties[P] | VanityVarReference | VanityTokenInput | VanityAuthoredColor | VanityCssValue | VanityOmit
+  = CSSTypeProperties[P] | VanityVarReference<DeclarationDataType<P>> | VanityTokenInput<DeclarationDataType<P>>
+    | ('color' extends DeclarationDataType<P> ? VanityAuthoredColor : never)
+    | ('integer' extends DeclarationDataType<P> ? VanityCalc<'number'> : never)
+    | VanityCssValue<string, DeclarationDataType<P>> | VanityOmit | VanityUnsafeValue
 
 declare const VANITY_RULE_CONDITION: unique symbol
 declare const VANITY_FRAGMENT: unique symbol
@@ -99,7 +111,8 @@ type VanityRuleScalar
     | VanityTokenInput
     | VanityAuthoredColor
     | VanityCssValue
-    | readonly (string | number | VanityVarReference | VanityTokenInput | VanityAuthoredColor | VanityCssValue)[]
+    | VanityUnsafeValue
+    | readonly (string | number | VanityVarReference | VanityTokenInput | VanityAuthoredColor | VanityCssValue | VanityUnsafeValue)[]
     | undefined
 
 /** Custom properties are plain keys; the escape audit sees them, `vars` ceremony doesn't exist. */
@@ -110,7 +123,7 @@ export interface VanityCustomProperties<C extends string> {
 export type VanityDeclarations<C extends string> = {
   [P in VanityCssPropertyName]?:
     | VanityStyleValue<P>
-    | readonly (CSSTypeProperties[P] | VanityVarReference | VanityTokenInput)[]
+    | readonly VanityStyleValue<P>[]
     | VanityPropertyArms<C, VanityStyleValue<P>>
 } & VanityCustomProperties<C>
 
@@ -191,7 +204,7 @@ type VanityAliasDeclarations<
 > = {
   [Alias in keyof Aliases]?: Aliases[Alias] extends VanityCssPropertyName
     ? | VanityStyleValue<Aliases[Alias]>
-    | readonly (CSSTypeProperties[Aliases[Alias]] | VanityVarReference | VanityTokenInput)[]
+    | readonly VanityStyleValue<Aliases[Alias]>[]
     | VanityPropertyArms<C, VanityStyleValue<Aliases[Alias]>>
     : never
 }
@@ -344,7 +357,7 @@ type VanityStrictPropertyAliasContributionsGuard<
  * semantically meaningless inside one, so the grammar refuses them at the key.
  */
 export type VanityKeyframeStep = {
-  [P in VanityCssPropertyName]?: VanityStyleValue<P> | readonly (CSSTypeProperties[P] | VanityVarReference | VanityTokenInput)[]
+  [P in VanityCssPropertyName]?: VanityStyleValue<P> | readonly VanityStyleValue<P>[]
 } & {
   [customProperty: `--${string}`]: string | number | VanityVarReference
 }

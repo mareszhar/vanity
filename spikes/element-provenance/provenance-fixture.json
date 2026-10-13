@@ -1,0 +1,514 @@
+{
+  "manifest": {
+    "recipes": {
+      "compound": {
+        "base": {
+          "root": [
+            "vanity.testing_compound__lc0c106"
+          ]
+        },
+        "defaults": {
+          "tone": "quiet",
+          "active": false
+        },
+        "variants": {
+          "tone": {
+            "quiet": {
+              "root": []
+            },
+            "loud": {
+              "root": []
+            }
+          }
+        },
+        "toggles": {
+          "active": {
+            "root": [
+              "vanity.testing_compound_active__lc0c107"
+            ]
+          },
+          "empty": {
+            "root": []
+          }
+        },
+        "compound": [
+          {
+            "when": {
+              "tone": "loud",
+              "active": true
+            },
+            "classes": {
+              "root": [
+                "vanity.testing_compound_compound_0__lc0c108"
+              ]
+            }
+          }
+        ]
+      },
+      "row": {
+        "base": {
+          "root": [
+            "vanity.testing_row__lc0c100"
+          ]
+        },
+        "defaults": {
+          "size": "small"
+        },
+        "variants": {
+          "size": {
+            "small": {
+              "root": []
+            },
+            "large": {
+              "root": [
+                "vanity.testing_row_size_large__lc0c101"
+              ]
+            }
+          }
+        }
+      },
+      "empty": {
+        "base": {
+          "root": [
+            "vanity.testing_empty__lc0c102"
+          ]
+        },
+        "defaults": {
+          "tone": "quiet"
+        },
+        "variants": {
+          "tone": {
+            "quiet": {
+              "root": []
+            },
+            "loud": {
+              "root": []
+            }
+          }
+        }
+      },
+      "anatomyRow": {
+        "parts": [
+          "root",
+          "label"
+        ],
+        "base": {
+          "root": [
+            "vanity.testing_anatomyRow_root__lc0c103"
+          ],
+          "label": [
+            "vanity.testing_anatomyRow_label__lc0c104"
+          ]
+        },
+        "defaults": {
+          "density": "compact"
+        },
+        "variants": {
+          "density": {
+            "compact": {
+              "root": [],
+              "label": []
+            },
+            "comfy": {
+              "root": [
+                "vanity.testing_anatomyRow_density_comfy_root__lc0c105"
+              ],
+              "label": []
+            }
+          }
+        }
+      }
+    },
+    "styles": [
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "row",
+        "part": "root",
+        "class": "vanity.testing_row__lc0c100",
+        "declarations": [
+          {
+            "property": "color",
+            "condition": [],
+            "origin": "token",
+            "tokens": [
+              "color.ink"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          },
+          {
+            "property": "padding",
+            "condition": [
+              "variants",
+              "size",
+              "small"
+            ],
+            "origin": "token",
+            "tokens": [
+              "space.sm"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          }
+        ]
+      },
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "row",
+        "part": "root",
+        "class": "vanity.testing_row_size_large__lc0c101",
+        "declarations": [
+          {
+            "property": "padding",
+            "condition": [
+              "variants",
+              "size",
+              "large"
+            ],
+            "origin": "token",
+            "tokens": [
+              "space.md"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          }
+        ]
+      },
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "empty",
+        "part": "root",
+        "class": "vanity.testing_empty__lc0c102",
+        "declarations": []
+      },
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "anatomyRow",
+        "part": "label",
+        "class": "vanity.testing_anatomyRow_label__lc0c104",
+        "declarations": [
+          {
+            "property": "color",
+            "condition": [],
+            "origin": "token",
+            "tokens": [
+              "color.ink"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "result": {
+    "small": [
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "row",
+        "part": "root",
+        "class": "vanity.testing_row__lc0c100",
+        "declarations": [
+          {
+            "property": "color",
+            "condition": [],
+            "origin": "token",
+            "tokens": [
+              "color.ink"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          },
+          {
+            "property": "padding",
+            "condition": [
+              "variants",
+              "size",
+              "small"
+            ],
+            "origin": "token",
+            "tokens": [
+              "space.sm"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          }
+        ],
+        "variant": {
+          "selection": {
+            "size": "small"
+          },
+          "evidence": "classes",
+          "candidates": 1
+        },
+        "root": "small",
+        "association": "self"
+      }
+    ],
+    "large": [
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "row",
+        "part": "root",
+        "class": "vanity.testing_row__lc0c100",
+        "declarations": [
+          {
+            "property": "color",
+            "condition": [],
+            "origin": "token",
+            "tokens": [
+              "color.ink"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          },
+          {
+            "property": "padding",
+            "condition": [
+              "variants",
+              "size",
+              "small"
+            ],
+            "origin": "token",
+            "tokens": [
+              "space.sm"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          }
+        ],
+        "variant": {
+          "selection": {
+            "size": "large"
+          },
+          "evidence": "classes",
+          "candidates": 1
+        },
+        "root": "large",
+        "association": "self"
+      },
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "row",
+        "part": "root",
+        "class": "vanity.testing_row_size_large__lc0c101",
+        "declarations": [
+          {
+            "property": "padding",
+            "condition": [
+              "variants",
+              "size",
+              "large"
+            ],
+            "origin": "token",
+            "tokens": [
+              "space.md"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          }
+        ],
+        "variant": {
+          "selection": {
+            "size": "large"
+          },
+          "evidence": "classes",
+          "candidates": 1
+        },
+        "root": "large",
+        "association": "self"
+      }
+    ],
+    "empty": [
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "empty",
+        "part": "root",
+        "class": "vanity.testing_empty__lc0c102",
+        "declarations": [],
+        "variant": {
+          "selection": {},
+          "evidence": "partial",
+          "candidates": 2
+        },
+        "root": "empty",
+        "association": "self"
+      }
+    ],
+    "bound": [
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "empty",
+        "part": "root",
+        "class": "vanity.testing_empty__lc0c102",
+        "declarations": [],
+        "variant": {
+          "selection": {
+            "tone": "loud"
+          },
+          "evidence": "binding"
+        },
+        "root": "bound",
+        "association": "self"
+      }
+    ],
+    "label": [
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "anatomyRow",
+        "part": "label",
+        "class": "vanity.testing_anatomyRow_label__lc0c104",
+        "declarations": [
+          {
+            "property": "color",
+            "condition": [],
+            "origin": "token",
+            "tokens": [
+              "color.ink"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          }
+        ],
+        "variant": {
+          "selection": {
+            "density": "comfy"
+          },
+          "evidence": "classes",
+          "candidates": 1
+        },
+        "root": "anatomy-root",
+        "association": "ancestor"
+      }
+    ],
+    "orphan": [
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "anatomyRow",
+        "part": "label",
+        "class": "vanity.testing_anatomyRow_label__lc0c104",
+        "declarations": [
+          {
+            "property": "color",
+            "condition": [],
+            "origin": "token",
+            "tokens": [
+              "color.ink"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          }
+        ],
+        "variant": {
+          "selection": {},
+          "evidence": "partial",
+          "candidates": 2
+        },
+        "root": null,
+        "association": "missing"
+      }
+    ],
+    "nested": [
+      {
+        "module": "app/components/Row.css.ts",
+        "export": "anatomyRow",
+        "part": "label",
+        "class": "vanity.testing_anatomyRow_label__lc0c104",
+        "declarations": [
+          {
+            "property": "color",
+            "condition": [],
+            "origin": "token",
+            "tokens": [
+              "color.ink"
+            ],
+            "evidence": {
+              "level": "type"
+            }
+          }
+        ],
+        "variant": {
+          "selection": {
+            "density": "compact"
+          },
+          "evidence": "classes",
+          "candidates": 1
+        },
+        "root": "inner",
+        "association": "ancestor"
+      }
+    ],
+    "compoundResults": {
+      "loudActive": {
+        "selection": {
+          "tone": "loud",
+          "active": true
+        },
+        "evidence": "partial",
+        "candidates": 2
+      },
+      "active": {
+        "selection": {
+          "tone": "quiet",
+          "active": true
+        },
+        "evidence": "partial",
+        "candidates": 2
+      },
+      "quiet": {
+        "selection": {
+          "active": false
+        },
+        "evidence": "partial",
+        "candidates": 4
+      },
+      "bindingDefaults": {
+        "selection": {
+          "tone": "quiet",
+          "active": false,
+          "empty": false
+        },
+        "evidence": "binding"
+      },
+      "invalid": {
+        "selection": {},
+        "evidence": "partial",
+        "errors": [
+          "Invalid selection: tone=unknown",
+          "Invalid default: tone=unknown"
+        ]
+      },
+      "badToggle": {
+        "selection": {
+          "tone": "quiet",
+          "active": "yes",
+          "empty": false
+        },
+        "errors": [
+          "Invalid selection: active=yes"
+        ]
+      },
+      "unknown": {
+        "selection": {
+          "tone": "quiet",
+          "active": false,
+          "empty": false
+        },
+        "errors": [
+          "Unknown selection: mystery"
+        ]
+      }
+    }
+  }
+}

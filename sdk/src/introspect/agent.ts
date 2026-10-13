@@ -24,6 +24,10 @@ export interface VanityAgentContext {
       readonly name: string
       /** Declared mode names in selection/cycle order. */
       readonly modes: readonly string[]
+      /** Declared token responsibilities. */
+      readonly covers?: readonly string[]
+      /** Deliberately identical token leaves or groups. */
+      readonly shared?: readonly string[]
       /** Nominal axis default, when declared; distinct from a token's fallback. */
       readonly defaultMode?: string
     }[]
@@ -46,6 +50,12 @@ export interface VanityAgentContext {
     readonly contexts: readonly string[]
     /** Author-supplied guidance, when present. */
     readonly description?: string
+    /** Guidance for selecting the role. */
+    readonly usage?: import('../tokens/types').VanityTokenUsage
+    /** Permitted declaration properties and enforcement level. */
+    readonly restrict?: import('../tokens/types').VanityTokenRestriction
+    /** Inclusive runtime bounds in authored units. */
+    readonly range?: readonly [string, string]
   }[]
   /** Source modules and their published recipes/anatomies or component ports. */
   readonly modules: readonly {
@@ -69,7 +79,7 @@ export interface VanityAgentContext {
   }
 }
 
-/** Machine context derived entirely from Manifest v4, with the complete token vocabulary. */
+/** Machine context derived entirely from Manifest v5, with the complete token vocabulary. */
 export function buildAgentContext(manifest: VanityManifest): VanityAgentContext {
   const modules = createManifestModules(manifest)
   return Object.freeze({
@@ -84,6 +94,8 @@ export function buildAgentContext(manifest: VanityManifest): VanityAgentContext 
       axes: Object.freeze(Object.values(manifest.system.axes).map(axis => Object.freeze({
         name: axis.name,
         modes: Object.freeze([...axis.modeOrder]),
+        ...(axis.covers === undefined ? {} : { covers: Object.freeze([...axis.covers]) }),
+        ...(axis.shared === undefined ? {} : { shared: Object.freeze([...axis.shared]) }),
         ...(axis.defaultMode === undefined ? {} : { defaultMode: axis.defaultMode }),
       }))),
       conditions: Object.freeze(Object.fromEntries(Object.entries(manifest.system.conditions)
@@ -102,6 +114,9 @@ export function buildAgentContext(manifest: VanityManifest): VanityAgentContext 
         ...declaration.context.selectors,
       ].filter((part): part is string => part !== undefined).join(' ')))]),
       ...(token.description === undefined ? {} : { description: token.description }),
+      ...(token.usage === undefined ? {} : { usage: token.usage }),
+      ...(token.restrict === undefined ? {} : { restrict: token.restrict }),
+      ...(token.range === undefined ? {} : { range: token.range }),
     }))),
     modules: Object.freeze(modules.filter(module => module.source !== '$project').map(module => Object.freeze({
       source: module.source,
@@ -125,7 +140,11 @@ export function buildAgentContext(manifest: VanityManifest): VanityAgentContext 
 
 /** Human orientation for an agent prompt; facts remain manifest-sourced. */
 export function generateAgentContext(manifest: VanityManifest): string {
-  const context = buildAgentContext(manifest)
+  return formatAgentContext(buildAgentContext(manifest))
+}
+
+/** Format a full or focused view of the existing agent context. */
+export function formatAgentContext(context: VanityAgentContext): string {
   const lines = [
     '# vanity system context',
     '',
@@ -135,12 +154,13 @@ export function generateAgentContext(manifest: VanityManifest): string {
   if (context.environment.axes.length > 0) {
     lines.push('', 'Environmental axes:')
     for (const axis of context.environment.axes)
-      lines.push(`- ${axis.name}: ${axis.modes.join(', ')}${axis.defaultMode === undefined ? '' : ` (default ${axis.defaultMode})`}`)
+      lines.push(`- ${axis.name}: ${axis.modes.join(', ')}${axis.defaultMode === undefined ? '' : ` (default ${axis.defaultMode})`}${axis.covers === undefined ? '' : `; covers ${axis.covers.join(', ') || '(none)'}`}${axis.shared === undefined ? '' : `; shared ${axis.shared.join(', ') || '(none)'}`}`)
   }
   lines.push('', 'Token vocabulary:')
   for (const token of context.tokens) {
     const contexts = token.contexts.length === 0 ? '' : `; emits ${token.contexts.join(' | ')}`
-    lines.push(`- ${token.path}: <${token.type}>, ${token.reference}${token.mutable ? ', runtime-mutable' : ''}${token.description ? ` — ${token.description}` : ''}${contexts}`)
+    const guidance = [token.usage?.for?.length ? `for ${token.usage.for.join('; ')}` : undefined, token.usage?.avoid ? `avoid ${token.usage.avoid}` : undefined, token.usage?.tier, token.restrict ? `${token.restrict.level}: only ${token.restrict.properties.join(', ')}${token.restrict.reason ? ` (${token.restrict.reason})` : ''}` : undefined, token.range ? `range [${token.range.join(', ')}]` : undefined].filter(Boolean).join('; ')
+    lines.push(`- ${token.path}: <${token.type}>, ${token.reference}${token.mutable ? ', runtime-mutable' : ''}${token.description ? ` — ${token.description}` : ''}${contexts}${guidance ? `; ${guidance}` : ''}`)
   }
   if (context.modules.some(module => module.recipes.length + module.ports.length > 0)) {
     lines.push('', 'Published component contracts:')

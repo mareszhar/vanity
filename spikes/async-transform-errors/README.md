@@ -20,7 +20,7 @@ To inspect another installed host, pass its absolute Vite Node entry path after 
 
 A local plugin models a cached system and an asynchronous replacement defining a missing `menu` role. A browser requests its consumer while the replacement is pending. The runner holds that evaluation for 100 ms after the transform starts, then verifies native terminal logging, the error overlay and computed font size. Each policy also receives a persistent missing-role failure.
 
-Vite 5.4.21, 6.4.3, 7.3.6 and 8.3.1 produce the same results:
+Vite 6.4.3, 7.3.6 and 8.3.1 produce the same results:
 
 | Transform policy | Known replacement pending | Persistent missing role |
 | --- | --- | --- |

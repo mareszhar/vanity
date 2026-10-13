@@ -13,7 +13,7 @@ import type { VanityConditionArm } from '../system/conditions'
 import type { VanityAnatomy, VanityAnatomyRuntime } from './types'
 import { createLayerContext, requireStyleModuleFile } from '../css/context'
 import { emitOnto, emitStyle } from '../css/emit'
-import { isPlainObject, splitTopLevel } from '../css/rule'
+import { isPlainObject, nestSelector, splitTopLevel } from '../css/rule'
 import { didYouMean, getDiagnosticSource, VanityError } from '../diagnostics'
 import { record } from '../introspect/records'
 import { substrate } from '../substrate'
@@ -45,6 +45,7 @@ export function bindAnatomy(system: VanitySystemContext) {
       partClasses[part] = substrate.css.emitClassRule({ rule: {}, debugId: getDebugName(debugId, part) })
 
     const build = startBuild(options, system, file, getScopedConditionsOver(parts, partClasses, system))
+    build.ctx.styleName = debugId
 
     const variants = options.variants ?? {}
     const toggles = options.toggles ?? {}
@@ -186,6 +187,7 @@ export function bindAnatomy(system: VanitySystemContext) {
       ...(debugId === undefined ? {} : { name: debugId }),
       parts,
       ...recordVariantShape(variants, toggles, defaults, ports),
+      classes: { base: partClasses, variants: variantClasses, toggles: toggleClasses, compound: compoundClasses },
     })
 
     substrate.modules.registerFunctionSerialization(handle as unknown as (...args: unknown[]) => unknown, {
@@ -297,7 +299,7 @@ function getScopedConditionsOver(
 
       arms.push({
         ...arm,
-        selector: splitTopLevel(arm.selector, ',')
+        selector: splitTopLevel(nestSelector(arm.selector), ',')
           .map(selectorPart => `${selectorPart.replaceAll('&', partClasses[part])} &`)
           .join(', '),
       })

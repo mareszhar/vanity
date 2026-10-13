@@ -1,9 +1,11 @@
 import { readFile } from 'node:fs/promises'
-import { createSystem, data } from '@mszr/vanity'
+import { createSystem, data, length, selector } from '@mszr/vanity'
 import { emit } from '@test'
 import Ajv2020 from 'ajv/dist/2020.js'
 import { describe, expect, it } from 'vitest'
 import { assertManifest } from '../cli'
+import { evaluateStyleModule } from '../compiler/modules/evaluate'
+import { applySourceLocations } from '../compiler/modules/source'
 import { diffManifests } from './diff'
 import { buildManifest, VANITY_MANIFEST_SCHEMA, VANITY_MANIFEST_VERSION } from './manifest'
 import { collectInspection } from './records'
@@ -48,7 +50,42 @@ function approximateManifest() {
 }
 
 describe('canonical introspection', () => {
-  it('uses the exact same canonical map for ds.introspect() and Manifest v4', () => {
+  it('reports only emitted token reach and preserves custom-property origins without a grammar verdict', () => {
+    const ds = createSystem().addConditions({ anchor: selector('&') }).addTokens({ small: length.px(4), large: length.px(12) }).consolidate()
+    const source = `const {ds}=require('fixture'); const row=ds.class({padding:ds.t.small,anchor:{padding:ds.t.large}}); const quoted=ds.class({content:'"var(--vanity-small)"'}); const custom=ds.class({'--gap':ds.t.small});`
+    const evaluated = evaluateStyleModule(applySourceLocations(source, '/fixture/reach.css.ts', '/fixture', undefined, true), '/fixture/reach.css.ts', 'debug', new Map([['fixture', { ds }]]))
+    const manifest = buildManifest(evaluated.records, [...evaluated.cssByFileScope.values()].join('\n'), { root: '/fixture' })
+    const styles = Object.values(manifest.modules['reach.css.ts']!.styles)
+    expect(styles.find(style => style.name === 'row')?.tokens).toEqual(['large'])
+    expect(styles.find(style => style.name === 'quoted')?.tokens).toEqual([])
+    const custom = styles.find(style => style.name === 'custom')!
+    expect(custom.tokens).toEqual(['small'])
+    expect(custom.declarations[0]?.components).toMatchObject([{ origin: 'token', tokens: ['small'], dataType: 'length', evidence: { level: 'unresolved', reason: 'Custom property grammar is declared by its owner' } }])
+  })
+
+  it('publishes Manifest v5 emitted declarations and rejects v4 at readers and diffs', () => {
+    const ds = fixture()
+    const source = `const {ds}=require('fixture'); const row=ds.class([{padding:4,paddingTop:8},{padding:12,color:ds.t.color.brand}]); const button=ds.recipe({base:{padding:4}});`
+    const evaluated = evaluateStyleModule(applySourceLocations(source, '/fixture/row.css.ts', '/fixture', undefined, true), '/fixture/row.css.ts', 'debug', new Map([['fixture', { ds }]]))
+    const manifest = buildManifest(evaluated.records, [...evaluated.cssByFileScope.values()].join('\n'), { root: '/fixture' })
+    expect(manifest).toMatchObject({ format: 'vanity.manifest/5', version: 5, $schema: 'https://schemas.mszr.dev/vanity/manifest-5.schema.json' })
+    const module = manifest.modules['row.css.ts']!
+    const row = Object.values(module.styles).find(style => style.name === 'row')!
+    expect(row.declarations.map(declaration => [declaration.property, declaration.value, declaration.source?.text])).toEqual([
+      ['padding', '12px', '12'],
+      ['padding-top', '8px', '8'],
+      ['color', expect.any(String), 'ds.t.color.brand'],
+    ])
+    expect(row.declarations[2]?.components).toMatchObject([{ origin: 'token', tokens: ['color.brand'], evidence: { level: 'type' } }])
+    expect(new Set(row.declarations.map(declaration => declaration.id)).size).toBe(3)
+    expect(module.recipes.button?.classes.base).toEqual(expect.any(String))
+    expect(() => assertManifest(manifest)).not.toThrow()
+    const previousVersion = { ...manifest, format: 'vanity.manifest/4', version: 4, $schema: 'https://schemas.mszr.dev/vanity/manifest-4.schema.json' }
+    expect(() => assertManifest(previousVersion)).toThrow('regenerate with the current version')
+    expect(() => diffManifests(previousVersion as never, manifest)).toThrow('regenerate with the current version')
+  })
+
+  it('uses the exact same canonical map for ds.introspect() and Manifest v5', () => {
     const ds = fixture()
     const manifest = manifestOf(ds)
 
@@ -63,6 +100,8 @@ describe('canonical introspection', () => {
       consts: { release: { value: 'next' } },
       utilities: { double: { path: ['double'] } },
     })
+    const styles = Object.values(manifest.modules).flatMap(module => Object.values(module.styles))
+    expect(styles.flatMap(style => style.declarations.map(declaration => declaration.arm.selector))).toEqual(styles.map(style => `.${style.class}`))
   })
 
   it('explains every public semantic handle species structurally', () => {
@@ -258,7 +297,7 @@ describe('canonical introspection', () => {
     }
   })
 
-  it('rejects malformed, unknown, and semantically invalid Manifest v4 data at the CLI boundary', () => {
+  it('rejects malformed, unknown, and semantically invalid Manifest v5 data at the CLI boundary', () => {
     const manifest = manifestOf(fixture())
     expect(() => assertManifest(manifest)).not.toThrow()
     const { modules: _modules, ...withoutModules } = manifest
@@ -270,7 +309,7 @@ describe('canonical introspection', () => {
     expect(() => assertManifest({
       ...manifest,
       version: VANITY_MANIFEST_VERSION - 1,
-    })).toThrow(new RegExp(`version.*must be ${VANITY_MANIFEST_VERSION}`))
+    })).toThrow(/version.*regenerate with the current version/)
     expect(() => assertManifest({ ...manifest, format: 'vanity.manifest/3' })).toThrow(/format.*must be/)
     expect(() => assertManifest({
       ...manifest,

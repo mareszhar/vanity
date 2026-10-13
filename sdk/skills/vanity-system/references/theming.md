@@ -1,6 +1,6 @@
 # Themes, modes, and axes
 
-An **axis** is a named family of alternatives (`scheme: light | dark`, `density: compact | comfortable | spacious`, `skin: paper | glass | terminal`). Tokens give per-mode values; components never branch on the mode. Adding a mode means filling in values, not editing components.
+An **axis** is a named family of alternatives (`scheme: light | dark`, `density: compact | comfortable | spacious`, `skin: paper | glass | terminal`). Express value differences in tokens so adding a mode fills in roles throughout the product. Component structure may use explicitly registered mode conditions; `vanity check` counts those uses without judging them.
 
 ## Declaring axes
 
@@ -70,7 +70,7 @@ const tokens = open.defineTokens({
 
 ## Themes that change character ("skins")
 
-A skin changes more than colors: radii, borders, shadows, type, motion. Model it as an axis whose modes cover every role that defines the character, so each skin is complete by construction:
+A skin changes more than colors: radii, borders, shadows, type, motion. Model those alternatives as an axis:
 
 ```ts
 const open = createSystem().addAxis('skin', {
@@ -101,6 +101,8 @@ const character = open.defineTokens({
 ```
 
 Skins only work as well as components' discipline: a component that hardcodes `border-radius: 8px` won't change. Combine axes freely (skin × scheme × density); when one token varies on several axes, Vanity emits the needed combinations.
+
+To require a complete skin, declare `covers` on the axis with the token leaves or groups that define its character. Every non-default mode must have an arm on each role or a dependency. Use `shared` for deliberately identical roles, not accidental omissions. The example leaves `ease.standard` unchanged in crisp and `font.display` unchanged in playful; adding coverage for those roles requires their missing arms or an explicit shared declaration. The base covers calm, groups include later additions, and derived roles need no redundant arms. Intersecting axes are checked independently.
 
 ## Scoping a theme to part of the page
 

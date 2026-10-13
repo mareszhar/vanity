@@ -51,6 +51,8 @@ Every value position accepts:
 
 The direct-handle rule applies recursively to channels, calculations, relative-color inputs, fallbacks, lists, and plugin operations.
 
+In style declarations the law also runs in the other direction: a known token or typed value must fit the receiving property's data types. A color token cannot fill padding, and a number token cannot fill a length slot even when its value is zero. The cursor checks direct typed inputs; the compiler checks interpolated references and validates the complete declaration grammar. Shorthands retain each component's type and origin. Unknown-typed tokens, external variables, and unresolved property families carry unresolved evidence rather than an invented verdict. See [CSS declaration compatibility](./spec-css.md#10-validation) for the evidence levels and identity limits.
+
 ## 4. Constructors
 
 Built-in constructors are dual:
@@ -413,6 +415,8 @@ Every helper receives:
 `boxShadow: 'none'` and the systematic keyword matrix are one contract. A one-off parser exception is insufficient.
 
 The declaration validator has a central property-grammar keyword path, with `box-shadow`/`text-shadow` `none` and the initial CSS-wide matrix covered across class, recipe, atom, and alias paths.
+
+Generated numeric grammar adds non-negative ranges, integer bounds, dimensioned bounds, and unitless rules to native declaration parsing. A raw JavaScript number follows the substrate's unit rule before validation (`padding: 1` emits `1px`); the string `'1'` is checked as authored and fails for padding. A literal unitless `0` remains valid in length slots. Numeric math establishes dimensions for `calc`, `min`, `max`, and `clamp`; it does not claim dimensions for every platform function. Unresolved grammar preserves the native validator's existing verdict, and internal exceptions fail rather than being labeled unresolved.
 
 Compatible token handles retain their CSS data type through constructors, operations, fallbacks, declarations, and runtime setters. The cross-cutting value-law suite covers color channels, math/clamp/negation, grid fragments, typed custom-property fallbacks, image tokens, and snapshot setters.
 

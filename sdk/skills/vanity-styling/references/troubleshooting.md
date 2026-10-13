@@ -25,6 +25,8 @@ The code names the failure class, the path names the property (`vanity.display`,
 
 TypeScript errors with `Did you mean 'ink'?` are token typos; `Object literal may only specify known properties, and 'hovr' does not exist` means an unknown key — check the system's condition names.
 
+An import failure names the specifier, importer and host message. Style modules execute in Node: package-name imports select Node entries, while other aliases and plugins keep the host's file. If evaluation names browser-selected imports, replace those aliases with package-name imports in the style module. A browser entry may re-export the throwing helper, so follow every named import site. A possible-causes hint means the stack did not identify the throwing module; establish the cause before changing imports. Native builtins such as `node:fs` need no browser polyfill.
+
 ## "My style doesn't apply"
 
 Work through these in order:

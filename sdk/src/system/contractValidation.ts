@@ -15,6 +15,9 @@ import type {
   VanitySystemIdentities,
 } from './contract'
 import { VanityError } from '../diagnostics'
+import { getContrastRecordError } from '../introspect/contrast'
+import { getTokenRangeError } from '../runtime/range'
+import { isTokenDataType } from '../tokens/config'
 
 type RecordValue = Record<string, unknown>
 
@@ -35,32 +38,6 @@ const COLOR_INTERPOLATION_SPACES = new Set([
   'hwb',
   'lch',
   'oklch',
-])
-
-const CSS_DATA_TYPES = new Set([
-  'unknown',
-  'declaration',
-  'number',
-  'integer',
-  'percentage',
-  'number-percentage',
-  'length',
-  'length-percentage',
-  'angle',
-  'time',
-  'frequency',
-  'resolution',
-  'flex',
-  'color',
-  'image',
-  'position',
-  'easing-function',
-  'transform-function',
-  'transform-list',
-  'custom-ident',
-  'dashed-ident',
-  'string',
-  'url',
 ])
 
 /** Validate the complete current portable-system shape before projection hashing. */
@@ -92,7 +69,7 @@ export function assertPortableSystemShape(
     'audits',
     'overwrites',
     'identities',
-  ], ['source', 'tokenLayer', 'axes'], 'portable system')
+  ], ['source', 'tokenLayer', 'axes', 'checks'], 'portable system')
   if (system.format !== expectedFormat)
     fail('portable system.format', `unsupported portable system format '${String(system.format)}'`)
   assertString(system.prefix, 'portable system.prefix')
@@ -110,6 +87,16 @@ export function assertPortableSystemShape(
   system.tokens.forEach((token, index) => assertHandleMeta(token, `portable system.tokens[${index}]`))
   assertArray(system.tokenRecords, 'portable system.tokenRecords')
   system.tokenRecords.forEach((token, index) => assertTokenRecord(token, `portable system.tokenRecords[${index}]`))
+  if (system.checks !== undefined) {
+    assertArray(system.checks, 'portable system.checks')
+    system.checks.forEach((entry, index) => {
+      const path = `portable system.checks[${index}]`
+      const check = requireRecord(entry, path)
+      const error = getContrastRecordError(check)
+      if (error)
+        fail(path, error)
+    })
+  }
   assertRuntimeContract(system.runtime)
   assertJsonRecord(system.consts, 'portable system.consts')
   assertStringArray(system.utilities, 'portable system.utilities')
@@ -333,8 +320,12 @@ function assertAxisDescription(value: unknown): asserts value is VanityAxisRegis
 
 function assertAxisDefinition(value: unknown, path: string): void {
   const definition = requireRecord(value, path)
-  assertExactKeys(definition, ['modeOrder', 'modes'], ['defaultMode', 'description', 'control', 'native'], path)
+  assertExactKeys(definition, ['modeOrder', 'modes'], ['defaultMode', 'description', 'control', 'native', 'covers', 'shared'], path)
   assertStringArray(definition.modeOrder, `${path}.modeOrder`)
+  if (definition.covers !== undefined)
+    assertStringArray(definition.covers, `${path}.covers`)
+  if (definition.shared !== undefined)
+    assertStringArray(definition.shared, `${path}.shared`)
   assertOptionalString(definition.defaultMode, `${path}.defaultMode`)
   assertOptionalString(definition.description, `${path}.description`)
   if (definition.control !== undefined) {
@@ -397,6 +388,7 @@ function assertHandleMeta(value: unknown, path: string): asserts value is Vanity
     'metadata',
     'register',
     'validate',
+    'restrict',
     'runtime',
     'axes',
     'cases',
@@ -417,6 +409,8 @@ function assertHandleMeta(value: unknown, path: string): asserts value is Vanity
     assertJsonRecord(meta.metadata, `${path}.metadata`)
   if (meta.register !== undefined)
     assertJsonValue(meta.register, `${path}.register`)
+  if (meta.restrict !== undefined)
+    assertTokenRestrictionShape(meta.restrict, `${path}.restrict`)
   if (meta.validate !== undefined)
     assertJsonValue(meta.validate, `${path}.validate`)
   if (meta.runtime !== undefined)
@@ -477,6 +471,9 @@ function assertTokenRecord(value: unknown, path: string): asserts value is Vanit
     'layer',
     'upgrade',
     'description',
+    'usage',
+    'restrict',
+    'range',
     'deprecated',
     'emission',
     'runtime',
@@ -495,6 +492,12 @@ function assertTokenRecord(value: unknown, path: string): asserts value is Vanit
   assertOptionalString(token.layer, `${path}.layer`)
   assertOptionalString(token.upgrade, `${path}.upgrade`)
   assertOptionalString(token.description, `${path}.description`)
+  if (token.usage !== undefined)
+    assertTokenUsageShape(token.usage, `${path}.usage`)
+  if (token.restrict !== undefined)
+    assertTokenRestrictionShape(token.restrict, `${path}.restrict`)
+  if (token.range !== undefined)
+    assertTokenRangeShape(token.range, token.semantic === undefined ? 'unknown' : (token.semantic as Record<string, unknown>).type, `${path}.range`)
   assertOptionalString(token.deprecated, `${path}.deprecated`)
   assertStringArray(token.refs, `${path}.refs`)
   assertStringArray(token.requirements, `${path}.requirements`)
@@ -851,6 +854,7 @@ function assertRuntimeToken(value: unknown, path: string): asserts value is Vani
     'deprecated',
     'metadata',
     'validation',
+    'range',
     'baseSlot',
   ], path)
   assertStringArray(token.token, `${path}.token`)
@@ -877,6 +881,8 @@ function assertRuntimeToken(value: unknown, path: string): asserts value is Vani
       fail(`${path}.validation.onInvalid`, 'must be throw, fallback, or omit')
     assertOptionalString(validation.fallback, `${path}.validation.fallback`)
   }
+  if (token.range !== undefined)
+    assertTokenRangeShape(token.range, token.type, `${path}.range`)
   assertOptionalString(token.baseSlot, `${path}.baseSlot`)
   assertArray(token.branches, `${path}.branches`)
   token.branches.forEach((branch, index) => assertRuntimeBranch(branch, `${path}.branches[${index}]`))
@@ -1081,7 +1087,7 @@ function assertVersion(value: unknown, path: string): void {
 
 function assertCssType(value: unknown, path: string): void {
   assertString(value, path)
-  if (!CSS_DATA_TYPES.has(value) && !value.startsWith('plugin:'))
+  if (!isTokenDataType(value))
     fail(path, 'contains an unknown CSS data type')
 }
 
@@ -1120,7 +1126,7 @@ function fail(path: string, message: string): never {
   })
 }
 
-// These shape helpers are shared by the Manifest v4 reader. Keeping the
+// These shape helpers are shared by the Manifest v5 reader. Keeping the
 // implementation in one boundary module prevents the portable and manifest
 // projections from silently accepting different nested contracts.
 export function assertConditionArmShape(value: unknown, path: string): asserts value is VanityConditionArm {
@@ -1177,4 +1183,35 @@ export function assertCssTypeShape(value: unknown, path: string): void {
 
 export function assertRuntimeContractShape(value: unknown): asserts value is VanityRuntimeContract {
   assertRuntimeContract(value)
+}
+
+/** Closed portable guidance, shared with the manifest reader. */
+export function assertTokenUsageShape(value: unknown, path: string): void {
+  const usage = requireRecord(value, path)
+  assertExactKeys(usage, [], ['for', 'avoid', 'tier'], path)
+  if (usage.for !== undefined)
+    assertStringArray(usage.for, `${path}.for`)
+  assertOptionalString(usage.avoid, `${path}.avoid`)
+  if (usage.tier !== undefined && usage.tier !== 'primitive')
+    fail(`${path}.tier`, 'must be primitive')
+}
+
+/** Closed property restriction metadata at portable boundaries. */
+export function assertTokenRestrictionShape(value: unknown, path: string): void {
+  const restriction = requireRecord(value, path)
+  assertExactKeys(restriction, ['properties', 'level'], ['reason'], path)
+  assertStringArray(restriction.properties, `${path}.properties`)
+  if (restriction.level !== 'discourage' && restriction.level !== 'forbid')
+    fail(`${path}.level`, 'must be discourage or forbid')
+  assertOptionalString(restriction.reason, `${path}.reason`)
+}
+
+/** Runtime and manifest bounds use the definition's exact comparison rule. */
+export function assertTokenRangeShape(value: unknown, type: unknown, path: string): void {
+  assertStringArray(value, path)
+  if ((value as string[]).length !== 2)
+    fail(path, 'needs exactly two inclusive bounds')
+  const error = getTokenRangeError(type as import('../values/types').VanityCssDataType, value as [string, string])
+  if (error)
+    fail(path, error)
 }

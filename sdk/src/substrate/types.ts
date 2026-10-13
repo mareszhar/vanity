@@ -77,10 +77,16 @@ export interface VanityStyleModuleTransform {
   readonly cssObjects: readonly unknown[]
   readonly localClassNames: readonly string[]
   readonly composedClassLists: readonly unknown[]
+  /** Selector identities whose emitted spelling is needed by provenance. */
+  readonly selectors?: readonly string[]
 }
 
 export interface VanityStyleModuleResult {
   readonly css: string
+  /** Exact selector spellings from the same backend transform. */
+  readonly selectors?: Readonly<Record<string, string>>
+  /** Selector formatting identity used to count otherwise identical CSSOM arms. */
+  readonly selectorKeys?: Readonly<Record<string, string>>
 }
 
 /**

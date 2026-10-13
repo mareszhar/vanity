@@ -9,6 +9,7 @@ import { vanityPlugin } from '@mszr/vanity/vite'
 import { build as esbuild } from 'esbuild'
 import { build, createServer } from 'vite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { installTestSdk } from '../test-support/installedSdk'
 import { createSystemContract } from './contract'
 
 function local(path: string) {
@@ -50,6 +51,7 @@ function outputOf(result: Awaited<ReturnType<typeof build>>): Rollup.OutputAsset
 
 async function temporaryApp(name: string): Promise<string> {
   const root = await realpath(await mkdtemp(join(tmpdir(), `vanity-${name}-`)))
+  await installTestSdk(root)
   await writeFile(join(root, 'package.json'), '{ "name": "projection-fixture", "type": "module" }\n')
   return root
 }
@@ -235,6 +237,7 @@ describe('the permanent plain-system projection canary', () => {
 
   it('keeps configured system CSS lazy for a plain-system-only build entry', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-css-laziness-')))
+    await installTestSdk(root)
 
     try {
       await writeFile(join(root, 'package.json'), '{ "name": "system-css-laziness", "type": "module" }\n')

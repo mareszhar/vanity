@@ -5,6 +5,7 @@
 
 import type { ProjectConfig } from '@mszr/selenita'
 import { VanityError } from './diagnostics'
+import { resolveStyleSelectors } from './introspect/records'
 import { substrate } from './substrate'
 import { readTokenFoldEvidence } from './tokens/fold'
 
@@ -63,6 +64,12 @@ export function captureEmission<T>(
       localClassNames: [...localClassNames],
       composedClassLists: [],
     }).css
+    resolveStyleSelectors(selectors => substrate.modules.transformStyleModule({
+      cssObjects: [],
+      localClassNames: [...localClassNames],
+      composedClassLists: [],
+      selectors,
+    }))
     return Object.freeze({ css, value })
   }
   finally {

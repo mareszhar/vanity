@@ -23,7 +23,7 @@ Vanity gives design-system authors inferred, composable, refactorable, and inspe
 npm install @mszr/vanity
 ```
 
-Install `vite` when compiling Vanilla style modules. `vue`, `nuxt`, `typescript`, and `@mszr/selenita` are optional peers; add only the integrations and testing tools your project uses.
+Install Vite 6, 7 or 8 when compiling Vanity style modules. `vue`, `nuxt`, `wxt`, `vitest`, `typescript`, and `@mszr/selenita` are optional peers; add only the integrations and testing tools your project uses.
 
 ## Quick start
 
@@ -94,6 +94,10 @@ export default defineConfig({
 Vanity evaluates the style module at build time and emits ordinary CSS: classes, custom properties, cascade layers, selectors, conditions, and at-rules. `consolidate()` itself performs no I/O and emits nothing, so tools can import the system directly.
 
 ## What you can build
+
+Check source styles with `pnpm exec vanity check` in Vite, WXT or Vitest 5 projects. Read its coverage and unevaluated entries alongside findings; Nuxt uses its framework build for compiler evidence. `--json` emits the versioned report for tools and agents.
+
+For new systems, enable `declarations: { level: 'forbid', tokens: ['length', 'color'] }` in `createSystem()` to require spacing and colors to come from the system. Existing projects can adopt the policy with a reviewed `vanity check --write-baseline` report. A baseline accepts existing policy findings while new ones still fail; invalid CSS and token-kind mismatches always require a repair.
 
 Use the locked system to create classes, ordered fragments, selector rules, recipes, anatomies, atom sets, ports, keyframes, font faces, and raw CSS. Mutable tokens and activatable axes lower to declared browser-native slots; the optional runtime controller sets those slots and can create SSR-safe snapshots.
 

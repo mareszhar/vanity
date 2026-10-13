@@ -55,17 +55,19 @@ export const skillSnippets: readonly VanitySkillSnippet[] = [
   { block: 'vanity-styling/references/patterns.md#9', startsWith: 'export const sheet = cls(', file: 'app/skills/sheet.css.ts' },
   { block: 'vanity-styling/references/patterns.md#10', startsWith: '// design/base.css.ts', file: 'app/skills/base.css.ts' },
 
+  { block: 'vanity-styling/SKILL.md#6', startsWith: `import { unsafe } from '@mszr/vanity'`, file: 'app/skills/aligned-icon.css.ts' },
+
   // vanity-system
   { block: 'vanity-system/SKILL.md#1', startsWith: `import { createSystem, media } from '@mszr/vanity'`, file: 'app/skills/systems/shape.ts', run: true },
   { block: 'vanity-system/SKILL.md#2', startsWith: 'const px = (value: number)', file: 'app/skills/systems/tiers.ts', before: open, after: `\nexport const tiers = open.addTokens(tokens).consolidate({ prefix: 'tiers' })\n`, run: true },
   { block: 'vanity-system/SKILL.md#3', startsWith: 'open.tdef({ val: open.length.px(12)', file: 'app/skills/systems/traits.ts', before: densityOpen, run: true },
-  { block: 'vanity-system/SKILL.md#4', startsWith: 'import { container, media, selector, supports }', file: 'app/skills/systems/conditions.ts', before: open, after: `\nexport const conditions = open.consolidate({ prefix: 'conditions' })\n`, run: true },
+  { block: 'vanity-system/SKILL.md#4', startsWith: 'import { aria, container, data, media, selector, supports }', file: 'app/skills/systems/conditions.ts', before: open, after: `\nexport const conditions = open.consolidate({ prefix: 'conditions' })\n`, run: true },
   { block: 'vanity-system/SKILL.md#5', startsWith: `import { colorSchemes, data } from '@mszr/vanity'`, file: 'app/skills/systems/axes.ts', before: `import { createSystem } from '@mszr/vanity'\n`, after: `\nexport const axes = open.addTokens(tokens).consolidate({ prefix: 'axes' })\n`, run: true },
   { block: 'vanity-system/SKILL.md#6', startsWith: 'const palette = open.defineTokens()', file: 'app/skills/systems/palette.ts', before: open, after: `\nexport const palette6 = open.addTokens({ color: palette }).consolidate({ prefix: 'palette' })\n`, run: true },
   { block: 'vanity-system/SKILL.md#7', startsWith: '// app code (a composable)', file: 'app/skills/runtimeIntro.ts', before: `export function useRuntimeIntro() {\n`, after: `}\n` },
   { block: 'vanity-system/references/color.md#1', startsWith: 'const palette = open.defineTokens()', file: 'app/skills/systems/derive.ts', before: open, after: `\nexport const derive = open.addTokens({ color: palette }).consolidate({ prefix: 'derive' })\n`, run: true },
-  { block: 'vanity-system/references/color.md#2', startsWith: '// design/accent.ts', file: 'app/skills/contrast/design/accent.ts' },
-  { block: 'vanity-system/references/color.md#3', startsWith: '// accent.test.ts', file: 'app/skills/contrast/accent.test.ts', test: true },
+  { block: 'vanity-system/references/color.md#2', startsWith: '// design/system.ts', file: 'app/skills/contrast/design/system.ts', run: true },
+  { block: 'vanity-system/references/color.md#3', startsWith: '// external-accent.test.ts', file: 'app/skills/contrast/external-accent.test.ts', test: true },
   { block: 'vanity-system/references/color.md#4', startsWith: `import { mapRecord } from '@mszr/vanity'`, file: 'app/skills/systems/scale.ts', before: open, after: `\nexport const scale = open.addTokens(tokens).consolidate({ prefix: 'scale' })\nexport const base = scale.t.blue.base\n`, run: true },
   { block: 'vanity-system/references/extending.md#1', startsWith: `import { createSystem, definePlugin } from '@mszr/vanity'`, file: 'app/skills/systems/plugin.ts', after: `\nexport const plugin = open.consolidate({ prefix: 'plugin' })\nexport const card = plugin.elevate.card()\n`, run: true },
   { block: 'vanity-system/references/extending.md#2', startsWith: 'createSystem({', file: 'app/skills/systems/policies.ts', before: `import { createSystem } from '@mszr/vanity'\n\n`, run: true },
@@ -79,6 +81,8 @@ export const skillSnippets: readonly VanitySkillSnippet[] = [
   { block: 'vanity-system/references/theming.md#2', startsWith: 'const tokens = open.defineTokens({', file: 'app/skills/systems/theming.ts' },
   { block: 'vanity-system/references/theming.md#4', startsWith: 'const widget = open.defineTokens(', file: 'app/skills/systems/theming.ts', after: `\nexport const theming = open.addTokens(tokens).addTokens({ widget }).consolidate({ prefix: 'theming' })\n`, run: true },
   { block: 'vanity-system/references/theming.md#3', startsWith: `const open = createSystem().addAxis('skin'`, file: 'app/skills/systems/skins.ts', before: `import { createSystem, data } from '@mszr/vanity'\n\n`, after: `\nexport const skins = open.addTokens(character).consolidate({ prefix: 'skins' })\n`, run: true },
+
+  { block: 'vanity-system/SKILL.md#8', startsWith: `import { createSystem } from '@mszr/vanity'`, file: 'app/skills/systems/guided.ts', run: true },
 
   // vanity-setup
   { block: 'vanity-setup/SKILL.md#3', startsWith: '// vanity.config.ts', file: 'vanity.config.ts' },

@@ -10,11 +10,14 @@
  * the plugin (tests, the emit runner) pay one guarded push at most.
  */
 
+import type { VanityDeclarationRecord } from '../css/declaration'
 import type { VanityPortMeta } from '../ports/types'
+import type { VanityStyleModuleResult } from '../substrate/types'
 import type { VanityAxisRegistryDescription } from '../system/axes'
 import type { VanitySemanticTokenAddress } from '../tokens/handle'
 import type { VanityCssFeature, VanityExpressionKind, VanityExtensionIdentity, VanitySource } from '../values/protocol'
 import type { VanityCssDataType } from '../values/types'
+import { getArmKey } from '../css/arm'
 
 // ─── Records ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +54,9 @@ export interface VanityTokenRecord extends VanitySourceRecord {
   /** A proven resolved preview, or an honest reason no preview is available. */
   preview: VanityTokenPreviewRecord
   description?: string
+  usage?: import('../tokens/types').VanityTokenUsage
+  restrict?: import('../tokens/types').VanityTokenRestriction
+  range?: readonly [string, string]
   deprecated?: string
   /** Every resolved declaration site, including semantic branch provenance. */
   emission?: readonly VanityTokenEmissionRecord[]
@@ -218,6 +224,18 @@ export interface VanityRecipeRecord extends VanitySourceRecord {
   defaults: Record<string, string | boolean>
   /** Published port name → the port's own custom-property name. */
   ports: Record<string, string>
+  /** The same emitted lookup table the recipe or anatomy runtime consumes. */
+  classes?: {
+    base: string
+    variants: Record<string, Record<string, string>>
+    toggles: Record<string, string>
+    compound: Array<{ when: Record<string, string | boolean>, class: string }>
+  } | {
+    base: Record<string, string>
+    variants: Record<string, Record<string, Record<string, string>>>
+    toggles: Record<string, Record<string, string>>
+    compound: Array<{ when: Record<string, string | boolean>, classes: Record<string, string> }>
+  }
 }
 
 export interface VanityPortRecord extends VanitySourceRecord {
@@ -243,6 +261,8 @@ export interface VanityEscapeRecord extends VanitySourceRecord {
   /** The stated intent — required on `unsafe`, absent elsewhere. */
   reason?: string
   layer?: string
+  style?: string
+  property?: string
 }
 
 export interface VanityContrastRecord extends VanitySourceRecord {
@@ -257,8 +277,21 @@ export interface VanityContrastRecord extends VanitySourceRecord {
   min: number
   /** True when the threshold was consciously accepted at the definition site. */
   accepted: boolean
+  evidence?: import('../evidence').VanityEvidence
+  samples?: number
+  step?: Readonly<Record<string, string>>
+  worst?: Readonly<Record<string, string | number>>
+  profile?: 'development' | 'production' | 'both'
+  note?: string
+  tokens?: readonly string[]
+  environment?: Readonly<Record<string, string>>
   /** The pick used a representative target because exact folding was declined. */
   fallback?: string
+}
+
+export interface VanityEmittedDeclarationRecord extends VanityDeclarationRecord {
+  arm: import('../css/rule').VanityArm & { selector: string, ordinal: number }
+  layer: string
 }
 
 export interface VanityStyleRecord extends VanitySourceRecord {
@@ -269,6 +302,13 @@ export interface VanityStyleRecord extends VanitySourceRecord {
   name?: string
   /** Custom properties referenced by the compiled declarations. */
   vars: string[]
+  declarations?: import('../css/declaration').VanityDeclarationRecord[]
+  /** Emitted winners in CSS order, projected from the same classified records. */
+  emittedDeclarations?: VanityEmittedDeclarationRecord[]
+  layer?: string
+  exports?: readonly string[]
+  /** Internal capture state; never serialized into the manifest. */
+  selectorsResolved?: boolean
 }
 
 export type VanityInspectRecord
@@ -325,6 +365,8 @@ export type VanityAuditKind
     | 'rootModeDisagreements'
     | 'staleDerivations'
     | 'derivedCaseGrowth'
+    | 'descendantConditions'
+    | 'unanchoredSelectors'
 
 /** Per-category audit behavior: `'off'` silences, `'warn'` reports, and `'error'` promotes a finding to a failure. */
 export type VanityAuditLevel = 'off' | 'warn' | 'error'
@@ -345,6 +387,8 @@ const CHANNEL = Symbol.for('vanity.inspection')
 
 interface Channel {
   current: VanityInspectRecord[] | undefined
+  findings?: import('../css/findings').VanityDeclarationFinding[]
+  warnings?: import('../diagnostics').VanityDiagnosticInput[]
 }
 
 function channel(): Channel {
@@ -357,9 +401,84 @@ export function record(entry: VanityInspectRecord): void {
   channel().current?.push(entry)
 }
 
+/** Finalize the active graph through its capture's actual CSS backend and class registry. */
+export function resolveStyleSelectors(
+  resolve: (selectors: readonly string[]) => VanityStyleModuleResult,
+  records = channel().current ?? [],
+): void {
+  const styles = records.filter((record): record is VanityStyleRecord => record.kind === 'style' && !record.selectorsResolved)
+  const selectors = styles.flatMap(style => style.emittedDeclarations?.map(declaration => declaration.arm.selector) ?? [])
+  if (styles.length === 0)
+    return
+  const resolved = resolve(selectors)
+  for (const style of styles) {
+    const authoredArms = new Map<string, Map<string, VanityEmittedDeclarationRecord[]>>()
+    for (const declaration of style.emittedDeclarations ?? []) {
+      const key = `${declaration.layer}:${getArmKey(declaration.arm)}:${declaration.arm.ordinal}`
+      let properties = authoredArms.get(key)
+      if (!properties) {
+        properties = new Map()
+        authoredArms.set(key, properties)
+      }
+      const values = properties.get(declaration.property) ?? []
+      values.push(declaration)
+      properties.set(declaration.property, values)
+    }
+    const getEmittedArmKey = (arm: VanityEmittedDeclarationRecord['arm']) => getArmKey({
+      ...arm,
+      scopes: arm.scopes?.length ? arm.scopes : undefined,
+      startingStyle: arm.startingStyle || undefined,
+    })
+    const emittedArms = new Map<string, Map<string, VanityEmittedDeclarationRecord[]>>()
+    for (const properties of authoredArms.values()) {
+      const first = properties.values().next().value![0]!
+      const selector = resolved.selectors![first.arm.selector]!
+      const key = `${first.layer}:${getEmittedArmKey({ ...first.arm, selector })}`
+      let emitted = emittedArms.get(key)
+      if (!emitted) {
+        emitted = new Map()
+        emittedArms.set(key, emitted)
+      }
+      for (const [property, values] of properties)
+        emitted.set(property, values)
+    }
+    const ordinals = new Map<string, number>()
+    style.emittedDeclarations = []
+    for (const properties of emittedArms.values()) {
+      const first = properties.values().next().value![0]!
+      const raw = first.arm.selector
+      const key = `${first.layer}:${getEmittedArmKey({ ...first.arm, selector: resolved.selectorKeys![raw]! })}`
+      const ordinal = ordinals.get(key) ?? 0
+      ordinals.set(key, ordinal + 1)
+      for (const values of properties.values()) {
+        for (const declaration of values) {
+          declaration.arm.selector = resolved.selectors![declaration.arm.selector]!
+          declaration.arm.ordinal = ordinal
+          style.emittedDeclarations.push(declaration)
+        }
+      }
+    }
+    style.selectorsResolved = true
+  }
+}
+
 /** Whether a collector is open — guards record preparation that isn't free. */
 export function isInspecting(): boolean {
   return channel().current !== undefined
+}
+
+/** Append one declaration finding to the active evaluation capture. */
+export function collectDeclarationFinding(finding: import('../css/findings').VanityDeclarationFinding): void {
+  channel().findings?.push(finding)
+}
+
+/** Non-policy warnings share the evaluation capture without inventing a declaration. */
+export function collectInspectionWarning(diagnostic: import('../diagnostics').VanityDiagnosticInput): void {
+  const current = channel().warnings
+  if (!current)
+    return
+  if (!current.some(prior => JSON.stringify(prior) === JSON.stringify(diagnostic)))
+    current.push(diagnostic)
 }
 
 /**
@@ -367,16 +486,42 @@ export function isInspecting(): boolean {
  * synchronous end-to-end (the same guarantee the css adapter rides), so one
  * `current` slot suffices — collectors never interleave.
  */
-export function collectInspection<T>(run: () => T): { result: T, records: VanityInspectRecord[] } {
+export interface VanityInspectionCapture {
+  records: VanityInspectRecord[]
+  findings: import('../css/findings').VanityDeclarationFinding[]
+  warnings: import('../diagnostics').VanityDiagnosticInput[]
+  /** The authored body returned; later compiler finalization can still fail. */
+  complete: boolean
+  error?: unknown
+}
+
+export function collectInspection<T>(run: () => T, observe?: (capture: VanityInspectionCapture) => void): { result: T, records: VanityInspectRecord[], findings: import('../css/findings').VanityDeclarationFinding[], warnings: import('../diagnostics').VanityDiagnosticInput[] } {
   const store = channel()
   const previous = store.current
+  const previousFindings = store.findings
+  const previousWarnings = store.warnings
   const records: VanityInspectRecord[] = []
+  const findings: import('../css/findings').VanityDeclarationFinding[] = []
+  const warnings: import('../diagnostics').VanityDiagnosticInput[] = []
   store.current = records
+  store.findings = findings
+  store.warnings = warnings
+  let complete = false
+  let failure: unknown
 
   try {
-    return { result: run(), records }
+    const result = run()
+    complete = true
+    return { result, records, findings, warnings }
+  }
+  catch (error) {
+    failure = error
+    throw error
   }
   finally {
     store.current = previous
+    store.findings = previousFindings
+    store.warnings = previousWarnings
+    observe?.({ records, findings, warnings, complete, ...(!complete ? { error: failure } : {}) })
   }
 }

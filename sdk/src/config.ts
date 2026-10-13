@@ -113,6 +113,8 @@ export interface VanityCompilerOptions {
   layerOrder?: readonly string[]
   /** Directory for compiler-owned system artifacts; defaults to `<root>/.vanity`. */
   artifactDirectory?: string
+  /** Accepted policy findings, relative to the project root; defaults to vanity.baseline.json when present. */
+  baseline?: string
   /** Receives structured compiler and integration diagnostics. */
   diagnostics?: import('./diagnostics').VanityDiagnosticSink
 }

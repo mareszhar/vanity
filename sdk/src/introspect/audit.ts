@@ -7,11 +7,14 @@
  * derived-case growth is advisory because the larger output remains correct.
  */
 
+import type { VanityDiagnostic, VanityDiagnosticCode } from '../diagnostics'
 import type { VanityOklch } from '../tokens/math'
+import type { VanityDeclarationPolicies } from '../values/policies'
 import type { VanityManifest, VanityManifestContrast, VanityManifestEscape, VanityManifestStyle } from './manifest'
 import type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel } from './records'
 import type { VanitySystemMap } from './system'
 import { parseBlocks, walkDeclarations } from '../css/compile'
+import { isDeclarationPropertyGoverned } from '../css/declarations-policy'
 import { hasBrowserReactiveSyntax } from '../tokens/expressions'
 import { parseColor } from '../tokens/math'
 import { createManifestModules, getManifestTokenUsage } from './manifest'
@@ -22,6 +25,8 @@ export type { VanityAuditConfig, VanityAuditKind, VanityAuditLevel }
 export interface VanityAuditFinding {
   /** Audit category that produced the finding. */
   kind: VanityAuditKind
+  /** Stable diagnostic code when the category names an authoring mistake. */
+  code?: VanityDiagnosticCode
   /** Effective severity after defaults and policy promotion. */
   level: 'warn' | 'error'
   /** The headline: what drifted, naming the value and the token it should be. */
@@ -34,6 +39,8 @@ export interface VanityAuditFinding {
 
 /** Build evidence supplied for categories a locked system cannot evaluate alone. */
 export interface VanityAuditEvidence {
+  /** Authored selector warnings from the compiler's existing evaluation capture. */
+  readonly selectorWarnings?: readonly VanityDiagnostic[]
   /** Style barrels that were loaded eagerly. */
   readonly eagerStyleBarrels?: readonly { readonly file: string, readonly imports: readonly string[] }[]
   /** Capability expectations that differ from emitted output. */
@@ -92,6 +99,8 @@ const DEFAULT_AUDIT_LEVELS: Record<VanityAuditKind, VanityAuditLevel> = {
   rootModeDisagreements: 'warn',
   staleDerivations: 'error',
   derivedCaseGrowth: 'warn',
+  descendantConditions: 'warn',
+  unanchoredSelectors: 'warn',
 }
 
 const SYSTEM_AUDIT_KINDS = [
@@ -102,6 +111,7 @@ const SYSTEM_AUDIT_KINDS = [
   'specificityContexts',
   'staleDerivations',
   'derivedCaseGrowth',
+  'descendantConditions',
 ] as const
 
 type SystemAuditKind = typeof SYSTEM_AUDIT_KINDS[number]
@@ -110,6 +120,7 @@ type AuditRunner = () => AuditFindingDraft[]
 type SystemAuditCategories = Record<SystemAuditKind, AuditRunner>
 
 const UNEVALUATED_AUDITS: readonly VanityUnevaluatedAudit[] = [
+  { kind: 'unanchoredSelectors', requires: 'buildEvidence' },
   { kind: 'unusedTokens', requires: 'moduleUsage' },
   { kind: 'contrast', requires: 'moduleUsage' },
   { kind: 'escapes', requires: 'moduleUsage' },
@@ -159,6 +170,8 @@ export function audit(
     overwriteInventory: systemCategories.overwriteInventory,
     staleDerivations: systemCategories.staleDerivations,
     derivedCaseGrowth: systemCategories.derivedCaseGrowth,
+    descendantConditions: systemCategories.descendantConditions,
+    unanchoredSelectors: () => (evidence.selectorWarnings ?? []).filter(row => row.code === 'VANITY_SELECTOR_UNANCHORED').map(row => ({ kind: 'unanchoredSelectors', code: row.code, message: row.message, fix: row.fix?.message, file: row.file })),
     eagerStyleBarrels: () => (evidence.eagerStyleBarrels ?? []).map(entry => ({
       kind: 'eagerStyleBarrels' as const,
       level: 'warn' as const,
@@ -198,7 +211,7 @@ export function audit(
   return findings
 }
 
-/** Run the seven audit categories that a consolidated semantic map can decide. */
+/** Run the system audit categories that a consolidated semantic map can decide. */
 export function runSystemAudit(
   system: VanitySystemMap,
   config?: VanityAuditConfig,
@@ -244,7 +257,17 @@ function createSystemAuditCategories(system: VanitySystemMap): SystemAuditCatego
     specificityContexts: () => findSpecificityContexts(system),
     staleDerivations: () => findStaleDerivations(system),
     derivedCaseGrowth: () => findDerivedCaseGrowth(system),
+    descendantConditions: () => findDescendantConditions(system),
   }
+}
+
+function findDescendantConditions(system: VanitySystemMap): Omit<VanityAuditFinding, 'level'>[] {
+  return Object.values(system.conditions).filter(condition => condition.arms.some(arm => arm.selector !== undefined && /^\[(?:data|aria)-/.test(arm.selector) && !arm.selector.includes('&'))).map(condition => ({
+    kind: 'descendantConditions',
+    code: 'VANITY_CONDITION_DESCENDANT',
+    message: `${condition.name} matches descendants of the styled element (${condition.readable})`,
+    fix: 'use data(…).self or aria(…).self to match the styled element itself; keep the bare condition for intentional descendants',
+  }))
 }
 
 interface Declaration {
@@ -488,6 +511,9 @@ function findScaleStrays(manifest: VanityManifest, declarations: Declaration[]):
   const graphVars = new Set(Object.values(manifest.system.tokens).flatMap(token => token.name ?? []))
 
   for (const declaration of declarations) {
+    const policy = manifest.system.policies.declarations as VanityDeclarationPolicies | undefined
+    if (policy && isDeclarationPropertyGoverned(policy, declaration.property))
+      continue
     const category = categories.get(declaration.property) ?? { tokenized: 0, strays: [] }
 
     if (isGraphReference(declaration.value, graphVars))
@@ -826,6 +852,8 @@ const AUDIT_CATEGORY_TITLES: Record<VanityAuditKind, string> = {
   rootModeDisagreements: 'root mode disagreements',
   staleDerivations: 'stale folded derivations',
   derivedCaseGrowth: 'derived-case growth',
+  descendantConditions: 'descendant element states',
+  unanchoredSelectors: 'unanchored pseudo selectors',
 }
 
 /** Grouped, deep-linked findings — what `pnpm run audit` prints. */
@@ -845,7 +873,7 @@ export function formatAuditFindings(findings: readonly VanityAuditFinding[]): st
 
     for (const finding of category) {
       const mark = finding.level === 'error' ? '✖' : '•'
-      lines.push(`  ${mark} ${finding.message}${finding.file === undefined ? '' : `\n      at ${finding.file}`}`)
+      lines.push(`  ${mark} ${finding.code === undefined ? '' : `${finding.code}  `}${finding.message}${finding.file === undefined ? '' : `\n      at ${finding.file}`}`)
 
       if (finding.fix !== undefined)
         lines.push(`      fix: ${finding.fix}`)

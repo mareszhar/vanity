@@ -6,9 +6,11 @@ import { join } from 'node:path'
 import { vanityPlugin } from '@mszr/vanity/vite'
 import { createServer } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
+import { installTestSdk } from '../../test-support/installedSdk'
 import { createPromiseGate } from '../../test-support/promises'
 import { invokeVanityHotUpdate } from '../../test-support/vite'
 import { resolveViteVirtualId } from '../hosts/viteHmr'
+import { getViteStyleModuleHost } from '../hosts/viteStyleModules'
 import * as styleBuild from './build'
 import { buildStyleModule } from './build'
 
@@ -21,6 +23,8 @@ const require = createRequire(import.meta.url)
 async function put(root: string, file: string, contents: string): Promise<string> {
   const path = join(root, file)
   await mkdir(join(path, '..'), { recursive: true })
+  if (file === 'package.json')
+    await installTestSdk(root)
   await writeFile(path, contents)
   return path
 }
@@ -274,7 +278,9 @@ import { ds } from './system'
 export const card = ds.class({ color: config.color, background: installedColor, padding })
 `)
 
-      const built = await buildStyleModule({ root, filePath: entry, alias })
+      const host = await createServer({ root, configFile: false, logLevel: 'silent', resolve: { alias }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } })
+      const built = await buildStyleModule({ root, filePath: entry, ...getViteStyleModuleHost(host) })
+      await host.close()
       const normalized = built.watchFiles
 
       expect(normalized).toContain(join(root, 'color.json'))
@@ -352,13 +358,15 @@ export const ds = createSystem().consolidate({ prefix: 'system-dependency' })
 export { unrelated as renamedUnrelated } from './constants'
 `)
 
+      const host = await createServer({ root, configFile: false, logLevel: 'silent', resolve: { alias }, server: { middlewareMode: true, hmr: false, ws: false, watch: null } })
       const built = await buildStyleModule({
         root,
         filePath: barrel,
-        alias,
+        ...getViteStyleModuleHost(host),
         namespaceFiles: [barrel, system, data],
       })
 
+      await host.close()
       expect(built.watchFiles).toContain(data)
       expect(built.watchFiles).toContain(system)
       expect(built.watchFiles).toContain(barrel)

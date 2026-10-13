@@ -13,6 +13,7 @@ import type {
 } from 'typescript'
 import type { BenchmarkScale } from '../benchmarks/scales'
 import type { HostGraphMeasurement } from './benchmark-host-graph'
+import type { RuntimeMinifier, RuntimeRangeMeasurement } from './benchmark-runtime'
 import { Buffer } from 'node:buffer'
 import { spawnSync } from 'node:child_process'
 import {
@@ -42,6 +43,7 @@ import {
   readBenchmarkByteFacts,
 } from './benchmark-facts'
 import { measureHostGraph } from './benchmark-host-graph'
+import { measureRuntimeRange } from './benchmark-runtime'
 
 interface CommandMeasurement {
   output: string
@@ -114,6 +116,7 @@ interface BenchmarkResult {
     runtimeMinifiedBytes: number
     runtimeMinGzipBytes: number
   }
+  runtimeRange: RuntimeRangeMeasurement
   protocol: 1
   scales: ScaleMeasurement[]
   hostGraph: HostGraphMeasurement
@@ -121,14 +124,6 @@ interface BenchmarkResult {
 
 interface PluginModule {
   create: (info: { languageService: LanguageService }) => LanguageService
-}
-
-interface RuntimeMinifier {
-  transformSync: (source: string, options: {
-    format: 'esm'
-    minify: true
-    target: 'es2022'
-  }) => { code: string }
 }
 
 const require = createRequire(import.meta.url)
@@ -402,6 +397,9 @@ if (runtimeEntry.minGzipBytes > RUNTIME_ENTRY_MIN_GZIP_BUDGET_BYTES) {
   )
 }
 
+const runtimeRange = await measureRuntimeRange(workspaceDir)
+console.log(`• runtime: base ${runtimeEntry.minGzipBytes} B; ranged fixture ${runtimeRange.rangedFixture.minGzipBytes} B; range fixture delta ${runtimeRange.delta.minGzipBytes} B min+gzip`)
+
 console.log('• host graph: plain Vite and Vanity')
 const hostGraph = await measureHostGraph(workspaceDir)
 console.log(`  plain build ${hostGraph.buildMs.plain} ms; Vanity build ${hostGraph.buildMs.vanity} ms; overhead ${hostGraph.overheadMs} ms`)
@@ -424,6 +422,7 @@ const result: BenchmarkResult = {
     runtimeMinifiedBytes: runtimeEntry.minifiedBytes,
     runtimeMinGzipBytes: runtimeEntry.minGzipBytes,
   },
+  runtimeRange,
   protocol: 1,
   scales: benchmarkScales.map(measureScale),
   hostGraph,

@@ -15,6 +15,7 @@ import type {
   VanitySystemPlugin,
   VanitySystemRule,
 } from '@mszr/vanity'
+import type { VanityStyleValue } from '../../css/types'
 
 /** How a Hail control participates in generated CSS. */
 export type HailControlResolution = 'static' | 'token' | 'mutable'
@@ -350,9 +351,9 @@ export interface HailBem {
 /** Small declaration fragments installed by Hail's `mx` utility group. */
 export interface HailMixins {
   /** Equal logical dimensions with a circular radius. */
-  readonly circle: (size: VanityCssInput) => VanityFragment
+  readonly circle: (size: VanityStyleValue<'inlineSize'>) => VanityFragment
   /** Equal logical dimensions. */
-  readonly square: (size: VanityCssInput) => VanityFragment
+  readonly square: (size: VanityStyleValue<'inlineSize'>) => VanityFragment
   /** One-line ellipsis by default, or a multiline WebKit line clamp. */
   readonly truncate: (lines?: number) => VanityFragment
 }

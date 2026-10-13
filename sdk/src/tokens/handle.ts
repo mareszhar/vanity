@@ -59,6 +59,7 @@ export interface VanityHandleMeta {
   deprecated?: string
   metadata?: VanityHandleMetadata
   register?: unknown
+  restrict?: import('./types').VanityTokenRestriction
   validate?: unknown
   runtime?: VanityHandleRuntimeAddress
   axes?: Readonly<Record<string, Readonly<Record<string, {

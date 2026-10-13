@@ -4,6 +4,7 @@
  * transform pipeline the real compiler drives, without a bundler in the loop.
  */
 
+import { resolveStyleSelectors } from '../introspect/records'
 import { substrate } from '../substrate'
 
 export interface EmitResult<T> {
@@ -33,6 +34,12 @@ export function emit<T>(body: () => T): EmitResult<T> {
       localClassNames: [...localClassNames],
       composedClassLists: [],
     }).css
+    resolveStyleSelectors(selectors => substrate.modules.transformStyleModule({
+      cssObjects: [],
+      localClassNames: [...localClassNames],
+      composedClassLists: [],
+      selectors,
+    }))
 
     return { css, returned }
   }

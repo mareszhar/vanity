@@ -148,13 +148,13 @@ Snapshots contain:
 
 - protocol version;
 - runtime schema ID;
-- canonical mutable token addresses and serialized values;
+- canonical mutable token addresses and write inputs (CSS text or finite numbers);
 - runtime-managed modes;
 - no private slot names, DOM references, untouched graph values, or generic custom-property writes.
 
 Axis and mode records keep their own entries through JSON and restored controllers. Only a declared mode with activation metadata or an explicit control can be selected; inherited JavaScript members never supply declarations or activation values.
 
-The portable runtime-contract protocol is `2` for declared multi-root metadata. The semantic snapshot protocol remains `1`: its token-path/address records already survive root and private-slot changes.
+The portable runtime-contract protocol is `2` for declared multi-root metadata. The semantic snapshot protocol is `2`: each override's `val` records the canonical input that validation received, preserving the difference between a string and a number. Accepted output stays inside the controller for DOM writes and inspection. Refreshing or binding a root reuses that output without validating again.
 
 `snapshotFrom()` is DOM-free and uses the same validation/serialization/semantic address model as a live runtime.
 
@@ -175,7 +175,9 @@ The portable runtime-contract protocol is `2` for declared multi-root metadata. 
 - preserve valid runtime state across compatible HMR;
 - mark superseded controllers stale so they cannot mutate behind the current runtime.
 
-Schema mismatch triggers per-entry reconciliation, not wholesale state loss. Unsupported snapshot protocols reject before any state is applied.
+Schema mismatch triggers per-entry reconciliation, not wholesale state loss. An unreadable or unsupported snapshot, including version `1`, produces a diagnostic naming its version and reconciles to empty overrides and modes. The application falls back to authored defaults; stored snapshots are not migrated.
+
+`$set`, transaction setters, `snapshotFrom`, `runtime({ initial })`, `hydrate`, `runtimeProps` and `runtimeStyle` use one acceptance path. Each write or replay validates its canonical input once. An omitted write is not recorded. A rejected input handled by `onInvalid: 'fallback'` remains the recorded input, so replay applies the same fallback. A transforming validator's output is never used as its next input.
 
 ## 8. SSR projections
 
@@ -213,6 +215,12 @@ Optional Standard Schema contracts:
 - serialize transformed output only after CSS data-type validation;
 - bind validator implementations explicitly in app/SSR code;
 - never use process-global mutable registries.
+
+The universal CSS type check runs on the original input first. A color Vanity value cannot reach a length token's validator. Then Vanity creates the canonical input: a Vanity value, extension value or token handle becomes its CSS text; `-0` becomes `0`; other finite numbers and strings stay unchanged. Runtime validators receive only strings or finite numbers, never authored objects or handles. Validators must be pure over those canonical inputs: the same input produces the same output across client writes, SSR and hydration.
+
+Range comparison is a separate runtime module. Generated application backing supplies it only when the system declares a range; systems without ranges ship the base controller alone.
+
+A mutable token can declare inclusive `range: [min, max]` bounds. Ranges admit numbers, integers, percentages, angles, times and lengths. Absolute lengths compare exactly across `px`, `cm`, `mm`, `Q`, `in`, `pt` and `pc`; relative lengths require the same unit as both bounds. Times compare `ms` and `s`, and `deg`, `grad` and `turn` convert exactly. Radians compare only with radians; mixing `rad` with those other units rejects the comparison. Non-mutable tokens, unordered bounds and types without an order reject ranges at definition. After validation or fallback, the range checks the output. Incomparable units, `calc()` and `var()` reject with the accepted units, without a browser or layout-dependent approximation.
 
 Transactions validate all values before writes.
 

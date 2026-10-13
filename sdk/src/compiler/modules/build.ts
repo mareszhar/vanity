@@ -1,18 +1,21 @@
 /** Compiler-owned bundling of a Vanity style module for evaluation. */
 
 import type { Loader, PluginBuild } from 'esbuild'
-import type { ResolvedConfig } from 'vite'
+import type { SourceMapPayload } from 'node:module'
 import type { NormalizedSystemSource } from '../core/systems'
+import type { ModuleInputs } from './graph'
+import type { ResolvedStyleImport, StyleModuleHost } from './resolution'
 import { readFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
+import { createRequire, isBuiltin } from 'node:module'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { build as esbuild } from 'esbuild'
 import { VanityError } from '../../diagnostics'
 import { substrate } from '../../substrate'
 import { normalizePath } from '../core/path'
 import { normalizeModuleIdentity } from '../projection/exportNames'
+import { findModuleInput, getModuleInputs } from './graph'
+import { getImportedPackageName, getResolvedPackage, isBrowserDisabledPackageRequest } from './resolution'
 import {
-  applyDebugNamesWithAliases,
   applySourceLocations,
   containsVanityAuthoring,
   getStyleAutoImportAliases,
@@ -34,10 +37,9 @@ export interface BundleExternalModule {
   readonly exports: Record<string, unknown>
 }
 
-export interface BundleStyleModuleParams {
+export interface BundleStyleModuleParams extends StyleModuleHost {
   readonly filePath: string
   readonly root: string
-  readonly alias: Record<string, string>
   /** The auto-import shim module, if the system option is configured. */
   readonly inject?: string
   /** Alias provenance declared by the configured style auto-import barrel. */
@@ -56,6 +58,9 @@ export interface BundleStyleModuleParams {
 
 export interface BuiltStyleModule {
   readonly source: string
+  readonly sourceMap: SourceMapPayload
+  readonly clientImports: readonly ResolvedStyleImport[]
+  readonly inputs: ModuleInputs
   readonly watchFiles: string[]
   readonly externalSystemEntries: string[]
 }
@@ -70,7 +75,8 @@ export interface BuiltStyleModule {
 export async function buildStyleModule({
   filePath,
   root,
-  alias,
+  resolve: resolveImport,
+  load: loadImport,
   inject,
   ambientAliases,
   externalModules = [],
@@ -88,8 +94,13 @@ export async function buildStyleModule({
         ...namespaceFiles.map(normalizeExistingPath),
       ])]
   const usedExternalEntries = new Set<string>()
-  const resolvingRequests = new Set<string>()
+  const clientImports: ResolvedStyleImport[] = []
+  const packages = new Map<string, ReturnType<typeof getResolvedPackage>>()
   const systemResolverSentinel = {}
+  const isVanityImplementation = (file: string): boolean => {
+    const normalized = normalizePath(file)
+    return normalized === vanityPackageRoot || normalized.startsWith(`${vanityPackageRoot}/`)
+  }
 
   const result = await esbuild({
     ...(exposedFiles === undefined
@@ -103,116 +114,137 @@ export async function buildStyleModule({
           },
         }),
     metafile: true,
+    sourcemap: 'external',
+    outfile: `${filePath}.vanity.cjs`,
     bundle: true,
     format: 'cjs',
     platform: 'node',
     write: false,
     logLevel: 'silent',
     absWorkingDir: root,
-    alias,
     inject: inject === undefined ? [] : [inject],
     plugins: [
       {
-        name: 'vanity-configured-system-externals',
+        name: 'vanity-host-resolution',
         setup(build) {
-          if (externalModules.length === 0)
-            return
           build.onResolve({ filter: /.*/ }, async (args) => {
-            const source = applyBundleAlias(args.path, alias)
-            const requestKey = `configured\0${args.path}\0${args.importer}\0${args.namespace}\0${args.resolveDir}\0${args.kind}`
-            if (args.pluginData === systemResolverSentinel || resolvingRequests.has(requestKey))
+            if (args.pluginData === systemResolverSentinel)
               return undefined
-            resolvingRequests.add(requestKey)
-
-            // Ask esbuild to resolve the request with the same aliases,
-            // extensions, package exports, and symlink policy as the bundle.
-            // Passing our own plugin name prevents this callback from
-            // recursively resolving itself.
-            try {
-              const resolved = await build.resolve(source, {
-                pluginName: 'vanity-configured-system-externals',
-                ...(args.importer ? { importer: args.importer } : {}),
-                ...(args.namespace ? { namespace: args.namespace } : {}),
-                ...(args.resolveDir ? { resolveDir: args.resolveDir } : {}),
-                kind: args.kind,
-                pluginData: systemResolverSentinel,
-                ...(args.with === undefined ? {} : { with: args.with }),
-              })
-              if (resolved.errors.length > 0 || !isAbsolute(resolved.path))
-                return undefined
-              // The auto-import shim is an implementation detail of this
-              // bundle. It re-exports the configured system, but externalizing
-              // the shim itself makes esbuild reject its injected path; only
-              // the shim's resolved system imports should become externals.
-              if (injectedPath !== undefined
-                && normalizeExistingPath(resolved.path) === injectedPath) {
-                return undefined
+            if (/^(?:@vanilla-extract\/|lightningcss$)/.test(args.path))
+              return { path: substrate.backend.resolveModule(args.path), external: true }
+            const importer = args.importer || resolve(root, 'package.json')
+            // CSSTree's Node ESM entry reads its data with import.meta.url.
+            // Keep the SDK's compiler dependency native in the CommonJS
+            // evaluation sandbox; authored imports still use the host rules.
+            if (isVanityImplementation(importer) && /^css-tree(?:\/|$)/.test(args.path))
+              return { path: require.resolve(args.path), external: true }
+            const resolveNodeImport = (request: string) => build.resolve(request, {
+              importer: importer.replace(/[?#].*$/, ''),
+              resolveDir: args.resolveDir || dirname(importer),
+              namespace: 'file',
+              kind: args.kind,
+              pluginData: systemResolverSentinel,
+            })
+            let resolved: { path: string, external?: boolean, namespace?: string }
+            if (args.kind === 'entry-point' || isVanityImplementation(importer)) {
+              const node = await resolveNodeImport(args.path)
+              if (node.errors.length > 0)
+                return { errors: node.errors }
+              resolved = { path: node.path, external: node.external }
+            }
+            else {
+              try {
+                let answer: Awaited<ReturnType<StyleModuleHost['resolve']>>
+                try {
+                  answer = await resolveImport(args.path, importer)
+                }
+                catch (error) {
+                  // Supported hosts disagree on disabled exports: some return
+                  // a stub or a file, others throw before producing an answer.
+                  // Only the named package's own metadata authorizes recovery.
+                  if (getImportedPackageName(args.path) === undefined)
+                    throw error
+                  const node = await resolveNodeImport(args.path)
+                  if (node.errors.length > 0 || !isBrowserDisabledPackageRequest(args.path, node.path, await getResolvedPackage(node.path, packages)))
+                    throw error
+                  answer = { id: node.path, external: node.external }
+                }
+                if (answer == null)
+                  throw new Error('the host returned no resolution')
+                const stub = answer.id.startsWith('__vite-browser-external')
+                if (stub && isBuiltin(args.path))
+                  return { path: args.path, external: true }
+                const packageName = getImportedPackageName(args.path)
+                const pkg = await getResolvedPackage(answer.id, packages)
+                const nativeExternal = answer.external && !isAbsolute(answer.id) && !answer.id.startsWith('\0')
+                if (nativeExternal || (packageName !== undefined && (packageName === pkg?.metadata.name || stub))) {
+                  const node = await resolveNodeImport(nativeExternal ? answer.id : args.path)
+                  const disabled = stub && node.errors.length === 0 && isBrowserDisabledPackageRequest(args.path, node.path, await getResolvedPackage(node.path, packages))
+                  if (node.errors.length === 0 && (!stub || disabled)) {
+                    resolved = { path: node.path, external: node.external }
+                  }
+                  else if (!stub) {
+                    throw new Error(node.errors.map(error => error.text).join('; '))
+                  }
+                  else {
+                    throw new Error('the client resolver selected an empty browser module. Import the package by name in the style module.')
+                  }
+                }
+                else {
+                  if (stub)
+                    throw new Error('the client resolver selected an empty browser module. Import the package by name in the style module.')
+                  resolved = { path: answer.id, ...(!isAbsolute(answer.id) || /[?#]/.test(answer.id) ? { namespace: 'vanity-host' } : {}) }
+                  clientImports.push({ specifier: args.path, importer, file: answer.id })
+                }
               }
-
-              const resolvedModule = normalizeExistingPath(resolved.path)
-              // The configured-system namespace table was built from this
-              // same resolved graph. Matching the physical module directly
-              // avoids reparsing every configured re-export graph for every
-              // unrelated import in a style bundle.
-              const external = externalModules.find(module => module.moduleFile === resolvedModule)
-              if (external === undefined)
-                return undefined
-              usedExternalEntries.add(external.source.entry)
-              return { path: external.id, external: true }
+              catch (error) {
+                return { errors: [{ text: `Cannot resolve '${args.path}' imported by '${importer}': ${error instanceof Error ? error.message : String(error)}` }] }
+              }
             }
-            finally {
-              resolvingRequests.delete(requestKey)
+            if (isAbsolute(resolved.path) && normalizeExistingPath(resolved.path) !== injectedPath) {
+              const external = externalModules.find(module => module.moduleFile === normalizeExistingPath(resolved.path))
+              if (external !== undefined) {
+                usedExternalEntries.add(external.source.entry)
+                return { path: external.id, external: true }
+              }
             }
+            return resolved
           })
-        },
-      },
-      {
-        name: 'vanity-substrate-externals',
-        setup(build) {
-          build.onResolve({ filter: /^(?:@vanilla-extract\/|lightningcss$)/ }, args => ({
-            path: substrate.backend.resolveModule(args.path),
-            external: true,
-          }))
         },
       },
       {
         name: 'vanity-authoring-source',
         setup(build) {
-          const isVanityImplementation = (file: string): boolean => {
-            const normalized = normalizePath(file)
-            return normalized === vanityPackageRoot || normalized.startsWith(`${vanityPackageRoot}/`)
-          }
-
-          build.onLoad({ filter: authoringSourceFilter }, async ({ path }) => {
+          build.onLoad({ filter: /.*/ }, async ({ path, namespace }) => {
             const normalizedPath = normalizePath(path)
-            const canonicalPath = normalizeExistingPath(normalizedPath)
+            const canonicalPath = isAbsolute(normalizedPath) ? normalizeExistingPath(normalizedPath) : normalizedPath
             const isProjectSource = canonicalPath === normalizedRoot
               || canonicalPath.startsWith(`${normalizedRoot}/`)
             if (isVanityImplementation(canonicalPath) && !isProjectSource)
               return undefined
 
-            const original = await readFile(path, 'utf-8')
+            if (namespace !== 'vanity-host' && !authoringSourceFilter.test(path))
+              return undefined
+            const loaded = namespace === 'vanity-host' ? await loadImport(path) : undefined
+            if (namespace === 'vanity-host' && loaded == null && !isAbsolute(path))
+              throw new Error(`Host did not load virtual module '${path}'`)
+            const original = loaded == null ? await readFile(path.replace(/[?#].*$/, ''), 'utf-8') : typeof loaded === 'string' ? loaded : loaded.code
             const isStyleModule = styleSourceFilter.test(path)
             const authoringAliases = isStyleModule
               ? await resolveStyleAuthoringAliases(
                   original,
                   path,
                   ambientAliases,
-                  alias,
                   build,
-                  systemResolverSentinel,
                 )
               : ambientAliases
             const isVanityAuthoring = containsVanityAuthoring(original, path, authoringAliases)
-            if (!isStyleModule && !isVanityAuthoring && canonicalPath !== normalizedEntry)
+            if (namespace !== 'vanity-host' && !isStyleModule && !isVanityAuthoring && canonicalPath !== normalizedEntry)
               return undefined
 
-            const named = isStyleModule && isVanityAuthoring
-              ? applyDebugNamesWithAliases(original, path, authoringAliases)
-              : original
             const located = isVanityAuthoring && !(preserveAuthoredSource && !isStyleModule)
-              ? applySourceLocations(named, path, root, authoringAliases)
-              : named
+              ? applySourceLocations(original, path, normalizedRoot, authoringAliases, isStyleModule)
+              : original
 
             const source = isStyleModule
               ? substrate.backend.addFileScope({
@@ -226,7 +258,7 @@ export async function buildStyleModule({
             return {
               contents: source,
               loader: getSourceLoader(path),
-              resolveDir: dirname(path),
+              resolveDir: isAbsolute(path) ? dirname(path.replace(/[?#].*$/, '')) : root,
             }
           })
         },
@@ -236,7 +268,9 @@ export async function buildStyleModule({
 
   const { outputFiles, metafile } = result
 
-  if (!outputFiles || outputFiles.length !== 1) {
+  const compiled = outputFiles?.find(file => file.path.endsWith('.cjs'))
+  const sourceMap = outputFiles?.find(file => file.path.endsWith('.map'))
+  if (compiled === undefined || sourceMap === undefined) {
     throw new VanityError({
       code: 'VANITY_COMPILER_INVALID_INPUT',
       message: `invalid style-module compilation for ${filePath}`,
@@ -245,12 +279,16 @@ export async function buildStyleModule({
     })
   }
 
+  const inputs = getModuleInputs(metafile.inputs, root)
   return {
-    source: outputFiles[0].text,
+    source: compiled.text,
+    sourceMap: JSON.parse(sourceMap.text) as SourceMapPayload,
+    clientImports,
+    inputs,
     // Dependency ownership is derived from the resolved graph, not from the
     // authoring loader. This keeps JSON and other data inputs visible while
     // stopping the Vanity implementation graph at its package boundary.
-    watchFiles: collectRelevantInputs(metafile.inputs, root, normalizedEntry, vanityPackageRoot),
+    watchFiles: collectRelevantInputs(inputs, root, normalizedEntry, vanityPackageRoot),
     externalSystemEntries: [...usedExternalEntries].sort(),
   }
 }
@@ -268,15 +306,6 @@ ${entries}
 `
 }
 
-interface MetafileImport {
-  readonly external?: boolean
-  readonly path: string
-}
-
-interface MetafileInput {
-  readonly imports?: readonly MetafileImport[]
-}
-
 /**
  * Select consumer dependencies from esbuild's resolved graph.
  *
@@ -288,18 +317,11 @@ interface MetafileInput {
  * because traversal reaches that package from a user-owned importer.
  */
 function collectRelevantInputs(
-  inputs: Readonly<Record<string, MetafileInput>>,
+  inputs: ModuleInputs,
   root: string,
   entry: string,
   vanityPackageRoot: string,
 ): string[] {
-  const byPath = new Map<string, MetafileInput>()
-  for (const [file, input] of Object.entries(inputs)) {
-    if (file.startsWith('<'))
-      continue
-    byPath.set(normalizeInputPath(file, root), input)
-  }
-
   const relevant = new Set<string>()
   const visited = new Set<string>()
   const queue = [entry]
@@ -312,40 +334,19 @@ function collectRelevantInputs(
 
     if (isWithin(current, vanityPackageRoot))
       continue
-    relevant.add(current)
+    if (isAbsolute(current))
+      relevant.add(current)
 
-    for (const dependency of byPath.get(current)?.imports ?? []) {
+    for (const dependency of inputs.get(current)?.imports ?? []) {
       if (dependency.external)
         continue
-      const resolved = findMetafileInput(dependency.path, current, root, byPath)
+      const resolved = findModuleInput(dependency.path, current, root, inputs)
       if (resolved !== undefined && !visited.has(resolved))
         queue.push(resolved)
     }
   }
 
   return [...relevant].sort()
-}
-
-function findMetafileInput(
-  imported: string,
-  importer: string,
-  root: string,
-  inputs: ReadonlyMap<string, MetafileInput>,
-): string | undefined {
-  const candidates = isAbsolute(imported)
-    ? [imported]
-    : [resolve(root, imported), resolve(dirname(importer), imported)]
-
-  for (const candidate of candidates) {
-    const normalized = normalizeInputPath(candidate, root)
-    if (inputs.has(normalized))
-      return normalized
-  }
-  return undefined
-}
-
-function normalizeInputPath(file: string, root: string): string {
-  return normalizeExistingPath(isAbsolute(file) ? file : resolve(root, file))
 }
 
 function isWithin(file: string, directory: string): boolean {
@@ -374,9 +375,7 @@ async function resolveStyleAuthoringAliases(
   source: string,
   filePath: string,
   ambientAliases: ReadonlyMap<string, string> | undefined,
-  aliases: Readonly<Record<string, string>>,
   resolver: Pick<PluginBuild, 'resolve'>,
-  resolverSentinel: object,
 ): Promise<ReadonlyMap<string, string> | undefined> {
   const bindings = readValueImportBindings(source, filePath)
   if (bindings.length === 0 && ambientAliases === undefined)
@@ -384,12 +383,11 @@ async function resolveStyleAuthoringAliases(
 
   const authoringAliases = new Map(ambientAliases ?? [])
   for (const binding of bindings) {
-    const resolved = await resolver.resolve(applyBundleAlias(binding.source, aliases), {
+    const resolved = await resolver.resolve(binding.source, {
       pluginName: 'vanity-authoring-source',
       importer: filePath,
       resolveDir: dirname(filePath),
       kind: 'import-statement',
-      pluginData: resolverSentinel,
     })
     if (resolved.errors.length > 0 || !isAbsolute(resolved.path))
       continue
@@ -411,31 +409,12 @@ async function resolveStyleAuthoringAliases(
   return authoringAliases
 }
 
-function applyBundleAlias(source: string, aliases: Readonly<Record<string, string>>): string {
-  for (const [find, replacement] of Object.entries(aliases)) {
-    if (source === find)
-      return replacement
-    if (source.startsWith(`${find}/`))
-      return `${replacement.replace(/\/$/, '')}${source.slice(find.length)}`
-  }
-  return source
-}
-
 function getSourceLoader(path: string): Loader {
-  if (/\.tsx$/i.test(path))
+  if (/\.tsx(?:[?#]|$)/i.test(path))
     return 'tsx'
-  if (/\.(?:ts|mts|cts)$/i.test(path))
+  if (/\.(?:ts|mts|cts)(?:[?#]|$)/i.test(path))
     return 'ts'
-  if (/\.jsx$/i.test(path))
+  if (/\.jsx(?:[?#]|$)/i.test(path))
     return 'jsx'
   return 'js'
-}
-
-/** The string-keyed subset of the resolved Vite aliases, for esbuild's resolver. */
-export function convertViteAliasesToEsbuild(config: ResolvedConfig): Record<string, string> {
-  const entries = config.resolve.alias
-    .filter(entry => typeof entry.find === 'string' && typeof entry.replacement === 'string')
-    .map(entry => [entry.find, entry.replacement])
-
-  return Object.fromEntries(entries)
 }

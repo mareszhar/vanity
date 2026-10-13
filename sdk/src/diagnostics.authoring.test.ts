@@ -5,10 +5,13 @@ import {
   defineCssSupportTarget,
   importDesignTokens,
   integer,
+  media,
   VANITY_DTCG_EXTENSION,
   VanityError,
 } from '@mszr/vanity'
+import { emit } from '@test'
 import { describe, expect, it } from 'vitest'
+import { collectInspection } from './introspect/records'
 
 function captureDiagnostic(run: () => unknown): VanityError['diagnostics'][number] {
   try {
@@ -135,5 +138,24 @@ describe('authoring diagnostics', () => {
       path: ['support', 'id'],
       fix: { message: expect.stringContaining('non-empty') },
     })
+  })
+})
+
+describe('style authoring repairs', () => {
+  it('names the token definition for an authored contrast value', () => {
+    const open = createSystem()
+    const ds = open.addTokens({ color: { bg: open.oklch(0.5, 0.1, 265) } }).consolidate()
+    const diagnostic = captureDiagnostic(() => emit(() => ds.class({ color: open.legibleOn(ds.t.color.bg) } as any)))
+    expect(diagnostic.message).toContain('legibleOn defines a token')
+    expect(diagnostic.fix?.message).toContain('onX: legibleOn(…)')
+  })
+  it('redirects a condition object key to registration at the authored key', () => {
+    const ds = createSystem().consolidate()
+    const diagnostic = captureDiagnostic(() => emit(() => ds.class({ [media('(width > 40rem)') as any]: { display: 'grid' } })))
+    expect(diagnostic).toMatchObject({ code: 'VANITY_CSS_INVALID_KEY', path: ['[object Object]'], file: 'src/test-support/prism.css.ts', fix: { message: expect.stringContaining('createSystem({ conditions })') } })
+  })
+  it('warns at the raw-selector axis declaration with an activatable repair', () => {
+    const { warnings } = collectInspection(() => createSystem().addAxis('density', { modes: { comfortable: '&', compact: '&[data-density=\'compact\']' }, default: 'comfortable' }).consolidate())
+    expect(warnings).toEqual([expect.objectContaining({ code: 'VANITY_SYSTEM_INVALID_AXIS', severity: 'warning', path: ['axes', 'density', 'modes', 'compact'], fix: expect.stringContaining('data(\'density\', \'compact\')') })])
   })
 })

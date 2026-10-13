@@ -102,7 +102,7 @@ export { default } from '@acme/design-system/vanity'
 
 WXT runs its own Vite build per entrypoint (popup, options, content script); the module mounts Vanity in it and registers the generated declarations during `wxt prepare`. Popup and options pages are ordinary documents: the shared system works unchanged.
 
-Content scripts render inside someone else's page, where `:root` tokens would leak into (and be overridden by) the host page. Mount content-script UI inside a shadow root and load the extension's CSS there. A separately rooted system for embedded UI needs its own system module (one module exports one system) listed alongside the main one in `compiler.system`; the Nuxt adapter doesn't accept a list of systems yet, so treat embedded topologies as unverified and test them in a real extension build.
+Content scripts render inside someone else's page, where `:root` tokens would leak into (and be overridden by) the host page. Mount content-script UI inside a shadow root and load the extension's CSS there. A separately rooted system for embedded UI needs its own system module (one module exports one system) listed alongside the main one in `compiler.system`. Vite, Nuxt, and WXT accept paths, source objects, and mixed lists; test embedded topologies in a real extension build, including shadow-root CSS delivery.
 
 ## Packages that ship `*.css.ts`
 

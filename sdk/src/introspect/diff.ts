@@ -1,4 +1,5 @@
 import type { VanityManifest } from './manifest'
+import { assertManifestShape } from './manifestValidation'
 
 /** Identity projection affected by one manifest change. */
 export type VanityChangeCategory = 'compatibility' | 'css' | 'runtime' | 'docs'
@@ -13,7 +14,7 @@ export interface VanityManifestChange {
   readonly after?: unknown
 }
 
-/** Complete semantic diff between two Manifest v4 artifacts. */
+/** Complete semantic diff between two Manifest v5 artifacts. */
 export interface VanityManifestDiff {
   readonly format: 'vanity.manifest-diff/1'
   readonly version: 1
@@ -27,6 +28,8 @@ export interface VanityManifestDiff {
 
 /** Categorized semantic diff over the four independent system identities. */
 export function diffManifests(before: VanityManifest, after: VanityManifest): VanityManifestDiff {
+  assertManifestShape(before)
+  assertManifestShape(after)
   const identities = {
     compatibility: getIdentityDiff(before, after, 'compatibility'),
     css: getIdentityDiff(before, after, 'css'),

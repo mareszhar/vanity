@@ -8,14 +8,25 @@
 
 import type { VanityDiagnosticInput as VanityDiagnostic } from '../diagnostics'
 import type { VanityConditionArm } from '../system/conditions'
+import type { VanityDeclarationRecord } from './declaration'
+import type { VanityDeclarationFinding } from './findings'
 import type { VanityCssPropertyName, VanityPropertyAliasMap, VanityPropertyAliasMode } from './types'
 import type { VanityValueContext } from './values'
-import { didYouMean, VanityError } from '../diagnostics'
+import { generate, parse } from 'css-tree'
+import { isUnsafeValue } from '../atoms/handle'
+import { didYouMean, getDeclarationSource, getDiagnosticSource, VanityError } from '../diagnostics'
+import { collectInspectionWarning, record as recordInspection } from '../introspect/records'
 import { convertToKebab } from '../tokens/names'
+import { getArmKey } from './arm'
+import { classifyDeclarationValue, resolveDeclarationValue } from './declaration'
+import { inspectDeclarationPolicy } from './declarations-policy'
+import { reportDeclarationFindings } from './findings'
 import { isOmit } from './fragment'
 import { resolveDeferredTokenDeclarationInput } from './tdec'
-import { checkDeclaration, checkPropertyName, checkQuery, checkSelector, isCssProperty } from './validation'
-import { serializeStyleValue } from './values'
+import { inspectTokenRestrictions } from './token-restrictions'
+import { checkDeclaration, checkPropertyName, checkQuery, checkSelector, isCssProperty, serializeDeclarationNumber } from './validation'
+
+export { getArmKey } from './arm'
 
 export interface VanityRuleContext extends VanityValueContext {
   conditions: Map<string, readonly VanityConditionArm[]>
@@ -25,6 +36,8 @@ export interface VanityRuleContext extends VanityValueContext {
   layerRoot: string
   /** Seeds diagnostic paths — recipe arms report as `variants.intent.brand.…`. */
   rootPath?: readonly string[]
+  styleName?: string
+  audit?: import('../introspect/records').VanityAuditConfig
   /**
    * Resolves keys the host surface scopes beyond the system's conditions —
    * anatomy's `'root:open'`. Returns arms to nest under, a diagnostic for a
@@ -56,6 +69,9 @@ export interface VanityArm {
 export interface VanityUnit {
   arm: VanityArm
   declarations: Record<string, string | number | Array<string | number>>
+  declarationRecords?: VanityDeclarationRecord[]
+  /** Last authored declaration group per property; findings retain all contributions. */
+  emittedDeclarations?: Record<string, VanityDeclarationRecord[]>
 }
 
 export interface VanityCompiled {
@@ -84,12 +100,46 @@ class RuleWalker {
   readonly units: VanityUnit[] = []
   private readonly diagnostics: VanityDiagnostic[] = []
   private forceNewUnit = false
+  private readonly contributions: Array<{ depth: number, index: number }> = []
 
   constructor(private readonly ctx: VanityRuleContext) {}
 
   throwIfFailed(): void {
+    const findings: VanityDeclarationFinding[] = []
+    for (const unit of this.units) {
+      const substitutions = new Map<string, string>()
+      for (const candidate of this.units) {
+        if (getArmKey(candidate.arm) !== getArmKey(unit.arm) && getArmKey(candidate.arm) !== getArmKey({}))
+          continue
+        for (const [property, value] of Object.entries(candidate.declarations)) {
+          if (property.startsWith('--'))
+            substitutions.set(property, String(Array.isArray(value) ? value.at(-1) : value))
+        }
+      }
+      for (const record of unit.declarationRecords ?? []) {
+        resolveDeclarationValue(record, { arm: unit.arm, substitutions })
+        findings.push(...inspectDeclarationPolicy(record, this.ctx, this.ctx.styleName))
+        findings.push(...inspectTokenRestrictions(record, this.ctx, this.ctx.styleName))
+        if (record.escape) {
+          recordInspection({ kind: 'escape', form: 'unsafe', file: this.ctx.file, ...getDiagnosticSource(record.path), detail: `${record.property}: ${record.value}`, reason: record.escape.reason, style: this.ctx.styleName, property: record.property, layer: this.ctx.defaultLayer })
+        }
+        for (const component of record.components) {
+          if (component.incompatible) {
+            findings.push({ declaration: record, style: this.ctx.styleName, diagnostic: {
+              code: 'VANITY_CSS_TOKEN_KIND',
+              message: `${record.path}: <${component.dataType}> ${component.tokens.length ? `token '${component.tokens.join(', ')}'` : component.origin} does not fit ${component.component}`,
+              detail: [component.incompatible.reason],
+              path: record.path,
+              fix: `use a value whose declared data type fits ${component.component}`,
+              file: this.ctx.file,
+            } })
+          }
+        }
+      }
+    }
     if (this.diagnostics.length > 0)
       throw new VanityError(this.diagnostics)
+    reportDeclarationFindings(findings)
   }
 
   walkInput(input: unknown, arm: VanityArm, path: string[]): void {
@@ -97,9 +147,15 @@ class RuleWalker {
       return
 
     if (Array.isArray(input)) {
-      for (const contribution of input) {
+      for (const [index, contribution] of input.entries()) {
         this.forceNewUnit = true
-        this.walkInput(contribution, arm, path)
+        this.contributions.push({ depth: path.length, index })
+        try {
+          this.walkInput(contribution, arm, path)
+        }
+        finally {
+          this.contributions.pop()
+        }
       }
       return
     }
@@ -147,7 +203,19 @@ class RuleWalker {
         continue
       }
 
+      if (key === '[object Object]') {
+        this.report({
+          code: 'VANITY_CSS_INVALID_KEY',
+          message: `${this.joinPath(path, key)} is a condition object used as a style key`,
+          path: this.joinPath(path, key),
+          fix: 'register the condition in createSystem({ conditions }), then use its name as the key',
+        })
+        continue
+      }
+
       const condition = this.ctx.conditions.get(key)
+
+      this.inspectSelector(key, path)
 
       if (condition !== undefined) {
         this.nest(key, value, condition, arm, path)
@@ -165,7 +233,7 @@ class RuleWalker {
       }
 
       if (key.startsWith('--')) {
-        this.declare(arm, key, value, path)
+        this.declare(arm, key, value, [...path, key])
         continue
       }
 
@@ -296,8 +364,8 @@ class RuleWalker {
     }
 
     // Native-nesting semantics: a selector without `&` is a descendant.
-    const selector = key.includes('&') ? key : `& ${key}`
-    const reason = checkSelector(selector)
+    const selector = nestSelector(key)
+    const reason = checkSelector(selector, [...path, key])
 
     if (reason !== undefined) {
       this.report({
@@ -316,7 +384,7 @@ class RuleWalker {
 
   private writeProperty(key: string, value: unknown, arm: VanityArm, path: string[], authoredKey = key): void {
     const authoredPath = [...path, authoredKey]
-    if (isPlainObject(value)) {
+    if (isPlainObject(value) && !isUnsafeValue(value)) {
       // A nested object under a non-property reads as a mistyped condition,
       // not as a property-first map — name the key itself.
       if (!isCssProperty(convertToKebab(key))) {
@@ -336,7 +404,7 @@ class RuleWalker {
           continue
 
         if (conditionName === BASE) {
-          this.declare(arm, key, conditionValue, authoredPath)
+          this.declare(arm, key, conditionValue, authoredPath, [...authoredPath, BASE], authoredKey)
           continue
         }
 
@@ -357,34 +425,47 @@ class RuleWalker {
           const merged = this.mergeArm(arm, conditionArm, [...authoredPath, conditionName])
 
           if (merged)
-            this.declare(merged, key, conditionValue, [...authoredPath, conditionName])
+            this.declare(merged, key, conditionValue, [...authoredPath, conditionName], [...authoredPath, conditionName], authoredKey)
         }
       }
       return
     }
 
-    this.declare(arm, key, value, authoredPath)
+    this.declare(arm, key, value, authoredPath, authoredPath, authoredKey)
   }
 
-  private declare(arm: VanityArm, property: string, value: unknown, path: string[]): void {
+  private declare(arm: VanityArm, property: string, value: unknown, path: string[], sourcePath = path, authoredKey = property): void {
     if (value === undefined || value === null || isOmit(value))
       return
     const at = path.join('.')
 
     try {
-      const serialized = Array.isArray(value)
-        ? value.map(entry => serializeStyleValue(entry, at, this.ctx))
-        : serializeStyleValue(value, at, this.ctx)
-
       const cssProperty = convertToKebab(property)
+      const records = (Array.isArray(value) ? value : [value]).map(entry => classifyDeclarationValue(cssProperty, entry, at, this.ctx))
+      const indexedSourcePath: string[] = []
+      for (let depth = 0; depth <= sourcePath.length; depth++) {
+        for (const contribution of this.contributions.filter(contribution => contribution.depth === depth))
+          indexedSourcePath.push(String(contribution.index))
+        if (depth < sourcePath.length)
+          indexedSourcePath.push(sourcePath[depth]!)
+      }
+      const provenance = getDeclarationSource(indexedSourcePath)
+      for (const record of records) {
+        Object.assign(record, provenance)
+        const propertyIndex = path.lastIndexOf(property)
+        record.conditionPath = path.filter((_, index) => index !== propertyIndex)
+        record.stylePath = this.ctx.rootPath
+        if (authoredKey !== property)
+          record.authoredKey = authoredKey
+      }
+      const serialized = Array.isArray(value) ? records.map(record => record.value) : records[0]!.value
 
       for (const entry of Array.isArray(serialized) ? serialized : [serialized]) {
-        // Numbers take the substrate's unit rule downstream, so only their
-        // property's existence is checkable here — but it is checked: an
-        // unknown property never rides a numeric value out silently.
+        // Preserve the authored number for emission, but validate the CSS
+        // produced by the same substrate unit rule that emission uses.
         const issue = typeof entry === 'string'
           ? checkDeclaration(cssProperty, entry)
-          : checkPropertyName(cssProperty)
+          : checkPropertyName(cssProperty) ?? checkDeclaration(cssProperty, serializeDeclarationNumber(cssProperty, entry))
 
         if (issue?.kind === 'unknown-property') {
           this.report({
@@ -407,7 +488,12 @@ class RuleWalker {
         }
       }
 
-      this.createUnit(arm).declarations[property] = serialized
+      const unit = this.createUnit(arm)
+      unit.declarations[property] = serialized
+      unit.emittedDeclarations ??= {}
+      unit.emittedDeclarations[property] = records
+      unit.declarationRecords ??= []
+      unit.declarationRecords.push(...records)
     }
     catch (error) {
       if (error instanceof VanityError) {
@@ -447,7 +533,7 @@ class RuleWalker {
       media: joinQueries(outer.media, inner.media),
       supports: joinQueries(outer.supports, inner.supports),
       container: outer.container ?? inner.container,
-      selector: composeSelectors(outer.selector, inner.selector),
+      selector: composeSelectors(outer.selector, inner.selector === undefined ? undefined : nestSelector(inner.selector)),
       scopes: [...outer.scopes ?? [], ...inner.scopes ?? []],
       startingStyle: outer.startingStyle || ('startingStyle' in inner ? inner.startingStyle : undefined),
     }
@@ -460,14 +546,44 @@ class RuleWalker {
   private report(diagnostic: Omit<VanityDiagnostic, 'file'>): void {
     this.diagnostics.push({ ...diagnostic, file: this.ctx.file })
   }
+
+  private inspectSelector(key: string, path: string[]): void {
+    const selector = key.trimStart()
+    const level = this.ctx.audit?.unanchoredSelectors ?? 'warn'
+    if (level === 'off' || !selector.startsWith(':') || selector.includes('&'))
+      return
+    let selectors
+    try {
+      selectors = parse(selector, { context: 'selectorList' })
+    }
+    catch (error) {
+      // Invalid selector text keeps the rule walker's existing CSS diagnostic.
+      if (error instanceof Error && error.name === 'SyntaxError')
+        return
+      throw error
+    }
+    if (selectors.type !== 'SelectorList')
+      return
+    const anchored = selectors.children.toArray().map(entry => `&${generate(entry)}`).join(', ')
+    const diagnostic: VanityDiagnostic = {
+      code: 'VANITY_SELECTOR_UNANCHORED',
+      severity: level === 'error' ? 'error' : 'warning',
+      message: `${this.joinPath(path, key)} matches descendants of the styled element`,
+      path: this.joinPath(path, key),
+      file: this.ctx.file,
+      ...getDiagnosticSource(this.joinPath(path, key)),
+      fix: `write '${anchored}' to match the styled element; keep '${key}' only for intentional descendants`,
+    }
+    if (level === 'error')
+      this.report(diagnostic)
+    else
+      collectInspectionWarning(diagnostic)
+  }
 }
 
 // ─── Arm algebra ─────────────────────────────────────────────────────────────
 
 /** The identity of an arm — units merge on it, recipes compare on it. */
-export function getArmKey(arm: VanityArm): string {
-  return JSON.stringify([arm.media, arm.supports, arm.container, arm.selector, arm.scopes, arm.startingStyle])
-}
 
 /** Validate a declared layer name against the system's order; `undefined` means valid. */
 export function checkLayer(declared: string, layers: readonly string[]): Omit<VanityDiagnostic, 'file'> | undefined {
@@ -489,6 +605,11 @@ function joinQueries(outer: string | undefined, inner: string | undefined): stri
     return outer ?? inner
 
   return `${outer} and ${inner}`
+}
+
+/** Place a selector under its rule anchor using native CSS nesting semantics. */
+export function nestSelector(selector: string): string {
+  return selector.includes('&') ? selector : `& ${selector}`
 }
 
 /** Intersect two `&` selectors: the inner's `&` becomes the outer, comma parts multiplied. */

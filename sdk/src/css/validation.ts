@@ -11,7 +11,11 @@ import type { Rule, Token, TokenOrValue } from 'lightningcss'
 import { Buffer } from 'node:buffer'
 import { all as knownCssProperties } from 'known-css-properties'
 import { transform } from 'lightningcss'
-import { didYouMean } from '../diagnostics'
+import { didYouMean, formatVanityDiagnostic, normalizeDiagnostic } from '../diagnostics'
+import { collectInspectionWarning, isInspecting } from '../introspect/records'
+import { substrate } from '../substrate'
+import { parseBlocks } from './compile'
+import { inspectDeclarationGrammar, inspectSelectorGrammar } from './grammar'
 
 const KNOWN_PROPERTIES = new Set(knownCssProperties)
 const CSS_WIDE_KEYWORDS = new Set(['initial', 'inherit', 'unset', 'revert', 'revert-layer'])
@@ -68,6 +72,31 @@ type Classified
     | { kind: 'unknown', name: string }
 
 const declarationCache = new Map<string, VanityDeclarationIssue | undefined>()
+const numberCache = new Map<string, string>()
+
+/** Ask the selected substrate for its unit rule; retain numbers in emitted rules. */
+export function serializeDeclarationNumber(property: string, value: number): string {
+  const key = `${property}\0${value}`
+  const cached = numberCache.get(key)
+  if (cached !== undefined)
+    return cached
+  const rule = property.startsWith('--')
+    ? { vars: { [property]: String(value) } }
+    : { [property.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase())]: value }
+  const { css } = substrate.modules.transformStyleModule({
+    localClassNames: [],
+    composedClassLists: [],
+    cssObjects: [{ type: 'global', selector: '.vanity-number', rule }],
+  })
+  const block = parseBlocks(css)[0]
+  // The substrate must emit one declaration for a finite numeric input. A
+  // broken adapter must fail visibly rather than invent a unit convention.
+  if (block?.kind !== 'rule' || block.declarations.length !== 1)
+    throw new Error(`The CSS substrate could not serialize ${property}: ${value}`)
+  const serialized = block.declarations[0]![1]
+  numberCache.set(key, serialized)
+  return serialized
+}
 
 /**
  * Check one declaration (kebab-case property, serialized value). Returns the
@@ -125,6 +154,10 @@ function getDeclarationIssue(property: string, value: string): VanityDeclaration
     })
   }
   catch (error) {
+    // Native syntax failures are CSS verdicts; implementation exceptions are
+    // not. Preserve a visible failure if the native validator itself breaks.
+    if (!(error instanceof Error) || error.name !== 'SyntaxError')
+      throw error
     return { kind: 'invalid-value', reason: (error as Error).message }
   }
 
@@ -142,6 +175,10 @@ function getDeclarationIssue(property: string, value: string): VanityDeclaration
     }
   }
 
+  const grammar = inspectDeclarationGrammar(property, value, outcome.kind === 'unparsed', true)
+  if (grammar.status === 'rejected')
+    return { kind: 'invalid-value', reason: grammar.reason }
+
   return undefined
 }
 
@@ -157,6 +194,8 @@ function checkSyntax(key: string, css: string): string | undefined {
     transform({ filename: 'vanity-check.css', code: Buffer.from(css), errorRecovery: false })
   }
   catch (error) {
+    if (!(error instanceof Error) || error.name !== 'SyntaxError')
+      throw error
     reason = (error as Error).message
   }
 
@@ -165,9 +204,20 @@ function checkSyntax(key: string, css: string): string | undefined {
 }
 
 /** Check a selector (with `&` still unresolved). Returns the parse failure, if any. */
-export function checkSelector(selector: string): string | undefined {
+export function checkSelector(selector: string, path?: readonly string[]): string | undefined {
   const probe = selector.replaceAll('&', '.vanity-probe')
-  return checkSyntax(`s\0${selector}`, `${probe}{--vanity-probe:0}`)
+  const reason = checkSyntax(`s\0${selector}`, `${probe}{--vanity-probe:0}`)
+  if (reason !== undefined)
+    return reason
+  const unknown = inspectSelectorGrammar(selector)
+  if (unknown.length) {
+    const diagnostic = normalizeDiagnostic({ code: 'VANITY_SELECTOR_UNKNOWN', severity: 'warning', message: `${selector}: unknown CSS pseudo ${unknown.join(', ')}`, path: path ? [...path] : undefined, fix: 'check the pseudo spelling against the CSS selector vocabulary; an unknown pseudo may never match' })
+    if (isInspecting())
+      collectInspectionWarning(diagnostic)
+    else
+      console.warn(formatVanityDiagnostic(diagnostic))
+  }
+  return undefined
 }
 
 type LayerName = { readonly identity: string, readonly reason?: never } | { readonly identity?: never, readonly reason: string }

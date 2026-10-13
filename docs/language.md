@@ -119,6 +119,10 @@ Keep the sense visible at the use site. Do not introduce a bare `validate` or `v
 
 Author-facing failures use `VanityError`, with a stable code and structured path/fix guidance; `TypeError` is reserved for a genuine internal invariant violation that indicates a Vanity bug.
 
+Declaration **origin** names where an authored component came from: a token, a derivation over tokens, a port, a literal, or an external substitution. It is separate from **evidence**, which names how compatibility was established: `type` covers every value of the declared type, `environments` lists checked authored states, `sampled` names a finite set of observations, and `unresolved` states what could not be established. An internal error is never unresolved evidence. These terms describe the result's limits, not its severity.
+
+Axis **coverage** is a declared responsibility: `covers` names roles each mode must account for, and `shared` names roles deliberately identical across those modes. It is separate from a check report's module coverage, which states what the compiler reached. Neither sense implies all runtime combinations were rendered or proven.
+
 ## 1. Behavioral spine
 
 > **Grow a system additively; consolidate it; style with it.**
@@ -314,6 +318,7 @@ Inside a runtime controller, a mutable token leaf is a token control, not a gene
 | token module | Definition module with graph references, axes, roots, and token-definition grammar. |
 | condition | Typed AST describing selectors and conditional at-rules. |
 | arm | One lowered conjunction of selector and at-rule conditions. |
+| `.self` | Explicit own-element anchor on a data/ARIA state condition; bare selector conditions nest as descendants. |
 | axis | Ordered set of intended alternative modes plus optional default and runtime-control metadata. |
 | mode | Named condition within an axis. |
 | root | Selector or scope owning a system/module token declaration. |
@@ -444,6 +449,8 @@ const palette = ds.defineTokens()
 `.add()` adds a literal/configured token, derived token, derived batch, or another builder. Every form merges additively.
 
 Tree syntax uses `ds.tdef({...})` to distinguish a definition from a group. `.add(name, config)` accepts raw config directly because that position cannot be a group.
+
+Token `usage` is guidance: `for` names intended uses, `avoid` names uses better served by another role, and primitive `tier` is acted on only by a declarations policy. Token `restrict` is an authoring contract over declaration properties, with the existing `discourage`/`forbid` severity vocabulary and a reason. A changed restriction is distinct from a changed role value. Token `range` is an inclusive mutable-value domain checked on accepted runtime output.
 
 Token handles project declarations toward CSS properties, while token-declaration data assigns values back to token custom properties. A graph-aware declaration can include build-folded dependents that a local substitution invalidates; live dependents remain browser-driven. The [token](./reference/spec-tokens.md) and [styling](./reference/spec-css.md) specifications define the concrete APIs.
 

@@ -28,6 +28,7 @@ import * as systemGraphs from './compiler/core/systems'
 import { resolveViteVirtualId } from './compiler/hosts/viteHmr'
 import { VanityError } from './index'
 import { planAutoImportDeclarations } from './prepare'
+import { installTestSdk } from './test-support/installedSdk'
 
 function local(path: string) {
   return fileURLToPath(new URL(path, import.meta.url))
@@ -62,6 +63,7 @@ async function hotUpdate(devServer: ViteDevServer, file: string) {
 describe('the vite build', () => {
   async function serveLayerOrderFixture(layerOrder?: string[]) {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-root-order-')))
+    await installTestSdk(root)
     await writeFile(join(root, 'package.json'), '{ "name": "root-order-fixture", "type": "module" }')
     const first = join(root, 'first.ts')
     const second = join(root, 'second.ts')
@@ -353,6 +355,7 @@ describe('the vite build', () => {
 
   it('preserves the host meaning of raw and URL queries on configured system files', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-query-')))
+    await installTestSdk(root)
 
     try {
       await writeFile(join(root, 'package.json'), '{ "name": "vanity-system-query", "type": "module" }')
@@ -415,6 +418,7 @@ export { raw, systemUrl }
 
   it('restores runtime services and semantic handles in app code', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-runtime-environment-')))
+    await installTestSdk(root)
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-runtime-environment", "type": "module" }')
     await writeFile(join(root, 'system.ts'), `import { colorSchemes, createSystem } from '@mszr/vanity'
 const open = createSystem().addAxis('scheme', colorSchemes({ locality: 'root' }))
@@ -473,7 +477,7 @@ export function exercise() {
       token: ['color', 'brand'],
       address: { kind: 'axis', axis: 'scheme', mode: 'dark' },
       val: 'black',
-    }), expect.objectContaining({ token: ['ratio'], address: { kind: 'base' }, val: '1.3' })])
+    }), expect.objectContaining({ token: ['ratio'], address: { kind: 'base' }, val: 1.26 })])
     expect(exercised.props.$system.attributes).toEqual({ 'data-scheme': 'dark' })
     expect(exercised.values[0][0]).toMatch(/^--app-v-/)
     expect(js).not.toContain('@vanilla-extract')
@@ -481,6 +485,7 @@ export function exercise() {
 
   it('serializes a whole system for explicit app-side imports', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-projection-')))
+    await installTestSdk(root)
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-system-projection", "type": "module" }')
     await writeFile(join(root, 'system.ts'), `import { createSystem } from '@mszr/vanity'
 const open = createSystem()
@@ -529,6 +534,7 @@ export const runtime = ds.runtime
   it('writes the manifest beside the CSS — .vanity/manifest.json, versioned', async () => {
     // A copy, so the build artifact never lands in the source tree.
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-manifest-')))
+    await installTestSdk(root)
     await cp(local('./test-support/vite-app'), root, { recursive: true })
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-manifest-fixture", "type": "module" }')
 
@@ -551,7 +557,7 @@ export const runtime = ds.runtime
 
     const manifest = JSON.parse(await readFile(join(root, '.vanity', 'manifest.json'), 'utf-8'))
 
-    expect(manifest.version).toBe(4)
+    expect(manifest.version).toBe(5)
     expect(manifest.system.tokens['color.brand'].name).toBe('--vanity-color-brand')
     expect(manifest.system.tokens['color.brand']).toMatchObject({
       declaredAt: { file: 'system.ts', line: 7, column: 14 },
@@ -575,6 +581,7 @@ describe('source-local build diagnostics', () => {
     autoImports?: import('./config').VanityAutoImports,
   ): Promise<unknown> {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-diagnostic-')))
+    await installTestSdk(root)
 
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-diagnostic-fixture", "type": "module" }')
 
@@ -779,6 +786,7 @@ describe('hmr', () => {
   async function serveFixtureCopy(prepare?: (root: string) => Promise<void>, layerOrder?: readonly string[]) {
     // realpath: Vite resolves modules to real paths; macOS tmpdir is a symlink.
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-hmr-')))
+    await installTestSdk(root)
     await cp(local('./test-support/vite-app'), root, { recursive: true })
     // The substrate walks up for a named package.json; the copy needs its own.
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-hmr-fixture", "type": "module" }')
@@ -809,6 +817,7 @@ describe('hmr', () => {
 
   it('does not recompute configured-system members for an unrelated save', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-hmr-scoped-invalidation-')))
+    await installTestSdk(root)
     const system = join(root, 'system.ts')
     const unrelated = join(root, 'unrelated.ts')
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-hmr-scoped-invalidation", "type": "module" }')
@@ -838,10 +847,10 @@ export const ds = createSystem().addTokens({ color: { brand: '#123456' } }).cons
     try {
       graphReads.mockClear()
       const context = { environment: server.environments.client }
-      await Reflect.apply(handler, context, [unrelated])
+      await Reflect.apply(handler, context, [unrelated, { event: 'update' }])
       expect(graphReads).not.toHaveBeenCalled()
 
-      await Reflect.apply(handler, context, [system])
+      await Reflect.apply(handler, context, [system, { event: 'update' }])
       expect(graphReads).toHaveBeenCalledTimes(1)
     }
     finally {
@@ -1005,7 +1014,7 @@ export const brand = ds.t.color.brand
       const { port } = httpServer.address() as AddressInfo
       const manifest = await (await fetch(`http://localhost:${port}/__vanity/manifest.json`)).json()
 
-      expect(manifest.version).toBe(4)
+      expect(manifest.version).toBe(5)
       expect(Object.values(manifest.modules as Record<string, any>)
         .flatMap(module => Object.keys(module.ports))).toContain('progress.fraction')
 
@@ -1114,6 +1123,7 @@ export const first = ds.class({ color })
 
   it('recovers first-ever failed style entries inside and outside the root when their dependency is fixed', async () => {
     const base = await realpath(await mkdtemp(join(tmpdir(), 'vanity-hmr-recovery-')))
+    await installTestSdk(base)
     const appRoot = join(base, 'app')
     const outsideRoot = join(base, 'packages', 'ui')
     await mkdir(appRoot, { recursive: true })
@@ -1215,6 +1225,7 @@ export const ds = createSystem()
 describe('auto-imports', () => {
   it('includes workspace-linked application modules and skips installed dependencies', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-auto-import-linked-modules-')))
+    await installTestSdk(root)
     const appRoot = join(root, 'app')
     const linkedRoot = join(root, 'packages/linked-app')
     const linkedFile = join(linkedRoot, 'index.ts')
@@ -1295,6 +1306,7 @@ export const values = [linked, installed]
 
   it('does not add a declared package auto-import source back to optimizer includes', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-auto-import-declared-package-')))
+    await installTestSdk(root)
     const originalCwd = process.cwd()
 
     try {
@@ -1401,6 +1413,7 @@ export {}
 
   it('an unbound locked system in a style module resolves through generated auto-imports', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-auto-')))
+    await installTestSdk(root)
     await cp(local('./test-support/vite-app/system.ts'), join(root, 'system.ts'))
     await writeFile(join(root, 'package.json'), '{ "name": "vanity-auto-fixture", "type": "module" }')
     // No imports at all — `ds` arrives through the auto-import shim.
@@ -1450,6 +1463,7 @@ export {}
 
   it('projects one shared authoring barrel into both Vite module roles', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-style-barrel-')))
+    await installTestSdk(root)
     const system = join(root, 'system.ts')
     const authoring = join(root, 'authoring.ts')
 
@@ -1501,6 +1515,7 @@ export const appHelper = 'shared barrel'
 
   it('regenerates exact globals when system exports are added and removed', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-auto-watch-')))
+    await installTestSdk(root)
     const system = join(root, 'system.ts')
     const card = join(root, 'card.css.ts')
     const original = await readFile(local('./test-support/vite-app/system.ts'), 'utf-8')
@@ -1548,6 +1563,7 @@ export const appHelper = 'shared barrel'
 
   it('filters style auto-imports while reusing the configured system', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-style-auto-filter-')))
+    await installTestSdk(root)
     const system = join(root, 'system.ts')
     const card = join(root, 'card.css.ts')
     const original = await readFile(local('./test-support/vite-app/system.ts'), 'utf-8')
@@ -1590,6 +1606,7 @@ export const appHelper = 'shared barrel'
 
   it('injects runtime presets and curated application barrels through one plugin', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-runtime-auto-')))
+    await installTestSdk(root)
     const helpers = join(root, 'helpers.ts')
     const styles = join(root, 'styles.ts')
 
@@ -1642,6 +1659,7 @@ export const merged = ports()
 
   it('scans every named export from an unfiltered local application barrel', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-runtime-barrel-')))
+    await installTestSdk(root)
     const helpers = join(root, 'helpers.ts')
     const styles = join(root, 'styles.ts')
 

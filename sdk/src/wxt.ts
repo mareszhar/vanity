@@ -11,7 +11,7 @@ import {
   renderAppAutoImportDeclarations,
   renderStyleAutoImportDeclarations,
 } from './compiler/auto-imports/autoImportDeclarations'
-import { listSystemSources } from './compiler/core/systems'
+import { getSystemSources } from './compiler/core/systems'
 import { loadVanityConfig, planAutoImportDeclarations } from './prepare'
 import { vanityPlugin } from './vite'
 
@@ -31,7 +31,7 @@ const vanityWxtModule = defineWxtModule<VanityConfig>({
       : existsSync(configPath)
         ? await loadVanityConfig(configPath, { root: wxt.config.root })
         : {}
-    listSystemSources(vanity.compiler?.system)
+    getSystemSources(vanity.compiler?.system)
     addViteConfig(wxt, () => ({ plugins: vanityPlugin(vanity) }))
 
     wxt.hook('prepare:types', async (_wxt, entries) => {

@@ -6,6 +6,7 @@
  * facets and projects them into authoring and locked surfaces.
  */
 
+import type { VanityCheck } from '../tokens/types'
 import type { DtcgCodecRegistry } from '../values/codecs'
 import type { VanityValueKernel } from '../values/kernel'
 import type { VanityAxisRegistry } from './axes'
@@ -38,6 +39,7 @@ export interface SystemRevisions {
 export interface OpenSystemState {
   readonly values: VanityValueKernel
   readonly tokens: TokenModule
+  readonly checks?: readonly ((tokens: object) => readonly VanityCheck[])[]
   readonly axes: AxisRegistry
   readonly policies: VanityPolicies
   readonly conditions: ConditionRegistry

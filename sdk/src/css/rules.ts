@@ -31,6 +31,7 @@ function emitRule(system: VanitySystemContext, selector: string, rule: unknown):
   const compiled = compileStyleRule(rule, {
     ...system,
     defaultLayer: system.globalDefaultLayer,
+    styleName: selector,
     file,
   })
   record({ kind: 'escape', form: 'rules', file, detail: selector, layer: compiled.layer })

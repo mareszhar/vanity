@@ -5,6 +5,12 @@
  */
 export const vanityViteHost = Symbol.for('@mszr/vanity/vite-host')
 
-export function configureVanityViteHost<T extends object>(options: T, host: 'nuxt'): T {
-  return Object.assign(options, { [vanityViteHost]: host })
+/** Host-owned project coordinates, independent of a framework's Vite application root. */
+export interface VanityViteHostOptions {
+  name: 'nuxt'
+  root: string
+}
+
+export function configureVanityViteHost<T extends object>(options: T, host: 'nuxt', root: string): T {
+  return Object.assign(options, { [vanityViteHost]: { name: host, root } satisfies VanityViteHostOptions })
 }

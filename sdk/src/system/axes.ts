@@ -3,7 +3,8 @@
 import type { VanityCondition, VanityConditionArm, VanityConditionInput } from './conditions'
 import { setOwn } from '../collections'
 import { checkQuery, checkSelector, parseLayerName } from '../css/validation'
-import { VanityError } from '../diagnostics'
+import { getDiagnosticSource, VanityError } from '../diagnostics'
+import { collectInspectionWarning } from '../introspect/records'
 import { getDataAttribute, getSchemeConditionArms } from './conditions'
 
 /** Smallest DOM or query scope at which an axis condition can be selected. */
@@ -108,6 +109,10 @@ export type VanityAxisConfig<
   readonly control?: Control
   /** Preserve native `light-dark()` behavior and its fallback policy. */
   readonly native?: VanityNativeSchemePolicy
+  /** Token leaves or groups every mode must account for. */
+  readonly covers?: readonly string[]
+  /** Token leaves or groups deliberately identical across modes. */
+  readonly shared?: readonly string[]
   /** Human-readable axis description. */
   readonly description?: string
 } & (undefined extends Control ? object : { readonly control: Control })
@@ -131,6 +136,10 @@ export type VanityOpenAxisConfig<
   readonly derive?: Derive
   /** Native scheme locality and support fallback policy. */
   readonly native?: VanityNativeSchemePolicy
+  /** Token leaves or groups every mode must account for. */
+  readonly covers?: readonly string[]
+  /** Token leaves or groups deliberately identical across modes. */
+  readonly shared?: readonly string[]
   /** Human-readable axis description. */
   readonly description?: string
   /** Query-free runtime controller for this axis. */
@@ -168,6 +177,10 @@ export interface VanityAxisDefinition<
   readonly control?: VanityAxisControl<any>
   /** Native scheme metadata, when this is a scheme axis. */
   readonly native?: VanityNativeSchemePolicy
+  /** Token leaves or groups every mode must account for. */
+  readonly covers?: readonly string[]
+  /** Token leaves or groups deliberately identical across modes. */
+  readonly shared?: readonly string[]
   /** Human-readable axis description. */
   readonly description?: string
 }
@@ -191,6 +204,8 @@ export interface VanityAxisRegistryDescription {
     readonly defaultMode?: string
     readonly modeOrder: readonly string[]
     readonly description?: string
+    readonly covers?: readonly string[]
+    readonly shared?: readonly string[]
     readonly control?: { readonly id: string }
     readonly native?: VanityNativeSchemePolicy
     readonly modes: Readonly<Record<string, {
@@ -319,6 +334,13 @@ export function defineAxis<
     )
   }
 
+  for (const key of ['covers', 'shared'] as const) {
+    const paths = config[key]
+    if (paths !== undefined && (!Array.isArray(paths) || paths.some(path => typeof path !== 'string' || !path.trim()))) {
+      throwAxisError(`axis ${key} must list token paths`, ['axis', key], 'provide an array of non-empty token leaf or group paths')
+    }
+  }
+
   const names = Object.keys(config.modes)
   if (names.length === 0) {
     throwAxisError(
@@ -426,6 +448,8 @@ export function defineAxis<
     ...((configuredDefault ?? markedDefault) === undefined ? {} : { defaultMode: configuredDefault ?? markedDefault }),
     modeOrder: Object.freeze(modeOrder) as readonly (keyof Modes & string)[],
     derive: Object.freeze({ ...(config.derive ?? {}) }),
+    ...(config.covers === undefined ? {} : { covers: Object.freeze([...config.covers]) }),
+    ...(config.shared === undefined ? {} : { shared: Object.freeze([...config.shared]) }),
     ...(config.control === undefined ? {} : { control: config.control }),
     ...(config.native === undefined ? {} : { native: Object.freeze({ ...config.native }) }),
     ...(config.description === undefined ? {} : { description: config.description }),
@@ -708,6 +732,21 @@ export function normalizeAxisAdditions<const Axes extends VanityAxisDefinitions>
         'create the axis definition with axis() or colorSchemes()',
       )
     }
+    if (definition.control === undefined) {
+      for (const [mode, trigger] of Object.entries(definition.modes)) {
+        if (!trigger.arms.some(arm => arm.mechanism === 'selector' && arm.runtime === undefined && arm.selector !== undefined && arm.selector !== '&'))
+          continue
+        const path = ['axes', name, 'modes', mode]
+        collectInspectionWarning({
+          code: 'VANITY_SYSTEM_INVALID_AXIS',
+          severity: 'warning',
+          message: `${name}.${mode} uses a raw selector and cannot be switched at runtime`,
+          path,
+          ...getDiagnosticSource(path.join('.')),
+          fix: `use data('${name}', '${mode}') for a runtime-activatable mode`,
+        })
+      }
+    }
     identities.add(identity)
     carriers.set(carrier, name)
     setOwn(merged, name, bindSchemeAxisDefinition(name, definition))
@@ -736,6 +775,8 @@ export function describeAxisRegistry(registry: VanityAxisRegistry<any>): VanityA
       return [axis, {
         ...(definition.defaultMode === undefined ? {} : { defaultMode: definition.defaultMode }),
         modeOrder: [...definition.modeOrder],
+        ...(definition.covers === undefined ? {} : { covers: [...definition.covers] }),
+        ...(definition.shared === undefined ? {} : { shared: [...definition.shared] }),
         ...(definition.description === undefined ? {} : { description: definition.description }),
         ...(definition.control === undefined ? {} : { control: { id: definition.control.id } }),
         ...(definition.native === undefined ? {} : { native: { ...definition.native } }),

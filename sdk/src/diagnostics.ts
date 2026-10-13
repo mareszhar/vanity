@@ -24,6 +24,8 @@ export type VanityDiagnosticCode
     | 'VANITY_SYSTEM_INCOMPATIBLE'
     | 'VANITY_SYSTEM_COLLISION'
     | 'VANITY_SYSTEM_INVALID_AXIS'
+    | 'VANITY_AXIS_UNCOVERED'
+    | 'VANITY_SELECTOR_UNANCHORED'
     | 'VANITY_SYSTEM_INVALID_LAYER'
     | 'VANITY_SYSTEM_INVALID_DEFINITION'
     | 'VANITY_SYSTEM_CONDITION_COLLISION'
@@ -41,7 +43,16 @@ export type VanityDiagnosticCode
     | 'VANITY_CSS_INVALID_KEY'
     | 'VANITY_CSS_INVALID_RAW'
     | 'VANITY_CSS_INVALID_SELECTOR'
+    | 'VANITY_SELECTOR_UNKNOWN'
+    | 'VANITY_CONDITION_DESCENDANT'
+    | 'VANITY_TOKENS_NUMERIC_KEY'
     | 'VANITY_CSS_INVALID_VALUE'
+    | 'VANITY_CSS_TOKEN_KIND'
+    | 'VANITY_DECLARATION_RAW'
+    | 'VANITY_DECLARATION_DERIVED'
+    | 'VANITY_DECLARATION_PRIMITIVE'
+    | 'VANITY_TOKEN_RESTRICTED'
+    | 'VANITY_BASELINE_INVALID'
     | 'VANITY_CSS_UNKNOWN_CONDITION'
     | 'VANITY_CSS_UNKNOWN_PROPERTY'
     | 'VANITY_PORT_INVALID_DEFAULT'
@@ -243,15 +254,46 @@ export interface VanitySourceLocation extends VanitySourcePoint {
   file: string
 }
 
+export interface VanityValueSourceSpan extends VanitySourceLocation {
+  /** UTF-16 offsets into the original authored module. */
+  start: number
+  end: number
+  text: string
+}
+
+export interface VanityDeclarationSource {
+  source?: VanityValueSourceSpan
+  editable: boolean
+  reason?: string
+}
+
 interface VanitySourceContext {
   file: string
+  exports?: string[]
   call: VanitySourcePoint
   locations: Record<string, VanitySourcePoint[]>
+  values?: Record<string, VanityDeclarationSource>
 }
 
 const SOURCE_MAPS = Symbol.for('vanity.sourceMaps')
 const CURRENT_SOURCE = Symbol.for('vanity.currentSource')
 const WITH_SOURCE = Symbol.for('vanity.withSource')
+
+/** Export identities from the compiler's syntax record, never from equal CSS classes. */
+export function getDiagnosticExports(): readonly string[] | undefined {
+  const state = globalThis as typeof globalThis & Record<symbol, unknown>
+  return (state[CURRENT_SOURCE] as VanitySourceContext | undefined)?.exports
+}
+
+/** Value provenance uses exact structural paths in the same authored-call context. */
+export function getDeclarationSource(path: readonly string[]): VanityDeclarationSource {
+  const state = globalThis as typeof globalThis & Record<symbol, unknown>
+  const context = state[CURRENT_SOURCE] as VanitySourceContext | undefined
+  return context?.values?.[JSON.stringify(path)] ?? {
+    editable: false,
+    reason: 'no independently authored value span is available',
+  }
+}
 
 /** A style-module evaluation is one provenance universe; prior graphs cannot leak into it. */
 export function clearDiagnosticSources(): void {

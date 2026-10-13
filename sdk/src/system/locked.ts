@@ -33,7 +33,7 @@ import type { VanitySystemMap } from '../introspect/system'
 import type { VanityAliasesOf, VanityAliasExposureOf } from '../plugins/propertyAliases'
 import type { VanityPortFactory, VanityPortInput } from '../ports/types'
 import type { VanityAnatomyFactory, VanityRecipeFactory } from '../recipes/types'
-import type { VanityRuntimeServices } from '../runtime/contract'
+import type { VanityRuntimeContract, VanityRuntimeServices } from '../runtime/contract'
 import type { VanityTokenBuilder } from '../tokens/builder'
 import type { VanityTokenPhaseLayers } from '../tokens/module'
 import type {
@@ -93,6 +93,7 @@ import { createPort } from '../ports/port'
 import { bindAnatomy } from '../recipes/anatomy'
 import { bindRecipe } from '../recipes/recipe'
 import { createRuntimeServices } from '../runtime/controller'
+import { getTokenRangeError } from '../runtime/range'
 import { substrate } from '../substrate'
 import {
   assertSystemNamespaceAvailable,
@@ -124,6 +125,7 @@ import {
   createSystemContract,
   VANITY_IN_PROCESS_SYSTEM,
 } from './contract'
+import { assertAxisCoverage } from './coverage'
 import { orderSystemLayers } from './layers'
 import { resolvePolicies } from './policies'
 import { orderSystemRules } from './rules'
@@ -488,6 +490,7 @@ const LOCKED_ONLY_SYSTEM_MEMBERS = new Set([
   'tdef',
   'addToken',
   'addTokens',
+  'addChecks',
   'augmentToken',
   'augmentTokens',
   'overwriteToken',
@@ -775,6 +778,7 @@ function materializeLockedSystem<
 
   let serializeSystemValue: (value: unknown) => string | number
   const system = {
+    tokenGraph: getTokenGraph(tokens),
     conditions,
     layers,
     defaultLayer: layers.find(layer => !SYSTEM_LAYERS.includes(layer)) ?? layers[0],
@@ -782,6 +786,7 @@ function materializeLockedSystem<
     layerRoot: prefix,
     ...(aliasConfig === undefined ? {} : { propertyAliases: aliasConfig }),
     policies: valueContext.policies,
+    ...(options.audit === undefined ? {} : { audit: options.audit }),
     resolveTokenDeclarations: (input: object) =>
       createTokenDeclarations(tokens as any, input as any),
     serializeValue: (value: unknown) => serializeSystemValue(value),
@@ -792,16 +797,28 @@ function materializeLockedSystem<
 
   const describedConditions = Object.freeze(describeConditions(conditions)) as VanityConditionDescriptions<VanitySystemConditionName<C, B>>
   const resolvedGraph = getTokenGraph(tokens)!
+  assertAxisCoverage(resolvedGraph)
   const runtimeControls = Object.fromEntries(
     (resolvedGraph.axes?.order ?? []).flatMap((axis) => {
       const control = resolvedGraph.axes?.definitions[axis]?.control
       return control === undefined ? [] : [[control.id, control]]
     }),
   )
+  const compareRange: typeof getTokenRangeError | undefined = runtimeContract.tokens.some(token => token.range !== undefined)
+    ? (...args) => getTokenRangeError(...args)
+    : undefined
+  if (compareRange) {
+    substrate.modules.registerFunctionSerialization(compareRange as (...args: unknown[]) => unknown, {
+      importPath: '@mszr/vanity/runtime/range',
+      importName: 'restoreRuntimeRange',
+      args: [],
+    })
+  }
   const runtimeServices = createRuntimeServices<Bound['t'], Axes>(
     runtimeContract,
     getRuntimeSchemas(tokens),
     runtimeControls,
+    compareRange,
   )
   serializeSystemValue = (value: unknown): string | number => {
     if (typeof value === 'number') {
@@ -1010,11 +1027,11 @@ function materializeLockedSystem<
     namesOf: buildOnly('namesOf', ((selection: object) => project(selection, 'name')) as Bound['namesOf']),
     varsOf: buildOnly('varsOf', ((selection: object) => project(selection, 'var')) as Bound['varsOf']),
     explain: buildOnly('explain', ((token: VanityTokenHandleAny) => explainToken(resolvedGraph, token)) as Bound['explain']),
-    runtime: registerApplicationProjection(runtimeServices.runtime, 'restoreRuntimeControllerFactory', runtimeContract),
-    snapshotFrom: registerApplicationProjection(runtimeServices.snapshotFrom, 'restoreSnapshotFrom', runtimeContract),
-    reconcileRuntimeSnapshot: registerApplicationProjection(runtimeServices.reconcileRuntimeSnapshot, 'restoreRuntimeReconciler', runtimeContract),
-    runtimeStyle: registerApplicationProjection(runtimeServices.runtimeStyle, 'restoreRuntimeStyle', runtimeContract),
-    runtimeProps: registerApplicationProjection(runtimeServices.runtimeProps, 'restoreRuntimeProps', runtimeContract),
+    runtime: registerApplicationProjection(runtimeServices.runtime, 'restoreRuntimeControllerFactory', runtimeContract, compareRange),
+    snapshotFrom: registerApplicationProjection(runtimeServices.snapshotFrom, 'restoreSnapshotFrom', runtimeContract, compareRange),
+    reconcileRuntimeSnapshot: registerApplicationProjection(runtimeServices.reconcileRuntimeSnapshot, 'restoreRuntimeReconciler', runtimeContract, compareRange),
+    runtimeStyle: registerApplicationProjection(runtimeServices.runtimeStyle, 'restoreRuntimeStyle', runtimeContract, compareRange),
+    runtimeProps: registerApplicationProjection(runtimeServices.runtimeProps, 'restoreRuntimeProps', runtimeContract, compareRange),
     serialize: (value: VanityValue) => String(serializeSystemValue(value)),
     conditions: describedConditions,
     layers: Object.freeze([...layers]) as readonly L[number][],
@@ -1065,6 +1082,7 @@ function materializeLockedSystem<
     ...(describedAxes === undefined ? {} : { axes: describedAxes }),
     tokens: getTokenRestorations(tokens),
     tokenRecords: getTokenInspections(resolvedGraph),
+    ...(resolvedGraph.checks === undefined ? {} : { checks: resolvedGraph.checks }),
     runtime: runtimeContract,
     ...(mode.consts === undefined ? {} : { consts: mode.consts }),
     ...(mode.utilities === undefined ? {} : { utilities: mode.utilities }),
@@ -1170,6 +1188,8 @@ function materializeLockedSystem<
 }
 
 function recordPortableSystem(portable: VanityPortableSystem): void {
+  for (const entry of portable.checks ?? [])
+    record(entry)
   record({
     kind: 'system',
     ...(portable.source === undefined ? {} : { file: portable.source }),
@@ -1292,11 +1312,11 @@ function buildOnly<F>(name: string, fn: F): F {
   return fn
 }
 
-function registerApplicationProjection<F>(fn: F, importName: string, contract: object): F {
+function registerApplicationProjection<F>(fn: F, importName: string, contract: VanityRuntimeContract, compareRange?: typeof getTokenRangeError): F {
   substrate.modules.registerFunctionSerialization(fn as (...args: unknown[]) => unknown, {
     importPath: '@mszr/vanity/runtime',
     importName,
-    args: [contract as any],
+    args: compareRange ? [contract as any, compareRange] : [contract as any],
   })
   return fn
 }

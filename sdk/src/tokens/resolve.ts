@@ -16,7 +16,9 @@ import {
 } from '../values/protocol'
 import { TextContrastCheck } from './checks'
 import { convertToExpression, getColorRequirements } from './color'
+import { getTokenEnvironments } from './environments'
 import {
+  collectRefs,
   foldColorCss,
   foldContrastTarget,
   foldExpr,
@@ -36,6 +38,7 @@ import {
   serializeTokenCss,
   VANITY_MODULE_TOKEN_REF,
 } from './module'
+import { validateTokenCheckSamples } from './sampling'
 
 export {
   collectRefs,
@@ -89,14 +92,14 @@ export function resolveGraph(
     foldRefForContrast: (handle, scheme) => foldContrastNode(requireNode(handle), scheme),
     foldValue: (value, scheme) => authoredValues.foldValue(value, scheme),
     serializeValue: value => authoredValues.serializeValue(value),
-    getRefTraits: handle => referenceTraits(requireNode(handle)),
+    getRefTraits: handle => getReferenceTraits(requireNode(handle)),
     getReferenceTraits: (reference) => {
       if (reference.kind !== 'token')
         return { cssLive: true, volatile: true, conditional: false }
       const node = reference.path === undefined ? undefined : graph.nodes.get(reference.path)
       if (!node)
         return resolver.invalidColor('a referenced token does not belong to this token module')
-      return referenceTraits(node)
+      return getReferenceTraits(node)
     },
     serializeRef: (handle) => {
       const referenced = requireNode(handle)
@@ -115,7 +118,7 @@ export function resolveGraph(
     },
   }
 
-  function referenceTraits(node: TokenNode) {
+  function getReferenceTraits(node: TokenNode) {
     const traits = resolveNode(node).traits
     return {
       cssLive: traits.cssLive || (node.contract.canonical && node.contract.reference === 'var'),
@@ -502,6 +505,7 @@ function createAuthoredValueFolder(
   resolver: () => VanityResolver,
   getDefinition: (node: TokenNode) => VanityOverride,
   guard: <Result>(node: TokenNode, compute: () => Result) => Result = (_node, compute) => compute(),
+  heldResolver?: VanityResolver,
 ) {
   function serializeValue(value: import('../values/types').VanitySelfValue): string {
     const context = createSerializeContext(
@@ -557,7 +561,7 @@ function createAuthoredValueFolder(
       if (definition.kind === 'value')
         return foldValue(definition.value, scheme)
 
-      return formatOklch(foldExpr(definition.expr, scheme, resolver()))
+      return formatOklch(foldExpr(definition.expr, scheme, definition.kind === 'contrast' && heldResolver ? heldResolver : resolver()))
     })
   }
 
@@ -692,6 +696,7 @@ function describeTarget(target: VanityColorExpr): string {
 /** Run authored contrast checks after graph resolution has established fold semantics. */
 export function runTokenChecks(checks: readonly unknown[], graph: TokenGraph): VanityDiagnostic[] {
   const diagnostics: VanityDiagnostic[] = []
+  const records: import('../introspect/records').VanityContrastRecord[] = []
 
   for (const entry of checks) {
     if (!(entry instanceof TextContrastCheck))
@@ -699,9 +704,19 @@ export function runTokenChecks(checks: readonly unknown[], graph: TokenGraph): V
 
     const text = convertToExpression(entry.text)
     const background = convertToExpression(entry.background)
+    const paths = new Set<string>()
+    collectRefs(text, paths)
+    collectRefs(background, paths)
 
-    for (const scheme of ['light', 'dark'] as const) {
-      const resolver = createTokenCheckResolver(graph, scheme)
+    const sampled = validateTokenCheckSamples(entry, graph)
+    if (sampled) {
+      records.push(...sampled.records)
+      diagnostics.push(...sampled.diagnostics)
+      sampled.records.forEach(record)
+      continue
+    }
+    for (const { scheme, when } of getTokenEnvironments(graph, [...paths])) {
+      const resolver = createTokenCheckResolver(graph, scheme, undefined, getTokenContextSubstitutions(graph, when))
       const textColor = foldExpr(text, scheme, resolver)
       const backgroundColor = foldExpr(background, scheme, resolver)
       const { algorithm, min } = entry.level
@@ -709,7 +724,7 @@ export function runTokenChecks(checks: readonly unknown[], graph: TokenGraph): V
         ? Math.abs(measureApcaContrast(textColor, backgroundColor))
         : measureWcagContrast(textColor, backgroundColor)
 
-      record({
+      const entryRecord: import('../introspect/records').VanityContrastRecord = {
         kind: 'contrast',
         file: graph.file,
         pairing: `${describeTarget(text)} on ${describeTarget(background)}`,
@@ -718,12 +733,17 @@ export function runTokenChecks(checks: readonly unknown[], graph: TokenGraph): V
         measured: Math.round(measured * 10) / 10,
         min,
         accepted: false,
-      })
+        tokens: [...paths].sort(),
+        ...(Object.keys(when).length ? { environment: when } : {}),
+        evidence: { level: 'environments', environments: Object.keys(when).length ? [[...Object.entries(when).map(([axis, mode]) => `${axis}=${mode}`), `scheme=${scheme}`].filter((value, index, values) => values.indexOf(value) === index).join(',')] : ['light', 'dark'] },
+      }
+      records.push(entryRecord)
+      record(entryRecord)
 
       if (measured < min) {
         diagnostics.push({
           code: 'VANITY_TOKENS_CONTRAST',
-          message: `${describeTarget(text)} / ${describeTarget(background)} fails ${algorithm === 'apca' ? `APCA Lc ${min}` : `WCAG 2 ${min}:1`} in scheme "${scheme}"`,
+          message: `${describeTarget(text)} / ${describeTarget(background)} fails ${algorithm === 'apca' ? `APCA Lc ${min}` : `WCAG 2 ${min}:1`} in scheme "${scheme}"${Object.keys(when).length ? ` (${Object.entries(when).map(([axis, mode]) => `${axis}=${mode}`).join(', ')})` : ''}`,
           detail: [`text (${scheme}) → ${formatOklch(textColor)} on ${formatOklch(backgroundColor)} = ${algorithm === 'apca' ? `Lc ${measured.toFixed(1)}` : `${measured.toFixed(2)}:1`}`],
           file: graph.file,
           fix: 'adjust one endpoint of the pairing, or relax the check level deliberately',
@@ -732,15 +752,17 @@ export function runTokenChecks(checks: readonly unknown[], graph: TokenGraph): V
     }
   }
 
+  if (records.length)
+    graph.checks = records
   return diagnostics
 }
 
 /** Create the no-cycle resolver used by authored checks and introspection. */
-export function createTokenCheckResolver(graph: TokenGraph, _scheme: VanityScheme): VanityResolver {
+export function createTokenCheckResolver(graph: TokenGraph, _scheme: VanityScheme, overrides?: Map<string, VanityOverride>, environment?: Map<string, VanityOverride>): VanityResolver {
   let resolver: VanityResolver
   const contrastStack: string[] = []
   const contrastResults = new Map<string, Map<VanityScheme, VanityContrastTargetResolution>>()
-  const authoredValues = createAuthoredValueFolder(graph, () => resolver, node => node.definition)
+  const authoredValues = createAuthoredValueFolder(graph, () => resolver, node => overrides?.get(node.key) ?? environment?.get(node.key) ?? node.definition, undefined, overrides ? createTokenCheckResolver(graph, _scheme, undefined, environment) : undefined)
 
   function foldContrastNode(node: TokenNode, targetScheme: VanityScheme): VanityContrastTargetResolution {
     if (contrastStack.includes(node.key)) {
@@ -758,7 +780,7 @@ export function createTokenCheckResolver(graph: TokenGraph, _scheme: VanitySchem
     if (cached !== undefined)
       return cached
 
-    const definition = node.definition
+    const definition = overrides?.get(node.key) ?? environment?.get(node.key) ?? node.definition
     const resolution = definition.kind !== 'color' && definition.kind !== 'contrast'
       ? (() => {
           const css = authoredValues.foldDefault(node, targetScheme)
@@ -783,7 +805,7 @@ export function createTokenCheckResolver(graph: TokenGraph, _scheme: VanitySchem
     return resolution
   }
 
-  function referenceTraits(node: TokenNode | undefined) {
+  function getReferenceTraits(node: TokenNode | undefined) {
     if (!node || graph.nodes.get(node.key) !== node)
       return resolver.invalidColor('a referenced token does not belong to this token module')
     const traits = graph.results.get(node.key)!.traits
@@ -814,9 +836,9 @@ export function createTokenCheckResolver(graph: TokenGraph, _scheme: VanitySchem
     },
     foldValue: (value, targetScheme) => authoredValues.foldValue(value, targetScheme),
     serializeValue: value => authoredValues.serializeValue(value),
-    getRefTraits: handle => referenceTraits(getNode(handle)),
+    getRefTraits: handle => getReferenceTraits(getNode(handle)),
     getReferenceTraits: reference => reference.kind === 'token'
-      ? referenceTraits(reference.path === undefined ? undefined : graph.nodes.get(reference.path))
+      ? getReferenceTraits(reference.path === undefined ? undefined : graph.nodes.get(reference.path))
       : { cssLive: true, volatile: true, conditional: false },
     invalidColor: (detail, fix) => {
       throw new VanityError({

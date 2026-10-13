@@ -1,6 +1,6 @@
 /**
  * Canonical semantic map. Every outward projection starts here:
- * `ds.introspect()`, Manifest v4, CLI output, DevTools, agents, and diffs.
+ * `ds.introspect()`, Manifest v5, CLI output, DevTools, agents, and diffs.
  */
 
 import type {
@@ -102,6 +102,14 @@ export interface VanityIntrospectedToken extends VanitySemanticEntry {
   readonly preview:
     | { readonly status: 'resolved', readonly val: string, readonly environment: Readonly<Record<string, string>>, readonly caveats?: readonly string[] }
     | { readonly status: 'unavailable', readonly reason: string }
+  /** Guidance for choosing this role. */
+  readonly usage?: VanityTokenRecord['usage']
+  /** Permitted declaration properties and enforcement severity. */
+  readonly restrict?: VanityTokenRecord['restrict']
+  /** Inclusive mutable domain, in authored units. */
+  readonly range?: VanityTokenRecord['range']
+  /** Build-time evidence for declared pairings involving this role. */
+  readonly contrast?: readonly import('./records').VanityContrastRecord[]
   /** JSON-safe metadata attached to the token. */
   readonly metadata: Readonly<Record<string, unknown>>
   /** Runtime contract metadata, when the token is mutable or branched. */
@@ -176,6 +184,10 @@ export interface VanitySystemMap {
     readonly name: string
     /** Default axis mode. */
     readonly defaultMode?: string
+    /** Token leaves or groups every mode must account for. */
+    readonly covers?: readonly string[]
+    /** Token leaves or groups deliberately identical across modes. */
+    readonly shared?: readonly string[]
     /** Deterministic mode order. */
     readonly modeOrder: readonly string[]
     /** Mode trigger and derivation metadata. */
@@ -360,6 +372,8 @@ export function introspectSystem(portable: VanityPortableSystem): VanitySystemMa
         name,
         ...(axis.defaultMode === undefined ? {} : { defaultMode: axis.defaultMode }),
         modeOrder: axis.modeOrder,
+        ...(axis.covers === undefined ? {} : { covers: axis.covers }),
+        ...(axis.shared === undefined ? {} : { shared: axis.shared }),
         modes: axis.modes,
         ...(axis.control === undefined ? {} : { control: axis.control }),
         ...(axis.native === undefined ? {} : { native: axis.native }),
@@ -487,6 +501,7 @@ function createIntrospectedToken(
     ? defaultOwner
     : getOwner('module', `module:${token.module.join('.')}`)
   const source = createDeclaredAt(token.file, token.line, token.column)
+  const contrast = portable.checks?.filter(check => check.tokens?.includes(token.path))
   return {
     id: `token:${token.path}`,
     kind: 'token',
@@ -515,6 +530,10 @@ function createIntrospectedToken(
     preview: getTokenPreview(token, portable),
     metadata: semantic.metadata,
     ...(token.runtime === undefined ? {} : { runtime: token.runtime }),
+    ...(token.usage === undefined ? {} : { usage: token.usage }),
+    ...(token.restrict === undefined ? {} : { restrict: token.restrict }),
+    ...(token.range === undefined ? {} : { range: token.range }),
+    ...(contrast?.length ? { contrast } : {}),
     ...(token.description === undefined ? {} : { description: token.description }),
     ...(token.deprecated === undefined ? {} : { deprecated: token.deprecated }),
   }

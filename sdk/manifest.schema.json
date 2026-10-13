@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.mszr.dev/vanity/manifest-4.schema.json",
-  "title": "vanity Manifest v4",
+  "$id": "https://schemas.mszr.dev/vanity/manifest-5.schema.json",
+  "title": "vanity Manifest v5",
   "description": "The canonical vanity system map plus package-relative build-module provenance.",
   "type": "object",
   "additionalProperties": false,
@@ -15,13 +15,13 @@
   ],
   "properties": {
     "$schema": {
-      "const": "https://schemas.mszr.dev/vanity/manifest-4.schema.json"
+      "const": "https://schemas.mszr.dev/vanity/manifest-5.schema.json"
     },
     "format": {
-      "const": "vanity.manifest/4"
+      "const": "vanity.manifest/5"
     },
     "version": {
-      "const": 4
+      "const": 5
     },
     "system": {
       "$ref": "#/$defs/system"
@@ -546,6 +546,18 @@
             },
             "defaultMode": {
               "type": "string"
+            },
+            "covers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "shared": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
             "control": {
               "type": "object",
@@ -1726,6 +1738,21 @@
             },
             "runtime": {
               "$ref": "#/$defs/tokenRuntime"
+            },
+            "usage": {
+              "$ref": "#/$defs/tokenUsage"
+            },
+            "restrict": {
+              "$ref": "#/$defs/tokenRestriction"
+            },
+            "range": {
+              "$ref": "#/$defs/tokenRange"
+            },
+            "contrast": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/contrastRecord"
+              }
             }
           }
         }
@@ -1970,6 +1997,9 @@
           "items": {
             "$ref": "#/$defs/runtimeBranch"
           }
+        },
+        "range": {
+          "$ref": "#/$defs/tokenRange"
         }
       },
       "additionalProperties": false
@@ -2038,7 +2068,8 @@
             "variants",
             "toggles",
             "defaults",
-            "ports"
+            "ports",
+            "classes"
           ],
           "properties": {
             "kind": {
@@ -2088,6 +2119,54 @@
               "type": "object",
               "additionalProperties": {
                 "type": "string"
+              }
+            },
+            "classes": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/recipeClasses"
+                },
+                {
+                  "$ref": "#/$defs/anatomyClasses"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "recipe"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "classes": {
+                "$ref": "#/$defs/recipeClasses"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "anatomy"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "classes": {
+                "$ref": "#/$defs/anatomyClasses"
               }
             }
           }
@@ -2180,7 +2259,10 @@
           "type": "object",
           "required": [
             "class",
-            "tokens"
+            "tokens",
+            "declarations",
+            "exports",
+            "layer"
           ],
           "properties": {
             "kind": {
@@ -2197,6 +2279,21 @@
               "items": {
                 "type": "string"
               }
+            },
+            "declarations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/styleDeclaration"
+              }
+            },
+            "exports": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "layer": {
+              "type": "string"
             }
           }
         }
@@ -2241,6 +2338,12 @@
               "type": "string"
             },
             "layer": {
+              "type": "string"
+            },
+            "style": {
+              "type": "string"
+            },
+            "property": {
               "type": "string"
             }
           }
@@ -2294,6 +2397,54 @@
             },
             "fallback": {
               "type": "string"
+            },
+            "evidence": {
+              "$ref": "#/$defs/evidence"
+            },
+            "samples": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "step": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "worst": {
+              "type": "object",
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              }
+            },
+            "profile": {
+              "enum": [
+                "development",
+                "production",
+                "both"
+              ]
+            },
+            "note": {
+              "type": "string"
+            },
+            "tokens": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "environment": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
             }
           }
         }
@@ -2473,12 +2624,639 @@
                 "type": "integer",
                 "minimum": 0
               }
+            },
+            "layer": {
+              "enum": [
+                "primitive",
+                "pattern",
+                "feature"
+              ]
             }
           }
         }
       ],
       "type": "object",
       "unevaluatedProperties": false
+    },
+    "tokenUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "for": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "avoid": {
+          "type": "string"
+        },
+        "tier": {
+          "const": "primitive"
+        }
+      }
+    },
+    "tokenRestriction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "properties",
+        "level"
+      ],
+      "properties": {
+        "properties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "level": {
+          "enum": [
+            "discourage",
+            "forbid"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "tokenRange": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "level"
+          ],
+          "properties": {
+            "level": {
+              "const": "type"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "level",
+            "environments"
+          ],
+          "properties": {
+            "level": {
+              "const": "environments"
+            },
+            "environments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "level",
+            "samples",
+            "parameters"
+          ],
+          "properties": {
+            "level": {
+              "const": "sampled"
+            },
+            "samples": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "parameters": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "level",
+            "reason"
+          ],
+          "properties": {
+            "level": {
+              "const": "unresolved"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "contrastRecord": {
+      "type": "object",
+      "required": [
+        "pairing",
+        "scheme",
+        "algorithm",
+        "measured",
+        "min",
+        "accepted",
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "contrast"
+        },
+        "pairing": {
+          "type": "string"
+        },
+        "scheme": {
+          "enum": [
+            "light",
+            "dark"
+          ]
+        },
+        "algorithm": {
+          "enum": [
+            "apca",
+            "wcag2"
+          ]
+        },
+        "measured": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "accepted": {
+          "type": "boolean"
+        },
+        "fallback": {
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "samples": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "step": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "worst": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "profile": {
+          "enum": [
+            "development",
+            "production",
+            "both"
+          ]
+        },
+        "note": {
+          "type": "string"
+        },
+        "tokens": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "column": {
+          "type": "integer"
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "recipeClasses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base",
+        "variants",
+        "toggles",
+        "compound"
+      ],
+      "properties": {
+        "base": {
+          "type": "string"
+        },
+        "variants": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "toggles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "compound": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "when",
+              "class"
+            ],
+            "properties": {
+              "when": {
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              },
+              "class": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "anatomyClasses": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base",
+        "variants",
+        "toggles",
+        "compound"
+      ],
+      "properties": {
+        "base": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "variants": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "toggles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "compound": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "when",
+              "classes"
+            ],
+            "properties": {
+              "when": {
+                "type": "object",
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              },
+              "classes": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "valueSourceSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "start",
+        "end",
+        "text",
+        "line",
+        "column"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "declarationArm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selector",
+        "ordinal"
+      ],
+      "properties": {
+        "selector": {
+          "type": "string"
+        },
+        "media": {
+          "type": "string"
+        },
+        "supports": {
+          "type": "string"
+        },
+        "container": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "startingStyle": {
+          "type": "boolean"
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "declarationDerivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "terms",
+        "allowed",
+        "audit"
+      ],
+      "properties": {
+        "terms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "token",
+              "factor"
+            ],
+            "properties": {
+              "token": {
+                "type": "string"
+              },
+              "factor": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        "allowed": {
+          "type": "boolean"
+        },
+        "audit": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "declarationComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "value",
+        "origin",
+        "tokens",
+        "dataType",
+        "evidence"
+      ],
+      "properties": {
+        "component": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "token",
+            "derived",
+            "port",
+            "literal",
+            "unsafe",
+            "external"
+          ]
+        },
+        "tokens": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dataType": {
+          "$ref": "#/$defs/cssType"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "derivation": {
+          "$ref": "#/$defs/declarationDerivation"
+        },
+        "incompatible": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expected",
+            "reason"
+          ],
+          "properties": {
+            "expected": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "styleDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "property",
+        "value",
+        "condition",
+        "arm",
+        "layer",
+        "components",
+        "tokens",
+        "editable"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "property": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "condition": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "arm": {
+          "$ref": "#/$defs/declarationArm"
+        },
+        "layer": {
+          "type": "string"
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/declarationComponent"
+          }
+        },
+        "tokens": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source": {
+          "$ref": "#/$defs/valueSourceSpan"
+        },
+        "editable": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "editable": {
+                "const": true
+              }
+            },
+            "required": [
+              "editable"
+            ]
+          },
+          "then": {
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "source": {
+                "$ref": "#/$defs/valueSourceSpan"
+              }
+            }
+          },
+          "else": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

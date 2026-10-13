@@ -271,6 +271,29 @@ export interface VanityTokenCase<
   readonly val: Val | null
 }
 
+/** Guidance for choosing a role; only the declarations policy acts on primitive tier. */
+export interface VanityTokenUsage {
+  /** Tasks this role is intended to serve. */
+  readonly for?: readonly string[]
+  /** Uses that should select a different role. */
+  readonly avoid?: string
+  /** Mark a primitive that the declarations policy discourages using directly. */
+  readonly tier?: 'primitive'
+}
+
+/** A token's permitted declaration properties and the severity of other uses. */
+export interface VanityTokenRestriction {
+  /** CamelCase CSS properties; shorthand and logical families include their members. */
+  readonly properties: readonly string[]
+  /** Warn or reject uses outside the declared properties. */
+  readonly level: 'discourage' | 'forbid'
+  /** Explain why the role is limited to those properties. */
+  readonly reason?: string
+}
+
+/** Inclusive bounds for a mutable token, expressed as comparable CSS values. */
+export type VanityTokenRange = readonly [number | string | VanityCssValue, number | string | VanityCssValue]
+
 /** Configure a token's value, policy overrides, axes, metadata, and runtime behavior. */
 export interface VanityTokenConfig<
   Val = unknown,
@@ -293,6 +316,12 @@ export interface VanityTokenConfig<
   readonly cases?: Cases
   /** Human-readable explanation surfaced in introspection and diagnostics. */
   readonly description?: string
+  /** Role guidance for authors; a primitive tier is enforced only by the declarations policy. */
+  readonly usage?: VanityTokenUsage
+  /** Enforce which declaration properties may consume this role. */
+  readonly restrict?: VanityTokenRestriction
+  /** Inclusive domain enforced after runtime validation; requires mutable: true. */
+  readonly range?: VanityTokenRange
   /** Deprecation guidance shown to authors consuming this token. */
   readonly deprecated?: VanityTokenDeprecation
   /** JSON-safe metadata copied into introspection and manifests. */
@@ -546,6 +575,7 @@ export type VanityCaseVal<Cases, When> = VanityCaseMatch<Cases, When> extends in
 export type VanityCaseInput<Cases, When> = When & ([VanityCaseMatch<Cases, When>] extends [never] ? never : unknown)
 
 declare const VANITY_TOKEN_CASES: unique symbol
+declare const VANITY_TOKEN_USAGE: unique symbol
 
 /** Select exact authored case addresses while preserving the branch's value and mutability. */
 export interface VanityTokenCaseSelector<Cases, Mutable extends boolean> {
@@ -587,6 +617,10 @@ type VanityConfiguredMutable<Node> = Node extends VanityConfiguredTokenShape<inf
   ? Config extends { readonly mutable: true } ? true : false
   : false
 
+type VanityConfiguredUsage<Node> = Node extends VanityConfiguredTokenShape<infer Config, any>
+  ? Config extends { readonly usage: infer Usage } ? Usage : undefined
+  : undefined
+
 type VanityConfiguredDescription<Node> = Node extends VanityConfiguredTokenShape<infer Config, any>
   ? Config extends { readonly description: infer Description extends string } ? Description : undefined
   : undefined
@@ -609,7 +643,10 @@ export interface VanityTokenHandle<
   Axes = Record<never, never>,
   Cases = readonly [],
   Description extends string | undefined = string | undefined,
+  Usage = unknown,
 > {
+  /** Type-only authored guidance retained in native editor hovers. */
+  readonly [VANITY_TOKEN_USAGE]?: Usage
   /** Final `--name` custom-property name; available on consolidated handles. */
   readonly $name: `--${Name}`
   /** Resolved direct value for this token. */
@@ -979,7 +1016,8 @@ export type VanityTokenHandleOf<
   VanityConfiguredMutable<Node>,
   VanityConfiguredAxes<Node>,
   VanityConfiguredCases<Node>,
-  VanityConfiguredDescription<Node>
+  VanityConfiguredDescription<Node>,
+  VanityConfiguredUsage<Node>
 > & ((Node extends VanityConfiguredTokenShape<any, infer ConfiguredType>
   ? ConfiguredType
   : VanityDataTypeOf<VanityConfiguredVal<Node>>) extends 'color' ? VanityColorMethods : Record<never, never>) : never

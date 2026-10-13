@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { vanityPlugin } from '@mszr/vanity/vite'
 import { createServer } from 'vite'
 import { describe, expect, it, vi } from 'vitest'
+import { installTestSdk } from '../test-support/installedSdk'
 import { writeFileArtifacts } from './publication'
 
 const vanityRoot = fileURLToPath(new URL('../', import.meta.url))
@@ -17,6 +18,8 @@ const alias = {
 async function put(root: string, file: string, contents: string): Promise<string> {
   const path = join(root, file)
   await mkdir(join(path, '..'), { recursive: true })
+  if (file === 'package.json')
+    await installTestSdk(root)
   await writeFile(path, contents)
   return path
 }

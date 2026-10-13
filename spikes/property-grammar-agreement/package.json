@@ -1,0 +1,22 @@
+{
+  "name": "spike-property-grammar-agreement",
+  "type": "module",
+  "private": true,
+  "description": "Can platform grammar data validate and attribute declaration components in agreement with Chromium?",
+  "scripts": {
+    "check": "node generate.mjs --check",
+    "generate": "node generate.mjs",
+    "generate:gaps": "node run.mjs --generate-gaps",
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@vanilla-extract/css": "catalog:",
+    "@webref/css": "catalog:",
+    "css-tree": "catalog:",
+    "csstype": "catalog:",
+    "known-css-properties": "catalog:",
+    "lightningcss": "catalog:",
+    "typescript": "catalog:"
+  }
+}

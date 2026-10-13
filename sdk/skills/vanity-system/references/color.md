@@ -33,52 +33,57 @@ const palette = open.defineTokens()
 - `legibleOn(background)` picks black or white for text on that background; use it for `on*` roles. It's a token definition, not a style value.
 - Define text/background roles in pairs (`accent` + `onAccent`, `danger` + `onDanger`) so components never guess.
 - `legibleOn` picks once, at build time, from the background's authored value. It **fails the build** below APCA Lc 60, per scheme and authored axis mode or case. The authored-default check includes literals, aliases, mutable backgrounds, token-valued channels, and supported `alpha`/`lighten`/`darken`/`from`/`colorMix` derivations. Deliberately unfoldable mixes use a representative approximation recorded in introspection; unsupported representatives fail with an actionable color diagnostic.
-- A mutable background is checked at its authored default, but keeps that foreground when the runtime changes the seed. This does not guarantee contrast throughout the runtime range. Test the retained foreground against every sampled background, as below.
+- A mutable background keeps the foreground picked at its authored value. Register a pairing with `addChecks` and declare each mutable dependency's `range` to sample the foreground the page retains.
 
-To test a live seed, remember that the page keeps the foreground picked at the authored seed while the runtime moves the background, so check **that** foreground across the seed's whole range, not just its endpoints (hue 0° and 360° are the same color; failures hide in between). Share the color formula between the system and a test:
+For a formula authored inside the system, the compiler follows both sides under the same inputs and holds only compiled `legibleOn` picks fixed:
 
 ```ts
-// design/accent.ts — one formula for the system and the test
-import type { VanityHueChannel, VanityOpenSystemBase } from '@mszr/vanity'
+// design/system.ts — contrast over the declared hue range
+import { angle, check, createSystem } from '@mszr/vanity'
 
-export function accentAt(open: VanityOpenSystemBase, hue: VanityHueChannel) {
-  return open.oklch(0.6, 0.15, hue)
-}
+const open = createSystem()
+const color = open.defineTokens()
+  .add('hue', { val: angle.deg(265), mutable: true, range: ['0deg', '360deg'] })
+  .add(m => ({ accent: open.oklch(0.6, 0.15, m.hue) }))
+  .add(m => ({ onAccent: open.legibleOn(m.accent) }))
 
-// system: .add(m => ({ accent: accentAt(open, m.hue) })).add(m => ({ onAccent: open.legibleOn(m.accent) }))
+export const ds = open.addTokens({ color })
+  .addChecks(t => [check.textContrast(t.color.onAccent, t.color.accent)])
+  .consolidate({ prefix: 'contrast' })
 ```
 
-Each sample builds the accent at one hue as a static color, so `legibleOn` checks it and reports which color it would pick. A sample that fails, or that would pick the other color, is a hue where the foreground the page keeps doesn't reach Lc 60 (on a background, at most one of black and white can):
+The angle grid uses 5° steps, including the ends; a mutable number uses 33 evenly spaced inputs and an integer samples only integers. Several inputs share a product capped at 1,024 points, with reductions reported. The runtime's type check, canonical validator input, fallback/omit policy and output range check determine which states are reachable. Development-only validation runs in both profiles; an unavailable or async validator limits evidence without turning an unknown sample into a failure. Passing samples are evidence for the declared range and validation, not proof of rendered contrast through opacity or overlays. Read those labels in `vanity check` and `explain`.
+
+Keep a hand-written sampling test for a formula that lives outside the token graph. Hold its authored foreground fixed rather than choosing a new foreground at every sample:
 
 ```ts
-// accent.test.ts
-import { createSystem } from '@mszr/vanity'
+// external-accent.test.ts
+import { check, createSystem } from '@mszr/vanity'
 import { expect, it } from 'vitest'
-import { accentAt } from './design/accent.ts'
-import { ds } from './design/system.ts'
 
-it('keeps the live on-accent color legible at every hue', () => {
-  const live = ds.t.color.onAccent.$val   // the pick the page keeps while the hue moves
+// A CSS string produced by application code outside the system's graph.
+function externalAccentAt(hue: number) {
+  return `oklch(0.6 0.15 ${hue})`
+}
+
+it('keeps the external accent legible with its authored foreground', () => {
+  const open = createSystem()
+  const ds = open.addTokens({ onAccent: open.legibleOn(externalAccentAt(265)) }).consolidate()
+  const live = ds.t.onAccent.$val
   const failing: number[] = []
-  for (let hue = 0; hue < 360; hue += 5) {
-    const open = createSystem()
+  for (let hue = 0; hue <= 360; hue += 5) {
     try {
-      const sample = open.addTokens(open.defineTokens()
-        .add('accent', accentAt(open, hue))
-        .add(m => ({ onAccent: open.legibleOn(m.accent) })))
-        .consolidate()
-      if (sample.t.onAccent.$val !== live)
-        failing.push(hue)
+      createSystem().addChecks(() => [check.textContrast(live, externalAccentAt(hue))]).consolidate()
     }
     catch {
-      failing.push(hue)   // neither black nor white reaches Lc 60
+      failing.push(hue)
     }
   }
   expect(failing).toEqual([])
 })
 ```
 
-Sampling every 5° is evidence, not proof; if a sampled hue is borderline, tighten the lightness or chroma rather than the step. Keep the seed's lightness and chroma fixed where legibility depends on them. If the accent also varies by scheme or mode, sample each branch.
+If a sampled hue is borderline, adjust lightness or chroma rather than the grid. Declare other changing inputs in the system when possible so the compiler can sample their shared state.
 
 ## Palettes from a scale
 

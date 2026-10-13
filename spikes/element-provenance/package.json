@@ -1,0 +1,17 @@
+{
+  "name": "spike-element-provenance",
+  "type": "module",
+  "private": true,
+  "description": "Can rendered classes, explicit selections and page execution hashes support truthful feedback captures?",
+  "scripts": {
+    "check": "node check.mjs",
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "nuxt": "catalog:",
+    "vite": "catalog:",
+    "vue": "catalog:"
+  }
+}

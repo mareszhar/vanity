@@ -189,6 +189,10 @@ export function createViteCssInstallation(options: {
   return {
     removeInstallation,
     collectRetirement,
+    removeSource: (entry: string): void => {
+      for (const client of clients.keys())
+        handleSourcePruned({ entry }, client)
+    },
     renderSourceCode: (code: string, entry: string, ids: ReadonlySet<string>): string => `${code}\nif (import.meta.hot) {\nimport.meta.hot.send('vanity:source-installed', ${JSON.stringify({ entry, ids: [...ids] })});\nimport.meta.hot.prune(() => import.meta.hot.send('vanity:source-pruned', ${JSON.stringify({ entry })}));\n}`,
   }
 }

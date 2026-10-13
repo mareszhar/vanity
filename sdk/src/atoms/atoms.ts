@@ -13,8 +13,8 @@ import type { VanityAtoms, VanityAtomsRuntime, VanityUnsafeValue } from './types
 import { createLayerContext, requireStyleModuleFile } from '../css/context'
 import { emitStyle } from '../css/emit'
 import { compileStyleRule } from '../css/rule'
+import { serializeStyleValue } from '../css/values'
 import { didYouMean, VanityError } from '../diagnostics'
-import { record } from '../introspect/records'
 import { substrate } from '../substrate'
 import { createAtomsHandle } from './handle'
 
@@ -80,7 +80,9 @@ export function bindAtoms(system: VanitySystemContext, placedLayer?: string) {
     if (diagnostics.length > 0)
       throw new VanityError(diagnostics)
 
-    const ctx = { ...system, defaultLayer: layer, file }
+    // The finite atom set is its own vocabulary. The declarations policy
+    // governs component declarations, not the vocabulary's literal definitions.
+    const ctx = { ...system, policies: system.policies && { ...system.policies, declarations: undefined }, defaultLayer: layer, file }
 
     // ── Pre-generate the bounded tables ──
     const classes: VanityAtomsRuntime['classes'] = {}
@@ -124,6 +126,7 @@ export function bindAtoms(system: VanitySystemContext, placedLayer?: string) {
     const unsafeClasses = new Map<string, string>()
 
     const emitUnsafe = (property: string, condition: string, escape: VanityUnsafeValue): string => {
+      serializeStyleValue(escape, property, ctx)
       const key = `${property}\0${condition}\0${escape.value}`
       const memoized = unsafeClasses.get(key)
 
@@ -131,20 +134,11 @@ export function bindAtoms(system: VanitySystemContext, placedLayer?: string) {
         return memoized
 
       const declarations = condition === 'base'
-        ? { [property]: escape.value }
-        : { [condition]: { [property]: escape.value } }
+        ? { [property]: escape }
+        : { [condition]: { [property]: escape } }
 
-      const className = emitStyle(compileStyleRule(declarations, ctx), `${name}_unsafe_${property}`)
+      const className = emitStyle(compileStyleRule(declarations, { ...ctx, styleName: name }), `${name}_unsafe_${property}`)
       unsafeClasses.set(key, className)
-
-      record({
-        kind: 'escape',
-        form: 'unsafe',
-        file,
-        detail: `${property}: ${escape.value}${condition === 'base' ? '' : ` (${condition})`}`,
-        reason: escape.reason,
-        layer,
-      })
 
       return className
     }

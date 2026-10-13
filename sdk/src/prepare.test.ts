@@ -17,6 +17,14 @@ afterEach(async () => {
 })
 
 describe('prepare-time auto-import declarations', () => {
+  it('loads the current config after an edit in the same process', async () => {
+    const root = await fixtureRoot()
+    const file = join(root, 'vanity.config.ts')
+    await writeFile(file, `export default {compiler:{system:'./one.ts'}}`)
+    expect((await loadVanityConfig(file, { root })).compiler?.system).toBe('./one.ts')
+    await writeFile(file, `export default {compiler:{system:'./two.ts'}}`)
+    expect((await loadVanityConfig(file, { root })).compiler?.system).toBe('./two.ts')
+  })
   it.each([
     { form: 'string', system: './authoring.ts' },
     { form: 'object', system: { entry: './authoring.ts', artifact: './system.json', exportName: 'ds', packageName: '@acme/ds' } },

@@ -241,6 +241,7 @@ export type {
   VanityPartConditionKeyHover,
   VanityRangeQuery,
   VanityScopeCondition,
+  VanityStateCondition,
   VanityStructuredQuery,
 } from './system/conditions'
 export type {
@@ -411,10 +412,13 @@ export type {
   VanityTokenModule,
   VanityTokenModuleOptions,
   VanityTokenPolicy,
+  VanityTokenRange,
   VanityTokenReference,
   VanityTokenRegistration,
+  VanityTokenRestriction,
   VanityTokens,
   VanityTokensOptions,
+  VanityTokenUsage,
   VanityTokenValidation,
   VanityTypedNoDefaultTokenFactory,
   VanityVarsOf,

@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test'
 import type { ViteDevServer } from 'vite'
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 import { createServer } from 'vite'
 import { createViteHmrHost } from '../../sdk/src/compiler/hosts/viteHmr'
+import { installTestSdk } from '../../sdk/src/test-support/installedSdk'
 import { vanityPlugin } from '../../sdk/src/vite'
 
 const sdkRoot = fileURLToPath(new URL('../../sdk/', import.meta.url))
@@ -14,6 +15,39 @@ const alias = {
   '@mszr/vanity/runtime': join(sdkRoot, 'src/runtime.ts'),
   '@mszr/vanity': join(sdkRoot, 'src/index.ts'),
   '@vanilla-extract/css': join(sdkRoot, 'node_modules/@vanilla-extract/css'),
+}
+
+for (const configured of [undefined, 'accepted.json']) {
+  test(`recovers baseline creation and removal in the page (${configured ?? 'default'})`, async ({ page }) => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-browser-baseline-')))
+    await installTestSdk(root)
+    await writeFile(join(root, 'package.json'), '{"name":"browser-baseline","type":"module"}')
+    await writeFile(join(root, 'system.ts'), `import{createSystem}from'@mszr/vanity';export const ds=createSystem({declarations:{level:'forbid',tokens:['length']}}).consolidate()`)
+    await writeFile(join(root, 'row.css.ts'), `import{ds}from'./system';export const card=ds.class({padding:'13px'})`)
+    await writeFile(join(root, 'index.html'), '<main id="card">waiting</main><script type="module" src="/main.ts"></script>')
+    await writeFile(join(root, 'main.ts'), `import{card}from'./row.css.ts';const node=document.querySelector('#card');node.className=card;node.textContent='ready'`)
+    const server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: vanityPlugin({ compiler: { system: './system.ts', baseline: configured } }), server: { host: '127.0.0.1', port: 0 } })
+    const baselineFile = join(root, configured ?? 'vanity.baseline.json')
+    const baseline = JSON.stringify({ format: 'vanity.baseline/1', entries: [{ code: 'VANITY_DECLARATION_RAW', module: 'row.css.ts', style: { export: 'card', name: 'card' }, property: 'padding', condition: [], value: '13px', count: 1 }] })
+    try {
+      await server.listen()
+      await page.goto(server.resolvedUrls!.local[0]!)
+      await expect(page.locator('vite-error-overlay')).toBeVisible()
+      await writeFile(baselineFile, baseline)
+      await expect(page.locator('vite-error-overlay')).toHaveCount(0)
+      await expect(page.locator('#card')).toHaveText('ready')
+      await expect(page.locator('#card')).toHaveCSS('padding-top', '13px')
+      await unlink(baselineFile)
+      await expect(page.locator('vite-error-overlay')).toBeVisible()
+      await writeFile(baselineFile, baseline)
+      await expect(page.locator('vite-error-overlay')).toHaveCount(0)
+      await expect(page.locator('#card')).toHaveText('ready')
+      await expect(page.locator('#card')).toHaveCSS('padding-top', '13px')
+    }
+    finally {
+      await server.close()
+    }
+  })
 }
 
 interface BrowserFixture {
@@ -65,6 +99,7 @@ async function startFixture(base: string, options: {
 } = {}): Promise<BrowserFixture> {
   const { alternateLayerProbe = false, unloadedStyleDelayMs = 0 } = options
   const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-browser-hmr-')))
+  await installTestSdk(root)
   const appRoot = join(root, 'app')
   const designRoot = join(root, 'packages', 'design')
   await mkdir(appRoot, { recursive: true })
@@ -214,6 +249,7 @@ document.querySelector('#namespace-proof')!.textContent = JSON.stringify((global
 
 async function startOrdinaryNamespaceFixture(base: string): Promise<OrdinaryNamespaceFixture> {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-browser-ordinary-')))
+  await installTestSdk(root)
   const appRoot = join(root, 'app')
   const packageRoot = join(root, 'packages', 'ordinary')
   await mkdir(appRoot, { recursive: true })
@@ -895,6 +931,7 @@ export const broken = ds.class({ color: ds.t.color.brand, padding: '7px' })
 
 test('accepted identifier spellings preserve rules and direct/prebuilt axis runtime carriers through DOM and SSR', async ({ page }) => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-identifiers-browser-')))
+  await installTestSdk(root)
   let server: ViteDevServer | undefined
   const cases = [
     ['unset', 'unset'],
@@ -972,6 +1009,44 @@ export const render = () => renderToString(createSSRApp({ render: () => h('div',
   }
   finally {
     await server?.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('refreshes every loaded CSS query after dependency and source edits', async ({ page }) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-query-browser-hmr-')))
+  await installTestSdk(root)
+  await put(root, 'package.json', '{"name":"query-browser-hmr","type":"module"}')
+  const system = await put(root, 'system.ts', 'import{createSystem}from"@mszr/vanity";export const ds=createSystem().consolidate()')
+  const value = await put(root, 'value.ts', 'export const padding="13px"')
+  const source = (width: string) => `import{ds}from'./system';import{padding}from'./value';export const card=ds.class({padding,width:'${width}'})`
+  const style = await put(root, 'style.css.ts', source('15px'))
+  const requests = ['/style.css.ts?inline', '/style.css.ts?inline&used', '/style.css.ts?url', '/style.css.ts?url&inline', '/style.css.ts?raw']
+  await put(root, 'index.html', '<html><main id="card">Styles</main><script type="module" src="/entry.js"></script></html>')
+  await put(root, 'entry.js', `import{card}from'/style.css.ts';${requests.map((id, index) => `import v${index} from '${id}';`).join('')}document.querySelector('#card').className=card;window.values=[${requests.map((_, index) => `v${index}`).join(',')}];import.meta.hot.accept(${JSON.stringify(requests)},modules=>{modules.forEach((value,index)=>{if(value)window.values[index]=value.default})})`)
+  const server = await createServer({ root, configFile: false, logLevel: 'silent', plugins: [vanityPlugin({ compiler: { system } })], optimizeDeps: { noDiscovery: true }, server: { host: '127.0.0.1', port: 0 } })
+  try {
+    await server.listen()
+    await page.goto(server.resolvedUrls!.local![0]!)
+    await expect(page.locator('#card')).toHaveCSS('padding-top', '13px')
+    const contents = () => page.evaluate(async () => {
+      const values = (window as unknown as { values: string[] }).values
+      return [values[0], values[1], await fetch(values[2]!, { headers: { accept: 'text/css' } }).then(response => response.text()), atob(values[3]!.split(',')[1]!)]
+    })
+    await expect.poll(contents).toEqual(Array.from({ length: 4 }, () => expect.stringMatching(/padding: ?13px/)))
+    await writeFile(value, 'export const padding="17px"')
+    await expect(page.locator('#card')).toHaveCSS('padding-top', '17px')
+    await expect.poll(contents).toEqual(Array.from({ length: 4 }, () => expect.stringMatching(/padding: ?17px/)))
+    await writeFile(style, source('19px'))
+    await expect(page.locator('#card')).toHaveCSS('width', '19px')
+    await expect.poll(contents).toEqual(Array.from({ length: 4 }, () => expect.stringMatching(/width: ?19px/)))
+    await expect.poll(() => page.evaluate(() => (window as unknown as { values: string[] }).values[4])).toBe(source('19px'))
+    const direct = await fetch(new URL('/style.css.ts?direct', server.resolvedUrls!.local![0]!))
+    expect(direct.headers.get('content-type')).toContain('text/css')
+    expect(await direct.text()).toMatch(/width: ?19px/)
+  }
+  finally {
+    await server.close()
     await rm(root, { recursive: true, force: true })
   }
 })

@@ -6,7 +6,7 @@ import { cwd } from 'node:process'
 import { createJiti } from 'jiti'
 import { planAutoImportDeclarations as plan } from './compiler/auto-imports/autoImportPlan'
 import { writeAutoImportDeclarations as write } from './compiler/auto-imports/autoImportWriter'
-import { listSystemSources } from './compiler/core/systems'
+import { getSystemSources } from './compiler/core/systems'
 import { resolveConfiguredModuleSource } from './compiler/projection/exportNames'
 import { VanityError } from './diagnostics'
 
@@ -35,7 +35,7 @@ export async function planAutoImportDeclarations(
   options: VanityConfig,
   context: VanityPrepareContext = {},
 ): Promise<VanityAutoImportPlan> {
-  listSystemSources(options.compiler?.system)
+  getSystemSources(options.compiler?.system)
   return plan(options, { root: context.root ?? cwd() })
 }
 
@@ -47,7 +47,7 @@ export async function writeAutoImportDeclarations(
   options: VanityConfig,
   context: VanityPrepareContext = {},
 ): Promise<VanityAutoImportWriteResult> {
-  listSystemSources(options.compiler?.system)
+  getSystemSources(options.compiler?.system)
   return write(options, { root: context.root ?? cwd() })
 }
 
@@ -76,7 +76,7 @@ export async function loadVanityConfig(
     throw error
   }
 
-  const loaded = await createJiti(import.meta.url).import<unknown>(configPath, { default: true })
+  const loaded = await createJiti(import.meta.url, { moduleCache: false }).import<unknown>(configPath, { default: true })
   if (!loaded || typeof loaded !== 'object' || Array.isArray(loaded)) {
     throw new VanityError({
       code: 'VANITY_CONFIG_INVALID',
@@ -86,6 +86,6 @@ export async function loadVanityConfig(
     })
   }
   const config = loaded as VanityConfig
-  listSystemSources(config.compiler?.system)
+  getSystemSources(config.compiler?.system)
   return config
 }

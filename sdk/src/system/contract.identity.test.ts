@@ -1,4 +1,4 @@
-import { createSystem } from '@mszr/vanity'
+import { createSystem, length } from '@mszr/vanity'
 import { describe, expect, it } from 'vitest'
 import { emitSystemCss } from '../compiler/projection/systemCss'
 import { getSystemContract } from './contract'
@@ -137,6 +137,24 @@ const namedRuleMutationExpectations = [
 ] as const
 
 describe('named-rule identity projections', () => {
+  it('keeps usage in docs and declarations policy in compatibility without changing CSS or runtime', () => {
+    const contracts = ['original', 'usage', 'policy'].map((kind) => {
+      const ds = createSystem(kind === 'policy' ? { declarations: { level: 'discourage', tokens: ['length'] } } : {})
+        .addTokens(h => ({ gap: h.tdef.length({ val: length.px(8), reference: 'var', ...(kind === 'usage' ? { usage: { for: ['gaps inside controls'] } } : {}) }) }))
+        .consolidate({ prefix: 'identity' })
+      return getSystemContract(ds)!
+    })
+    const [original, usage, policy] = contracts as [typeof contracts[number], typeof contracts[number], typeof contracts[number]]
+    const identities = original.portable.identities
+    expect(usage.portable.identities).toMatchObject({ compatibility: identities.compatibility, css: identities.css, runtime: identities.runtime })
+    expect(usage.portable.identities.docs).not.toBe(identities.docs)
+    expect(policy.portable.identities).toMatchObject({ css: identities.css, runtime: identities.runtime, docs: identities.docs })
+    expect(policy.portable.identities.compatibility).not.toBe(identities.compatibility)
+    const css = contracts.map(contract => emitSystemCss(contract, { filePath: '/app/system.ts' }, 'debug').css)
+    expect(css[1]).toBe(css[0])
+    expect(css[2]).toBe(css[0])
+  })
+
   it('matches emitted CSS and every identity projection against the mutation table', () => {
     for (const mutation of namedRuleMutationExpectations) {
       const before = contractOf(mutation.before)

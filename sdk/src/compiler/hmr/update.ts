@@ -113,11 +113,7 @@ export async function handleHotUpdate(
   if (!dependents?.size && affectedSystems.length === 0)
     return undefined
 
-  const entries = new Set(dependents ?? [])
-  for (const system of affectedSystems) {
-    for (const entry of state.styleEntriesBySystem.get(system) ?? [])
-      entries.add(entry)
-  }
+  const entries = getAffectedStyleEntries(normalizedFile, state)
 
   for (const id of state.runtimeVirtualIds) {
     const payload = id.slice(state.runtimeVirtualPrefix.length)
@@ -219,4 +215,14 @@ export async function handleHotUpdate(
       returnedByUrl.set(url, module)
   }
   return [...returnedByUrl.values(), ...withoutUrl]
+}
+
+/** The same bundled/source-system fan-out serves edits, creates and deletions. */
+export function getAffectedStyleEntries(file: string, state: Pick<StyleHotUpdateState, 'dependentsByFile' | 'systemDependentsByFile' | 'styleEntriesBySystem'>): Set<string> {
+  const entries = new Set(state.dependentsByFile.get(file) ?? [])
+  for (const system of state.systemDependentsByFile.get(file) ?? []) {
+    for (const entry of state.styleEntriesBySystem.get(system) ?? [])
+      entries.add(entry)
+  }
+  return entries
 }

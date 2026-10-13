@@ -1,0 +1,1065 @@
+{
+  "browser": "153.0.8010.12",
+  "families": 175,
+  "unsupported": 123,
+  "supported": 52,
+  "cells": 1070,
+  "entries": [
+    {
+      "property": "-webkit-animation",
+      "supported": true,
+      "cells": 1,
+      "href": "https://compat.spec.whatwg.org/#propdef--webkit-animation"
+    },
+    {
+      "property": "-webkit-animation-duration",
+      "supported": true,
+      "cells": 1,
+      "href": "https://compat.spec.whatwg.org/#propdef--webkit-animation-duration"
+    },
+    {
+      "property": "-webkit-perspective",
+      "supported": true,
+      "cells": 4,
+      "href": "https://compat.spec.whatwg.org/#propdef--webkit-perspective"
+    },
+    {
+      "property": "alignment-baseline",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-inline-3/#propdef-alignment-baseline"
+    },
+    {
+      "property": "all",
+      "supported": true,
+      "cells": 2,
+      "href": "https://drafts.csswg.org/css-cascade-5/#propdef-all"
+    },
+    {
+      "property": "animation",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-animations-1/#propdef-animation"
+    },
+    {
+      "property": "background-repeat-x",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-backgrounds-4/#propdef-background-repeat-x"
+    },
+    {
+      "property": "background-repeat-y",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-backgrounds-4/#propdef-background-repeat-y"
+    },
+    {
+      "property": "baseline-shift",
+      "supported": true,
+      "cells": 6,
+      "href": "https://drafts.csswg.org/css-inline-3/#propdef-baseline-shift"
+    },
+    {
+      "property": "block-ellipsis",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-block-ellipsis"
+    },
+    {
+      "property": "block-step",
+      "supported": false,
+      "cells": 15,
+      "href": "https://drafts.csswg.org/css-rhythm-1/#propdef-block-step"
+    },
+    {
+      "property": "block-step-align",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-rhythm-1/#propdef-block-step-align"
+    },
+    {
+      "property": "block-step-insert",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-rhythm-1/#propdef-block-step-insert"
+    },
+    {
+      "property": "block-step-round",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-rhythm-1/#propdef-block-step-round"
+    },
+    {
+      "property": "block-step-size",
+      "supported": false,
+      "cells": 13,
+      "href": "https://drafts.csswg.org/css-rhythm-1/#propdef-block-step-size"
+    },
+    {
+      "property": "bookmark-label",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-content-3/#propdef-bookmark-label"
+    },
+    {
+      "property": "bookmark-level",
+      "supported": false,
+      "cells": 6,
+      "href": "https://drafts.csswg.org/css-content-3/#propdef-bookmark-level"
+    },
+    {
+      "property": "bookmark-state",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-content-3/#propdef-bookmark-state"
+    },
+    {
+      "property": "border-boundary",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-round-display-1/#propdef-border-boundary"
+    },
+    {
+      "property": "box-snap",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-line-grid-1/#propdef-box-snap"
+    },
+    {
+      "property": "caret",
+      "supported": false,
+      "cells": 11,
+      "href": "https://drafts.csswg.org/css-ui-4/#propdef-caret"
+    },
+    {
+      "property": "caret-color",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-ui-4/#propdef-caret-color"
+    },
+    {
+      "property": "color-adjust",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-color-adjust-1/#propdef-color-adjust"
+    },
+    {
+      "property": "column-gap",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-gaps-1/#propdef-column-gap"
+    },
+    {
+      "property": "column-span",
+      "supported": true,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-multicol-2/#propdef-column-span"
+    },
+    {
+      "property": "column-width",
+      "supported": true,
+      "cells": 6,
+      "href": "https://drafts.csswg.org/css-sizing-4/#column-sizing"
+    },
+    {
+      "property": "columns",
+      "supported": true,
+      "cells": 6,
+      "href": "https://drafts.csswg.org/css-multicol-2/#propdef-columns"
+    },
+    {
+      "property": "continue",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-continue"
+    },
+    {
+      "property": "cue",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-cue"
+    },
+    {
+      "property": "cue-after",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-cue-after"
+    },
+    {
+      "property": "cue-before",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-cue-before"
+    },
+    {
+      "property": "cx",
+      "supported": true,
+      "cells": 5,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/geometry.html#CxProperty"
+    },
+    {
+      "property": "cy",
+      "supported": true,
+      "cells": 5,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/geometry.html#CyProperty"
+    },
+    {
+      "property": "d",
+      "supported": true,
+      "cells": 1,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/paths.html#DProperty"
+    },
+    {
+      "property": "fill",
+      "supported": true,
+      "cells": 6,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/painting.html#FillProperty"
+    },
+    {
+      "property": "fill-break",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-fill-break"
+    },
+    {
+      "property": "fill-color",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-fill-color"
+    },
+    {
+      "property": "fill-image",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-fill-image"
+    },
+    {
+      "property": "fill-origin",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-fill-origin"
+    },
+    {
+      "property": "fill-position",
+      "supported": false,
+      "cells": 21,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-fill-position"
+    },
+    {
+      "property": "fill-repeat",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-fill-repeat"
+    },
+    {
+      "property": "fill-size",
+      "supported": false,
+      "cells": 18,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-fill-size"
+    },
+    {
+      "property": "float-defer",
+      "supported": false,
+      "cells": 9,
+      "href": "https://drafts.csswg.org/css-page-floats-3/#propdef-float-defer"
+    },
+    {
+      "property": "float-offset",
+      "supported": false,
+      "cells": 19,
+      "href": "https://drafts.csswg.org/css-page-floats-3/#propdef-float-offset"
+    },
+    {
+      "property": "float-reference",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-page-floats-3/#propdef-float-reference"
+    },
+    {
+      "property": "flow-from",
+      "supported": false,
+      "cells": 19,
+      "href": "https://drafts.csswg.org/css-regions-1/#propdef-flow-from"
+    },
+    {
+      "property": "flow-into",
+      "supported": false,
+      "cells": 19,
+      "href": "https://drafts.csswg.org/css-regions-1/#propdef-flow-into"
+    },
+    {
+      "property": "font-feature-settings",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-fonts-4/#propdef-font-feature-settings"
+    },
+    {
+      "property": "font-synthesis-position",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-fonts-4/#propdef-font-synthesis-position"
+    },
+    {
+      "property": "font-width",
+      "supported": false,
+      "cells": 7,
+      "href": "https://drafts.csswg.org/css-fonts-4/#propdef-font-width"
+    },
+    {
+      "property": "footnote-display",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-gcpm-3/#propdef-footnote-display"
+    },
+    {
+      "property": "footnote-policy",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-gcpm-3/#propdef-footnote-policy"
+    },
+    {
+      "property": "gap",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-gaps-1/#propdef-gap"
+    },
+    {
+      "property": "glyph-orientation-vertical",
+      "supported": false,
+      "cells": 7,
+      "href": "https://drafts.csswg.org/css-writing-modes-4/#propdef-glyph-orientation-vertical"
+    },
+    {
+      "property": "grid-column-gap",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-gaps-1/#propdef-grid-column-gap"
+    },
+    {
+      "property": "grid-gap",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-gaps-1/#propdef-grid-gap"
+    },
+    {
+      "property": "grid-row-gap",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-gaps-1/#propdef-grid-row-gap"
+    },
+    {
+      "property": "hanging-punctuation",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-hanging-punctuation"
+    },
+    {
+      "property": "hyphenate-limit-chars",
+      "supported": true,
+      "cells": 2,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-hyphenate-limit-chars"
+    },
+    {
+      "property": "hyphenate-limit-last",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-hyphenate-limit-last"
+    },
+    {
+      "property": "hyphenate-limit-lines",
+      "supported": false,
+      "cells": 7,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-hyphenate-limit-lines"
+    },
+    {
+      "property": "hyphenate-limit-zone",
+      "supported": false,
+      "cells": 19,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-hyphenate-limit-zone"
+    },
+    {
+      "property": "image-orientation",
+      "supported": true,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-images-3/#propdef-image-orientation"
+    },
+    {
+      "property": "image-resolution",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-images-4/#propdef-image-resolution"
+    },
+    {
+      "property": "initial-letter-align",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-inline-3/#propdef-initial-letter-align"
+    },
+    {
+      "property": "initial-letter-wrap",
+      "supported": false,
+      "cells": 20,
+      "href": "https://drafts.csswg.org/css-inline-3/#propdef-initial-letter-wrap"
+    },
+    {
+      "property": "inline-sizing",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-inline-3/#propdef-inline-sizing"
+    },
+    {
+      "property": "input-security",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-forms-1/#propdef-input-security"
+    },
+    {
+      "property": "line-clamp",
+      "supported": false,
+      "cells": 9,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-line-clamp"
+    },
+    {
+      "property": "line-fit-edge",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-inline-3/#propdef-line-fit-edge"
+    },
+    {
+      "property": "line-grid",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-line-grid-1/#propdef-line-grid"
+    },
+    {
+      "property": "line-height-step",
+      "supported": false,
+      "cells": 12,
+      "href": "https://drafts.csswg.org/css-rhythm-1/#propdef-line-height-step"
+    },
+    {
+      "property": "line-padding",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-line-padding"
+    },
+    {
+      "property": "line-snap",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-line-grid-1/#propdef-line-snap"
+    },
+    {
+      "property": "margin-break",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-break-4/#propdef-margin-break"
+    },
+    {
+      "property": "margin-trim",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-box-4/#propdef-margin-trim"
+    },
+    {
+      "property": "marker-side",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-lists-3/#propdef-marker-side"
+    },
+    {
+      "property": "mask-border",
+      "supported": false,
+      "cells": 17,
+      "href": "https://drafts.csswg.org/css-masking-1/#propdef-mask-border"
+    },
+    {
+      "property": "mask-border-mode",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-masking-1/#propdef-mask-border-mode"
+    },
+    {
+      "property": "mask-border-outset",
+      "supported": false,
+      "cells": 19,
+      "href": "https://drafts.csswg.org/css-masking-1/#propdef-mask-border-outset"
+    },
+    {
+      "property": "mask-border-repeat",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-masking-1/#propdef-mask-border-repeat"
+    },
+    {
+      "property": "mask-border-slice",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-masking-1/#propdef-mask-border-slice"
+    },
+    {
+      "property": "mask-border-source",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-masking-1/#propdef-mask-border-source"
+    },
+    {
+      "property": "mask-border-width",
+      "supported": false,
+      "cells": 24,
+      "href": "https://drafts.csswg.org/css-masking-1/#propdef-mask-border-width"
+    },
+    {
+      "property": "max-lines",
+      "supported": false,
+      "cells": 7,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-max-lines"
+    },
+    {
+      "property": "min-intrinsic-sizing",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-sizing-4/#propdef-min-intrinsic-sizing"
+    },
+    {
+      "property": "outline-color",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-ui-4/#propdef-outline-color"
+    },
+    {
+      "property": "overflow-clip-margin",
+      "supported": true,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin"
+    },
+    {
+      "property": "overflow-clip-margin-block",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-block"
+    },
+    {
+      "property": "overflow-clip-margin-block-end",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-block-end"
+    },
+    {
+      "property": "overflow-clip-margin-block-start",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-block-start"
+    },
+    {
+      "property": "overflow-clip-margin-bottom",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-bottom"
+    },
+    {
+      "property": "overflow-clip-margin-inline",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-inline"
+    },
+    {
+      "property": "overflow-clip-margin-inline-end",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-inline-end"
+    },
+    {
+      "property": "overflow-clip-margin-inline-start",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-inline-start"
+    },
+    {
+      "property": "overflow-clip-margin-left",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-left"
+    },
+    {
+      "property": "overflow-clip-margin-right",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-right"
+    },
+    {
+      "property": "overflow-clip-margin-top",
+      "supported": false,
+      "cells": 14,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-overflow-clip-margin-top"
+    },
+    {
+      "property": "pause",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-pause"
+    },
+    {
+      "property": "pause-after",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-pause-after"
+    },
+    {
+      "property": "pause-before",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-pause-before"
+    },
+    {
+      "property": "r",
+      "supported": true,
+      "cells": 7,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/geometry.html#RProperty"
+    },
+    {
+      "property": "region-fragment",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-regions-1/#propdef-region-fragment"
+    },
+    {
+      "property": "resize",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-ui-4/#propdef-resize"
+    },
+    {
+      "property": "rest",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-rest"
+    },
+    {
+      "property": "rest-after",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-rest-after"
+    },
+    {
+      "property": "rest-before",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-rest-before"
+    },
+    {
+      "property": "row-gap",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-gaps-1/#propdef-row-gap"
+    },
+    {
+      "property": "ruby-merge",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-ruby-1/#propdef-ruby-merge"
+    },
+    {
+      "property": "ruby-overhang",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-ruby-1/#propdef-ruby-overhang"
+    },
+    {
+      "property": "rx",
+      "supported": true,
+      "cells": 7,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/geometry.html#RxProperty"
+    },
+    {
+      "property": "ry",
+      "supported": true,
+      "cells": 7,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/geometry.html#RyProperty"
+    },
+    {
+      "property": "shape-inside",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-shapes-2/#propdef-shape-inside"
+    },
+    {
+      "property": "size",
+      "supported": true,
+      "cells": 6,
+      "href": "https://drafts.csswg.org/css-sizing-4/#propdef-size"
+    },
+    {
+      "property": "slider-orientation",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-forms-1/#propdef-slider-orientation"
+    },
+    {
+      "property": "spatial-navigation-action",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-spatial-nav-1/#propdef-spatial-navigation-action"
+    },
+    {
+      "property": "spatial-navigation-contain",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-spatial-nav-1/#propdef-spatial-navigation-contain"
+    },
+    {
+      "property": "spatial-navigation-function",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-spatial-nav-1/#propdef-spatial-navigation-function"
+    },
+    {
+      "property": "speak",
+      "supported": true,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-speak"
+    },
+    {
+      "property": "speak-as",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-speak-as"
+    },
+    {
+      "property": "string-set",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-content-3/#propdef-string-set"
+    },
+    {
+      "property": "stroke",
+      "supported": true,
+      "cells": 6,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/painting.html#StrokeProperty"
+    },
+    {
+      "property": "stroke-align",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-align"
+    },
+    {
+      "property": "stroke-alignment",
+      "supported": false,
+      "cells": 4,
+      "href": "https://svgwg.org/specs/strokes/#StrokeAlignmentProperty"
+    },
+    {
+      "property": "stroke-break",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-break"
+    },
+    {
+      "property": "stroke-color",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-color"
+    },
+    {
+      "property": "stroke-dash-corner",
+      "supported": false,
+      "cells": 15,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-dash-corner"
+    },
+    {
+      "property": "stroke-dash-justify",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-dash-justify"
+    },
+    {
+      "property": "stroke-dashadjust",
+      "supported": false,
+      "cells": 5,
+      "href": "https://svgwg.org/specs/strokes/#StrokeDashadjustProperty"
+    },
+    {
+      "property": "stroke-dasharray",
+      "supported": true,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-dasharray"
+    },
+    {
+      "property": "stroke-dashcorner",
+      "supported": false,
+      "cells": 15,
+      "href": "https://svgwg.org/specs/strokes/#StrokeDashcornerProperty"
+    },
+    {
+      "property": "stroke-image",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-image"
+    },
+    {
+      "property": "stroke-miterlimit",
+      "supported": true,
+      "cells": 2,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-miterlimit"
+    },
+    {
+      "property": "stroke-origin",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-origin"
+    },
+    {
+      "property": "stroke-position",
+      "supported": false,
+      "cells": 21,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-position"
+    },
+    {
+      "property": "stroke-repeat",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-repeat"
+    },
+    {
+      "property": "stroke-size",
+      "supported": false,
+      "cells": 18,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-size"
+    },
+    {
+      "property": "stroke-width",
+      "supported": true,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/fill-stroke-3/#propdef-stroke-width"
+    },
+    {
+      "property": "text-align",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-text-align"
+    },
+    {
+      "property": "text-align-all",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-text-align-all"
+    },
+    {
+      "property": "text-autospace",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-text-autospace"
+    },
+    {
+      "property": "text-combine-upright",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-writing-modes-4/#propdef-text-combine-upright"
+    },
+    {
+      "property": "text-decoration",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-text-decor-4/#propdef-text-decoration"
+    },
+    {
+      "property": "text-decoration-skip",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-text-decor-4/#propdef-text-decoration-skip"
+    },
+    {
+      "property": "text-decoration-skip-box",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-decor-4/#propdef-text-decoration-skip-box"
+    },
+    {
+      "property": "text-decoration-skip-self",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-decor-4/#propdef-text-decoration-skip-self"
+    },
+    {
+      "property": "text-decoration-skip-spaces",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-decor-4/#propdef-text-decoration-skip-spaces"
+    },
+    {
+      "property": "text-decoration-thickness",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-text-decor-4/#propdef-text-decoration-thickness"
+    },
+    {
+      "property": "text-emphasis-skip",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-text-decor-4/#propdef-text-emphasis-skip"
+    },
+    {
+      "property": "text-group-align",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-text-group-align"
+    },
+    {
+      "property": "text-overflow",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-overflow-4/#propdef-text-overflow"
+    },
+    {
+      "property": "text-shadow",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-text-decor-4/#propdef-text-shadow"
+    },
+    {
+      "property": "text-spacing",
+      "supported": false,
+      "cells": 6,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-text-spacing"
+    },
+    {
+      "property": "text-spacing-trim",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-text-spacing-trim"
+    },
+    {
+      "property": "vertical-align",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-inline-3/#propdef-vertical-align"
+    },
+    {
+      "property": "view-transition-name",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-view-transitions-2/#propdef-view-transition-name"
+    },
+    {
+      "property": "voice-balance",
+      "supported": false,
+      "cells": 11,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-voice-balance"
+    },
+    {
+      "property": "voice-duration",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-voice-duration"
+    },
+    {
+      "property": "voice-pitch",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-voice-pitch"
+    },
+    {
+      "property": "voice-range",
+      "supported": false,
+      "cells": 8,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-voice-range"
+    },
+    {
+      "property": "voice-rate",
+      "supported": false,
+      "cells": 7,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-voice-rate"
+    },
+    {
+      "property": "voice-stress",
+      "supported": false,
+      "cells": 5,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-voice-stress"
+    },
+    {
+      "property": "voice-volume",
+      "supported": false,
+      "cells": 3,
+      "href": "https://drafts.csswg.org/css-speech-1/#propdef-voice-volume"
+    },
+    {
+      "property": "white-space",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-white-space"
+    },
+    {
+      "property": "white-space-trim",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-white-space-trim"
+    },
+    {
+      "property": "will-change",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-will-change-1/#propdef-will-change"
+    },
+    {
+      "property": "word-space-transform",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-word-space-transform"
+    },
+    {
+      "property": "wrap-after",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-wrap-after"
+    },
+    {
+      "property": "wrap-before",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-wrap-before"
+    },
+    {
+      "property": "wrap-flow",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-exclusions-1/#propdef-wrap-flow"
+    },
+    {
+      "property": "wrap-inside",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-text-4/#propdef-wrap-inside"
+    },
+    {
+      "property": "wrap-through",
+      "supported": false,
+      "cells": 4,
+      "href": "https://drafts.csswg.org/css-exclusions-1/#propdef-wrap-through"
+    },
+    {
+      "property": "x",
+      "supported": true,
+      "cells": 5,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/geometry.html#XProperty"
+    },
+    {
+      "property": "y",
+      "supported": true,
+      "cells": 5,
+      "href": "https://w3c.github.io/svgwg/svg2-draft/geometry.html#YProperty"
+    },
+    {
+      "property": "zoom",
+      "supported": true,
+      "cells": 1,
+      "href": "https://drafts.csswg.org/css-viewport/#propdef-zoom"
+    }
+  ],
+  "native": {
+    "-moz-text-size-adjust": "lightningcss 1.33.0 aborts on calc(1 / 2), percentage.rs:30; isolated subprocess probe",
+    "-webkit-text-size-adjust": "lightningcss 1.33.0 aborts on calc(1 / 2), percentage.rs:30; isolated complete-domain probe",
+    "text-size-adjust": "lightningcss 1.33.0 aborts on calc(1 / 2), percentage.rs:30; isolated complete-domain probe",
+    "font-stretch": "lightningcss 1.33.0 aborts on calc(1 / 2), percentage.rs:30; isolated complete-domain probe"
+  }
+}

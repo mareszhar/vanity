@@ -1,0 +1,19 @@
+{
+  "name": "spike-style-import-parity",
+  "type": "module",
+  "private": true,
+  "description": "Can a Node style evaluator reuse its host’s client resolver without another plugin pipeline?",
+  "scripts": {
+    "check": "node check.mjs",
+    "test": "node run.mjs && node frameworks.mjs && node nuxt.mjs"
+  },
+  "devDependencies": {
+    "@nuxt/kit": "catalog:",
+    "esbuild": "catalog:",
+    "nuxt": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vue": "catalog:",
+    "wxt": "catalog:"
+  }
+}

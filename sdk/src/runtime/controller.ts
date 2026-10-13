@@ -20,7 +20,6 @@ import type {
 import type {
   VanityStandardSchemaV1,
 } from '../tokens/types'
-import type { VanityCssDataType } from '../values/types'
 import type {
   VanityRuntimeAxes,
   VanityRuntimeContract,
@@ -42,25 +41,38 @@ import type {
   VanityRuntimeTarget,
   VanityRuntimeTokenContract,
   VanityRuntimeTokens,
-  VanityRuntimeValidationContract,
   VanitySnapshotFrom,
 } from './contract'
+import type { getTokenRangeError } from './range'
 import { setOwn } from '../collections'
 import {
   createHandle,
   getRuntimeAddress,
-  isBranchHandle,
-  isHandle,
 } from '../tokens/handle'
-import { isCssValue, isVanityValue } from '../values/types'
+import { isDevelopmentMode, resolveRuntimeValue, serializeRuntimeValue } from './acceptance'
 import {
   createVanityRuntimeError,
   VANITY_RUNTIME_SNAPSHOT_VERSION,
+  VanityRuntimeError,
 } from './contract'
 import { serializeRuntimeCssText } from './value'
 
 interface RuntimeSchemaStore {
   readonly [id: string]: VanityStandardSchemaV1 | undefined
+}
+
+interface RuntimeOverride extends VanityRuntimeSnapshotOverride {
+  readonly value: string
+}
+
+interface RuntimeProjection {
+  readonly overrides: readonly RuntimeOverride[]
+  readonly modes: Readonly<Record<string, string>>
+}
+
+interface RuntimeReconciliation {
+  readonly result: VanityRuntimeReconciliation
+  readonly projection: RuntimeProjection
 }
 
 interface RuntimeRootState {
@@ -74,11 +86,12 @@ interface RuntimeState {
   readonly contract: VanityRuntimeContract
   readonly roots: Map<string, RuntimeRootState>
   readonly within?: VanityRuntimeQueryScope | VanityRuntimeTarget
-  readonly overrides: Map<string, VanityRuntimeSnapshotOverride>
+  readonly overrides: Map<string, RuntimeOverride>
   readonly modes: Map<string, string>
   readonly diagnostics: VanityRuntimeDiagnostic[]
   readonly options: VanityRuntimeOptions
   readonly memory: boolean
+  readonly compareRange?: typeof getTokenRangeError
   active: boolean
 }
 
@@ -127,16 +140,17 @@ export function createRuntimeServices<T, Axes extends VanityAxisDefinitions = Va
   contract: VanityRuntimeContract,
   embeddedSchemas: RuntimeSchemaStore = {},
   embeddedControls: Readonly<Record<string, VanityAxisControl<any>>> = {},
+  compareRange?: typeof getTokenRangeError,
 ): VanityRuntimeServices<T, Axes> {
   const reconcile = (snapshot: unknown, options: VanityRuntimeOptions = {}) =>
-    reconcileSnapshot(contract, snapshot, mergeSchemas(embeddedSchemas, options.validators), options)
+    reconcileSnapshot(contract, snapshot, mergeSchemas(embeddedSchemas, options.validators), options, compareRange).result
   const runtimeStyle = (snapshot: unknown, options: VanityRuntimeOptions = {}) => {
-    const result = reconcile(snapshot, options)
-    return projectStyles(contract, result.snapshot)
+    const result = reconcileSnapshot(contract, snapshot, mergeSchemas(embeddedSchemas, options.validators), options, compareRange)
+    return projectStyles(contract, result.projection)
   }
   const runtimeProps = (snapshot: unknown, options: VanityRuntimeOptions = {}) => {
-    const result = reconcile(snapshot, options)
-    return projectProps(contract, result.snapshot)
+    const result = reconcileSnapshot(contract, snapshot, mergeSchemas(embeddedSchemas, options.validators), options, compareRange)
+    return projectProps(contract, result.projection)
   }
   return {
     runtime: ((options: VanityRuntimeOptions = {}) => {
@@ -145,6 +159,7 @@ export function createRuntimeServices<T, Axes extends VanityAxisDefinitions = Va
         contract,
         { ...options, controls: { ...embeddedControls, ...options.controls } },
         mergeSchemas(embeddedSchemas, options.validators),
+        compareRange,
       )
     }) as VanityRuntimeControllerFactory<T, Axes>,
     snapshotFrom: ((configure: (runtime: VanityRuntimeController<T, Axes>) => void, options: VanityRuntimeOptions = {}) => {
@@ -161,6 +176,7 @@ export function createRuntimeServices<T, Axes extends VanityAxisDefinitions = Va
         contract,
         { ...options, controls: { ...embeddedControls, ...options.controls } },
         mergeSchemas(embeddedSchemas, options.validators),
+        compareRange,
         true,
       )
       configure(runtime)
@@ -194,36 +210,39 @@ function assertRuntimeOptions(options: unknown): asserts options is VanityRuntim
 /** Generated application-module restoration target for `ds.runtime()`. */
 export function restoreRuntimeControllerFactory<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions>(
   contract: VanityRuntimeContract,
+  compareRange?: typeof getTokenRangeError,
 ): VanityRuntimeControllerFactory<T, Axes> {
-  return createRuntimeServices<T, Axes>(contract).runtime
+  return createRuntimeServices<T, Axes>(contract, {}, {}, compareRange).runtime
 }
 
 /** Restore `snapshotFrom()` from compiler-projected runtime data: `restoreSnapshotFrom(contract)`. */
 export function restoreSnapshotFrom<T, Axes extends VanityAxisDefinitions = VanityAxisDefinitions>(
   contract: VanityRuntimeContract,
+  compareRange?: typeof getTokenRangeError,
 ): VanitySnapshotFrom<T, Axes> {
-  return createRuntimeServices<T, Axes>(contract).snapshotFrom
+  return createRuntimeServices<T, Axes>(contract, {}, {}, compareRange).snapshotFrom
 }
 
 /** Restore runtime snapshot reconciliation from projected data: `restoreRuntimeReconciler(contract)`. */
-export function restoreRuntimeReconciler(contract: VanityRuntimeContract): VanityRuntimeServices<unknown>['reconcileRuntimeSnapshot'] {
-  return createRuntimeServices(contract).reconcileRuntimeSnapshot
+export function restoreRuntimeReconciler(contract: VanityRuntimeContract, compareRange?: typeof getTokenRangeError): VanityRuntimeServices<unknown>['reconcileRuntimeSnapshot'] {
+  return createRuntimeServices(contract, {}, {}, compareRange).reconcileRuntimeSnapshot
 }
 
 /** Restore runtime inline-style projection from projected data: `restoreRuntimeStyle(contract)`. */
-export function restoreRuntimeStyle(contract: VanityRuntimeContract): VanityRuntimeServices<unknown>['runtimeStyle'] {
-  return createRuntimeServices(contract).runtimeStyle
+export function restoreRuntimeStyle(contract: VanityRuntimeContract, compareRange?: typeof getTokenRangeError): VanityRuntimeServices<unknown>['runtimeStyle'] {
+  return createRuntimeServices(contract, {}, {}, compareRange).runtimeStyle
 }
 
 /** Restore runtime prop projection from projected data: `restoreRuntimeProps(contract)`. */
-export function restoreRuntimeProps(contract: VanityRuntimeContract): VanityRuntimeServices<unknown>['runtimeProps'] {
-  return createRuntimeServices(contract).runtimeProps
+export function restoreRuntimeProps(contract: VanityRuntimeContract, compareRange?: typeof getTokenRangeError): VanityRuntimeServices<unknown>['runtimeProps'] {
+  return createRuntimeServices(contract, {}, {}, compareRange).runtimeProps
 }
 
 function bindRuntime<T, Axes extends VanityAxisDefinitions>(
   contract: VanityRuntimeContract,
   options: VanityRuntimeOptions,
   schemas: RuntimeSchemaStore,
+  compareRange?: typeof getTokenRangeError,
   memory = false,
 ): VanityRuntimeController<T, Axes> {
   const family = `${contract.prefix}\0${contract.root}`
@@ -251,6 +270,7 @@ function bindRuntime<T, Axes extends VanityAxisDefinitions>(
     diagnostics: [],
     options: effectiveOptions,
     memory,
+    compareRange,
     active: true,
   }
   if (bindings && scope) {
@@ -258,14 +278,11 @@ function bindRuntime<T, Axes extends VanityAxisDefinitions>(
     BOUND_RUNTIMES.set(scope, bindings)
   }
 
-  const initial = effectiveOptions.initial === undefined
-    ? createEmptySnapshot(contract)
-    : reconcileSnapshot(contract, effectiveOptions.initial, schemas, effectiveOptions)
-  if ('diagnostics' in initial)
-    state.diagnostics.push(...initial.diagnostics)
-  const snapshot = 'snapshot' in initial ? initial.snapshot : initial
-  if (effectiveOptions.initial !== undefined)
-    restoreRuntimeState(contract, state, snapshot)
+  if (effectiveOptions.initial !== undefined) {
+    const initial = reconcileSnapshot(contract, effectiveOptions.initial, schemas, effectiveOptions, compareRange)
+    state.diagnostics.push(...initial.result.diagnostics)
+    restoreRuntimeState(contract, state, initial.projection)
+  }
   return createRuntimeController<T, Axes>(contract, state, schemas)
 }
 
@@ -305,7 +322,7 @@ type RuntimeMutation
     readonly token: VanityRuntimeTokenContract
     readonly runtime: VanityHandleRuntimeAddress
     readonly value: string
-    readonly override: VanityRuntimeSnapshotOverride
+    readonly override: RuntimeOverride
   }
   | {
     readonly kind: 'unset'
@@ -379,10 +396,10 @@ function createRuntimeController<T, Axes extends VanityAxisDefinitions>(
     },
     hydrate(input: unknown) {
       assertActive(state)
-      const result = reconcileSnapshot(contract, input, schemas, state.options)
-      state.diagnostics.push(...result.diagnostics)
-      restoreRuntimeState(contract, state, result.snapshot)
-      return result
+      const result = reconcileSnapshot(contract, input, schemas, state.options, state.compareRange)
+      state.diagnostics.push(...result.result.diagnostics)
+      restoreRuntimeState(contract, state, result.projection)
+      return result.result
     },
     snapshot: () => getRuntimeSnapshot(contract, state),
     inspect: () => inspectRuntime(contract, state),
@@ -580,7 +597,7 @@ function inspectRuntime(contract: VanityRuntimeContract, state: RuntimeState): V
       return [Object.freeze({
         token: override.token,
         address: override.address,
-        val: override.val,
+        val: state.overrides.get(recordKey(override.token, override.address))!.value,
         name: token.name,
         slot: slot as `--${string}`,
         tokenRootPath: token.rootPath,
@@ -709,16 +726,16 @@ function prepareOverride(
       fix: 'set the base or branch address emitted by this runtime contract',
     })
   }
-  const value = validateAndSerialize(token, input, schemas, state.options)
-  if (value === undefined) {
+  const accepted = resolveRuntimeValue(token, input, schemas, state.options, state.compareRange)
+  if (accepted === undefined) {
     return {
       kind: 'unset',
       token,
       runtime,
     }
   }
-  const override: VanityRuntimeSnapshotOverride = { token: token.token, address: runtime.address, val: value }
-  return { kind: 'set', token, runtime, value, override }
+  const override: RuntimeOverride = { token: token.token, address: runtime.address, val: accepted.input, value: accepted.value }
+  return { kind: 'set', token, runtime, value: accepted.value, override }
 }
 
 function prepareUnset(
@@ -799,7 +816,7 @@ function applyMutations(state: RuntimeState, mutations: readonly RuntimeMutation
 
 function applyStateToRoot(state: RuntimeState, root: RuntimeRootState): void {
   const snapshot = getRuntimeSnapshot(state.contract, state)
-  const props = projectProps(state.contract, snapshot)[root.contract.path]!
+  const props = projectProps(state.contract, { overrides: [...state.overrides.values()], modes: snapshot.modes })[root.contract.path]!
   const targets = getTargetsForRoot(state, root, Object.keys(props.style).length > 0)
   const [styleTarget] = targets
   if (styleTarget) {
@@ -828,9 +845,20 @@ function reconcileSnapshot(
   input: unknown,
   schemas: RuntimeSchemaStore,
   options: VanityRuntimeOptions,
-): VanityRuntimeReconciliation {
-  const source = parseSnapshot(input)
+  compareRange?: typeof getTokenRangeError,
+): RuntimeReconciliation {
   const diagnostics: VanityRuntimeDiagnostic[] = []
+  let source: VanityRuntimeSnapshot
+  try {
+    source = parseSnapshot(input)
+  }
+  catch (error) {
+    if (!(error instanceof VanityRuntimeError))
+      throw error
+    diagnostics.push(error.diagnostic)
+    const snapshot = createEmptySnapshot(contract)
+    return { result: { snapshot, diagnostics: Object.freeze(diagnostics) }, projection: { overrides: [], modes: snapshot.modes } }
+  }
   if (source.system !== contract.system) {
     diagnostics.push({
       code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
@@ -838,7 +866,7 @@ function reconcileSnapshot(
     })
   }
 
-  const overrides = new Map<string, VanityRuntimeSnapshotOverride>()
+  const overrides = new Map<string, RuntimeOverride>()
   for (const entry of source.overrides) {
     if (!isSnapshotOverride(entry)) {
       diagnostics.push({ code: 'VANITY_RUNTIME_UNKNOWN_ADDRESS', message: 'skipped a malformed runtime override record' })
@@ -872,9 +900,9 @@ function reconcileSnapshot(
       })
       continue
     }
-    let val: string | undefined
+    let accepted: ReturnType<typeof resolveRuntimeValue>
     try {
-      val = validateAndSerialize(token, parseSnapshotInput(token.type, entry.val), schemas, { ...options, dev: options.dev ?? false })
+      accepted = resolveRuntimeValue(token, entry.val, schemas, { ...options, dev: options.dev ?? false }, compareRange)
     }
     catch (error) {
       diagnostics.push({
@@ -885,7 +913,7 @@ function reconcileSnapshot(
       })
       continue
     }
-    if (val === undefined) {
+    if (accepted === undefined) {
       diagnostics.push({
         code: 'VANITY_RUNTIME_INVALID_VALUE',
         message: `${formatAddress(entry.token, entry.address)} was omitted by its validation policy`,
@@ -894,7 +922,7 @@ function reconcileSnapshot(
       })
       continue
     }
-    const normalized = { token: token.token, address: normalizeAddress(entry.address, contract.axisOrder), val }
+    const normalized = { token: token.token, address: normalizeAddress(entry.address, contract.axisOrder), val: accepted.input, value: accepted.value }
     overrides.set(recordKey(normalized.token, normalized.address), normalized)
   }
 
@@ -922,14 +950,15 @@ function reconcileSnapshot(
     setOwn(modes, axis, mode)
   }
 
+  const snapshot: VanityRuntimeSnapshot = Object.freeze({
+    version: VANITY_RUNTIME_SNAPSHOT_VERSION,
+    system: contract.system,
+    overrides: Object.freeze(sortOverrides([...overrides.values()].map(({ value: _value, ...entry }) => entry), contract.axisOrder)),
+    modes: Object.freeze(sortRecord(modes, contract.axisOrder)),
+  })
   return Object.freeze({
-    snapshot: Object.freeze({
-      version: VANITY_RUNTIME_SNAPSHOT_VERSION,
-      system: contract.system,
-      overrides: Object.freeze(sortOverrides([...overrides.values()], contract.axisOrder)),
-      modes: Object.freeze(sortRecord(modes, contract.axisOrder)),
-    }),
-    diagnostics: Object.freeze(diagnostics),
+    result: Object.freeze({ snapshot, diagnostics: Object.freeze(diagnostics) }),
+    projection: { overrides: sortOverrides([...overrides.values()], contract.axisOrder), modes: snapshot.modes },
   })
 }
 
@@ -937,7 +966,7 @@ function parseSnapshot(input: unknown): VanityRuntimeSnapshot {
   if (!isPlainObject(input) || input.version !== VANITY_RUNTIME_SNAPSHOT_VERSION) {
     throwRuntimeDiagnostic({
       code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
-      message: `unsupported runtime snapshot protocol '${isPlainObject(input) ? String(input.version) : 'unreadable'}'; expected version ${VANITY_RUNTIME_SNAPSHOT_VERSION}`,
+      message: `unsupported runtime snapshot version ${isPlainObject(input) ? String(input.version) : 'unreadable'}; expected version ${VANITY_RUNTIME_SNAPSHOT_VERSION}`,
       path: ['snapshot', 'version'],
       fix: `provide a runtime snapshot with version ${VANITY_RUNTIME_SNAPSHOT_VERSION}`,
     })
@@ -945,7 +974,7 @@ function parseSnapshot(input: unknown): VanityRuntimeSnapshot {
   if (typeof input.system !== 'string' || !Array.isArray(input.overrides) || !isPlainObject(input.modes)) {
     throwRuntimeDiagnostic({
       code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
-      message: 'runtime snapshot v1 is unreadable: expected system, overrides, and modes fields',
+      message: 'runtime snapshot v2 is unreadable: expected system, overrides, and modes fields',
       path: ['snapshot'],
       fix: 'provide system, overrides, and modes fields using the runtime snapshot protocol',
     })
@@ -954,7 +983,7 @@ function parseSnapshot(input: unknown): VanityRuntimeSnapshot {
     if (typeof mode !== 'string') {
       throwRuntimeDiagnostic({
         code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
-        message: 'runtime snapshot v1 modes must be strings',
+        message: 'runtime snapshot v2 modes must be strings',
         path: ['snapshot', 'modes'],
         fix: 'serialize each active axis mode as a string',
       })
@@ -969,8 +998,7 @@ function isSnapshotOverride(input: unknown): input is VanityRuntimeSnapshotOverr
     && input.token.length > 0
     && input.token.every(part => typeof part === 'string' && part.length > 0)
     && isSemanticAddress(input.address)
-    && typeof input.val === 'string'
-    && input.val.trim().length > 0
+    && ((typeof input.val === 'string' && input.val.trim().length > 0) || (typeof input.val === 'number' && Number.isFinite(input.val)))
 }
 
 function isSemanticAddress(input: unknown): input is VanitySemanticTokenAddress {
@@ -985,185 +1013,9 @@ function isSemanticAddress(input: unknown): input is VanitySemanticTokenAddress 
   return false
 }
 
-function validateAndSerialize(
-  token: VanityRuntimeTokenContract,
-  input: unknown,
-  schemas: RuntimeSchemaStore,
-  options: VanityRuntimeOptions,
-): string | undefined {
-  assertUniversalInput(token.type, input)
-  const policy = token.validation
-  let output = input
-  if (policy && shouldValidate(policy.runtime, options)) {
-    const schema = schemas[policy.id]
-    if (!schema) {
-      throwRuntimeDiagnostic({
-        code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
-        message: `validation schema '${policy.id}' is not registered on this application runtime controller`,
-        token: token.token,
-        path: [...token.token, 'validate'],
-        fix: `register the '${policy.id}' Standard Schema validator in runtime({ validators })`,
-      })
-    }
-    const result = schema['~standard'].validate(input)
-    if (isPromiseLike(result)) {
-      throwRuntimeDiagnostic({
-        code: 'VANITY_RUNTIME_SCHEMA_MISMATCH',
-        message: `validation schema '${policy.id}' is async; runtime setters are synchronous`,
-        token: token.token,
-        path: [...token.token, 'validate'],
-        fix: 'provide a synchronous Standard Schema validator for runtime setters',
-      })
-    }
-    if ('issues' in result && result.issues !== undefined) {
-      if (policy.onInvalid === 'omit')
-        return undefined
-      if (policy.onInvalid === 'fallback' && policy.fallback !== undefined) {
-        output = policy.fallback
-      }
-      else {
-        throwRuntimeDiagnostic({
-          code: 'VANITY_RUNTIME_INVALID_VALUE',
-          message: `validation schema '${policy.id}' rejected the value`,
-          detail: result.issues.map(issue => issue.message),
-          token: token.token,
-          path: [...token.token, 'value'],
-          fix: 'set a value accepted by the registered validator, or configure onInvalid: fallback/omit',
-        })
-      }
-    }
-    else {
-      output = result.value
-    }
-    assertUniversalInput(token.type, output)
-  }
-  return serializeRuntimeValue(output)
-}
-
-function assertUniversalInput(type: VanityCssDataType, input: unknown): void {
-  if (isVanityValue(input) && type !== 'unknown' && input.type !== 'unknown' && !isCompatibleType(type, input.type)) {
-    throwRuntimeDiagnostic({
-      code: 'VANITY_RUNTIME_INVALID_VALUE',
-      message: `expected <${type}> but received a <${input.type}> vanity value`,
-      path: ['value'],
-      fix: `provide a value compatible with <${type}>`,
-    })
-  }
-  if (typeof input === 'number') {
-    if (!Number.isFinite(input)) {
-      throwRuntimeDiagnostic({
-        code: 'VANITY_RUNTIME_INVALID_VALUE',
-        message: 'a runtime CSS number must be finite',
-        path: ['value'],
-        fix: 'pass a finite number',
-      })
-    }
-    if (type === 'integer' && !Number.isInteger(input)) {
-      throwRuntimeDiagnostic({
-        code: 'VANITY_RUNTIME_INVALID_VALUE',
-        message: `expected <integer> but received ${input}`,
-        path: ['value'],
-        fix: 'pass a whole number',
-      })
-    }
-    if (!['unknown', 'number', 'integer', 'percentage', 'number-percentage'].includes(type)) {
-      throwRuntimeDiagnostic({
-        code: 'VANITY_RUNTIME_INVALID_VALUE',
-        message: `a bare number is not a <${type}> runtime input`,
-        path: ['value'],
-        fix: `pass a typed value or a compatible token for <${type}>`,
-      })
-    }
-    return
-  }
-  if (typeof input === 'string') {
-    if (input.trim().length === 0) {
-      throwRuntimeDiagnostic({
-        code: 'VANITY_RUNTIME_INVALID_VALUE',
-        message: 'a runtime CSS value cannot be empty',
-        path: ['value'],
-        fix: 'provide non-empty CSS text',
-      })
-    }
-    return
-  }
-  if (!isVanityValue(input) && !isHandle(input) && !isBranchHandle(input)) {
-    throwRuntimeDiagnostic({
-      code: 'VANITY_RUNTIME_INVALID_VALUE',
-      message: 'runtime CSS values must be strings, finite numbers, vanity values, or token handles',
-      path: ['value'],
-      fix: 'pass a string, finite number, vanity value, or token handle',
-    })
-  }
-}
-
-function parseSnapshotInput(type: VanityCssDataType, val: string): unknown {
-  if ((type === 'number' || type === 'integer' || type === 'number-percentage')
-    && /^[-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?$/i.test(val.trim())) {
-    return Number(val)
-  }
-  return val
-}
-
-function isCompatibleType(expected: VanityCssDataType, actual: VanityCssDataType): boolean {
-  return expected === actual
-    || (expected === 'number-percentage' && (actual === 'number' || actual === 'integer' || actual === 'percentage'))
-    || (expected === 'length-percentage' && (actual === 'length' || actual === 'percentage'))
-    || (expected === 'number' && actual === 'integer')
-}
-
-function serializeRuntimeValue(input: unknown): string {
-  if (typeof input === 'number')
-    return String(Object.is(input, -0) ? 0 : input)
-  if (typeof input === 'string') {
-    if (input.trim().length === 0) {
-      throwRuntimeDiagnostic({
-        code: 'VANITY_RUNTIME_INVALID_VALUE',
-        message: 'a runtime CSS value cannot be empty',
-        path: ['value'],
-        fix: 'provide non-empty CSS text',
-      })
-    }
-    return input
-  }
-  if (isCssValue(input))
-    return input.css
-  if (isHandle(input) || isBranchHandle(input) || isVanityValue(input)) {
-    const serialized = String(input)
-    if (serialized.trim().length === 0) {
-      throwRuntimeDiagnostic({
-        code: 'VANITY_RUNTIME_INVALID_VALUE',
-        message: 'a runtime CSS value cannot serialize to an empty string',
-        path: ['value'],
-        fix: 'provide a serializable CSS value or token reference',
-      })
-    }
-    return serialized
-  }
-  throwRuntimeDiagnostic({
-    code: 'VANITY_RUNTIME_INVALID_VALUE',
-    message: 'cannot serialize this runtime CSS value',
-    path: ['value'],
-    fix: 'pass a string, finite number, vanity value, or token handle',
-  })
-}
-
-function shouldValidate(mode: VanityRuntimeValidationContract['runtime'], options: VanityRuntimeOptions): boolean {
-  return mode === 'always' || (mode === 'dev' && (options.dev ?? isDevelopmentMode()))
-}
-
-function isDevelopmentMode(): boolean {
-  const runtimeProcess = Reflect.get(globalThis, 'process') as { env?: { NODE_ENV?: string } } | undefined
-  return runtimeProcess?.env?.NODE_ENV !== 'production'
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (typeof value === 'object' || typeof value === 'function') && value !== null && 'then' in value
-}
-
 function projectStyles(
   contract: VanityRuntimeContract,
-  snapshot: VanityRuntimeSnapshot,
+  snapshot: RuntimeProjection,
 ): VanityRuntimeStyles {
   const styles = Object.fromEntries(contract.roots.map(root => [
     root.path,
@@ -1173,7 +1025,7 @@ function projectStyles(
     const token = getTokenByPath(contract, entry.token)
     const slot = token && getTokenSlot(token, entry.address)
     if (token && slot)
-      styles[token.rootPath]![slot as `--${string}`] = entry.val
+      styles[token.rootPath]![slot as `--${string}`] = entry.value
   }
   for (const [axis, mode] of Object.entries(snapshot.modes)) {
     const projected = contract.axes[axis]?.control?.projections?.[mode]?.style
@@ -1191,7 +1043,7 @@ function projectStyles(
 
 function projectAttributesForRoot(
   contract: VanityRuntimeContract,
-  snapshot: VanityRuntimeSnapshot,
+  snapshot: RuntimeProjection,
   root: VanityRuntimeRootContract,
 ): Readonly<Record<string, string>> {
   const attributes: Record<string, string> = {}
@@ -1209,7 +1061,7 @@ function projectAttributesForRoot(
 
 function projectProps(
   contract: VanityRuntimeContract,
-  snapshot: VanityRuntimeSnapshot,
+  snapshot: RuntimeProjection,
 ): VanityRuntimeProps {
   const styles = projectStyles(contract, snapshot)
   return Object.freeze(Object.fromEntries(contract.roots.map(root => [
@@ -1221,7 +1073,7 @@ function projectProps(
   ])))
 }
 
-function restoreRuntimeState(contract: VanityRuntimeContract, state: RuntimeState, snapshot: VanityRuntimeSnapshot): void {
+function restoreRuntimeState(contract: VanityRuntimeContract, state: RuntimeState, snapshot: RuntimeProjection): void {
   const props = projectProps(contract, snapshot)
   const targets = new Map<string, readonly VanityRuntimeTarget[]>()
   for (const root of contract.roots) {
@@ -1244,7 +1096,7 @@ function restoreRuntimeState(contract: VanityRuntimeContract, state: RuntimeStat
   for (const entry of snapshot.overrides) {
     const token = getTokenByPath(contract, entry.token)!
     const slot = getTokenSlot(token, entry.address)!
-    writeStyle(targets.get(token.rootPath)![0]!.style, slot, entry.val)
+    writeStyle(targets.get(token.rootPath)![0]!.style, slot, entry.value)
   }
   for (const [axis] of state.modes) {
     if (Object.hasOwn(snapshot.modes, axis))
@@ -1293,13 +1145,13 @@ function getRuntimeSnapshot(contract: VanityRuntimeContract, state: RuntimeState
   return Object.freeze({
     version: VANITY_RUNTIME_SNAPSHOT_VERSION,
     system: contract.system,
-    overrides: Object.freeze(sortOverrides([...state.overrides.values()], contract.axisOrder)),
+    overrides: Object.freeze(sortOverrides([...state.overrides.values()].map(({ value: _value, ...entry }) => entry), contract.axisOrder)),
     modes: Object.freeze(sortRecord(Object.fromEntries(state.modes), contract.axisOrder)),
   })
 }
 
 function createEmptySnapshot(contract: VanityRuntimeContract): VanityRuntimeSnapshot {
-  return Object.freeze({ version: 1, system: contract.system, overrides: Object.freeze([]), modes: Object.freeze({}) })
+  return Object.freeze({ version: VANITY_RUNTIME_SNAPSHOT_VERSION, system: contract.system, overrides: Object.freeze([]), modes: Object.freeze({}) })
 }
 
 function createRuntimeMeta(
@@ -1357,7 +1209,7 @@ function normalizeAddress(address: VanitySemanticTokenAddress, axisOrder: readon
     : address
 }
 
-function sortOverrides(entries: VanityRuntimeSnapshotOverride[], axisOrder: readonly string[]): VanityRuntimeSnapshotOverride[] {
+function sortOverrides<Entry extends VanityRuntimeSnapshotOverride>(entries: Entry[], axisOrder: readonly string[]): Entry[] {
   return entries.sort((left, right) => {
     const token = left.token.join('.').localeCompare(right.token.join('.'))
     return token || getAddressKey(left.address, axisOrder).localeCompare(getAddressKey(right.address, axisOrder))

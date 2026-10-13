@@ -35,6 +35,8 @@ The absences are semantic:
 
 Every value-producing add/augment/overwrite accepts `value | (ds => value)`. The callback sees the complete accumulated system before that link. `expect*` is direct because it asserts shape and computes no value.
 
+`open.addChecks(t => [...])` registers additive build-time token guarantees. Its callback sees the accumulated token handles; checks attach before consolidation and contribute evidence to documentation identity without changing CSS, runtime or compatibility. Contrast levels and sampling belong to [spec-tokens §12](./spec-tokens.md#12-interchange-and-checks). Checks are assertions rather than named shape entries, so they have no detached definition or overwrite operation.
+
 ## 3. Detached modules
 
 Every registrable data kind has a detached definition:
@@ -203,11 +205,15 @@ createSystem({
 
 This is equivalent to `createSystem().addPolicies(config)`.
 
-Known top-level groups are `constructors`, `support`, `layerOrder`, `tokens`, `color`, and `plugins`. The `tokens` group owns `reference` and `emit`; the `color` group owns `mixSpace` and `adjustSpace`; generic `validation` is not a system policy. Constructor names form an open subfamily for built-in, user, and plugin constructors. Plugin policy data is auto-scoped by plugin identity.
+Known top-level groups are `constructors`, `support`, `layerOrder`, `tokens`, `color`, `declarations`, and `plugins`. The `tokens` group owns `reference` and `emit`; the `color` group owns `mixSpace` and `adjustSpace`; generic `validation` is not a system policy. Constructor names form an open subfamily for built-in, user, and plugin constructors. Plugin policy data is auto-scoped by plugin identity.
 
 `color.mixSpace` supplies the interpolation method that CSS requires when a bound `colorMix()` call omits `.in()`. `color.adjustSpace` supplies the named polar space for the bare Vanity channel-adjust conveniences; both policies are optional, and an explicit namespace or `.in()` call always wins. The policy values are part of the portable contract so a restored system binds the same constructor grammar and diagnostics.
 
 Conformance policy adapts unresolved values at system entry. Restriction policy is metadata and diagnostics, never shape subtraction. `forbid` fails consolidation, `discourage` warns and compiles. `prospective` covers later contributions; `retroactive` scans the complete graph.
+
+The optional `declarations` group declares `level: 'forbid' | 'discourage'`, a `reason`, CSS data types in `tokens`, per-property requirements such as `properties: { zIndex: 'token' }`, exact exempt literals in `mechanics`, and `derivations: 'allow' | 'audit' | 'restrict'` (default `audit`). Its requirements apply to each component of a style declaration, through the shared [declaration origin record](./spec-css.md#10-css-grammar-validation). Token definitions, finite atom vocabulary definitions, and raw CSS remain outside it. Its values affect compatibility identity, not CSS bytes.
+
+`declarations.enforce` is rejected: style modules have no system contribution order, so prospective/retroactive enforcement would not describe them. A token's `usage: { tier: 'primitive' }` makes its direct use a policy finding; guidance in `usage.for` or its description appears beside nearest-role suggestions. The policy does not make those suggestions proof of semantic suitability.
 
 Only a plugin's setup surface exposes:
 

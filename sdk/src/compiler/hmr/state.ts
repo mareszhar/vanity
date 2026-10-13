@@ -58,6 +58,30 @@ export function getStyleCssVirtualId(
   ))
 }
 
+/** Address the complete stylesheet view of a style module, including its imported CSS. */
+export function getStyleModuleCssVirtualId(sourcePath: string, root: string, virtualExtension: string): string {
+  const styleId = getStyleCssVirtualId(sourcePath, root, virtualExtension)
+  const prefix = normalizePath(join(resolve(root), '.vanity', 'virtual'))
+  return `${prefix}/module/${styleId.slice(`${prefix}/style/`.length)}`
+}
+
+/** Recover the authored source of a compiler-owned stylesheet view. */
+export function getStyleModuleSourcePath(id: string, root: string, virtualExtension: string): string | undefined {
+  const cleanId = id.split('?')[0]!
+  const prefix = `${normalizePath(join(resolve(root), '.vanity', 'virtual', 'module'))}/`
+  if (!cleanId.startsWith(prefix) || !cleanId.endsWith(virtualExtension))
+    return undefined
+  const [ups, ...segments] = cleanId.slice(prefix.length, -virtualExtension.length).split('/')
+  if (ups === undefined || !/^(?:0|[1-9]\d*)$/.test(ups))
+    return undefined
+  // An absolute source can ascend at most to the filesystem root.
+  const count = Number(ups)
+  if (!Number.isSafeInteger(count) || count > normalizePath(resolve(root)).split('/').filter(Boolean).length)
+    return undefined
+  const source = normalizePath(resolve(root, '../'.repeat(count), ...segments))
+  return getStyleModuleCssVirtualId(source, root, virtualExtension) === cleanId ? source : undefined
+}
+
 /** CSS owners are keyed by kind so a style path and system entry never alias accidentally. */
 export type CssOwnerKey = `style:${string}` | `system:${string}`
 

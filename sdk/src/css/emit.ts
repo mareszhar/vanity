@@ -7,9 +7,13 @@
  * transform dots every registered class.
  */
 
+import type { VanityEmittedDeclarationRecord } from '../introspect/records'
 import type { VanityArm, VanityCompiled, VanityUnit } from './rule'
+import { getDiagnosticExports, getDiagnosticSource } from '../diagnostics'
+import { record } from '../introspect/records'
 import { substrate } from '../substrate'
-import { splitTopLevel } from './rule'
+import { getStyleModuleFile } from './context'
+import { getArmKey, splitTopLevel } from './rule'
 
 type SubstrateRule = Record<string, unknown>
 
@@ -32,6 +36,7 @@ export function emitStyle(compiled: VanityCompiled, debugId?: string): string {
     })
   }
 
+  recordEmittedStyle(className, compiled, debugId, [...baseUnit ? [baseUnit] : [], ...rest])
   return className
 }
 
@@ -53,6 +58,7 @@ export function emitOnto(className: string, compiled: VanityCompiled): void {
       rule: applyLayer(layer, applyAtRules(unit.arm, convertToSubstrateRule(unit.declarations))),
     })
   }
+  recordEmittedStyle(className, compiled)
 }
 
 export function emitGlobal(selector: string, compiled: VanityCompiled): void {
@@ -68,6 +74,56 @@ export function emitGlobal(selector: string, compiled: VanityCompiled): void {
       rule: applyLayer(layer, applyAtRules(unit.arm, convertToSubstrateRule(unit.declarations))),
     })
   }
+}
+
+/** The substrate merges identical arms: first property position, last authored value. */
+function recordEmittedStyle(className: string, compiled: VanityCompiled, name?: string, units = compiled.units): void {
+  const groups = new Map<string, { arm: VanityArm, declarations: Map<string, import('./declaration').VanityDeclarationRecord[]> }>()
+  for (const unit of units) {
+    const key = getArmKey(unit.arm)
+    let group = groups.get(key)
+    if (!group) {
+      group = { arm: unit.arm, declarations: new Map() }
+      groups.set(key, group)
+    }
+    for (const [property, declarations] of Object.entries(unit.emittedDeclarations ?? {}))
+      group.declarations.set(property, declarations)
+  }
+  const layer = getQualifiedLayer(compiled)
+  const emittedDeclarations: VanityEmittedDeclarationRecord[] = []
+  let groupOrdinal = 0
+  for (const group of groups.values()) {
+    const ordinal = groupOrdinal++
+    const selector = group.arm.selector === undefined ? className : group.arm.selector.replaceAll('&', className)
+    for (const declarations of group.declarations.values()) {
+      for (const declaration of declarations) {
+        const conditions = [...declaration.conditionPath ?? []]
+        if (declaration.authoredKey !== undefined) {
+          const index = conditions.lastIndexOf(declaration.authoredKey)
+          if (index >= 0)
+            conditions.splice(index, 1)
+        }
+        emittedDeclarations.push({ ...declaration, conditionPath: conditions.slice(declaration.stylePath?.length ?? 0), arm: { ...group.arm, selector, ordinal }, layer })
+      }
+    }
+  }
+  const vars = new Set<string>()
+  for (const declaration of emittedDeclarations) {
+    for (const match of String(declaration.value).matchAll(/var\((--[\w-]+)/g))
+      vars.add(match[1]!)
+  }
+  record({
+    kind: 'style',
+    file: getStyleModuleFile()?.filePath,
+    ...getDiagnosticSource(),
+    ...(name === undefined ? {} : { name }),
+    class: className,
+    vars: [...vars],
+    declarations: compiled.units.flatMap(unit => unit.declarationRecords ?? []),
+    emittedDeclarations,
+    layer,
+    exports: getDiagnosticExports(),
+  })
 }
 
 /** `recipes` under root `prism` → `prism.recipes` — the emitted, namespaced form. */

@@ -1,6 +1,7 @@
 /** Compiler-owned Vanity style-module transformation and CSS virtual output. */
 
 import type { VanityIdentifierMode } from '../../config'
+import type { VanityDiagnosticInput } from '../../diagnostics'
 import type { VanityInspectRecord } from '../../introspect/records'
 import type { VanityPortableSystem } from '../../system/contract'
 import type { CompilerHmrHost } from '../hmr/host'
@@ -10,7 +11,9 @@ import type {
   BundleStyleModuleParams,
 } from '../modules/build'
 import type { EvaluatedStyleModule } from '../modules/evaluate'
+import type { StyleModuleHost } from '../modules/resolution'
 import type { EvaluatedSystem, NormalizedSystemSource } from './systems'
+import { Buffer } from 'node:buffer'
 import { isAbsolute, resolve } from 'node:path'
 import { substrate } from '../../substrate'
 import {
@@ -18,17 +21,22 @@ import {
   getSystemCssVirtualId,
   replaceEntryVirtualIds,
 } from '../hmr/state'
+import { readCompilerBaseline } from '../modules/baseline'
 import { evaluateStyleModule } from '../modules/evaluate'
+import { enrichStyleEvaluationError } from '../modules/resolution'
 import { normalizePath } from './path'
-import { assertNamespaceOwnership, isSameAuthoredFile } from './systems'
+import { assertNamespaceOwnership, isSameAuthoredFile, removeNamespaceOwners } from './systems'
 
 export interface StyleAutoImportInjection {
   readonly aliases: ReadonlyMap<string, string>
   readonly path: string
 }
 
-export interface StyleTransformContext {
+export interface StyleTransformContext extends StyleModuleHost {
   readonly root: string
+  readonly getStyleModuleGeneration: (file: string) => number
+  readonly baseline?: string
+  readonly baselineRoot?: string
   readonly styleFileFilter: RegExp
   readonly virtualExtension: string
   readonly isDev: boolean
@@ -45,7 +53,6 @@ export interface StyleTransformContext {
   readonly ensureConfiguredSystem: (source: NormalizedSystemSource) => Promise<EvaluatedSystem>
   readonly injectShimFor: (filePath: string) => Promise<StyleAutoImportInjection | undefined>
   readonly buildStyleModule: (params: BundleStyleModuleParams) => Promise<BuiltStyleModule>
-  readonly alias: Record<string, string>
   readonly rememberStyleSystems: (entry: string, systems: Iterable<string>) => void
   readonly rememberDependencies: (entry: string, files: Iterable<string>, preserveKnown: boolean) => Set<string>
   readonly rememberPendingCssResponse: (id: string, contents: string) => void
@@ -55,15 +62,33 @@ export interface StyleTransformContext {
   readonly buildFailureFiles: (error: unknown, root: string) => string[]
   readonly createStyleBuildError: (error: unknown, entry: string, root: string) => unknown
   readonly reportFailure: (error: unknown) => void
+  readonly reportWarning?: (diagnostic: VanityDiagnosticInput) => void
   readonly getIdentifierOption: () => VanityIdentifierMode
   readonly scheduleManifest: () => void
+  readonly prefixCss: (css: string) => string
+  readonly loadSubstrateCss?: (source: string) => Promise<string>
+}
+
+/** Content queries are distinct from Vite's import and HMR request stamps. */
+export function getStyleCssQuery(id: string): { readonly raw: boolean, readonly inline: boolean, readonly url: boolean, readonly direct: boolean, readonly css: boolean } {
+  const query = id.slice(id.indexOf('?') + 1)
+  const parameters = id.includes('?') ? new URLSearchParams(query) : new URLSearchParams()
+  return {
+    raw: /[?&]raw(?:&|$)/.test(id),
+    inline: /[?&]inline\b/.test(id),
+    url: /[?&]url(?:&|$)/.test(id),
+    direct: /[?&]direct\b/.test(id),
+    css: /[?&](?:inline|direct|transform-only)\b/.test(id)
+      || /[?&]url(?:&|$)/.test(id)
+      || (parameters.has('vue') && parameters.get('type') === 'style'),
+  }
 }
 
 /** Transform one `*.css.ts` module and update its stable CSS virtual modules. */
 export async function transformStyleModule(
   _code: string,
   id: string,
-  transformOptions: { readonly ssr?: boolean } | undefined,
+  transformOptions: { readonly ssr?: boolean, readonly css?: boolean } | undefined,
   context: StyleTransformContext,
 ): Promise<{ code: string, map: { mappings: string } } | null> {
   const [validId] = id.split('?')
@@ -71,9 +96,16 @@ export async function transformStyleModule(
   if (!context.styleFileFilter.test(validId))
     return null
 
+  const query = getStyleCssQuery(id)
+  if (query.raw)
+    return null
+
   const root = context.root
   const filePath = normalizePath(validId)
+  const generation = context.getStyleModuleGeneration(filePath)
+  const isCurrent = () => generation === context.getStyleModuleGeneration(filePath)
 
+  let bundled: BuiltStyleModule
   let source: string
   let watchFiles: string[]
   let externalSystems: readonly BundleExternalModule[] = []
@@ -99,14 +131,17 @@ export async function transformStyleModule(
         }))
       })
       const injection = await context.injectShimFor(filePath)
-      const bundled = await context.buildStyleModule({
+      bundled = await context.buildStyleModule({
         filePath,
         root,
-        alias: context.alias,
+        resolve: context.resolve,
+        load: context.load,
         inject: injection?.path,
         ambientAliases: injection?.aliases,
         externalModules: externalSystems,
       })
+      if (!isCurrent())
+        return { code: '', map: { mappings: '' } }
       source = bundled.source
       watchFiles = bundled.watchFiles
       externalSystemEntries = bundled.externalSystemEntries
@@ -119,6 +154,8 @@ export async function transformStyleModule(
     }
   }
   catch (error) {
+    if (!isCurrent())
+      return { code: '', map: { mappings: '' } }
     context.failedStyleEntries.add(filePath)
     const failureFiles = context.buildFailureFiles(error, root)
     const dependencies = context.rememberDependencies(filePath, failureFiles, true)
@@ -129,8 +166,12 @@ export async function transformStyleModule(
     throw failure
   }
 
+  if (!isCurrent())
+    return { code: '', map: { mappings: '' } }
   context.failedStyleEntries.delete(filePath)
-  const dependencies = context.rememberDependencies(filePath, watchFiles, false)
+  const baseline = readCompilerBaseline(context.baselineRoot ?? root, context.baseline, root)
+  const baselineSession = baseline.createModuleSession(filePath)
+  const dependencies = context.rememberDependencies(filePath, [...watchFiles, baseline.file], false)
   for (const dependency of dependencies)
     context.addWatchFile(dependency)
 
@@ -141,40 +182,33 @@ export async function transformStyleModule(
       filePath,
       context.getIdentifierOption(),
       new Map(externalSystems.map(system => [system.id, system.exports])),
+      context.reportWarning,
+      baselineSession.finalization,
     )
   }
   catch (error) {
+    const enriched = await enrichStyleEvaluationError(error, bundled!, root)
+    if (!isCurrent())
+      return { code: '', map: { mappings: '' } }
     context.failedStyleEntries.add(filePath)
-    const failure = context.createStyleBuildError(error, filePath, root)
+    const failure = context.createStyleBuildError(enriched, filePath, root)
     context.reportFailure(failure)
     throw failure
   }
   const { exports, cssByFileScope, unusedCompositionRegex, records } = evaluated
 
-  // `.css.ts` is an ecosystem convention shared with vanilla-extract.
-  // A raw vanilla-extract module emits through the temporary substrate
-  // adapter above but creates no Vanity inspection records. Leave that
-  // source untouched so the bundled vanilla-extract plugin immediately
-  // after this one can own its normal transform. Any Vanity authoring
-  // primitive records itself, including modules reached through an
-  // auto-imported system, so this remains semantic rather than relying on
-  // fragile import-text heuristics.
+  // The bundled substrate plugin preserves raw vanilla-extract class naming.
+  // Its output still belongs to this pipeline: keep stylesheet ownership until
+  // that transform replaces it, independently of inspection records.
   if (records.length === 0) {
     context.setStyleModuleOwnership(filePath, false)
-    context.failedStyleEntries.delete(filePath)
-    context.rememberDependencies(filePath, [], false)
     context.recordsByFile.delete(filePath)
-    const retired = replaceEntryVirtualIds(
-      filePath,
-      new Set(),
-      context.cssVirtualIdsByEntry,
-      context.cssByVirtualId,
-      context.cssOwnersByVirtualId,
-      `style:${filePath}`,
-      context.rememberPendingCssResponse,
-    )
-    clearRetiredCss(context, retired)
-    return null
+    if (!context.systemSources.some(source => source.entry === filePath))
+      removeNamespaceOwners(context.namespaceOwners, [filePath])
+    context.exportSignatures.delete(filePath)
+    return transformOptions?.css && context.loadSubstrateCss !== undefined
+      ? { code: await context.loadSubstrateCss(filePath), map: { mappings: '' } }
+      : null
   }
   context.setStyleModuleOwnership(filePath, true)
 
@@ -206,13 +240,18 @@ export async function transformStyleModule(
 
   // Replace each evaluated file's inspection records — the bundle carries
   // its whole import graph, so records for dependencies arrive here too.
-  const recordedFiles = new Set<string>()
-  for (const record of records)
-    recordedFiles.add(record.file ?? normalizePath(filePath))
-  for (const file of recordedFiles)
-    context.recordsByFile.set(file, records.filter(record => (record.file ?? normalizePath(filePath)) === file))
+  const recordedFiles = new Map<string, VanityInspectRecord[]>()
+  for (const record of records) {
+    const authoredFile = record.file ?? filePath
+    const file = normalizePath(isAbsolute(authoredFile) ? authoredFile : resolve(root, authoredFile))
+    const fileRecords = recordedFiles.get(file) ?? []
+    fileRecords.push(record)
+    recordedFiles.set(file, fileRecords)
+  }
+  for (const [file, fileRecords] of recordedFiles)
+    context.recordsByFile.set(file, fileRecords)
 
-  const cssImports: string[] = []
+  const cssImports: Array<{ readonly id: string, readonly code: string }> = []
   const nextVirtualIds = new Set<string>()
 
   for (const [serializedFileScope, css] of cssByFileScope) {
@@ -231,7 +270,7 @@ export async function transformStyleModule(
     context.cssByVirtualId.set(virtualId, served)
     context.clearPendingCssResponse(virtualId)
     nextVirtualIds.add(virtualId)
-    cssImports.push(`import '${context.host.resolveBrowserModuleUrl(virtualId)}';`)
+    cssImports.push({ id: virtualId, code: `import '${context.host.resolveBrowserModuleUrl(virtualId)}';` })
 
     // The id is stable, so update both halves of the HMR contract: mark
     // Vite's file-change walk already invalidated this virtual module via
@@ -262,7 +301,7 @@ export async function transformStyleModule(
     if (!context.cssByVirtualId.has(virtualId) || nextVirtualIds.has(virtualId))
       continue
     nextVirtualIds.add(virtualId)
-    cssImports.unshift(`import '${context.host.resolveBrowserModuleUrl(virtualId)}';`)
+    cssImports.unshift({ id: virtualId, code: `import '${context.host.resolveBrowserModuleUrl(virtualId)}';` })
   }
 
   const previousVirtualIds = context.cssVirtualIdsByEntry.get(filePath)
@@ -282,7 +321,14 @@ export async function transformStyleModule(
   if (context.isDev)
     context.scheduleManifest()
 
-  let code = substrate.backend.serializeStyleModule(cssImports, exports, unusedCompositionRegex)
+  if (transformOptions?.css) {
+    const css = cssImports
+      .map(({ id }) => context.prefixCss(context.cssByVirtualId.get(id) ?? ''))
+      .join('\n')
+    return { code: css, map: { mappings: '' } }
+  }
+
+  let code = substrate.backend.serializeStyleModule(cssImports.map(({ code }) => code), exports, unusedCompositionRegex)
 
   if (context.isDev && !transformOptions?.ssr) {
     const signature = Object.keys(exports).sort().join('\0')
@@ -307,6 +353,29 @@ export async function transformStyleModule(
   return { code, map: { mappings: '' } }
 }
 
+/** Retire one source using the same ownership replacement and CSS graph cleanup as a transform. */
+export function removeStyleModule(filePath: string, context: StyleTransformContext): void {
+  context.setStyleModuleOwnership(filePath, false)
+  context.failedStyleEntries.delete(filePath)
+  context.rememberDependencies(filePath, [], false)
+  context.rememberStyleSystems(filePath, [])
+  context.recordsByFile.delete(filePath)
+  if (!context.systemSources.some(source => source.entry === filePath))
+    removeNamespaceOwners(context.namespaceOwners, [filePath])
+  context.exportSignatures.delete(filePath)
+  const retired = replaceEntryVirtualIds(
+    filePath,
+    new Set(),
+    context.cssVirtualIdsByEntry,
+    context.cssByVirtualId,
+    context.cssOwnersByVirtualId,
+    `style:${filePath}`,
+    context.rememberPendingCssResponse,
+  )
+  context.cssVirtualIdsByEntry.delete(filePath)
+  clearRetiredCss(context, retired)
+}
+
 function clearRetiredCss(
   context: StyleTransformContext,
   retired: ReadonlySet<string>,
@@ -315,4 +384,25 @@ function clearRetiredCss(
     return
 
   context.clearRetiredCssModules(retired)
+}
+
+/** Load a stylesheet view through the same evaluation, capture and ownership path. */
+export async function loadStyleModuleCss(
+  source: string,
+  id: string,
+  options: { readonly ssr?: boolean } | undefined,
+  context: StyleTransformContext,
+): Promise<{ code: string, map: { mappings: string } } | null> {
+  const query = getStyleCssQuery(id)
+  // The host's CSS URL hook owns build assets and its transform-only request.
+  if (query.url && !context.isDev)
+    return null
+  const result = await transformStyleModule('', source, { ...options, css: true }, context)
+  if (result === null || !query.url)
+    return result
+  const url = query.inline
+    ? `data:text/css;base64,${Buffer.from(result.code).toString('base64')}`
+    : context.host.resolveBrowserModuleUrl(id.split('?')[0]!)
+      + id.slice(id.indexOf('?')).replace(/([?&])url(?:&|$)/, (_, separator: string) => separator).replace(/[?&]$/, '')
+  return { code: `export default ${JSON.stringify(url)}`, map: { mappings: '' } }
 }

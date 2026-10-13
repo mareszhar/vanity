@@ -1,6 +1,6 @@
 /** Pure in-process system contract and its validated data-only compiler projection. */
 
-import type { VanityTokenRecord } from '../introspect/records'
+import type { VanityContrastRecord, VanityTokenRecord } from '../introspect/records'
 import type { VanityRuntimeContract } from '../runtime/contract'
 import type { VanityHandleMeta } from '../tokens/handle'
 import type {
@@ -143,6 +143,8 @@ export interface VanityPortableSystem {
   readonly tokens: readonly VanityHandleMeta[]
   /** Semantic token records used by introspection and diagnostics. */
   readonly tokenRecords: readonly VanityTokenRecord[]
+  /** Build-time contrast evidence; participates only in the docs identity. */
+  readonly checks?: readonly VanityContrastRecord[]
   /** Runtime root, axis, and mutable-token contract. */
   readonly runtime: VanityRuntimeContract
   /** JSON-safe constants exposed by the system. */
@@ -224,6 +226,7 @@ export function createSystemContract(input: VanitySystemContractInput): VanityIn
     ...(input.axes === undefined ? {} : { axes: input.axes }),
     tokens: input.tokens,
     tokenRecords: input.tokenRecords,
+    ...(input.checks?.length ? { checks: input.checks } : {}),
     runtime: input.runtime,
     consts: input.consts ?? {},
     utilities: input.utilities ?? [],
@@ -328,6 +331,7 @@ function getSystemIdentities(
       mutable: token.mutable,
       axes: Object.keys(token.axes ?? {}).sort(),
       cases: token.cases?.map(entry => entry.when) ?? [],
+      ...(token.restrict === undefined ? {} : { restrict: token.restrict }),
     })),
     overwrites: normalized.overwrites,
   }
@@ -338,7 +342,15 @@ function getSystemIdentities(
     layers: normalized.layers,
     conditions: normalized.conditionArms,
     conditionAsts: normalized.conditionAsts,
-    axes: normalized.axes,
+    axes: normalized.axes === undefined
+      ? undefined
+      : {
+          ...normalized.axes,
+          definitions: Object.fromEntries(Object.entries(normalized.axes.definitions).map(([name, definition]) => {
+            const { covers: _covers, shared: _shared, ...emitted } = definition
+            return [name, emitted]
+          })),
+        },
     ruleGroups: projectRuleGroups(normalized.ruleGroups, normalized.layers, 'css'),
     tokens: normalized.tokenRecords.map(token => ({
       path: token.path,
@@ -378,6 +390,7 @@ function getSystemIdentities(
         emit: token.emit,
         mutable: token.mutable,
         validation: token.validation,
+        ...(token.range === undefined ? {} : { range: token.range }),
         baseSlot: token.baseSlot,
         branches: token.branches.map(branch => ({
           address: branch.address,
@@ -389,6 +402,7 @@ function getSystemIdentities(
     tokens: normalized.tokens.map(projectRuntimeToken),
   }
   const docsProjection = {
+    ...(normalized.checks?.length ? { checks: normalized.checks } : {}),
     source: normalized.source,
     consts: normalized.consts,
     utilities: normalized.utilities,
@@ -400,6 +414,7 @@ function getSystemIdentities(
     tokens: normalized.tokenRecords.map(token => ({
       path: token.path,
       description: token.description,
+      usage: token.usage,
       deprecated: token.deprecated,
       metadata: token.semantic.metadata,
     })),

@@ -145,6 +145,12 @@ export interface VanityFluentCondition<
   readonly not: () => VanityFluentCondition<string>
 }
 
+/** An element state with an explicit own-element spelling. */
+export interface VanityStateCondition<Compiled extends string, Activatable extends boolean = false> extends VanityFluentCondition<Compiled, Activatable> {
+  /** Match this state on the styled element itself. */
+  readonly self: VanityFluentCondition<`&${Compiled}`, Activatable>
+}
+
 export type VanityConditionInput = string | VanityCondition<string, boolean>
 
 export type VanityConditionKeyFor<Name extends string, Input>
@@ -352,33 +358,41 @@ export function getDataAttribute(attribute: string): { name: string, selectorNam
   return { name, selectorName: serializeCssIdentifier(name) }
 }
 
-/** A literal `data-*` selector; compose `selector('&')` when anchoring is intended. */
+function createStateCondition<Compiled extends string>(compiled: Compiled, ast: VanityConditionAst, ...arms: VanityConditionArm[]): VanityStateCondition<Compiled> {
+  return Object.freeze({
+    ...createCondition(compiled, ast, ...arms),
+    self: createCondition(`&${compiled}`, { kind: 'and', conditions: [{ kind: 'selector', selector: '&' }, ast] }, ...arms.map(arm => ({ ...arm, selector: `&${arm.selector}` }))),
+  })
+}
+
+/** A literal `data-*` selector; `.self` anchors it to the styled element. */
 export function data<const Attribute extends string>(
   attribute: Attribute,
-): VanityFluentCondition<`[data-${VanityKebab<Attribute>}]`, true>
+): VanityStateCondition<`[data-${VanityKebab<Attribute>}]`, true>
 export function data<const Attribute extends string, const Value extends string>(
   attribute: Attribute,
   value: Value,
-): VanityFluentCondition<`[data-${VanityKebab<Attribute>}='${Value}']`, true>
-export function data(attribute: string, value?: string): VanityFluentCondition<string, true> {
+): VanityStateCondition<`[data-${VanityKebab<Attribute>}='${Value}']`, true>
+export function data(attribute: string, value?: string): VanityStateCondition<string, true> {
   const { name, selectorName } = getDataAttribute(attribute)
   const compiled = value === undefined ? `[${selectorName}]` : `[${selectorName}='${value}']`
-  return createCondition(
+  return createStateCondition(
     compiled,
     { kind: 'selector', selector: compiled },
     {
       selector: compiled,
       runtime: { kind: 'attribute', name, value: value ?? '' },
     },
-  ) as unknown as VanityFluentCondition<string, true>
+  ) as unknown as VanityStateCondition<string, true>
 }
 
 /** A literal ARIA selector. */
 export function aria<const Attribute extends string, const Value extends string | boolean = true>(
   attribute: Attribute,
   value: Value = true as Value,
-): VanityFluentCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`> {
-  return selector(`[aria-${convertToKebab(attribute)}='${value}']`) as VanityFluentCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`>
+): VanityStateCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`> {
+  const compiled = `[aria-${convertToKebab(attribute)}='${value}']`
+  return createStateCondition(compiled, { kind: 'selector', selector: compiled }, { selector: compiled }) as VanityStateCondition<`[aria-${VanityKebab<Attribute>}='${Value}']`>
 }
 
 export interface VanityScopeCondition extends VanityFluentCondition<string> {
@@ -639,8 +653,11 @@ function lowerNegatedAst(ast: VanityConditionAst): readonly VanityConditionArm[]
     return dedupeArms(ast.conditions.flatMap(lowerNegatedAst))
   if (ast.kind === 'not')
     return lowerAst(ast.condition)
-  if (ast.kind === 'selector')
-    return [{ selector: negateSelector(ast.selector) }]
+  if (ast.kind === 'selector') {
+    // Inside an anchor's own rule its complement is empty. This arm must
+    // disappear before De Morgan expansion, rather than become :not(:scope).
+    return ast.selector.trim() === '&' ? [] : [{ selector: negateSelector(ast.selector) }]
+  }
   if (ast.kind === 'media')
     return [{ media: `not ${ast.query}` }]
   if (ast.kind === 'supports')
@@ -743,7 +760,7 @@ function composeSelectors(left: string | undefined, right: string | undefined): 
 function negateSelector(input: string): string {
   const parts = splitSelectorList(input)
   if (parts.length > 1)
-    return `&:not(:is(${parts.map(part => part.replaceAll('&', ':scope')).join(', ')}))`
+    return `&:not(:is(${parts.join(', ')}))`
   if (input.startsWith('&'))
     return `&:not(${input.slice(1) || ':scope'})`
   return `&:not(${input})`

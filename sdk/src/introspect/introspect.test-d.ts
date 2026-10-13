@@ -57,6 +57,8 @@ describe('the audit config', () => {
       | 'rootModeDisagreements'
       | 'staleDerivations'
       | 'derivedCaseGrowth'
+      | 'descendantConditions'
+      | 'unanchoredSelectors'
     >()
     expectTypeOf<VanityAuditLevel>().toEqualTypeOf<'off' | 'warn' | 'error'>()
   })
@@ -64,7 +66,7 @@ describe('the audit config', () => {
 
 describe('the manifest format', () => {
   it('is versioned and shaped as documented', () => {
-    expectTypeOf<VanityManifest['version']>().toEqualTypeOf<4>()
+    expectTypeOf<VanityManifest['version']>().toEqualTypeOf<5>()
     expectTypeOf<VanityManifest['system']['tokens'][string]>().toEqualTypeOf<VanityManifestToken>()
     expectTypeOf<VanityManifestToken['declarations']>().toEqualTypeOf<VanityManifestToken['declarations']>()
     expectTypeOf<VanityManifestToken['mutable']>().toEqualTypeOf<boolean>()

@@ -32,6 +32,8 @@ const palette = ds.defineTokens()
 3. `callback(entire prior accumulated tree)`;
 4. another token builder to merge at the current level.
 
+Numeric token keys are rejected with `VANITY_TOKENS_NUMERIC_KEY`: eagerly available keys fail at registration, and keys returned by a callback fail when consolidation evaluates it. Use `s500` or a word so every token projection has an addressable name.
+
 Every form adds. No form replaces. A callback cannot read siblings created in the same batch; split those into sequential calls so the dependency is typed.
 
 The chain is immutable, exact, and duplicate paths fail locally.
@@ -54,7 +56,7 @@ const tokens = ds.defineTokens({
 
 `.add('brand', { val: 'red', mutable: true })` accepts the raw config because that position cannot be a group. Wrapping it in `tdef` is rejected as unnecessary ceremony.
 
-Typed variants such as `ds.tdef.color()` exist for reservations or values whose type cannot be inferred.
+Typed variants such as `ds.tdef.color()` exist for reservations or values whose type cannot be inferred. At build, bare and configured literal values use the same compiler grammar: explicit dimensions, percentages, quoted strings, hexadecimal colors and unambiguous typed functions retain their data type. An alias keeps its dependency’s type. A named color, unitless zero, variable reference or ambiguous calculation remains unknown and receives an informational definition hint with a typed spelling; it is not newly rejected. Typed constructors make the intent explicit and retain the strongest cursor inference.
 
 Definition fields preserve independent traits:
 
@@ -65,9 +67,23 @@ Definition fields preserve independent traits:
 - `axes`;
 - `cases` where retained by the normalized model;
 - `register`;
-- `description` and deprecation metadata;
+- `description`, `usage` guidance and deprecation metadata;
+- `restrict` declaration-property contracts;
+- `range` inclusive domains for mutable number, integer, percentage, angle, time and length tokens;
 - validation;
 - checks and portability metadata.
+
+### Guidance and declaration restrictions
+
+`usage: { for: ['divider', 'quiet outline'], avoid: 'text and icons', tier: 'primitive' }` explains role intent. Guidance appears in native token hovers, explanations, agent context and nearest-role diagnostics. It never rejects authoring; only an enabled declarations policy acts on primitive tier. Editing guidance changes the docs identity without changing CSS, compatibility or runtime identity.
+
+`restrict: { properties: ['borderColor', 'outlineColor'], level: 'forbid', reason: 'Hairlines need an edge role.' }` limits declaration uses independently of the declarations policy. Properties use camelCase CSS names, without wildcard syntax. A shorthand includes its longhands and their logical group: `borderColor` permits `borderTopColor`, `borderInlineStartColor`, `borderInlineColor` and the color component of a `border` value. It does not permit `color` or the width component of a border. The compiler reads the finalized declaration components; it does not infer token identity from equal serialized values.
+
+Uses outside that contract produce `VANITY_TOKEN_RESTRICTED`. `discourage` warns and compiles; `forbid` rejects after the module's findings are collected. Choose a role for the property, or label a deliberate exception with `unsafe.value(value, reason)`. A restriction edit changes compatibility, without rewriting system CSS or runtime state. Check's explicit comparison reports changed restrictions separately from changed values.
+
+`range: [min, max]` declares a mutable token's runtime domain. Bounds must be ordered and comparable without layout; absolute lengths and time units convert exactly, while other lengths must use one unit. Angles convert exactly between `deg`, `grad` and `turn`; `rad` compares only with `rad`. Generated application backing includes the comparator only for systems that declare a range. Runtime validation checks the range after a schema's output or fallback. A range edit changes runtime identity without rewriting system CSS. See [runtime validation](./spec-runtime.md#9-validation) for canonical validator inputs, units and snapshot replay.
+
+Nearest-role suggestions follow the authored `deprecated: { reason, use }` replacement path and retain the replacement's guidance. A missing replacement cannot be guessed from value equality.
 
 Absent, reserved-without-value, and CSS `unset` are distinct states.
 
@@ -391,7 +407,7 @@ Preserve:
 - exact diagnostics for cycles, aliases, unsupported units/spaces, roots, and nonportable expressions;
 - contrast, unused-token, scale, axis, portability, root, and registration checks.
 
-Manifest v4 contains one system map plus source-grouped module facts without duplicating the portable compiler artifact.
+Manifest v5 contains one system map plus source-grouped module facts without duplicating the portable compiler artifact.
 
 ### Foreground selection
 
@@ -399,7 +415,7 @@ Manifest v4 contains one system map plus source-grouped module facts without dup
 
 A dependency is volatile only when it reaches a mutable token or an unresolved external reference. Immutable aliases, numeric channel tokens, channel operations, and mix percentages do not become mutable merely because their CSS retains a `var()` edge. CSS liveness, mutability, and scheme selection are independent traits across every color-expression family.
 
-Mutable backgrounds are checked at their authored defaults too. Their selected foreground stays fixed while runtime writes can move the background; the build check cannot guarantee an arbitrary runtime range. Validate the retained foreground across the range the application permits. Deliberately unfoldable mix shapes retain an explained representative approximation in introspection and contrast audit data. A form with no supported authored representative, such as an unsupported relative-color fold or an external channel without a default, fails with an actionable color diagnostic rather than silently passing a contrast check.
+Mutable backgrounds are checked at their authored defaults too. Their selected foreground stays fixed while runtime writes can move the background. Register an `addChecks` pairing and declare ranges to sample the retained foreground across reachable writes; passing samples are evidence, not a guarantee over arbitrary writes. Deliberately unfoldable mix shapes retain an explained representative approximation in introspection and contrast audit data. A form with no supported authored representative, such as an unsupported relative-color fold or an external channel without a default, fails with an actionable color diagnostic rather than silently passing a contrast check.
 
 ### Cross-token checks
 
@@ -412,7 +428,18 @@ Mutable backgrounds are checked at their authored defaults too. Their selected f
 | `.aaa()` | WCAG 2 contrast 7 |
 | `.lc(min)` | APCA Lc `min` |
 
-Supply the returned checks through the token-resolution `checks: refs => [...]` option. A bound system applies the same callback shape to an inline token module.
+Attach pairings with the immutable, additive `open.addChecks(t => [...])` method before consolidation. Each registered contrast level remains visible in the evidence, including different levels on the same pair. Checks enter the docs identity only; they change neither system CSS nor schema or runtime identity. `consolidate()` has no `checks` option.
+
+```ts
+const checked = open.addChecks(t => [check.textContrast(t.color.text, t.color.surface).aa()])
+const ds = checked.consolidate()
+```
+
+A check resolves both sides in the same light/dark scheme, declared axis mode and authored case. It samples the union of their mutable dependencies with declared ranges. A compiled `legibleOn` pick stays at its authored result for that environment; other foregrounds move with the sampled state. Integer ranges contain only integers, every integer up to 33 states and otherwise 33 distinct evenly spaced integers including both ends. Angle ranges use a 5° grid in the authored units, including radians; other ranges use 33 evenly spaced inputs including both ends. Products above 1,024 points use a reduced grid whose actual dimensions are reported.
+
+Each input passes through the runtime's universal type check, canonicalization, validator policy and output range check. Throwing, omitted and out-of-range writes are unreachable; fallback writes use their accepted output. A development-only validator is sampled in both profiles, with one result when the reachable states agree. Unavailable or asynchronous validators limit the affected samples to `validator not evaluated`; those samples cannot fail the build. A fully evaluated failing sample still fails even when another sample has that limit. Validators must be pure over canonical inputs.
+
+Results carry the shared evidence level plus sample count, step, worst reachable state and profile. A mutable dependency without a range stays at its authored value with a request to declare one. `vanity check`, role explanations and manifest contrast records retain these limits. APCA Lc and WCAG ratios stay separately named. Declared pairings do not establish rendered contrast through opacity, overlays or background images.
 
 ### Emission and identity details
 

@@ -104,13 +104,14 @@ export type VanityCompatibleTokenInput<Type extends VanityCssDataType>
 export type VanityDataTypeOf<Value>
   = Value extends VanityValue<infer Type> ? Type
     : Value extends VanityTokenInput<infer Type> ? Type
-      : Value extends number ? (number extends Value ? 'number' : `${Value}` extends `${bigint}` ? 'integer' : 'number')
-        : Value extends `${number}%` ? 'percentage'
-          : Value extends `${number}${'px' | 'rem' | 'em' | 'vh' | 'vw' | 'vmin' | 'vmax' | 'ch' | 'lh'}` ? 'length'
-            : Value extends `${number}${'deg' | 'grad' | 'rad' | 'turn'}` ? 'angle'
-              : Value extends `${number}${'ms' | 's'}` ? 'time'
-                : Value extends `${number}fr` ? 'flex'
-                  : 'unknown'
+      : Value extends import('../tokens/types').VanityAuthoredContrast ? 'color'
+        : Value extends number ? (number extends Value ? 'number' : `${Value}` extends `${bigint}` ? 'integer' : 'number')
+          : Value extends `${number}%` ? 'percentage'
+            : Value extends `${number}${'px' | 'rem' | 'em' | 'vh' | 'vw' | 'vmin' | 'vmax' | 'ch' | 'lh'}` ? 'length'
+              : Value extends `${number}${'deg' | 'grad' | 'rad' | 'turn'}` ? 'angle'
+                : Value extends `${number}${'ms' | 's'}` ? 'time'
+                  : Value extends `${number}fr` ? 'flex'
+                    : 'unknown'
 
 /** Concrete base used by self-contained value implementations. */
 export abstract class CssValue<

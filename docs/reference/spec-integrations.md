@@ -198,6 +198,12 @@ The compiler evaluates the file for `cls` and `t`; application modules receive t
 
 The file is optional for adapters and is the CLI's default configuration source. `vanity prepare` reads it without loading Vite or Nuxt, statically discovers enabled module-role routes, and reconciles their declarations before a separate typecheck.
 
+`compiler.baseline` selects a project-relative or absolute policy baseline. When omitted, the compiler reads `vanity.baseline.json` at the project root if present. Nuxt resolves it from `rootDir`, even when Vite's source root is `app/`. Baseline identities also use project-relative source paths, so check and every host accept the same authored findings. Invalid CSS, token-kind mismatches and system errors cannot be accepted. The [check and baseline contract](./spec-introspection.md#policy-baselines) defines repeat counts, reconciliation and incomplete evidence.
+
+The development server watches the selected baseline, including an absent or invalid configured file. Creating, editing or deleting it re-evaluates dependent styles; repairing it clears the error overlay without a server restart.
+
+`vanity check` uses the configured client resolver and compiler without serving or bundling an application. Vite 6–8, WXT and Vitest 5 configurations support this headless path. Install the project's host package; these adapters use optional peers, including Vitest's public Node entry. Check selects production mode through the host's own configuration, so default identifiers match a production build. Each run creates one configured pipeline, disables HTTP and WebSocket serving, and closes it afterward. WXT can briefly probe port availability while reading its development-server configuration. Nuxt cannot supply its client pipeline without a framework build; check reports the reason and exits 2. Use its production build for compiler evidence.
+
 Use `vanity prepare --root <project>` when running from another directory or `--config <path>` for a differently named module. The equivalent programmatic surface is `planAutoImportDeclarations()` for host-owned registration and `writeAutoImportDeclarations()` for filesystem reconciliation.
 
 Shared config paths should be project-relative or absolute; framework aliases such as `~` are available only when an adapter resolves them. Running the command alongside `nuxt prepare` is safe because Nuxt still owns its native application type registry and does not require this extra step.
@@ -235,9 +241,37 @@ System CSS is emitted once per CSS identity, independently of which style module
 
 Vanity watches every resolved input a style module depends on, including data imports such as JSON, and stops at its own package boundary so its implementation dependencies never land in your watch set.
 
-The supported Vite range is `^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0`.
+The supported Vite range is `^6.0.0 || ^7.0.0 || ^8.0.0`.
+
+### Style-module imports
+
+Style modules use the host's client resolver for aliases, resolver plugins, relative paths and virtual modules. The host's loader supplies virtual source. In development, optimizer metadata replaces a prebundled cache answer with its original source before evaluation; ownership and HMR watch that original path. An optimizer answer without original-source metadata fails compilation rather than evaluating a browser prebundle.
+
+A package-name import such as `package` or `package/subpath` selects the package's Node entry when the client answer belongs to that package. The package's own browser-disabled metadata also authorizes its Node entry, whether the host returns a stub, a file or a package-entry error. A redirect into another package retains the host answer. An alias to another entry of the same package still selects Node from the written package request. Imports inside Vanity's implementation keep Node resolution and its substrate externals; a builtin such as `node:fs` remains native when the client would stub it, while a bare builtin name redirected to a polyfill keeps that package.
+
+Other aliases and plugin-selected files retain their host answers, including runnable browser entries. If a browser entry throws during evaluation, the diagnostic names each browser-selected import in the throwing module's recorded importer chain and recommends importing the package by name. An unmapped stack keeps the original message and labels reached browser entries as possible causes. A browser-disabled stub without the named package's own disabling metadata fails with the same package-name repair.
+
+Nuxt development's client and server requests share its existing client resolver. A production SSR build after the client build closes has no live client environment and uses its own environment's resolver; opaque aliases and plugin choices can therefore differ between those environments. Named package requests select Node in both.
+
+Configured-system source and member discovery runs during configuration. Evaluation starts after plugin initialization at the first style, projection, HTML or manifest consumer. Concurrent consumers share one attempt and see only a complete result. A failed attempt retains its diagnostic until a relevant edit starts a new attempt; watch builds and development updates preserve accepted artifacts while that attempt runs.
 
 `compiler.layerOrder` sets the host-wide order of CSS layer roots, declared first in integrated HTML documents; its semantics live in [spec-system.md §9](./spec-system.md#9-compiler-projection).
+
+### CSS queries
+
+An ordinary style-module import exports JavaScript values such as class names, recipes and ports. A CSS query selects the module's complete compiled stylesheet, including its system and imported style CSS and their layer statements. The stylesheet passes through the host's configured CSS pipeline.
+
+| Query | Meaning |
+| --- | --- |
+| `inline` | Default-exported CSS string; no stylesheet installation or extraction. |
+| `url` | Default-exported stylesheet URL; production builds emit its processed CSS asset. |
+| `url&inline` | Development CSS data URL. Vite's CSS URL hook rejects this combination in production builds. |
+| `direct` | Development CSS response with `text/css`; production uses normal stylesheet extraction. Combined with `inline`, development serves CSS and production exports a string. |
+| Vue style and `transform-only` queries | Compiled CSS handled by the host's CSS pipeline; Vue's scoped, custom-element and CSS-module queries retain their native meaning. |
+| `raw` | Default-exported authored source text, including with other flags; it does not evaluate the style module. |
+| `used`, `import`, and request timestamps alone | Request decorations; the module retains its JavaScript exports. |
+
+`raw` takes precedence over CSS content forms. Other combinations follow the host's CSS behavior. Each loaded query is a separate module id and updates after edits to the style module or its dependencies. Nuxt's production SSR stylesheet collection can request `inline&used` through either the documented `./Card.css` shorthand or an explicit `./Card.css.ts` import; both deliver the client stylesheet's CSS to server-rendered HTML.
 
 ### Module roles and type consumers
 
@@ -368,6 +402,8 @@ The Vite integration tracks attempted style entries and their dependencies, pres
 
 In development, a retired stylesheet leaves each page once its replacement CSS is installed there. This applies to stylesheets Vite serves as CSS modules; a link a host renders into server HTML, such as Nuxt's development renderer, can keep retired rules until the next page load, because Vanity does not retract host-rendered markup. Stylesheet delivery order never changes Vanity's cascade ([styling §8](./spec-css.md#8-layers)).
 
+Deleted style modules retire their compiler ownership, stylesheet and graph entries. Vanity retires every stylesheet it serves from that module, including rules authored with vanilla-extract’s `style()` through Vanity’s pipeline. Files compiled by a separately registered vanilla-extract plugin belong to that plugin’s lifecycle. A module that still imports one receives the host’s missing-import error; restoring the file repairs it without restarting the dev server. A Nuxt SSR error page recovers on a fresh page request. Watch builds retire deleted sources before publishing their manifest, including a file unwatched after its consumer was removed.
+
 ### 9.1 Updating dependencies
 
 Stop the development server before changing the installed version of Vanity or its build host, then start it again after installation completes. A running server can retain loaded compiler code while reading files from the updated installation. Reloading the browser does not restart that process.
@@ -419,3 +455,4 @@ Elevation reuses a compatible host `scheme` axis or contributes the canonical on
 - HMR under root and non-root public bases, and client and SSR module graphs on each supported Vite major;
 - canary throughout the refactor;
 - reinstated demos with the preserved capability walk.
+

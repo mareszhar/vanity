@@ -14,7 +14,7 @@ function manifest(): VanityManifest {
 }
 
 describe('the vanity CLI projections', () => {
-  it('inspects and explains from Manifest v4 without evaluating authoring code', () => {
+  it('inspects and explains from Manifest v5 without evaluating authoring code', () => {
     const built = manifest()
     expect(inspectManifest(built)).toContain('1 tokens')
     expect(explainManifestPath(built, 'color.brand')).toContain('token token:color.brand')

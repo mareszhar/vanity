@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { vanityPlugin } from '@mszr/vanity/vite'
 import { build, createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
+import { installTestSdk } from '../../test-support/installedSdk'
 import { resolveViteVirtualId } from '../hosts/viteHmr'
 
 const vanityRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -46,6 +47,7 @@ async function hotUpdate(server: ViteDevServer, file: string): Promise<unknown> 
 describe('configured system module namespaces', () => {
   it('preserves leaf and ordinary barrel namespaces during style evaluation', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-')))
+    await installTestSdk(root)
 
     try {
       await put(root, 'package.json', '{ "name": "system-exports", "type": "module" }')
@@ -97,6 +99,7 @@ export const proof = renamedUnrelated
 
   it('projects a one-file system and its destructured members by value identity', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-one-file-')))
+    await installTestSdk(root)
     let server: ViteDevServer | undefined
 
     try {
@@ -180,6 +183,7 @@ export const result = {
 
   it('diagnoses unrelated exports and accepts the same fixture with only type exports', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-diagnostic-')))
+    await installTestSdk(root)
     let server: ViteDevServer | undefined
 
     try {
@@ -244,6 +248,7 @@ export const result = theme.t.color.brand.$name
 
   it('keeps the export diagnostic grammatical for several unrelated exports', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-diagnostic-count-')))
+    await installTestSdk(root)
     let server: ViteDevServer | undefined
 
     try {
@@ -293,6 +298,7 @@ export const result = [label, other, theme.t.color.brand.$name]
   for (const configured of [false, true]) {
     it(`preserves ordinary object aliases through a configured barrel (configured=${configured})`, async () => {
       const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-object-')))
+      await installTestSdk(root)
       let server: ViteDevServer | undefined
 
       try {
@@ -338,6 +344,7 @@ export const sharedMutation = value.label === 'mutated' && alias.label === 'muta
 
     it(`preserves an ordinary callable re-export and unused function (configured=${configured})`, async () => {
       const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-function-')))
+      await installTestSdk(root)
       let server: ViteDevServer | undefined
 
       try {
@@ -378,6 +385,7 @@ export const result = renamed()
 
   it('preserves live ordinary bindings across a configured re-export edge', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-live-')))
+    await installTestSdk(root)
     let server: ViteDevServer | undefined
 
     try {
@@ -423,6 +431,7 @@ export const throughBarrel = renamedLive
 
   it('preserves barrel and leaf namespaces in browser and SSR application projections', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-app-')))
+    await installTestSdk(root)
     let server: ViteDevServer | undefined
 
     try {
@@ -496,6 +505,7 @@ export const unrelated = renamedUnrelated
 
   it('keeps ordinary barrel values current through same-server edits', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-hmr-')))
+    await installTestSdk(root)
     let server: ViteDevServer | undefined
 
     try {
@@ -598,6 +608,7 @@ export const proof = renamedUnrelated
 
   it('addresses namespaces without machine paths and never emits an unbindable name', async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), 'vanity-system-exports-addressing-')))
+    await installTestSdk(root)
     let server: ViteDevServer | undefined
 
     try {

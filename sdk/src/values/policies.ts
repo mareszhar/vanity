@@ -1,6 +1,18 @@
+import type { VanityCssPropertyName } from '../css/types'
 import type { VanityColorInterpolationSpace, VanityPolarColorSpace } from '../tokens/types'
 import type { VanityCssSupportTarget } from './protocol'
+import type { VanityCssDataType } from './types'
 import type { VanityLengthUnit } from './units'
+
+/** Provenance requirements on authored style declaration components. */
+export interface VanityDeclarationPolicies {
+  readonly level: 'forbid' | 'discourage'
+  readonly reason?: string
+  readonly tokens?: readonly VanityCssDataType[]
+  readonly properties?: Readonly<Partial<Record<VanityCssPropertyName, 'token'>>>
+  readonly mechanics?: readonly string[]
+  readonly derivations?: 'allow' | 'audit' | 'restrict'
+}
 
 /**
  * Policy shapes shared by value serialization and system policy operations.
@@ -57,6 +69,8 @@ export interface VanityColorPolicies {
 
 /** Authored system policy; omitted known leaves resolve from the library defaults. */
 export interface VanityPolicies {
+  /** Require declared origins in style values; omitted policies admit literal decisions. */
+  readonly declarations?: VanityDeclarationPolicies
   /** Configure restrictions and unit behavior for named value constructors. */
   readonly constructors?: VanityConstructorPolicies
   /** Declare the CSS feature target used when values are serialized. */
@@ -75,6 +89,8 @@ export interface VanityPolicies {
 
 /** Fully resolved policy used by bound constructors, value resolution, and contracts. */
 export interface VanityResolvedPolicies {
+  /** Optional style-value origin policy, finalized after module evaluation. */
+  readonly declarations?: VanityDeclarationPolicies
   /** Resolved restrictions and unit behavior for every known constructor. */
   readonly constructors: VanityConstructorPolicies
   /** Resolved CSS feature target used by value serialization. */

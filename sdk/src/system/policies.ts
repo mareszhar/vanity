@@ -6,7 +6,10 @@ import type {
   VanityResolvedPolicies,
 } from '../values/policies'
 import type { VanityCssSupportTarget } from '../values/protocol'
+import { isCssProperty } from '../css/validation'
 import { VanityError } from '../diagnostics'
+import { isTokenDataType } from '../tokens/config'
+import { convertToKebab } from '../tokens/names'
 import { VANITY_DEFAULT_CSS_SUPPORT } from '../values/protocol'
 
 export type {
@@ -14,6 +17,7 @@ export type {
   VanityConstructorPolicies,
   VanityConstructorPolicy,
   VanityConstructorRestriction,
+  VanityDeclarationPolicies,
   VanityPolicies,
   VanityPolicyJson,
   VanityResolvedPolicies,
@@ -27,6 +31,7 @@ const KNOWN_POLICY_GROUPS = new Set([
   'tokens',
   'color',
   'plugins',
+  'declarations',
 ])
 const TOKEN_POLICY_KEYS = new Set(['reference', 'emit'])
 const COLOR_POLICY_KEYS = new Set(['mixSpace', 'adjustSpace'])
@@ -76,6 +81,7 @@ export function resolvePolicies(
     },
     color: authored.color ?? {},
     plugins: authored.plugins ?? {},
+    ...(authored.declarations === undefined ? {} : { declarations: authored.declarations }),
   }) as VanityResolvedPolicies
 }
 
@@ -155,6 +161,30 @@ export function expectPolicies(current: VanityPolicies, patch: VanityPolicies): 
 }
 
 function validatePolicies(policies: VanityPolicies): void {
+  if (policies.declarations !== undefined) {
+    const value = policies.declarations
+    if (!isPlainRecord(value))
+      throwPolicyError('VANITY_POLICY_INVALID', 'declarations policy must be a plain object', 'declarations', 'provide the declarations policy with a level and its provenance requirements')
+    if (Object.hasOwn(value, 'enforce'))
+      throwPolicyError('VANITY_POLICY_INVALID', 'declarations.enforce has no meaning: style modules have no system contribution order', ['declarations', 'enforce'], 'remove enforce; declaration findings apply wherever a style value is authored')
+    assertKnownKeys(value, ['level', 'reason', 'tokens', 'properties', 'mechanics', 'derivations'], 'declarations')
+    if (!['forbid', 'discourage'].includes(value.level))
+      throwPolicyError('VANITY_POLICY_INVALID', 'declarations.level must be forbid or discourage', ['declarations', 'level'], 'choose forbid for errors or discourage for warnings')
+    if (value.reason !== undefined && typeof value.reason !== 'string')
+      throwPolicyError('VANITY_POLICY_INVALID', 'declarations.reason must be a string', ['declarations', 'reason'], 'explain the system convention')
+    if (value.derivations !== undefined && !['allow', 'audit', 'restrict'].includes(value.derivations))
+      throwPolicyError('VANITY_POLICY_INVALID', 'declarations.derivations must be allow, audit or restrict', ['declarations', 'derivations'], 'choose how to treat calculations over tokens')
+    for (const key of ['tokens', 'mechanics'] as const) {
+      if (value[key] !== undefined && (!Array.isArray(value[key]) || value[key].some(entry => typeof entry !== 'string')))
+        throwPolicyError('VANITY_POLICY_INVALID', `declarations.${key} must be an array of strings`, ['declarations', key], `list ${key === 'tokens' ? 'CSS data types' : 'the exact exempt literals'}`)
+    }
+    if (value.tokens?.some(type => !isTokenDataType(type)))
+      throwPolicyError('VANITY_POLICY_INVALID', 'declarations.tokens contains an unknown CSS data type', ['declarations', 'tokens'], 'use canonical data-type names such as color, length or easing-function')
+    if (value.properties !== undefined) {
+      if (!isPlainRecord(value.properties) || Object.entries(value.properties).some(([property, entry]) => entry !== 'token' || !isCssProperty(convertToKebab(property))))
+        throwPolicyError('VANITY_POLICY_INVALID', 'declarations.properties must map CSS properties to token', ['declarations', 'properties'], 'use camelCase CSS property names with the value token')
+    }
+  }
   for (const key of Object.keys(policies)) {
     if (KNOWN_POLICY_GROUPS.has(key))
       continue

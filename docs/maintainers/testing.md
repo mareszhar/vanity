@@ -2,6 +2,8 @@
 
 This document defines Vanity's permanent evidence policy. Product claims are accepted only when reproducible tests observe them in every relevant evidence dimension.
 
+The source vocabulary audit reads authored files. Generated `test-results`, `dist` and framework output directories are excluded; a copied host artifact is a receipt, not Vanity source. Parser visitor names remain exempt only inside their owning parser adapter.
+
 ## 1. Evidence rule
 
 A contract is complete only when every relevant evidence dimension is green.
@@ -252,6 +254,8 @@ Record cold and warm results with environment metadata. Benchmarks are comparati
 
 A shared declaration import can increase cold checking for consumers that otherwise use one entrypoint. Measure that boundary separately from fixtures that already import core, and distinguish full library checking from warm editor operations.
 
+The base runtime entry has a 12,400 B minified+gzipped ceiling. The benchmark also builds matched generated systems with and without a declared range, records their sizes and the comparator entry separately, and asserts the range-free fixture ships no comparator. Range-enabled costs receive explicit review without increasing the base ceiling.
+
 Required measurements:
 
 - `tsc --noEmit` cold and incremental;
@@ -268,7 +272,7 @@ Required measurements:
 - runtime entrypoint and runtime metadata size;
 - snapshot serialize/hydrate time.
 
-The supported-major Vite graph matrix asserts that, in a one-shot build, no handler runs for modules the hook does not serve. It wraps the real host hooks in place and observes invocation counts for generated plain application modules and a physically installed dependency on every supported Vite major. The host-graph benchmark records build timings only; it does not duplicate the matrix's zero-call gate.
+The Vite 6–8 graph matrix (`pnpm run sdk:test:vite-compat`) asserts that, in a one-shot build, no handler runs for modules the hook does not serve. It wraps the real host hooks in place and observes invocation counts for generated plain application modules and a physically installed dependency on every supported Vite major. The host-graph benchmark records build timings only; it does not duplicate the matrix's zero-call gate.
 
 Save-overlap controls observe current CSS and exported values across first/warm requests, explicit/ambient imports and client/SSR. Browser controls verify that known system updates produce no false errors, genuine missing roles reach native logs and overlays, and system-only repairs recover every consumer, including CSS accepted in an overlapping failed update. Controlled partial-failure cases invoke the real compiler hook so a native fallback reload cannot mask missing CSS notifications; the watcher-driven controls own normal host event flow. Syntax, evaluation and CSS-validation failures retain accepted CSS with an explicit diagnostic; failures from replaced system attempts cannot replace later valid output.
 
@@ -377,6 +381,12 @@ One projection's passing test does not close a cross-cutting requirement. Record
 - recovery tests pair a repair that succeeds with a failure that is deliberate.
 
 Every published benchmark number points to a timestamped measurement receipt and is mechanically checked against it.
+
+Policy baseline acceptance spans the headless command and application hosts. The same fixture accepts an existing finding, rejects a later finding in that module, retains acceptance after line movement, and removes an entry only after its source completes without that finding. Interrupted entries survive reconciliation. Repeated imports count authored occurrences once. A completed body rejected by policy counts as evaluated, with incomplete CSS; independent modules still run after a system fails. Command output validates against its published schema, including configuration failures and explicit role comparisons.
+
+Installed-package fixtures compare compiler CSS bytes, including layer statements, and structured diagnostics between `check` and production builds on Vite 6–8, WXT and a Vitest project configuration. The actual Vitest-created server also evaluates the style graph. Nuxt's packed fresh-app fixture accepts a project-root baseline and renders a component's stylesheet in production SSR; Nuxt is unsupported by headless `check`. Browser recovery contracts create and delete both default and configured baseline files without restarting the development server.
+
+CSS-query contracts cover the native CSS plugin's query forms on each supported Vite major, including combinations and requests produced by Vue. Nuxt production browser evidence covers both the `.css` shorthand and explicit `.css.ts` import with inline styles enabled and disabled; permanent browser tests protect its inline stylesheet collection. Queried module ids share the source's ownership and dependency updates while retaining their distinct host module identities.
 
 Application namespace evidence uses one topology matrix rather than a proxy fixture — a separate ordinary module, a pure re-export barrel, and a one-file system exporting the system plus destructured members:
 

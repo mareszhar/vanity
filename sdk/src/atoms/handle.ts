@@ -23,7 +23,7 @@ export const unsafe = {
   },
 }
 
-function isUnsafeValue(value: unknown): value is VanityUnsafeValue {
+export function isUnsafeValue(value: unknown): value is VanityUnsafeValue {
   return typeof value === 'object' && value !== null && Object.hasOwn(value, UNSAFE)
 }
 

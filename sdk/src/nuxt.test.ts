@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { vanityViteHost } from './compiler/hosts/viteHost'
 import { VanityError } from './diagnostics'
 import vanityNuxtModule from './nuxt'
 
@@ -127,6 +128,15 @@ describe('nuxt auto-import integration', () => {
 })
 
 describe('nuxt compiler.system', () => {
+  it('supplies the project root for default baselines and resolves explicit baselines from it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'vanity-nuxt-baseline-'))
+    roots.push(root)
+    const nuxt = { options: { _requiredModules: {}, alias: {}, dev: false, experimental: {}, postcss: {}, rootDir: root, typescript: { tsConfig: {} } }, hook: vi.fn() }
+    await vanityNuxtModule({ compiler: { baseline: './accepted.json' } }, nuxt as never)
+    const options = vite.vanityPlugin.mock.calls[0]![0]
+    expect(options.compiler.baseline).toBe(join(root, 'accepted.json'))
+    expect(options[vanityViteHost]).toEqual({ name: 'nuxt', root })
+  })
   async function createNuxt() {
     const root = await mkdtemp(join(tmpdir(), 'vanity-nuxt-'))
     roots.push(root)
@@ -214,4 +224,25 @@ describe('nuxt compiler.system', () => {
     expect((error as VanityError).diagnostics[0]).toMatchObject({ code: 'VANITY_COMPILER_INVALID_INPUT', path })
     expect(nuxtKit.addVitePlugin).not.toHaveBeenCalled()
   })
+})
+
+it('warns when the page scanner includes a style module and names the move', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'vanity-nuxt-'))
+  roots.push(root)
+  const nuxt = {
+    options: { _requiredModules: {}, alias: {}, dev: false, experimental: {}, postcss: {}, rootDir: root, typescript: { tsConfig: {} } },
+    hook: vi.fn(),
+  }
+  await vanityNuxtModule({}, nuxt as never)
+  const handler = nuxt.hook.mock.calls.find(([name]) => name === 'pages:extend')?.[1]
+  expect(handler).toBeTypeOf('function')
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    await handler!([{ file: join(root, 'app/pages/index.vue'), children: [{ file: join(root, 'app/pages/index.css.ts') }] }])
+    expect(warning).toHaveBeenCalledOnce()
+    expect(warning).toHaveBeenCalledWith(expect.stringMatching(/VANITY_STYLE_MODULE_MISUSE.*index.css.ts[\s\S]*move.*component.*styles/))
+  }
+  finally {
+    warning.mockRestore()
+  }
 })

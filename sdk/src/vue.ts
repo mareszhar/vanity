@@ -13,7 +13,7 @@ import { computed, toValue } from 'vue'
 import { ports } from './runtime'
 
 /** One port fragment, omission marker, or nullish value accepted by `usePorts`. */
-export type VanityPortSource = VanityPortStyle | false | null | undefined
+export type VanityPortSource = VanityPortStyle | false | 0 | 0n | '' | null | undefined
 /** Lazy source form used when a port fragment depends on reactive state. */
 export type VanityPortSourceFactory = () => VanityPortSource | readonly VanityPortSource[]
 

@@ -1,6 +1,7 @@
 /** Compiler-owned source inspection and authoring transforms. */
 
-import type { CallExpression, Expression, ObjectExpression, ObjectProperty } from 'oxc-parser'
+import type { ArrayExpression, CallExpression, Expression, ObjectExpression, ObjectProperty } from 'oxc-parser'
+import type { VanityDeclarationSource } from '../../diagnostics'
 import { posix } from 'node:path'
 import { parseSync, Visitor } from 'oxc-parser'
 import { renderStyleAutoImportDeclarations as renderStyleAutoImportDeclarationsFromSources } from '../auto-imports/autoImportDeclarations'
@@ -145,6 +146,13 @@ export function applyDebugNamesWithAliases(
     return source
 
   const aliases = getAuthoringAliases(parsed.program, undefined, ambientAliases)
+  return applyInsertions(source, collectDebugNameInsertions(parsed.program, aliases))
+}
+
+function collectDebugNameInsertions(
+  program: Parameters<Visitor['visit']>[0],
+  aliases: Map<string, string>,
+): Array<{ at: number, text: string }> {
   const edits: Array<{ at: number, text: string }> = []
 
   new Visitor({
@@ -174,9 +182,9 @@ export function applyDebugNamesWithAliases(
       if (args.length === 1)
         edits.push({ at: node.init.end - 1, text: `, '${name}'` })
     },
-  }).visit(parsed.program)
+  }).visit(program)
 
-  return applyInsertions(source, edits)
+  return edits
 }
 
 /**
@@ -332,6 +340,7 @@ export function applySourceLocations(
   fileName: string,
   root: string,
   ambientAliases?: ReadonlyMap<string, string>,
+  debugNames = false,
 ): string {
   const parsed = parseSync(fileName, source, { range: true })
 
@@ -339,13 +348,39 @@ export function applySourceLocations(
     return source
 
   const aliases = getAuthoringAliases(parsed.program, sourceAuthoringNames, ambientAliases)
-  const calls: Array<{ node: CallExpression, name: string }> = []
+  const calls: Array<{ node: CallExpression, name: string, helper: boolean }> = []
+  let functionDepth = 0
+  const exportedLocals = new Map<string, string[]>()
+  for (const declaration of parsed.module.staticExports) {
+    for (const entry of declaration.entries) {
+      if (!entry.isType && entry.exportName.name !== null && entry.localName.name !== null) {
+        const names = exportedLocals.get(entry.localName.name) ?? []
+        names.push(entry.exportName.name)
+        exportedLocals.set(entry.localName.name, names)
+      }
+    }
+  }
+  const exportsByCall = new Map<Expression, string[]>()
 
   new Visitor({
+    FunctionDeclaration() { functionDepth++ },
+    'FunctionDeclaration:exit': function () { functionDepth-- },
+    FunctionExpression() { functionDepth++ },
+    'FunctionExpression:exit': function () { functionDepth-- },
+    ArrowFunctionExpression() { functionDepth++ },
+    'ArrowFunctionExpression:exit': function () { functionDepth-- },
+    ExportDefaultDeclaration(node) {
+      if (node.declaration.type === 'CallExpression')
+        exportsByCall.set(node.declaration, ['default'])
+    },
+    VariableDeclarator(node) {
+      if (node.id.type === 'Identifier' && node.init)
+        exportsByCall.set(unwrapSource(node.init), [...exportedLocals.get(node.id.name) ?? []].sort())
+    },
     CallExpression(node) {
       const name = getAuthoringCallee(node.callee, aliases, sourceAuthoringNames)
       if (name !== undefined && (!tokenBuilderMethodNames.has(name) || isTokenBuilderChain(node, aliases)))
-        calls.push({ node, name })
+        calls.push({ node, name, helper: functionDepth > 0 })
     },
   }).visit(parsed.program)
 
@@ -354,12 +389,17 @@ export function applySourceLocations(
   const relativeFile = normalizePath(posix.relative(normalizePath(root), normalizePath(fileName)))
   const file = relativeFile.startsWith('..') ? normalizePath(fileName) : relativeFile
   const pointAt = createSourcePoint(source)
-  const edits: Array<{ at: number, text: string }> = []
+  // Both transforms use original offsets. Debug-name insertions must never
+  // shift source locations or the value spans recorded for later calls.
+  const edits = debugNames
+    ? collectDebugNameInsertions(parsed.program, getAuthoringAliases(parsed.program, undefined, ambientAliases))
+    : []
 
-  for (const { node, name } of outermost) {
+  for (const { node, name, helper } of outermost) {
     const locations: Record<string, Array<{ line: number, column: number }>> = {}
-    collectCallLocations(node, name, aliases, locations, pointAt)
-    const meta = { file, call: pointAt(node.start), locations }
+    const values: Record<string, VanityDeclarationSource> = {}
+    collectCallLocations(node, name, aliases, locations, pointAt, { source, file, helper, values })
+    const meta = { file, call: pointAt(node.start), locations, values, exports: exportsByCall.get(node) }
     const key = `${file}:${node.start}`
     const json = JSON.stringify(meta)
 
@@ -392,20 +432,21 @@ function collectCallLocations(
   aliases: Map<string, string>,
   locations: Record<string, Array<{ line: number, column: number }>>,
   pointAt: (offset: number) => { line: number, column: number },
+  context: ValueSourceContext,
 ): void {
   if (call.callee.type === 'MemberExpression' && call.callee.object.type === 'CallExpression') {
     const base = call.callee.object
     const baseName = getAuthoringCallee(base.callee, aliases, sourceAuthoringNames)
     if (baseName !== undefined)
-      collectCallLocations(base, baseName, aliases, locations, pointAt)
+      collectCallLocations(base, baseName, aliases, locations, pointAt, context)
   }
 
   const expression = getSourceObjectForCall(call, name)
   if (expression !== undefined)
-    collectObjectLocations(expression, [], locations, pointAt)
+    collectObjectLocations(expression, [], locations, pointAt, context)
 }
 
-function getSourceObjectForCall(call: CallExpression, name: string): ObjectExpression | undefined {
+function getSourceObjectForCall(call: CallExpression, name: string): ObjectExpression | ArrayExpression | undefined {
   const argument = call.arguments[0]
 
   if (argument === undefined || argument.type === 'SpreadElement')
@@ -413,7 +454,7 @@ function getSourceObjectForCall(call: CallExpression, name: string): ObjectExpre
 
   const expression = unwrapSource(argument)
 
-  if (expression.type === 'ObjectExpression')
+  if (expression.type === 'ObjectExpression' || expression.type === 'ArrayExpression')
     return expression
 
   if (name === 'add' && (expression.type === 'ArrowFunctionExpression' || expression.type === 'FunctionExpression')) {
@@ -438,29 +479,91 @@ function getSourceObjectForCall(call: CallExpression, name: string): ObjectExpre
 }
 
 function collectObjectLocations(
-  object: ObjectExpression,
+  object: ObjectExpression | ArrayExpression,
   prefix: string[],
   locations: Record<string, Array<{ line: number, column: number }>>,
   pointAt: (offset: number) => { line: number, column: number },
+  context: ValueSourceContext,
 ): void {
+  if (object.type === 'ArrayExpression') {
+    object.elements.forEach((element, index) => {
+      if (element === null || element.type === 'SpreadElement')
+        return
+      const value = unwrapSource(element)
+      if (value.type === 'ObjectExpression' || value.type === 'ArrayExpression')
+        collectObjectLocations(value, [...prefix, String(index)], locations, pointAt, context)
+    })
+    return
+  }
+
   for (const property of object.properties) {
     if (property.type !== 'Property')
       continue
 
-    const key = getSourcePropertyName(property)
+    // A computed condition object becomes this key under JavaScript's
+    // property coercion. Retain its authored site for the registration repair.
+    const key = property.computed && property.key.type !== 'Literal'
+      ? '[object Object]'
+      : getSourcePropertyName(property)
     if (key === undefined)
       continue
 
     const path = [...prefix, key]
     const joined = path.join('.')
     const points = locations[joined] ?? []
-    points.push(pointAt(property.key.start))
+    points.push(pointAt(property.computed ? property.start : property.key.start))
     locations[joined] = points
 
     const value = unwrapSource(property.value)
-    if (value.type === 'ObjectExpression')
-      collectObjectLocations(value, path, locations, pointAt)
+    const editable = !context.helper && isStaticSourceValue(value)
+    context.values[JSON.stringify(path)] = {
+      source: {
+        file: context.file,
+        start: value.start,
+        end: value.end,
+        text: context.source.slice(value.start, value.end),
+        ...pointAt(value.start),
+      },
+      editable,
+      ...(!editable
+        ? { reason: context.helper
+            ? 'style created in a helper function'
+            : 'value is not a supported static reference or literal' }
+        : {}),
+    }
+    if (value.type === 'ObjectExpression' || value.type === 'ArrayExpression')
+      collectObjectLocations(value, path, locations, pointAt, context)
   }
+}
+
+interface ValueSourceContext {
+  source: string
+  file: string
+  helper: boolean
+  values: Record<string, VanityDeclarationSource>
+}
+
+/** Only syntax with an independently authored value is offered for reference swaps. */
+function isStaticSourceValue(expression: Expression, memberRoot = false): boolean {
+  const value = unwrapSource(expression)
+  if (value.type === 'Literal')
+    return true
+  if (value.type === 'UnaryExpression')
+    return ['+', '-'].includes(value.operator) && value.argument.type === 'Literal'
+  if (value.type === 'Identifier')
+    return memberRoot && ['ds', 't'].includes(value.name)
+  if (value.type === 'MemberExpression')
+    return (!value.computed || value.property.type === 'Literal') && isStaticSourceValue(value.object, true)
+  if (value.type === 'TemplateLiteral')
+    return value.expressions.every(expression => isStaticSourceValue(expression))
+  if (value.type === 'CallExpression') {
+    const callee = value.callee
+    return callee.type === 'MemberExpression' && !callee.computed && callee.property.type === 'Identifier'
+      && ['calc', 'min', 'max', 'clamp', 'add', 'subtract', 'multiply', 'divide', 'negate'].includes(callee.property.name)
+      && isStaticSourceValue(callee.object, true)
+      && value.arguments.every(argument => argument.type !== 'SpreadElement' && isStaticSourceValue(argument))
+  }
+  return false
 }
 
 function getSourcePropertyName(property: ObjectProperty): string | undefined {
@@ -529,3 +632,16 @@ function applyInsertions(source: string, edits: Array<{ at: number, text: string
 }
 
 // ─── Introspection: manifests and audits derive during the build ─────────────
+
+/** Read stylesheet imports from a compiled source wrapper using JavaScript syntax. */
+export function readStyleModuleCssImports(source: string, fileName: string): string[] {
+  const parsed = parseSync(fileName, source)
+  const imports: string[] = []
+  new Visitor({
+    ImportDeclaration(node) {
+      if (/\.vanilla\.css(?:\?.*)?$/.test(node.source.value))
+        imports.push(node.source.value)
+    },
+  }).visit(parsed.program)
+  return imports
+}

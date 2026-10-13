@@ -72,6 +72,7 @@ export function buildRuntimeSystemModule(system: EvaluatedSystem, target: 'brows
       reference: token.reference,
       emit: token.emit,
       mutable: token.mutable,
+      ...(token.range === undefined ? {} : { range: token.range }),
       ...(token.validation === undefined ? {} : { validation: token.validation }),
       ...(token.baseSlot === undefined ? {} : { baseSlot: token.baseSlot }),
       branches: token.branches.map(branch => ({
@@ -80,9 +81,12 @@ export function buildRuntimeSystemModule(system: EvaluatedSystem, target: 'brows
       })),
     })),
   }
+  const ranged = runtimeContract.tokens.some(token => token.range !== undefined)
+  const rangeArgument = ranged ? ', _compareRange' : ''
   const sourceExports = new Set(system.exportNames)
   const lines = [
     `import { restoreStyleAuthoringStub, restoreRuntimeControllerFactory, restoreRuntimeProps, restoreRuntimeReconciler, restoreRuntimeStyle, restoreSnapshotFrom, restoreToken } from '@mszr/vanity/runtime';`,
+    ...(ranged ? [`import { restoreRuntimeRange } from '@mszr/vanity/runtime/range';`, `const _compareRange = restoreRuntimeRange();`] : []),
     `const _runtimeContract = JSON.parse(${JSON.stringify(JSON.stringify(runtimeContract))});`,
     `const _tokenRecords = JSON.parse(${JSON.stringify(JSON.stringify(tokens))});`,
     `const _t = {};`,
@@ -92,11 +96,11 @@ export function buildRuntimeSystemModule(system: EvaluatedSystem, target: 'brows
     `  for (let _index = 0; _index < _parts.length - 1; _index++) _target = _target[_parts[_index]] ||= {};`,
     `  _target[_parts.at(-1)] = restoreToken(_meta);`,
     `}`,
-    `const _runtime = restoreRuntimeControllerFactory(_runtimeContract);`,
-    `const _snapshotFrom = restoreSnapshotFrom(_runtimeContract);`,
-    `const _reconcileRuntimeSnapshot = restoreRuntimeReconciler(_runtimeContract);`,
-    `const _runtimeStyle = restoreRuntimeStyle(_runtimeContract);`,
-    `const _runtimeProps = restoreRuntimeProps(_runtimeContract);`,
+    `const _runtime = restoreRuntimeControllerFactory(_runtimeContract${rangeArgument});`,
+    `const _snapshotFrom = restoreSnapshotFrom(_runtimeContract${rangeArgument});`,
+    `const _reconcileRuntimeSnapshot = restoreRuntimeReconciler(_runtimeContract${rangeArgument});`,
+    `const _runtimeStyle = restoreRuntimeStyle(_runtimeContract${rangeArgument});`,
+    `const _runtimeProps = restoreRuntimeProps(_runtimeContract${rangeArgument});`,
     `const _system = Object.freeze({`,
     `  t: Object.freeze(_t),`,
     `  runtime: _runtime, snapshotFrom: _snapshotFrom,`,

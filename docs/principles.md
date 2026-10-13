@@ -84,9 +84,11 @@ A policy is system-wide law, not an option bag or a way for plugins to mutate th
 - bound values expose restriction diagnostics immediately;
 - prospective enforcement covers contributions after the restriction;
 - retroactive enforcement scans the complete graph;
-- explicit-unit values such as `length.px(8)` are policy-immune;
+- explicit-unit values such as `length.px(8)` are immune to constructor conformance; declaration provenance is a separate law, so that value written directly in a governed style declaration is raw;
 - `createSystem(config)` is exactly the initial policy book;
 - plugins may require host policy and may register data about their own configuration, scoped automatically under their identity, but may not author global user policy.
+
+The opt-in `declarations` policy governs where component declaration values come from. It reports convention findings at `discourage` or `forbid`, admits labeled `unsafe.value` exceptions, and has no contribution-order `enforce`: style modules have no prospective or retroactive contribution order. Findings are collected through evaluation and finalized by the compiler; CSS grammar errors retain their throwing behavior.
 
 Policy groups are additive shape. Overwrite is explicit value replacement. Every policy decision appears in identity, provenance, introspection, and diagnostics.
 

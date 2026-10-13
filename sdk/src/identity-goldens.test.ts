@@ -55,7 +55,7 @@ describe('stable emitted and runtime identities', () => {
             },
           ],
           "system": "vanity-runtime-2-1jno513",
-          "version": 1,
+          "version": 2,
         },
       }
     `)

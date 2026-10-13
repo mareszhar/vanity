@@ -339,6 +339,7 @@ describe('system-scope audit', () => {
     const report = system({ color: { brand: 'red' } }).audit()
 
     expect(report.unevaluated).toEqual([
+      { kind: 'unanchoredSelectors', requires: 'buildEvidence' },
       { kind: 'unusedTokens', requires: 'moduleUsage' },
       { kind: 'contrast', requires: 'moduleUsage' },
       { kind: 'escapes', requires: 'moduleUsage' },

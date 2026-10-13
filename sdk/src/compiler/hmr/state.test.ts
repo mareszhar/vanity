@@ -4,7 +4,7 @@ import {
   createVitePendingCssResponseCache,
   getViteBrowserModuleUrl,
   getViteGraphModuleUrl,
-  removeRetiredCssModules,
+  removeRetiredModules,
   resolveViteVirtualId,
 } from '../hosts/viteHmr'
 import { getStyleCssVirtualId, getSystemCssVirtualId, replaceEntryVirtualIds } from './state'
@@ -340,7 +340,7 @@ describe('compiler CSS ownership state', () => {
       },
     } as never
 
-    removeRetiredCssModules(server, virtualId)
+    removeRetiredModules(server, virtualId)
 
     for (const { graph, module, importer } of [client, ssr]) {
       expect(graph.urlToModuleMap.has(module.url)).toBe(false)

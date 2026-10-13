@@ -10,7 +10,11 @@ import type {
   VanityTypedNoDefaultTokenFactory,
 } from './types'
 import { setOwn } from '../collections'
+import { getDeclarationPropertyData, getLiteralTokenType } from '../css/grammar'
 import { VanityError } from '../diagnostics'
+import { getTokenRangeError } from '../runtime/range'
+import { serializeRuntimeCssText } from '../runtime/value'
+import { convertToKebab } from './names'
 import { VANITY_CONFIGURED_TOKEN } from './types'
 
 const DATA_TYPES = {
@@ -37,6 +41,13 @@ const DATA_TYPES = {
   string: 'string',
   url: 'url',
 } as const satisfies Readonly<Record<string, VanityCssDataType>>
+
+const TOKEN_DATA_TYPES = new Set<string>([...Object.values(DATA_TYPES), 'declaration'])
+
+/** The canonical token kinds also validate policy and portable metadata. */
+export function isTokenDataType(value: unknown): value is VanityCssDataType {
+  return typeof value === 'string' && (value.startsWith('plugin:') || TOKEN_DATA_TYPES.has(value))
+}
 
 export function createTokenFactory<Axes extends VanityAxisDefinitions = Record<never, never>>(
   axes?: VanityAxisRegistry<Axes>,
@@ -73,6 +84,17 @@ function createConfiguredToken<const Config extends VanityTokenConfig, Type exte
   }
 
   validateTokenConfig(config, axes)
+  if (config.range !== undefined) {
+    let error: string | undefined
+    if (config.mutable !== true)
+      error = 'token.range requires mutable: true'
+    else if (!Array.isArray(config.range) || config.range.length !== 2)
+      error = 'token.range needs inclusive [min, max] bounds'
+    else
+      error = getTokenRangeError(type, config.range.map(serializeRuntimeCssText) as [string, string])
+    if (error)
+      throwTokenConfigError('VANITY_TOKENS_INVALID_CONFIG', error, 'range', 'declare comparable inclusive bounds on a mutable number, integer, percentage, angle, time or length token')
+  }
   const lowered = lowerAxisDerivations(config, axes)
   return Object.freeze({
     [VANITY_CONFIGURED_TOKEN]: true as const,
@@ -131,6 +153,24 @@ function lowerAxisDerivations<Config extends VanityTokenConfig>(
 }
 
 function validateTokenConfig(config: VanityTokenConfig, axes?: VanityAxisRegistry<any>): void {
+  if (config.restrict !== undefined) {
+    const restrict = config.restrict
+    if (!isPlainObject(restrict) || Object.keys(restrict).some(key => !['properties', 'level', 'reason'].includes(key))
+      || !Array.isArray(restrict.properties) || restrict.properties.some(property => typeof property !== 'string' || property.includes('-') || !getDeclarationPropertyData(convertToKebab(property)))
+      || !['discourage', 'forbid'].includes(restrict.level)
+      || (restrict.reason !== undefined && typeof restrict.reason !== 'string')) {
+      throwTokenConfigError('VANITY_TOKENS_INVALID_CONFIG', 'token.restrict needs camelCase CSS properties, level: discourage or forbid, and an optional reason', 'restrict', 'provide properties without wildcards and a restriction level; style uses have no contribution order or enforce option')
+    }
+  }
+  if (config.usage !== undefined) {
+    const usage = config.usage
+    if (!isPlainObject(usage) || Object.keys(usage).some(key => !['for', 'avoid', 'tier'].includes(key))
+      || (usage.for !== undefined && (!Array.isArray(usage.for) || usage.for.some(value => typeof value !== 'string')))
+      || (usage.avoid !== undefined && typeof usage.avoid !== 'string')
+      || (usage.tier !== undefined && usage.tier !== 'primitive')) {
+      throwTokenConfigError('VANITY_TOKENS_INVALID_CONFIG', 'token.usage needs for strings, an avoid string, or tier: primitive', 'usage', 'provide guidance with for, avoid and optional tier: primitive')
+    }
+  }
   const conditional = config.mutable === true || config.axes !== undefined || config.cases !== undefined
   if (conditional && config.reference === 'val') {
     throwTokenConfigError(
@@ -322,16 +362,8 @@ function inferConfiguredType(config: VanityTokenConfig): VanityCssDataType {
   }
   if (typeof val === 'number')
     return Number.isInteger(val) ? 'integer' : 'number'
-  if (typeof val === 'string') {
-    if (/^-?(?:\d+|\d*\.\d+)%$/.test(val))
-      return 'percentage'
-    if (/^-?(?:\d+|\d*\.\d+)(?:px|rem|em|vh|vw|vmin|vmax|ch|lh)$/.test(val))
-      return 'length'
-    if (/^-?(?:\d+|\d*\.\d+)(?:deg|grad|rad|turn)$/.test(val))
-      return 'angle'
-    if (/^-?(?:\d+|\d*\.\d+)(?:ms|s)$/.test(val))
-      return 'time'
-  }
+  if (typeof val === 'string')
+    return getLiteralTokenType(val)
   return 'unknown'
 }
 

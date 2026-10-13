@@ -45,6 +45,7 @@ import {
   stringifyFileScope,
 } from '@vanilla-extract/integration'
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin'
+import { generate, parse } from 'css-tree'
 import { VanityError } from '../../diagnostics'
 
 interface VanityRawCssBlock {
@@ -229,7 +230,7 @@ function createModuleSubstrate(): {
       }
     }
     flush()
-    return { css: output.join('\n') }
+    return { css: output.join('\n'), ...(input.selectors === undefined ? {} : resolveSelectors(input)) }
   }
 
   const installCapture = (capture: VanityVanillaExtractCapture): void => {
@@ -302,6 +303,52 @@ function createModuleSubstrate(): {
   }
 
   return { modules, backend: Object.freeze(backend) }
+}
+
+/** Resolve metadata through the backend's own selector transform; never emit these markers. */
+function resolveSelectors(input: VanityStyleModuleTransform): Pick<VanityStyleModuleResult, 'selectors' | 'selectorKeys'> {
+  const requested = [...new Set(input.selectors ?? [])]
+  if (requested.length === 0)
+    return { selectors: {}, selectorKeys: {} }
+  const css = transformCss({
+    localClassNames: [...input.localClassNames],
+    composedClassLists: input.composedClassLists as VanillaComposition[],
+    cssObjs: requested.map((selector, index) => ({
+      type: 'global',
+      selector,
+      rule: { vars: { [`--vanity-selector-${index}`]: '0' } },
+    })),
+  }).join('\n')
+  const parsed = parse(css, { positions: true })
+  const resolved: Record<string, string> = {}
+  const selectorKeys: Record<string, string> = {}
+  if (parsed.type === 'StyleSheet') {
+    parsed.children.forEach((rule) => {
+      if (rule.type !== 'Rule' || rule.prelude === null)
+        return
+      rule.block.children.forEach((declaration) => {
+        if (declaration.type === 'Declaration') {
+          const marker = /^--vanity-selector-(\d+)$/.exec(declaration.property)
+          const selector = marker ? requested[Number(marker[1])] : undefined
+          if (selector !== undefined) {
+            const prelude = rule.prelude!
+            resolved[selector] = prelude.loc ? css.slice(prelude.loc.start.offset, prelude.loc.end.offset) : generate(prelude)
+            selectorKeys[selector] = generate(prelude)
+          }
+        }
+      })
+    })
+  }
+  for (const selector of requested) {
+    if (resolved[selector] === undefined) {
+      throw new VanityError({
+        code: 'VANITY_SUBSTRATE_INVALID_STATE',
+        message: `the CSS backend did not resolve provenance selector '${selector}'`,
+        fix: 'report the selector and style module to the Vanity maintainer',
+      })
+    }
+  }
+  return { selectors: resolved, selectorKeys }
 }
 
 function getStyleModuleFile(): VanityFileScope | undefined {
