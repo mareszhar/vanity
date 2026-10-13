@@ -455,4 +455,3 @@ Elevation reuses a compatible host `scheme` axis or contributes the canonical on
 - HMR under root and non-root public bases, and client and SSR module graphs on each supported Vite major;
 - canary throughout the refactor;
 - reinstated demos with the preserved capability walk.
-
